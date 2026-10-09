@@ -1,0 +1,702 @@
+//! Portable wire layer of the Oath diagnostic controller: byte layouts of the
+//! runtime DLL (trace v4, 48 byte config, 64 byte receipt), PE export parsing
+//! and the JSON projection. It touches no process and no file, so it is
+//! tested on any host. Every number here is observation metadata: nothing in
+//! this module produces, accepts or adjusts a quantity.
+// Dormant until the runner wires the controller; the parent removes this allow then.
+#![allow(dead_code)]
+use serde_json::{json, Value};
+
+pub(crate) const RUNTIME_VERSION: u32 = 0x0134_0001;
+pub(crate) const MODE_DIAGNOSTIC: u32 = 1;
+pub(crate) const MAX_SECONDS: u32 = 300;
+pub(crate) const CONFIG_SIZE: usize = 48;
+pub(crate) const RECEIPT_SIZE: usize = 64;
+
+pub(crate) const TRACE_MAGIC: u32 = 0x4a41_434f;
+pub(crate) const TRACE_VERSION: u32 = 4;
+pub(crate) const CAPACITY: usize = 1024;
+pub(crate) const HEADER_SIZE: usize = 64;
+pub(crate) const ROW_SIZE: usize = 104;
+pub(crate) const TRACE_SIZE: usize = HEADER_SIZE + CAPACITY * ROW_SIZE;
+/// Upper bound of any raw trace read.
+pub(crate) const MAX_TRACE_READ: usize = 256 * 1024;
+
+// Trace header offsets (repr(C), v4).
+const H_NEXT: usize = 8;
+const H_DROPPED: usize = 12;
+const H_IN_FLIGHT: usize = 16;
+const H_COMPLETED: usize = 20;
+const H_STOPPED: usize = 24;
+const H_IMAGE_BASE: usize = 32;
+const H_FILTERED: usize = 40;
+const H_DEADLINE_HIT: usize = 56;
+
+pub(crate) const EXPORT_INSTALL: &str = "OathRuntimeInstall";
+pub(crate) const EXPORT_START: &str = "OathRuntimeStartObservation";
+pub(crate) const EXPORT_STOP: &str = "OathRuntimeStopObservation";
+pub(crate) const EXPORT_RECEIPT: &str = "OathRuntimeReadReceipt";
+pub(crate) const EXPORTS: [&str; 4] = [EXPORT_INSTALL, EXPORT_START, EXPORT_STOP, EXPORT_RECEIPT];
+
+pub(crate) fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
+}
+pub(crate) fn u64_at(bytes: &[u8], at: usize) -> Option<u64> {
+    Some(u64::from_le_bytes(bytes.get(at..at + 8)?.try_into().ok()?))
+}
+fn u16_at(bytes: &[u8], at: usize) -> Option<u16> {
+    Some(u16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?))
+}
+
+/// Runtime status codes (OathStatus). Unknown values are reported, never
+/// treated as success or as a zero contribution.
+pub(crate) fn status_name(status: u32) -> String {
+    match status {
+        0 => "ok".into(),
+        1 => "invalid_input".into(),
+        2 => "process_identity".into(),
+        3 => "image_identity".into(),
+        4 => "entry_bytes".into(),
+        5 => "hook_failure".into(),
+        6 => "critical".into(),
+        7 => "wrong_state".into(),
+        8 => "not_wired".into(),
+        99 => "panic".into(),
+        other => format!("unknown_status_{other}"),
+    }
+}
+
+/// The 48 byte request. Both out fields stay zero on input.
+pub(crate) fn encode_config(
+    pid: u32,
+    max_seconds: u32,
+    created_filetime: u64,
+) -> [u8; CONFIG_SIZE] {
+    let mut out = [0u8; CONFIG_SIZE];
+    out[0..4].copy_from_slice(&RUNTIME_VERSION.to_le_bytes());
+    out[4..8].copy_from_slice(&(CONFIG_SIZE as u32).to_le_bytes());
+    out[8..12].copy_from_slice(&pid.to_le_bytes());
+    out[12..16].copy_from_slice(&max_seconds.to_le_bytes());
+    out[16..24].copy_from_slice(&created_filetime.to_le_bytes());
+    out[24..28].copy_from_slice(&MODE_DIAGNOSTIC.to_le_bytes());
+    out
+}
+
+/// What a successful install may have changed in the config block: only the
+/// two out fields. Returns (trace address, trace size).
+pub(crate) fn check_installed_config(
+    sent: &[u8; CONFIG_SIZE],
+    after: &[u8],
+) -> Result<(u64, u32), String> {
+    if after.len() != CONFIG_SIZE {
+        return Err("config block has the wrong length".into());
+    }
+    // 0..32 input fields, 32..40 trace address, 40..44 trace size, 44..48 reserved
+    if after[..32] != sent[..32] || after[44..48] != sent[44..48] {
+        return Err("install changed a config field other than the two outputs".into());
+    }
+    let address = u64_at(after, 32).unwrap_or(0);
+    let size = u32_at(after, 40).unwrap_or(0);
+    if address == 0 || !address.is_multiple_of(8) {
+        return Err("install returned no usable trace address".into());
+    }
+    if size as usize != TRACE_SIZE {
+        return Err(format!(
+            "install returned trace size {size}, expected {TRACE_SIZE}"
+        ));
+    }
+    Ok((address, size))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Receipt {
+    pub phase: u32,
+    pub trace_address: u64,
+    pub trace_size: u32,
+    pub max_seconds: u32,
+    pub rows: u32,
+    pub completed: u32,
+    pub dropped: u32,
+    pub filtered: u32,
+    pub in_flight: u32,
+    pub expired: u32,
+}
+
+pub(crate) fn decode_receipt(bytes: &[u8]) -> Result<Receipt, String> {
+    if bytes.len() != RECEIPT_SIZE {
+        return Err("receipt has the wrong length".into());
+    }
+    let f = |at| u32_at(bytes, at).unwrap_or(u32::MAX);
+    if f(0) != RUNTIME_VERSION || f(4) as usize != RECEIPT_SIZE {
+        return Err("receipt version or size differs".into());
+    }
+    // quantity_accepted (offset 56) and reserved (60) must be zero.
+    if f(56) != 0 || f(60) != 0 {
+        return Err("receipt claims an accepted quantity".into());
+    }
+    Ok(Receipt {
+        phase: f(8),
+        trace_address: u64_at(bytes, 16).unwrap_or(0),
+        trace_size: f(24),
+        max_seconds: f(28),
+        rows: f(32),
+        completed: f(36),
+        dropped: f(40),
+        filtered: f(44),
+        in_flight: f(48),
+        expired: f(52),
+    })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TraceView {
+    pub bytes: Vec<u8>,
+    pub rows: usize,
+}
+impl TraceView {
+    pub fn parse(bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() != TRACE_SIZE {
+            return Err("trace copy has the wrong length".into());
+        }
+        if u32_at(bytes, 0) != Some(TRACE_MAGIC) || u32_at(bytes, 4) != Some(TRACE_VERSION) {
+            return Err("trace magic or version differs".into());
+        }
+        let next = u32_at(bytes, H_NEXT).unwrap_or(u32::MAX) as usize;
+        Ok(Self {
+            bytes: bytes.to_vec(),
+            rows: next.min(CAPACITY),
+        })
+    }
+    pub fn in_flight(&self) -> u32 {
+        u32_at(&self.bytes, H_IN_FLIGHT).unwrap_or(u32::MAX)
+    }
+    fn header(&self, at: usize) -> u32 {
+        u32_at(&self.bytes, at).unwrap_or(u32::MAX)
+    }
+    fn row(&self, index: usize) -> &[u8] {
+        let start = HEADER_SIZE + index * ROW_SIZE;
+        &self.bytes[start..start + ROW_SIZE]
+    }
+}
+
+fn hex(value: u64) -> String {
+    format!("0x{value:x}")
+}
+
+fn call_name(value: u32) -> Value {
+    match value {
+        1 => json!("apply"),
+        2 => json!("remove"),
+        other => json!(format!("unknown_{other}")),
+    }
+}
+
+fn copy_flag_names(flags: u32) -> Vec<&'static str> {
+    let mut names = Vec::new();
+    if flags & 1 != 0 {
+        names.push("effect_vtable");
+    }
+    if flags & 2 != 0 {
+        names.push("subject_pointer");
+    }
+    if flags & 4 != 0 {
+        names.push("subject_object_present");
+    }
+    names
+}
+
+/// One row. A row that changed between the two copies, or that was never
+/// published, is Unknown: it contributes no state claim at all.
+fn project_row(index: usize, row: &[u8], stable: bool) -> Value {
+    let u = |at| u32_at(row, at).unwrap_or(0);
+    let q = |at| u64_at(row, at).unwrap_or(0);
+    let state = match (stable, u(0)) {
+        (false, _) => "unknown_unstable",
+        (true, 0) => "unknown_unpublished",
+        (true, 1) => "incomplete",
+        (true, 2) => "completed",
+        (true, 3) => "unwound",
+        (true, _) => "unknown_state",
+    };
+    let completed = stable && u(0) == 2;
+    json!({
+        "sequence": index + 1,
+        "call": call_name(u(4)),
+        "state": state,
+        "thread_id": u(8),
+        "instance_id": u(12),
+        "copy_flags": u(16),
+        "copy_flag_names": copy_flag_names(u(16)),
+        "completion_order": u(20),
+        "raw_r8": hex(q(24)),
+        "effect": hex(q(32)),
+        "subject": hex(q(40)),
+        "caller_return": hex(q(48)),
+        "caller_rbp": hex(q(56)),
+        "caller_rdi": hex(q(64)),
+        "effect_vtable": hex(q(72)),
+        "subject_object": hex(q(80)),
+        "subject_control": hex(q(88)),
+        // Only a completed call has a result; AL is the boolean reading.
+        "original_rax": if completed { json!(hex(q(96))) } else { Value::Null },
+        "original_al": if completed { json!(q(96) & 0xff) } else { Value::Null },
+        "authority": "observation_only",
+    })
+}
+
+/// Projects two raw copies of the trace. Rows must agree byte for byte to be
+/// stable. The result is complete only when the trace is stopped, nothing is
+/// in flight and every row agreed.
+pub(crate) fn project_trace(first: &TraceView, second: &TraceView, receipt: &Receipt) -> Value {
+    let rows = second.rows;
+    let mut projected = Vec::with_capacity(rows);
+    let mut unstable = 0usize;
+    let mut open = 0usize;
+    for index in 0..rows {
+        let stable = index < first.rows && first.row(index) == second.row(index);
+        if !stable {
+            unstable += 1;
+        }
+        let row = project_row(index, second.row(index), stable);
+        if row["state"] != "completed" && row["state"] != "unwound" {
+            open += 1;
+        }
+        projected.push(row);
+    }
+    let stopped = second.header(H_STOPPED) == 2;
+    let header_agrees = first.bytes[..HEADER_SIZE] == second.bytes[..HEADER_SIZE];
+    let complete =
+        stopped && second.in_flight() == 0 && header_agrees && unstable == 0 && open == 0;
+    json!({
+        "trace_version": TRACE_VERSION,
+        "trace_stopped": stopped,
+        "complete": complete,
+        "rows": projected,
+        "row_count": rows,
+        "unstable_rows": unstable,
+        "open_rows": open,
+        "header_agrees": header_agrees,
+        "in_flight": second.in_flight(),
+        "completed_counter": second.header(H_COMPLETED),
+        "dropped": second.header(H_DROPPED),
+        "filtered": second.header(H_FILTERED),
+        "deadline_hit": second.header(H_DEADLINE_HIT) != 0,
+        "image_base": hex(u64_at(&second.bytes, H_IMAGE_BASE).unwrap_or(0)),
+        "receipt": {
+            "phase": receipt.phase,
+            "rows": receipt.rows,
+            "completed": receipt.completed,
+            "dropped": receipt.dropped,
+            "filtered": receipt.filtered,
+            "in_flight": receipt.in_flight,
+            "expired": receipt.expired,
+            "max_seconds": receipt.max_seconds,
+        },
+        // A completed Apply is an observation of the call, never a quantity.
+        "accepted": false,
+        "quantity_accepted": false,
+        "authority": "observation_only",
+    })
+}
+
+/// Facts of a PE image that the loader checks need.
+#[derive(Clone, Debug)]
+pub(crate) struct PeImage {
+    pub size_of_image: u32,
+    pub size_of_headers: u32,
+    /// File offset of the optional header's ImageBase (rewritten by the loader).
+    pub image_base_offset: usize,
+    pub exports: Vec<(String, u32)>,
+    sections: Vec<(u32, u32, u32, u32, u32)>, // va, vsize, raw, rawsize, characteristics
+}
+impl PeImage {
+    pub fn export(&self, name: &str) -> Option<u32> {
+        let mut found = self.exports.iter().filter(|(n, _)| n == name);
+        let first = found.next()?;
+        found.next().is_none().then_some(first.1)
+    }
+    fn file_offset(&self, rva: u32) -> Option<usize> {
+        self.sections
+            .iter()
+            .find_map(|&(va, vsize, raw, rawsize, _)| {
+                let span = vsize.max(rawsize);
+                (rva >= va && rva - va < span && rva - va < rawsize)
+                    .then(|| (raw + (rva - va)) as usize)
+            })
+    }
+    /// The bytes at an RVA, only if they lie inside one section's raw data.
+    pub fn bytes_at<'a>(&self, file: &'a [u8], rva: u32, len: usize) -> Option<&'a [u8]> {
+        let start = self.file_offset(rva)?;
+        let last = self.file_offset(rva.checked_add(len as u32 - 1)?)?;
+        (last - start == len - 1)
+            .then(|| file.get(start..start + len))
+            .flatten()
+    }
+    pub fn rva_is_executable(&self, rva: u32) -> bool {
+        self.sections.iter().any(|&(va, vsize, _, rawsize, ch)| {
+            ch & 0x2000_0000 != 0 && rva >= va && rva - va < vsize.max(rawsize)
+        })
+    }
+}
+
+pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
+    let bad = |what: &str| format!("not an acceptable Win64 DLL: {what}");
+    let pe = u32_at(bytes, 0x3c).ok_or_else(|| bad("no PE offset"))? as usize;
+    if bytes.get(0..2) != Some(b"MZ") || bytes.get(pe..pe + 4) != Some(b"PE\0\0") {
+        return Err(bad("signature"));
+    }
+    let machine = u16_at(bytes, pe + 4).ok_or_else(|| bad("header"))?;
+    let section_count = u16_at(bytes, pe + 6).ok_or_else(|| bad("header"))? as usize;
+    let optional_size = u16_at(bytes, pe + 20).ok_or_else(|| bad("header"))? as usize;
+    let characteristics = u16_at(bytes, pe + 22).ok_or_else(|| bad("header"))?;
+    let opt = pe + 24;
+    if machine != 0x8664 || u16_at(bytes, opt) != Some(0x20b) || characteristics & 0x2000 == 0 {
+        return Err(bad("machine, optional header or DLL flag"));
+    }
+    if section_count == 0 || section_count > 96 || optional_size < 112 + 16 {
+        return Err(bad("section table"));
+    }
+    let size_of_image = u32_at(bytes, opt + 56).ok_or_else(|| bad("size"))?;
+    let size_of_headers = u32_at(bytes, opt + 60).ok_or_else(|| bad("size"))?;
+    let export_rva = u32_at(bytes, opt + 112).ok_or_else(|| bad("export dir"))?;
+    let export_size = u32_at(bytes, opt + 116).ok_or_else(|| bad("export dir"))?;
+    let mut sections = Vec::new();
+    for n in 0..section_count {
+        let at = opt + optional_size + n * 40;
+        let f = |o| u32_at(bytes, at + o).ok_or_else(|| bad("section"));
+        let (vsize, va, rawsize, raw, ch) = (f(8)?, f(12)?, f(16)?, f(20)?, f(36)?);
+        if raw as usize + rawsize as usize > bytes.len()
+            || va as u64 + vsize as u64 > size_of_image as u64
+        {
+            return Err(bad("section outside the file or image"));
+        }
+        sections.push((va, vsize, raw, rawsize, ch));
+    }
+    let mut image = PeImage {
+        size_of_image,
+        size_of_headers,
+        image_base_offset: opt + 24,
+        exports: Vec::new(),
+        sections,
+    };
+    if export_rva == 0 || export_size < 40 {
+        return Err(bad("no export directory"));
+    }
+    let dir = image
+        .file_offset(export_rva)
+        .ok_or_else(|| bad("export directory"))?;
+    let count = u32_at(bytes, dir + 20).ok_or_else(|| bad("export"))? as usize;
+    let names = u32_at(bytes, dir + 24).ok_or_else(|| bad("export"))? as usize;
+    let functions = u32_at(bytes, dir + 28).ok_or_else(|| bad("export"))?;
+    let name_table = u32_at(bytes, dir + 32).ok_or_else(|| bad("export"))?;
+    let ordinals = u32_at(bytes, dir + 36).ok_or_else(|| bad("export"))?;
+    if names > 4096 || count > 4096 {
+        return Err(bad("export table too large"));
+    }
+    for n in 0..names {
+        let name_rva = image
+            .file_offset(name_table + 4 * n as u32)
+            .and_then(|o| u32_at(bytes, o));
+        let ordinal = image
+            .file_offset(ordinals + 2 * n as u32)
+            .and_then(|o| u16_at(bytes, o));
+        let (Some(name_rva), Some(ordinal)) = (name_rva, ordinal) else {
+            return Err(bad("export name tables"));
+        };
+        let start = image
+            .file_offset(name_rva)
+            .ok_or_else(|| bad("export name"))?;
+        let tail = bytes
+            .get(start..(start + 128).min(bytes.len()))
+            .ok_or_else(|| bad("export name"))?;
+        let end = tail
+            .iter()
+            .position(|b| *b == 0)
+            .ok_or_else(|| bad("unterminated export name"))?;
+        let name = String::from_utf8_lossy(&tail[..end]).into_owned();
+        if ordinal as usize >= count {
+            return Err(bad("export ordinal"));
+        }
+        let rva = image
+            .file_offset(functions + 4 * u32::from(ordinal))
+            .and_then(|o| u32_at(bytes, o))
+            .ok_or_else(|| bad("export function table"))?;
+        if rva >= export_rva && rva < export_rva + export_size {
+            return Err(bad("forwarded export"));
+        }
+        image.exports.push((name, rva));
+    }
+    Ok(image)
+}
+
+/// RVAs of the four runtime exports; each must be unique and executable.
+pub(crate) fn runtime_exports(image: &PeImage) -> Result<[u32; 4], String> {
+    let mut out = [0u32; 4];
+    for (slot, name) in out.iter_mut().zip(EXPORTS) {
+        let rva = image
+            .export(name)
+            .ok_or_else(|| format!("export {name} is missing or duplicated"))?;
+        if rva == 0 || rva >= image.size_of_image || !image.rva_is_executable(rva) {
+            return Err(format!("export {name} is not inside executable code"));
+        }
+        *slot = rva;
+    }
+    Ok(out)
+}
+
+/// Bytes the loader must not have changed: headers with ImageBase masked.
+pub(crate) fn header_matches(disk: &[u8], remote: &[u8], image: &PeImage) -> bool {
+    let len = image.size_of_headers as usize;
+    if disk.len() < len || remote.len() < len {
+        return false;
+    }
+    let mask = image.image_base_offset..image.image_base_offset + 8;
+    (0..len).all(|i| mask.contains(&i) || disk[i] == remote[i])
+}
+
+pub(crate) fn lower_hex_sha(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    #[test]
+    fn layout_constants_follow_the_v4_trace() {
+        assert_eq!(HEADER_SIZE + ROW_SIZE * CAPACITY, TRACE_SIZE);
+        assert_eq!(TRACE_SIZE, 106_560);
+        const { assert!(TRACE_SIZE <= MAX_TRACE_READ) };
+        assert_eq!(H_NEXT + 4, H_DROPPED);
+        assert_eq!(H_DEADLINE_HIT, 56);
+        assert_eq!(ROW_SIZE, 13 * 8);
+    }
+
+    #[test]
+    fn config_roundtrip_accepts_only_the_two_outputs() {
+        let sent = encode_config(42, 30, 0x01d9_0000_0000_0001);
+        assert_eq!(u32_at(&sent, 0), Some(RUNTIME_VERSION));
+        assert_eq!(u32_at(&sent, 24), Some(MODE_DIAGNOSTIC));
+        let mut after = sent;
+        after[32..40].copy_from_slice(&0x1234_5000u64.to_le_bytes());
+        after[40..44].copy_from_slice(&(TRACE_SIZE as u32).to_le_bytes());
+        assert_eq!(
+            check_installed_config(&sent, &after),
+            Ok((0x1234_5000, TRACE_SIZE as u32))
+        );
+        for (at, value) in [(9usize, 1u8), (17, 1), (28, 1), (46, 1), (0, 9)] {
+            let mut bad = after;
+            bad[at] ^= value;
+            assert!(check_installed_config(&sent, &bad).is_err(), "byte {at}");
+        }
+        let mut no_trace = sent;
+        no_trace[40..44].copy_from_slice(&(TRACE_SIZE as u32).to_le_bytes());
+        assert!(check_installed_config(&sent, &no_trace).is_err());
+        let mut wrong_size = after;
+        wrong_size[40..44].copy_from_slice(&1u32.to_le_bytes());
+        assert!(check_installed_config(&sent, &wrong_size).is_err());
+        let mut unaligned = after;
+        unaligned[32..40].copy_from_slice(&0x1234_5001u64.to_le_bytes());
+        assert!(check_installed_config(&sent, &unaligned).is_err());
+    }
+
+    fn receipt_bytes() -> [u8; RECEIPT_SIZE] {
+        let mut out = [0u8; RECEIPT_SIZE];
+        out[0..4].copy_from_slice(&RUNTIME_VERSION.to_le_bytes());
+        out[4..8].copy_from_slice(&(RECEIPT_SIZE as u32).to_le_bytes());
+        out[8..12].copy_from_slice(&2u32.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn a_receipt_that_accepts_a_quantity_is_refused() {
+        assert!(decode_receipt(&receipt_bytes()).is_ok());
+        let mut accepted = receipt_bytes();
+        accepted[56] = 1;
+        assert!(decode_receipt(&accepted).is_err());
+        let mut reserved = receipt_bytes();
+        reserved[60] = 1;
+        assert!(decode_receipt(&reserved).is_err());
+        let mut version = receipt_bytes();
+        version[0] ^= 1;
+        assert!(decode_receipt(&version).is_err());
+        assert!(decode_receipt(&receipt_bytes()[..60]).is_err());
+    }
+
+    fn blank_trace(stopped: u32) -> Vec<u8> {
+        let mut bytes = vec![0u8; TRACE_SIZE];
+        bytes[0..4].copy_from_slice(&TRACE_MAGIC.to_le_bytes());
+        bytes[4..8].copy_from_slice(&TRACE_VERSION.to_le_bytes());
+        bytes[H_STOPPED..H_STOPPED + 4].copy_from_slice(&stopped.to_le_bytes());
+        bytes
+    }
+    fn set_row(bytes: &mut [u8], index: usize, state: u32, call: u32, rax: u64) {
+        let at = HEADER_SIZE + index * ROW_SIZE;
+        bytes[at..at + 4].copy_from_slice(&state.to_le_bytes());
+        bytes[at + 4..at + 8].copy_from_slice(&call.to_le_bytes());
+        bytes[at + 12..at + 16].copy_from_slice(&0x0aa1u32.to_le_bytes());
+        bytes[at + 56..at + 64].copy_from_slice(&0xaaaa_bbbbu64.to_le_bytes());
+        bytes[at + 64..at + 72].copy_from_slice(&0xcccc_ddddu64.to_le_bytes());
+        bytes[at + 96..at + 104].copy_from_slice(&rax.to_le_bytes());
+        let next = (index as u32 + 1).to_le_bytes();
+        bytes[H_NEXT..H_NEXT + 4].copy_from_slice(&next);
+    }
+    fn receipt() -> Receipt {
+        decode_receipt(&receipt_bytes()).unwrap()
+    }
+
+    #[test]
+    fn a_stable_stopped_trace_is_complete_and_never_a_quantity() {
+        let mut bytes = blank_trace(2);
+        set_row(&mut bytes, 0, 2, 1, 0xdead_beef_0000_0001);
+        let view = TraceView::parse(&bytes).unwrap();
+        let json = project_trace(&view, &view, &receipt());
+        assert_eq!(json["complete"], true);
+        assert_eq!(json["quantity_accepted"], false);
+        assert_eq!(json["accepted"], false);
+        let row = &json["rows"][0];
+        assert_eq!(row["state"], "completed");
+        assert_eq!(row["original_al"], 1);
+        assert_eq!(row["caller_rbp"], "0xaaaabbbb");
+        assert_eq!(row["caller_rdi"], "0xccccdddd");
+        assert_eq!(row["call"], "apply");
+    }
+
+    #[test]
+    fn unstable_unpublished_and_active_rows_are_unknown_not_zero() {
+        let mut a = blank_trace(0);
+        set_row(&mut a, 0, 1, 2, 0x77);
+        let mut b = a.clone();
+        set_row(&mut b, 1, 2, 1, 5);
+        let (a, b) = (TraceView::parse(&a).unwrap(), TraceView::parse(&b).unwrap());
+        let json = project_trace(&a, &b, &receipt());
+        assert_eq!(json["complete"], false);
+        assert_eq!(json["rows"][0]["state"], "incomplete");
+        assert_eq!(json["rows"][0]["original_rax"], Value::Null);
+        assert_eq!(json["rows"][1]["state"], "unknown_unstable");
+        assert_eq!(json["rows"][1]["original_rax"], Value::Null);
+        // A stopped trace with a row that was reserved and never published.
+        let mut c = blank_trace(2);
+        set_row(&mut c, 0, 0, 1, 0);
+        let c = TraceView::parse(&c).unwrap();
+        let json = project_trace(&c, &c, &receipt());
+        assert_eq!(json["rows"][0]["state"], "unknown_unpublished");
+        assert_eq!(json["complete"], false);
+        // In flight keeps a stopped trace incomplete.
+        let mut d = blank_trace(2);
+        d[H_IN_FLIGHT] = 1;
+        let d = TraceView::parse(&d).unwrap();
+        assert_eq!(project_trace(&d, &d, &receipt())["complete"], false);
+    }
+
+    #[test]
+    fn trace_parse_refuses_wrong_magic_version_and_length() {
+        let good = blank_trace(0);
+        assert!(TraceView::parse(&good).is_ok());
+        let mut magic = good.clone();
+        magic[0] ^= 1;
+        assert!(TraceView::parse(&magic).is_err());
+        let mut version = good.clone();
+        version[4] = 3;
+        assert!(TraceView::parse(&version).is_err());
+        assert!(TraceView::parse(&good[..TRACE_SIZE - 1]).is_err());
+        let mut overflow = good;
+        overflow[H_NEXT..H_NEXT + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert_eq!(TraceView::parse(&overflow).unwrap().rows, CAPACITY);
+    }
+
+    #[test]
+    fn unknown_status_values_are_named_not_mapped_to_ok() {
+        assert_eq!(status_name(0), "ok");
+        assert_eq!(status_name(8), "not_wired");
+        assert_eq!(status_name(1234), "unknown_status_1234");
+        assert!(lower_hex_sha(&"a".repeat(64)));
+        assert!(!lower_hex_sha(&"A".repeat(64)));
+        assert!(!lower_hex_sha("abc"));
+    }
+
+    /// Smallest DLL image with one executable section and the given exports.
+    pub(crate) fn synthetic_dll(names: &[&str], forward_first: bool) -> Vec<u8> {
+        let mut f = vec![0u8; 0x600];
+        f[0..2].copy_from_slice(b"MZ");
+        f[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        let pe = 0x80;
+        f[pe..pe + 4].copy_from_slice(b"PE\0\0");
+        f[pe + 4..pe + 6].copy_from_slice(&0x8664u16.to_le_bytes());
+        f[pe + 6..pe + 8].copy_from_slice(&1u16.to_le_bytes());
+        f[pe + 20..pe + 22].copy_from_slice(&240u16.to_le_bytes());
+        f[pe + 22..pe + 24].copy_from_slice(&0x2022u16.to_le_bytes());
+        let opt = pe + 24;
+        f[opt..opt + 2].copy_from_slice(&0x20bu16.to_le_bytes());
+        f[opt + 24..opt + 32].copy_from_slice(&0x1_8000_0000u64.to_le_bytes());
+        f[opt + 56..opt + 60].copy_from_slice(&0x3000u32.to_le_bytes());
+        f[opt + 60..opt + 64].copy_from_slice(&0x200u32.to_le_bytes());
+        f[opt + 112..opt + 116].copy_from_slice(&0x1100u32.to_le_bytes());
+        f[opt + 116..opt + 120].copy_from_slice(&0x100u32.to_le_bytes());
+        let sec = opt + 240;
+        f[sec..sec + 6].copy_from_slice(b".text\0");
+        f[sec + 8..sec + 12].copy_from_slice(&0x1000u32.to_le_bytes());
+        f[sec + 12..sec + 16].copy_from_slice(&0x1000u32.to_le_bytes());
+        f[sec + 16..sec + 20].copy_from_slice(&0x400u32.to_le_bytes());
+        f[sec + 20..sec + 24].copy_from_slice(&0x200u32.to_le_bytes());
+        f[sec + 36..sec + 40].copy_from_slice(&0x6000_0020u32.to_le_bytes());
+        let raw = |rva: u32| 0x200 + (rva - 0x1000) as usize;
+        let d = raw(0x1100);
+        let n = names.len() as u32;
+        f[d + 20..d + 24].copy_from_slice(&n.to_le_bytes());
+        f[d + 24..d + 28].copy_from_slice(&n.to_le_bytes());
+        f[d + 28..d + 32].copy_from_slice(&0x1130u32.to_le_bytes());
+        f[d + 32..d + 36].copy_from_slice(&0x1150u32.to_le_bytes());
+        f[d + 36..d + 40].copy_from_slice(&0x1170u32.to_le_bytes());
+        let mut name_at = 0x1180u32;
+        for (i, name) in names.iter().enumerate() {
+            let i = i as u32;
+            let func = if forward_first && i == 0 {
+                0x1110
+            } else {
+                0x1010 + 0x10 * i
+            };
+            f[raw(0x1130 + 4 * i)..][..4].copy_from_slice(&func.to_le_bytes());
+            f[raw(0x1150 + 4 * i)..][..4].copy_from_slice(&name_at.to_le_bytes());
+            f[raw(0x1170 + 2 * i)..][..2].copy_from_slice(&(i as u16).to_le_bytes());
+            f[raw(name_at)..][..name.len()].copy_from_slice(name.as_bytes());
+            name_at += name.len() as u32 + 1;
+        }
+        f
+    }
+
+    #[test]
+    fn export_parsing_finds_exactly_the_four_executable_exports() {
+        let dll = synthetic_dll(&EXPORTS, false);
+        let image = parse_pe(&dll).unwrap();
+        let rvas = runtime_exports(&image).unwrap();
+        assert_eq!(rvas, [0x1010, 0x1020, 0x1030, 0x1040]);
+        assert_eq!(image.size_of_image, 0x3000);
+        assert!(runtime_exports(&parse_pe(&synthetic_dll(&EXPORTS[..3], false)).unwrap()).is_err());
+        let dup = [EXPORTS[0], EXPORTS[0], EXPORTS[1], EXPORTS[2]];
+        assert!(runtime_exports(&parse_pe(&synthetic_dll(&dup, false)).unwrap()).is_err());
+        assert!(parse_pe(&synthetic_dll(&EXPORTS, true)).is_err());
+        let mut exe = dll.clone();
+        exe[0x80 + 22] = 0x22;
+        exe[0x80 + 23] = 0x00;
+        assert!(parse_pe(&exe).is_err());
+        let mut x86 = dll.clone();
+        x86[0x84] = 0x4c;
+        assert!(parse_pe(&x86).is_err());
+        assert!(parse_pe(&dll[..0x300]).is_err());
+        assert!(parse_pe(b"MZ").is_err());
+    }
+
+    #[test]
+    fn header_comparison_masks_only_the_image_base() {
+        let dll = synthetic_dll(&EXPORTS, false);
+        let image = parse_pe(&dll).unwrap();
+        let mut remote = dll.clone();
+        remote[image.image_base_offset..image.image_base_offset + 8]
+            .copy_from_slice(&0x7ff6_0000_0000u64.to_le_bytes());
+        assert!(header_matches(&dll, &remote, &image));
+        remote[image.image_base_offset + 8] ^= 1;
+        assert!(!header_matches(&dll, &remote, &image));
+        assert!(!header_matches(&dll[..0x100], &dll, &image));
+    }
+}
