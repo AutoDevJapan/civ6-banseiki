@@ -205,6 +205,27 @@ mod win {
         b: i32,
     }
     #[repr(C)]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+    fn titlebar_focus_point(window: &Rect, client: &Rect, origin: Point) -> Option<Point> {
+        let width = window.r.checked_sub(window.l)?;
+        let title_height = origin.y.checked_sub(window.t)?;
+        if client.r <= client.l
+            || client.b <= client.t
+            || width < 100
+            || !(16..=64).contains(&title_height)
+        {
+            return None;
+        }
+        Some(Point {
+            x: window.l.checked_add(width / 2)?,
+            y: window.t.checked_add(title_height / 2)?,
+        })
+    }
+    #[repr(C)]
     struct Entry {
         size: u32,
         usage: u32,
@@ -262,6 +283,10 @@ mod win {
         fn ShowWindow(h: Handle, cmd: i32) -> i32;
         fn SetForegroundWindow(h: Handle) -> i32;
         fn GetWindowRect(h: Handle, rect: *mut Rect) -> i32;
+        fn GetClientRect(h: Handle, rect: *mut Rect) -> i32;
+        fn ClientToScreen(h: Handle, point: *mut Point) -> i32;
+        fn WindowFromPoint(point: Point) -> Handle;
+        fn GetAncestor(h: Handle, flags: u32) -> Handle;
         fn SetCursorPos(x: i32, y: i32) -> i32;
         fn mouse_event(flags: u32, x: u32, y: u32, data: u32, extra: usize);
         fn MapVirtualKeyW(vk: u32, kind: u32) -> u32;
@@ -390,7 +415,43 @@ mod win {
             }
         }
         fn activate(&mut self, h: isize) -> bool {
-            unsafe { SetForegroundWindow(h) != 0 }
+            if unsafe { GetForegroundWindow() } == h {
+                return true;
+            }
+            if unsafe { SetForegroundWindow(h) } != 0 {
+                return true;
+            }
+            let mut window = Rect {
+                l: 0,
+                t: 0,
+                r: 0,
+                b: 0,
+            };
+            let mut client = Rect {
+                l: 0,
+                t: 0,
+                r: 0,
+                b: 0,
+            };
+            let mut origin = Point { x: 0, y: 0 };
+            if unsafe { GetWindowRect(h, &mut window) } == 0
+                || unsafe { GetClientRect(h, &mut client) } == 0
+                || unsafe { ClientToScreen(h, &mut origin) } == 0
+            {
+                return false;
+            }
+            let Some(point) = titlebar_focus_point(&window, &client, origin) else {
+                return false;
+            };
+            let visible = || unsafe { GetAncestor(WindowFromPoint(point), 2) == h };
+            if !visible() || !self.cursor(point.x, point.y) || !visible() {
+                return false;
+            }
+            self.mouse(LEFT_DOWN);
+            self.sleep(0.08);
+            self.mouse(LEFT_UP);
+            self.sleep(0.15);
+            unsafe { GetForegroundWindow() == h }
         }
         fn rect(&mut self, h: isize) -> Result<(i32, i32, i32, i32)> {
             let mut r = Rect {
@@ -454,6 +515,38 @@ mod win {
     }
     pub fn require_single_civ_process() -> Result<()> {
         require_single_with(&mut WindowsBackend::new())
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn titlebar_focus_requires_a_normal_nonclient_band() {
+            let window = Rect {
+                l: 0,
+                t: 0,
+                r: 1456,
+                b: 933,
+            };
+            let client = Rect {
+                l: 0,
+                t: 0,
+                r: 1456,
+                b: 903,
+            };
+            assert_eq!(
+                titlebar_focus_point(&window, &client, Point { x: 0, y: 30 }),
+                Some(Point { x: 728, y: 15 })
+            );
+            assert_eq!(
+                titlebar_focus_point(&window, &client, Point { x: 0, y: 0 }),
+                None
+            );
+            assert_eq!(
+                titlebar_focus_point(&window, &client, Point { x: 0, y: 100 }),
+                None
+            );
+        }
     }
 }
 #[cfg(windows)]
