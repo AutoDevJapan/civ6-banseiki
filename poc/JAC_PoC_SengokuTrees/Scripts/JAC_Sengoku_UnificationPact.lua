@@ -124,7 +124,9 @@ local function CheckGroup(lead, members, targets, label)
   local teams = {};
   for _, id in ipairs(members) do teams[Players[id]:GetTeam()] = true; end
   for _, city in ipairs(targets) do
-    if not teams[Players[city:GetOwner()]:GetTeam()] then return; end
+    local ownerID = city:GetOwner();
+    if type(ownerID) ~= "number" or ownerID < 0 or not Alive(ownerID)
+        or not teams[Players[ownerID]:GetTeam()] then return; end
   end
   local capital = Players[lead]:GetCities():GetCapitalCity();
   if capital and not capital:GetBuildings():HasBuilding(UNIFIED.Index) then

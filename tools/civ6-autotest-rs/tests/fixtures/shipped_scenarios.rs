@@ -316,6 +316,8 @@ pub const SHIPPED_SCENARIOS: &[(&str, SelectionBoundary)] = &[
         "multiplayer-japan-15km-settlers-hotseat-growth.json",
         Shared,
     ),
+    ("multiplayer-japan-staging-assignment.json", Shared),
+    ("multiplayer-japan-staging-diagnostic.json", Shared),
     ("probe-alliance-expiry.json", Shared),
     ("probe-alliance-type.json", Shared),
     ("probe-ally-vision.json", Shared),
