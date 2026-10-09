@@ -3,6 +3,184 @@ use super::*;
 use mlua::{Lua, Value as LuaValue};
 
 #[test]
+fn modifier_inventory_reader_rejects_count_and_phase_corruption() -> Result<()> {
+    let lua = Lua::new();
+    lua.load("Game={GetCurrentGameTurn=function()return 1 end}; PlayerManager={GetAliveMajors=function()return {} end}").exec()?;
+    let mut events = Vec::new();
+    for phase in [
+        "baseline",
+        "fixture_before_choice",
+        "selected",
+        "selected_after_wait_1s",
+        "selected_after_wait_5s",
+    ] {
+        for context in ["GameCore_Tuner", "InGame"] {
+            let code = MODIFIER_INVENTORY
+                .replace("__OATH__", "'JAC_OATH_ODA_TENKA_FUBU'")
+                .replace("__CONTEXT__", &lua_string(context))
+                .replace("__PHASE__", &lua_string(phase));
+            let captured: String = lua
+                .load(format!("{}{code}", crate::oath_save_probe::HELPERS))
+                .eval()?;
+            events.push(
+                json!({"status":"OK","detail":format!("ran Lua in {context}; return={captured}")}),
+            );
+        }
+    }
+    let dir = tempfile::tempdir()?;
+    let write = |events: &[Value]| -> Result<()> {
+        std::fs::write(
+            dir.path().join("steps.jsonl"),
+            events
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )?;
+        Ok(())
+    };
+    write(&events)?;
+    let decoded = read_modifier_inventory(dir.path())?;
+    assert_eq!(decoded["observations"].as_array().unwrap().len(), 10);
+    assert_eq!(decoded["observations"][0]["inventory_available"], false);
+    assert_eq!(decoded["quantity_accepted"], false);
+    assert_eq!(decoded["product_accepted"], false);
+    assert_eq!(
+        decoded["observations"][0]["modifier_call"]["available"],
+        false
+    );
+    assert_eq!(
+        decoded["observations"][0]["modifier_call"]["lookup_type"],
+        "nil"
+    );
+    let original = events.clone();
+    let detail = events[0]["detail"].as_str().unwrap().replace(
+        "total_instance_count8:number:0",
+        "total_instance_count8:number:1",
+    );
+    assert_ne!(detail, events[0]["detail"].as_str().unwrap());
+    events[0]["detail"] = json!(detail);
+    write(&events)?;
+    assert!(read_modifier_inventory(dir.path()).is_err());
+    events = original.clone();
+    events.swap(0, 1);
+    write(&events)?;
+    assert!(read_modifier_inventory(dir.path()).is_err());
+    // Corrupt a same-length phase independently of the context ordering.
+    let mut phase_events = original;
+    phase_events[6]["detail"] = json!(phase_events[6]["detail"]
+        .as_str()
+        .unwrap()
+        .replace("selected_after_wait_1s", "selected_after_wait_5s"));
+    write(&phase_events)?;
+    assert!(read_modifier_inventory(dir.path()).is_err());
+    Ok(())
+}
+
+#[test]
+fn modifier_inventory_reader_keeps_instance_getter_metadata() -> Result<()> {
+    let lua = Lua::new();
+    lua.load(r#"
+Game={GetCurrentGameTurn=function()return 1 end};PlayerManager={GetAliveMajors=function()return {} end}
+GameEffects={GetModifiers=function()return {17,18,19}end,
+GetModifierDefinition=function(id)if id==19 then error('definition read failed')end;return {Id=id==17 and 'JAC_OATH_ODA_TENKA_FUBU_E1' or 'UNRELATED'}end,
+GetModifierActive=function()return false end,GetModifierOwner=function()return 0 end,
+GetModifierSubjectCount=function()return 0 end,GetModifierTrackedObjectCount=function()return 1 end,
+GetModifierSubjects=function()return nil end,GetModifierTrackedObjects=function()return {42}end,
+GetObjectType=function()error('type read failed')end,GetObjectString=function()return 'City (1), Owner: 0' end,GetObjectsPlayerId=function()return 0 end}
+"#).exec()?;
+    let mut events = Vec::new();
+    for phase in [
+        "baseline",
+        "fixture_before_choice",
+        "selected",
+        "selected_after_wait_1s",
+        "selected_after_wait_5s",
+    ] {
+        for context in ["GameCore_Tuner", "InGame"] {
+            let code = MODIFIER_INVENTORY
+                .replace("__OATH__", "'JAC_OATH_ODA_TENKA_FUBU'")
+                .replace("__CONTEXT__", &lua_string(context))
+                .replace("__PHASE__", &lua_string(phase));
+            let captured: String = lua
+                .load(format!("{}{code}", crate::oath_save_probe::HELPERS))
+                .eval()?;
+            events.push(
+                json!({"status":"OK","detail":format!("ran Lua in {context}; return={captured}")}),
+            );
+        }
+    }
+    let dir = tempfile::tempdir()?;
+    let write = |rows: &[Value]| -> Result<()> {
+        std::fs::write(
+            dir.path().join("steps.jsonl"),
+            rows.iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )?;
+        Ok(())
+    };
+    write(&events)?;
+    let decoded = read_modifier_inventory(dir.path())?;
+    let observation = &decoded["observations"][0];
+    assert_eq!(observation["other_definitions"][0]["id"], 18);
+    assert_eq!(
+        observation["other_definitions"][0]["definition"],
+        "UNRELATED"
+    );
+    assert_eq!(observation["unresolved_definitions"][0]["id"], 19);
+    assert_eq!(
+        observation["unresolved_definitions"][0]["call"]["call_ok"],
+        false
+    );
+    assert!(observation["unresolved_definitions"][0]["call"]["error"]
+        .as_str()
+        .unwrap()
+        .contains("definition read failed"));
+    assert_eq!(observation["modifier_call"]["call_ok"], true);
+    assert_eq!(observation["modifier_call"]["type"], "table");
+    assert_eq!(observation["city_call"]["call_ok"], true);
+    let instance = &decoded["observations"][0]["instances"][0];
+    assert_eq!(
+        instance["objects"]["GetModifierSubjects"]["call_type"],
+        "nil"
+    );
+    assert_eq!(decoded["observations"][0]["inventory_available"], false);
+    assert_eq!(instance["methods"]["GetModifierActive"]["value"], false);
+    assert_eq!(instance["methods"]["GetModifierOwner"]["value"], 0.0);
+    let getters = &instance["objects"]["GetModifierTrackedObjects"]["objects"][0]["getters"];
+    assert_eq!(getters["GetObjectName"]["available"], false);
+    assert_eq!(getters["GetObjectName"]["lookup_type"], "nil");
+    assert_eq!(getters["GetObjectType"]["call_ok"], false);
+    assert!(getters["GetObjectType"]["error"]
+        .as_str()
+        .unwrap()
+        .contains("type read failed"));
+    for (before, after) in [
+        (
+            "matching_instance_count8:number:1",
+            "matching_instance_count8:number:2",
+        ),
+        (
+            "quantity_accepted13:boolean:false",
+            "quantity_accepted12:boolean:true",
+        ),
+    ] {
+        let mut changed = events.clone();
+        let detail = changed[0]["detail"]
+            .as_str()
+            .unwrap()
+            .replace(before, after);
+        assert_ne!(detail, changed[0]["detail"].as_str().unwrap());
+        changed[0]["detail"] = json!(detail);
+        write(&changed)?;
+        assert!(read_modifier_inventory(dir.path()).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn modifier_inventory_preserves_false_and_distinguishes_unavailable_lists() -> Result<()> {
     use crate::oath_expiry_probe::Frame;
     let lua = Lua::new();

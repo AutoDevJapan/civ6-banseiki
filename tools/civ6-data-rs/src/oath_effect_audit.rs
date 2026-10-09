@@ -1,5 +1,5 @@
 //! Short live scenarios for the 66 house oaths. Generated Lua is test code, never a MOD script.
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
     collections::BTreeSet,
@@ -1538,6 +1538,13 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
 }
 
 pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
+    if args.len() == 2 && args[0] == "--read-modifier-inventory" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&read_modifier_inventory(Path::new(&args[1]))?)?
+        );
+        return Ok(());
+    }
     if args.len() == 2 && args[0] == "--modifier-inventory" {
         let case = cases(repo)?
             .into_iter()
@@ -1551,7 +1558,7 @@ pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
     let Some(check) = crate::parse_check_args(
         "generate-oath-effect-audit",
         args,
-        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory.",
+        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory; --read-modifier-inventory ARTIFACTS reads recorded frames without asserting acceptance.",
     )?
     else {
         return Ok(());
@@ -1583,6 +1590,155 @@ pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
         if check { "up to date" } else { "generated" }
     );
     Ok(())
+}
+
+fn read_modifier_inventory(directory: &Path) -> Result<Value> {
+    use crate::oath_expiry_probe::Frame;
+    fn scalar(value: &Frame) -> Value {
+        match value {
+            Frame::Bool(v) => json!(v),
+            Frame::Num(v) => json!(v),
+            Frame::Str(v) => json!(v),
+            Frame::Table(_) => json!({"type":"table"}),
+        }
+    }
+    fn call_summary(info: &Frame) -> Result<Value> {
+        Ok(json!({
+            "available": scalar(info.get("available")?),
+            "call_ok": info.get("call_ok").ok().map(scalar),
+            "lookup_type": info.get("lookup_type").ok().map(scalar),
+            "type": info.get("value_type").ok().map(scalar),
+            "value": info.get("value").ok().map(scalar),
+            "error": info.get("error").ok().map(scalar),
+        }))
+    }
+    let text = std::fs::read_to_string(directory.join("steps.jsonl"))?;
+    let mut observations = Vec::new();
+    for line in text.lines() {
+        let event: Value = serde_json::from_str(line)?;
+        if event["status"] != "OK" {
+            continue;
+        }
+        let Some(detail) = event["detail"].as_str() else {
+            continue;
+        };
+        let Some((prefix, encoded)) = detail.split_once("JAC_OATH_MODIFIER_INVENTORY|") else {
+            continue;
+        };
+        let context = if prefix == "ran Lua in GameCore_Tuner; return=" {
+            "GameCore_Tuner"
+        } else if prefix == "ran Lua in InGame; return=" {
+            "InGame"
+        } else {
+            bail!("unexpected observation context")
+        };
+        let frame = Frame::parse(encoded)?;
+        ensure!(
+            frame.get("oath")?.text()? == "JAC_OATH_ODA_TENKA_FUBU",
+            "unexpected observation oath"
+        );
+        ensure!(
+            frame.get("context")?.text()? == context,
+            "observed and executed context differ"
+        );
+        let instances = frame.get("instances")?.entries()?;
+        let others = frame.get("other_definitions")?.entries()?;
+        let unknown = frame.get("unresolved_definitions")?.entries()?;
+        ensure!(
+            frame.get("matching_instance_count")?.int()? == instances.len() as i64,
+            "matching count mismatch"
+        );
+        ensure!(
+            frame.get("other_instance_count")?.int()? == others.len() as i64,
+            "other count mismatch"
+        );
+        ensure!(
+            frame.get("total_instance_count")?.int()?
+                == (instances.len() + others.len() + unknown.len()) as i64,
+            "total count mismatch"
+        );
+        ensure!(
+            frame.get("quantity_accepted")? == &Frame::Bool(false)
+                && frame.get("product_accepted")? == &Frame::Bool(false),
+            "observation must not assert acceptance"
+        );
+        let mut summaries = Vec::new();
+        for (_, row, _) in instances {
+            let mut methods = serde_json::Map::new();
+            for method in [
+                "GetModifierActive",
+                "GetModifierOwner",
+                "GetModifierSubjectCount",
+                "GetModifierTrackedObjectCount",
+            ] {
+                let info = row.get(method)?;
+                methods.insert(method.into(), call_summary(info)?);
+            }
+            let mut object_lists = serde_json::Map::new();
+            for method in ["GetModifierSubjects", "GetModifierTrackedObjects"] {
+                let list = row.get(method)?;
+                let mut objects = Vec::new();
+                for (_, object, _) in list.get("objects")?.entries()? {
+                    let mut getters = serde_json::Map::new();
+                    for getter in [
+                        "GetObjectName",
+                        "GetObjectType",
+                        "GetObjectString",
+                        "GetObjectsPlayerId",
+                    ] {
+                        let info = object.get(getter)?;
+                        getters.insert(getter.into(), call_summary(info)?);
+                    }
+                    objects.push(json!({"id":object.get("id")?.int()?,"getters":getters}));
+                }
+                let call = list.get("call")?;
+                object_lists.insert(method.into(),json!({"available":scalar(call.get("available")?),"call_ok":call.get("call_ok").ok().map(scalar),"lookup_type":call.get("lookup_type").ok().map(scalar),"call_type":call.get("value_type").ok().map(scalar),"error":call.get("error").ok().map(scalar),"objects":objects}));
+            }
+            summaries.push(json!({"id":row.get("instance")?.int()?,"definition":row.get("definition")?.text()?,"definition_call":call_summary(row.get("definition_call")?)?,"methods":methods,"objects":object_lists}));
+        }
+        let mut own = Vec::new();
+        for (_, city, _) in frame.get("cities")?.entries()? {
+            if city.get("owner")?.int()? == 0 {
+                own.push(json!({"id":city.get("id")?.int()?,"plot":city.get("plot")?.int()?,"flag":city.get("flag").ok().map(scalar)}));
+            }
+        }
+        let other_definitions = others.iter().map(|(_, row, _)| {
+            Ok(json!({"id":row.get("instance")?.int()?,"definition":row.get("definition")?.text()?}))
+        }).collect::<Result<Vec<_>>>()?;
+        let unresolved_definitions = unknown
+            .iter()
+            .map(|(_, row, _)| {
+                Ok(json!({"id":row.get("instance")?.int()?,"call":call_summary(row.get("call")?)?}))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let city_call = frame.get("city_call")?;
+        observations.push(json!({"context":context,"phase":frame.get("phase")?.text()?,"turn":frame.get("turn")?.int()?,"inventory_available":scalar(frame.get("inventory_available")?),"total":frame.get("total_instance_count")?.int()?,"matching":instances.len(),"other":others.len(),"unresolved":unknown.len(),"cities":frame.get("cities")?.entries()?.len(),"human_cities":own,"instances":summaries,"other_definitions":other_definitions,"unresolved_definitions":unresolved_definitions,"modifier_call":call_summary(frame.get("calls")?.get("modifiers")?)?,"city_call":{"call_ok":scalar(city_call.get("call_ok")?),"error":city_call.get("error").ok().map(scalar)}}));
+    }
+    ensure!(
+        observations.len() == 10,
+        "expected ten complete observation frames"
+    );
+    for (index, phase) in [
+        "baseline",
+        "fixture_before_choice",
+        "selected",
+        "selected_after_wait_1s",
+        "selected_after_wait_5s",
+    ]
+    .iter()
+    .enumerate()
+    {
+        for (offset, context) in ["GameCore_Tuner", "InGame"].iter().enumerate() {
+            ensure!(
+                observations[index * 2 + offset]["phase"] == *phase
+                    && observations[index * 2 + offset]["context"] == *context,
+                "observation order mismatch"
+            );
+        }
+    }
+    Ok(
+        json!({"scope":"recorded_observation_reader_only","native_ordering_proved":false,"quantity_accepted":false,"product_accepted":false,"observations":observations}),
+    )
 }
 
 #[cfg(test)]

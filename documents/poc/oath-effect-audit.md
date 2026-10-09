@@ -410,6 +410,26 @@ d2ea3fbbの実機56は97/147手順まで成功し、98手順目の待機中に�
 
 取得できないAPI、実行エラー、返却型を保持し、false・0・空一覧と区別する。定義を読めないInstanceを対象外として捨てず、未解決の一覧へ残す。通常の全66生成源や比較基準は変更しない。追加と解除のnative命令、誓約旗の切替、生産進捗・人口・資金・終手・保存は操作しない。人工的な入力は選択機会を用意する改元1の黄金期に限り、正式な選択は既存の画面操作を通す。
 
-この観測は有効状態と対象のAPI資料であり、nativeのApply完了と台帳公開の順序、読取ロックの再入性、保存復元やID再利用の安全性を証明しない。数量・通常製品の受入とnativeの順序の成立はfalseを保つ。実機結果は未取得である。
+この観測は有効状態と対象のAPI資料であり、nativeのApply完了と台帳公開の順序、読取ロックの再入性、保存復元やID再利用の安全性を証明しない。数量・通常製品の受入とnativeの順序の成立はfalseを保つ。実機61の観測結果を以下に記す。
 
 総Instance数・対象一致数・対象外数を区別し、対象外の定義名とIDも全件残す。実行器の汎用ログ判定5/5だけを、一覧取得やnative実装の成功へ読み替えない。実際の観測の`inventory_available`、`other_definitions`、`unresolved_definitions`と各呼出しの型・エラーを確認する。型不正や重複IDのassertが止めた観測は失敗のまま保持し、部分資料から完全な一覧を主張しない。
+
+実機61はa4c5bc91の21/21手順・ログ判定5/5で完了した。保存済み`result.json`の「Generic: JAC Runtime Error」は`0 matching stack traces`であり、API取得不能やnative実装の成否とは別のログ判定である。Core/UI各5枚の正式選択前後を記録し、9原資料をSHA256一致で保全した。canonical形式を読む`--read-modifier-inventory <保全先>`は、10枚の順序・実行側と記録側・件数・受入falseを照合する資料の読取であり、実行源や実数量の独立受入検証ではない。出力の`human_cities`は、この織田家をプレイヤー0に固定した観測でのプレイヤー0所有都市を表す。
+
+全10枚でModifier5918件、天下布武の定義一致44件、他定義5874件、未解決定義0、都市56件を記録した。選択前の4枚では対象は0で、正式選択後の6枚では軍事のInstance464と文化の465が、Object470/471（本人都市65536/131073）を条件成立対象として返した。定義名はそれぞれ`JAC_OATH_ODA_TENKA_FUBU_E1/E2`であり、[誓約SQL](../../poc/JAC_PoC_SengokuTrees/Data/JAC_Sengoku_Oaths.sql)の軍事15%・文化5%に対応する。記録を比較し、対象となるInstanceと都市が、Core/UIと1秒・5秒の待機後も同じだったことを確認した。他家にも同じ定義のInstanceがあるため、定義名とActiveだけで本人を判定できない。
+
+他家の条件未成立では、Active=trueでもSubjectCount=0・Subjects=nilとなった。[観測生成器](../../tools/civ6-data-rs/src/oath_effect_audit.rs)は呼出し結果の`value_type="nil"`を記録し、一覧全体の`inventory_available=false`を保持している。この原記録は変更しない。数量・製品・nativeの順序の受入false、診断の終了3も維持する。
+
+読取結果にも対象外の定義名とInstance ID、未解決のInstance IDと定義取得エラー、一覧と都市取得の呼出し結果を残す。Getterの取得不能、実行失敗、型、値は別々に出力し、nilの対象一覧を取得成功へ読み替えない。非空のInstanceを含む資料で、これらの保持と件数・受入フラグ・観測順序の破損を検査する。
+
+## Modifier読取のホストロック
+
+配布DLLのホストサービスGUID`27ce99c2-78a8-41d5-91a2-567c083e47af`を、配布EXE（SHA256 `e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63`）のQueryInterface RVA`1c99e0`と仮想表`fc79d0`へ追跡した。仮想表の取得`+40`は`1c96f0→f4be0`でhost`+460`のTryEnterCriticalSection、必要時のEnterCriticalSectionを呼ぶ。解放`+38`は`1c9a80→f7170`で同じ対象のLeaveCriticalSectionを呼ぶ。インポート表のRVA`f96730`はTryEnterCriticalSection、`f96720`はEnterCriticalSection、`f96728`はLeaveCriticalSectionに対応する。`f96988`のGetCurrentThreadIdとhost`+4a0/+4a4`の所有スレッド・再入数も、取得側`f4c2b/f4c39`と解放側`f717e/f7186`で照合した。
+
+同一スレッドからのCriticalSection再入はWindowsの契約に従い、取得回数ごとの解放を要求する。[Microsoftの一次資料](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-entercriticalsection)。これは静的な呼出し先の確認であり、native補正の実行や他スレッドとの待機関係の安全性を証明しない。Instanceの対象公開とApply/Removeの順序、Cityラッパーの同一性・所有者移管・保存後の寿命は残る。
+
+GetCurrentThreadIdへの呼出しは、`98bcd0`の中継jmpを経てインポート表へ届く。解放側`f7184`は所有スレッドが違えば解放せずに返る。一致する場合、`f7186`で再入数を1減らし、0になった場合だけ`f718f`で所有スレッド値を消す。その後の`f71a5→9898c0→f96728`は再入数が0に戻った場合だけに限らず、所有スレッドが一致した各解放でLeaveCriticalSectionを呼ぶ。
+
+同じ配布DLLのFactory生成メソッドRVA`94b860`では、`94bb05`が生成経路の`92a4f0`を直接呼び、その`92a534`はvptr`aa3e38`を設定する。この表の`+28`にある`956a40`は`+188..+190`の16バイト要素を出力配列へ複製するが、その集合がApply完了後の対象と同一かは未確定である。`+68`の`95c170`は`+100`の1バイトを返して直ちに終了する。後続の`95c180`にある別関数の走査を、このGetterの処理として扱わない。
+
+通常割合の実装を進めるには、対象集合の追加・削除とApply/Removeの前後、ホストロックの取得・解放の境界、Cityラッパーの所有者移管・保存復元・破棄の経路を結び付ける必要がある。公開されたInstanceや有効状態だけから適用済みと判断することも、取得不能を寄与0として扱うこともできない。通常割合と解除復元を満たす製品用の実装は未完了であり、これらの静的資料を製品受入へ数えない。
