@@ -7,6 +7,10 @@ const XML: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.xml";
 const TEXT: &str = "poc/JAC_PoC_JapanMapScale/Text/JAC_JapanMapScale_Text.xml";
 
 fn fixture() -> Lua {
+    fixture_with_state("")
+}
+
+fn fixture_with_state(initial: &str) -> Lua {
     let lua = new_lua();
     exec(
         &lua,
@@ -22,11 +26,12 @@ map='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map'
 SlotStatus={SS_TAKEN=1,SS_COMPUTER=2,SS_CLOSED=3}
 Mouse={eLClick=1}
 local function player(id, status, team)
-  local p={id=id,status=status,team=team,ready=id==0}
+  local p={id=id,status=status,team=team,ready=id==0,networkId='net-'..id}
   function p:GetSlotStatus() return self.status end
   function p:GetTeam() return self.team end
   function p:SetTeam(value) if not self.rejectTeam then self.team=value end end
   function p:GetPlayerName() return 'Player '..self.id end
+  function p:GetNetworkIdentifer() return self.networkId end
   function p:GetReady() return self.ready end
   return p
 end
@@ -146,6 +151,7 @@ function include(name)
 end
 "#,
     );
+    exec(&lua, initial);
     exec(&lua, &read_repo(STAGING));
     exec(&lua, "ContextPtr:show()");
     lua
@@ -436,11 +442,14 @@ assert(values.JAC_MP_ROSTER==nil)
 assert(PlayerConfigurations[0].team==3 and PlayerConfigurations[1].team==4)
 assert(values.NO_TEAMS==true and Controls.ReadyButton.disabled)
 Controls.JAC_DifferentButton.click()
-assert(values.JAC_MP_MODE=='DIFFERENT')
+assert(values.JAC_MP_MODE=='JAPAN' and Controls.ReadyButton.disabled)
 assert(values.JAC_MP_ROSTER==nil and values.NO_TEAMS==true)
 rejectedConfigKeys[rejectedBaseline]=nil
 ContextPtr.hidden=true
 ContextPtr:show()
+assert(values.JAC_MP_ROSTER=='0,1')
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_MODE=='DIFFERENT')
 assert(PlayerConfigurations[0].team==3 and PlayerConfigurations[1].team==4)
 "#,
         );
@@ -538,6 +547,7 @@ rowsManager.instances[2].AreaPullDown.select(3)
 Controls.JAC_SubjectPullDown.select(3)
 assert(values.JAC_MP_SUBJECT==1)
 PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
 Events.MultiplayerPlayerConnected.fire(1)
 assert(values.JAC_MP_AREA_1==nil and values.JAC_MP_SUBJECT==nil)
 assert(values.JAC_MP_PRIOR_TEAM_1==7)
@@ -550,19 +560,94 @@ assert(PlayerConfigurations[1].team==7)
 }
 
 #[test]
-fn reconnect_waits_for_rejected_subject_cleanup_across_context_reload() {
+fn same_person_reconnect_keeps_the_team_saved_before_all_japan() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+assert(values.JAC_MP_PRIOR_TEAM_0==3 and values.JAC_MP_TEAM==4)
+assert(values.JAC_MP_ID_0=='net-0')
+Events.MultiplayerPlayerConnected.fire(0)
+assert(values.JAC_MP_PRIOR_TEAM_0==3 and values.JAC_MP_RETIRING_0==nil)
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_MODE=='DIFFERENT')
+assert(PlayerConfigurations[0].team==3)
+"#,
+    );
+}
+
+#[test]
+fn changed_network_identity_is_reconciled_after_player_info_update() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+rowsManager.instances[1].AreaPullDown.select(2)
+rowsManager.instances[2].AreaPullDown.select(3)
+Controls.JAC_SubjectPullDown.select(3)
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
+Events.PlayerInfoChanged.fire(1)
+assert(values.JAC_MP_SUBJECT==nil and values.JAC_MP_AREA_1==nil)
+assert(values.JAC_MP_ID_1=='replacement-1' and values.JAC_MP_PRIOR_TEAM_1==7)
+assert(Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
+fn reconnect_cannot_switch_modes_while_old_roster_write_is_rejected() {
     let lua = fixture();
     exec(
         &lua,
         r#"
 Controls.JAC_AllJapanButton.click()
 Controls.JAC_SubjectPullDown.select(3)
-assert(values.JAC_MP_SUBJECT==1)
 PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
+rejectedConfigKeys.JAC_MP_ROSTER=true
+Events.MultiplayerPlayerConnected.fire(1)
+assert(values.JAC_MP_RETIRING_1=='REJOINING')
+assert(Controls.ReadyButton.disabled)
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_MODE=='JAPAN' and PlayerConfigurations[1].team==7)
+assert(values.JAC_MP_PRIOR_TEAM_1==4)
+rejectedConfigKeys.JAC_MP_ROSTER=nil
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_RETIRING_1==nil and values.JAC_MP_SUBJECT==nil)
+assert(values.JAC_MP_PRIOR_TEAM_1==7)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[1].team==7)
+"#,
+    );
+}
+
+#[test]
+fn reconnect_waits_for_rejected_subject_cleanup_across_show() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+rowsManager.instances[1].AreaPullDown.select(2)
+rowsManager.instances[2].AreaPullDown.select(3)
+Controls.JAC_SubjectPullDown.select(3)
+assert(values.JAC_MP_SUBJECT==1)
+assert(not Controls.ReadyButton.disabled)
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
 rejectedConfigKeys.JAC_MP_SUBJECT=true
+launchActive=true
 Events.MultiplayerPlayerConnected.fire(1)
 assert(values.JAC_MP_RETIRING_1=='REJOINING' and values.JAC_MP_SUBJECT==1)
-assert(Controls.ReadyButton.disabled)
+assert(Controls.ReadyButton.disabled and stoppedLaunches==1 and not launchActive)
+local readyBefore,autostartBefore=stockReady,stockAutostart
+OnReadyButton()
+CheckGameAutoStart()
+assert(stockReady==readyBefore and stockAutostart==autostartBefore)
 ContextPtr.hidden=true
 ContextPtr:show()
 assert(values.JAC_MP_RETIRING_1=='REJOINING' and Controls.ReadyButton.disabled)
@@ -571,6 +656,46 @@ ContextPtr.hidden=true
 ContextPtr:show()
 assert(values.JAC_MP_SUBJECT==nil and values.JAC_MP_RETIRING_1==nil)
 assert(values.JAC_MP_PRIOR_TEAM_1==7 and Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
+fn fresh_lua_context_resumes_replacement_before_ready_or_team_restore() {
+    let lua = fixture_with_state(
+        r#"
+values.JAC_MP_MODE='JAPAN'
+values.JAC_MP_ROSTER='0'
+values.JAC_MP_TEAM=4
+values.JAC_MP_PRIOR_NO_TEAMS='TRUE'
+values.JAC_MP_PRIOR_TEAM_0=3
+values.JAC_MP_PRIOR_TEAM_1=4
+values.JAC_MP_ID_0='net-0'
+values.JAC_MP_ID_1='net-1'
+values.JAC_MP_AREA_0='EAST'
+values.JAC_MP_AREA_1='WEST'
+values.JAC_MP_SUBJECT=1
+values.JAC_MP_RETIRING_1='REJOINING'
+values.NO_TEAMS=false
+PlayerConfigurations[0].team=4
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
+rejectedConfigKeys.JAC_MP_SUBJECT=true
+"#,
+    );
+    exec(
+        &lua,
+        r#"
+assert(values.JAC_MP_RETIRING_1=='REJOINING' and values.JAC_MP_SUBJECT==1)
+assert(Controls.ReadyButton.disabled)
+rejectedConfigKeys.JAC_MP_SUBJECT=nil
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_RETIRING_1==nil and values.JAC_MP_SUBJECT==nil)
+assert(values.JAC_MP_ROSTER=='0,1' and values.JAC_MP_PRIOR_TEAM_1==7)
+assert(values.JAC_MP_ID_1=='replacement-1' and Controls.ReadyButton.disabled)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[0].team==3 and PlayerConfigurations[1].team==7)
 "#,
     );
 }
@@ -585,6 +710,7 @@ Controls.JAC_AllJapanButton.click()
 Controls.JAC_SubjectPullDown.select(3)
 assert(values.JAC_MP_SUBJECT==1)
 PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
 rejectedConfigKeys.JAC_MP_RETIRING_1=true
 Events.MultiplayerPlayerConnected.fire(1)
 assert(values.JAC_MP_SUBJECT==nil and values.JAC_MP_AREA_1==nil)
@@ -625,6 +751,7 @@ participants={0,1,2,3}
 Events.MultiplayerPlayerConnected.fire(3)
 assert(values.JAC_MP_PRIOR_TEAM_3==5)
 PlayerConfigurations[3].team=7
+PlayerConfigurations[3].networkId='replacement-3'
 rejectedConfigKeys.JAC_MP_RETIRING_3=true
 Events.MultiplayerPlayerConnected.fire(3)
 assert(values.JAC_MP_RETIRING_3==nil)

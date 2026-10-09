@@ -147,7 +147,16 @@ if Controls then
   end
   local function assignmentKey(id) return "JAC_MP_AREA_" .. tostring(id) end
   local function priorTeamKey(id) return "JAC_MP_PRIOR_TEAM_" .. tostring(id) end
+  local function identityKey(id) return "JAC_MP_ID_" .. tostring(id) end
   local function retiringKey(id) return "JAC_MP_RETIRING_" .. tostring(id) end
+  local function networkIdentity(id)
+    if GameConfiguration.IsHotseat() then return nil end
+    local player = PlayerConfigurations[id]
+    if not player or not player.GetNetworkIdentifer then return nil end
+    local identifier = player:GetNetworkIdentifer()
+    if identifier == nil or identifier == "" then return nil end
+    return tostring(identifier)
+  end
   local function scoped()
     return GameConfiguration.GetValue("RULESET") == "RULESET_JAC_BANSEIKI"
       and japanMaps[MapConfiguration.GetValue("MAP_SCRIPT")] == true
@@ -203,6 +212,13 @@ if Controls then
   local function chosen(id)
     return choiceByCode[read(assignmentKey(id))]
   end
+  local function retirementPending()
+    if next(pendingRejoin) then return true end
+    for id = 0, 21 do
+      if read(retiringKey(id)) ~= nil then return true end
+    end
+    return false
+  end
   local function valid(ids)
     if mode() ~= JAPAN then return true, nil end
     if #ids < 2 then return false, "LOC_JAC_MP_NEED_PLAYERS" end
@@ -215,11 +231,12 @@ if Controls then
     if read(RESTORE_DONE) ~= nil then
       return false, "LOC_JAC_MP_TEAM_PENDING"
     end
-    if canEdit() and next(pendingRejoin) then
+    if retirementPending() then
       return false, "LOC_JAC_MP_TEAM_PENDING"
     end
-    for id = 0, 21 do
-      if read(retiringKey(id)) ~= nil then
+    for _, id in ipairs(ids) do
+      local saved = read(identityKey(id))
+      if saved ~= nil and networkIdentity(id) ~= tostring(saved) then
         return false, "LOC_JAC_MP_TEAM_PENDING"
       end
     end
@@ -332,13 +349,16 @@ if Controls then
     end
     write(assignmentKey(id), nil)
     write(priorTeamKey(id), nil)
-    if read(assignmentKey(id)) ~= nil or read(priorTeamKey(id)) ~= nil then
+    write(identityKey(id), nil)
+    if read(assignmentKey(id)) ~= nil or read(priorTeamKey(id)) ~= nil
+      or read(identityKey(id)) ~= nil then
       return false
     end
     write(key, nil)
     return read(key) == nil
   end
   local function restoreTeams()
+    if retirementPending() then return false end
     local ids = rosterIds()
     if not sameValue(read(RESTORE_DONE), true) then
       for _, id in ipairs(ids) do
@@ -359,7 +379,9 @@ if Controls then
     for _, id in ipairs(ids) do
       write(priorTeamKey(id), nil)
       write(assignmentKey(id), nil)
-      if read(priorTeamKey(id)) ~= nil or read(assignmentKey(id)) ~= nil then
+      write(identityKey(id), nil)
+      if read(priorTeamKey(id)) ~= nil or read(assignmentKey(id)) ~= nil
+        or read(identityKey(id)) ~= nil then
         return false
       end
     end
@@ -384,6 +406,14 @@ if Controls then
       if read(RESTORE_DONE) ~= nil then return end
     end
     local currentSet = humanSet(ids)
+    for _, id in ipairs(rosterIds()) do
+      local saved = read(identityKey(id))
+      local current = networkIdentity(id)
+      if currentSet[id] and saved ~= nil and current ~= nil
+        and not sameValue(saved, current) then
+        pendingRejoin[id] = true
+      end
+    end
     for id in pairs(pendingRejoin) do
       write(retiringKey(id), REJOINING)
       if read(retiringKey(id)) ~= REJOINING then
@@ -419,6 +449,9 @@ if Controls then
         write(priorTeamKey(id), PlayerConfigurations[id]:GetTeam())
         if not sameValue(read(priorTeamKey(id)),
           PlayerConfigurations[id]:GetTeam()) then return end
+        local identity = networkIdentity(id)
+        write(identityKey(id), identity)
+        if not sameValue(read(identityKey(id)), identity) then return end
       end
       if read(assignmentKey(id)) and not chosen(id) then
         write(assignmentKey(id), nil)
@@ -551,6 +584,10 @@ if Controls then
   end
   local function onMode(nextMode)
     if not scoped() or not canEdit() or mode() == nextMode then return end
+    if nextMode == DIFFERENT then
+      syncState()
+      if retirementPending() or read(ROSTER) ~= rosterValue(humans()) then return end
+    end
     lastError = nil
     resetAttempts()
     write(MODE, nextMode)
@@ -610,7 +647,14 @@ if Controls then
     resetAttempts()
     if canEdit() and mode() == JAPAN then
       for _, old in ipairs(rosterIds()) do
-        if old == id then pendingRejoin[id] = true end
+        if old == id then
+          local saved = read(identityKey(id))
+          local current = networkIdentity(id)
+          if saved == nil or current == nil
+            or not sameValue(saved, current) then
+            pendingRejoin[id] = true
+          end
+        end
       end
     end
     syncState()
