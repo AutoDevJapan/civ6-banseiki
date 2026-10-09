@@ -1,8 +1,8 @@
 //! Bounded, external x64 observer. No game commands, injection, or memory writes.
 //!
 //! Run only against the PID/creation FILETIME supplied by the live_chain owner.
-//! `ready` (stdout and OUTPUT.ready) means that all four hardware probes are
-//! installed, not that any runtime value or notification has been identified.
+//! `ready` (stdout and OUTPUT.ready) means that the three setter/candidate probes
+//! are installed. Getter is enabled only on the retained first setter thread.
 //! Output contains raw fields only. Even a completed observation is not product
 //! acceptance. Forced termination of this debugger cannot run Rust cleanup;
 //! use its deadline or Ctrl-C for an orderly restore/continue/detach instead.
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 type Result<T> = std::result::Result<T, String>;
 
 #[derive(Debug, Parser)]
-#[command(about = "Observe one pinned Civ6 process using four hardware execution probes")]
+#[command(about = "Observe one pinned Civ6 process using bounded hardware execution probes")]
 struct Args {
     #[arg(long)]
     pid: u32,
@@ -29,7 +29,7 @@ struct Args {
     /// Absolute, previously nonexistent JSONL file; OUTPUT.ready must also be new.
     #[arg(long)]
     output: PathBuf,
-    #[arg(long, default_value_t = 240)]
+    #[arg(long, default_value_t = 90)]
     seconds: u64,
 }
 
@@ -39,8 +39,8 @@ impl Args {
         if self.pid == 0 || self.created == 0 {
             return Err("--pid and --created must be nonzero".into());
         }
-        if !(1..=240).contains(&self.seconds) {
-            return Err("--seconds must be in 1..=240".into());
+        if !(1..=90).contains(&self.seconds) {
+            return Err("--seconds must be in 1..=90".into());
         }
         if !self.output.is_absolute()
             || self.output.extension().and_then(|s| s.to_str()) != Some("jsonl")
@@ -71,7 +71,7 @@ mod policy {
     pub const RVAS: [u64; 4] = [0x713E3D, 0x713E42, 0x70AF4A, 0x115357];
     pub const RF: u32 = 1 << 16;
     pub const GETTER_LIMIT: u32 = 32;
-    pub const CANDIDATE_LIMIT: u32 = 8;
+    pub const CANDIDATE_LIMIT: u32 = 16;
 
     #[derive(Default, Serialize)]
     pub struct AttachBreak {
@@ -208,20 +208,33 @@ mod policy {
             self.address == [0; 4] && matches!(self.dr6, 0 | 0xFFFF0FF0) && self.dr7 & !0x400 == 0
         }
 
-        pub fn installed(self, addresses: [u64; 4]) -> Self {
+        pub fn installed(self, addresses: [u64; 4], enabled: u64) -> Self {
             Self {
-                address: addresses,
+                address: std::array::from_fn(|slot| {
+                    if enabled & (1 << (slot * 2)) != 0 {
+                        addresses[slot]
+                    } else {
+                        0
+                    }
+                }),
                 dr6: self.dr6,
-                dr7: self.dr7 | 0x55, // local enable, execution, length 1 in all slots
+                dr7: self.dr7 | enabled, // local execution probes, length 1
             }
         }
 
-        pub fn own_hit(self, addresses: [u64; 4], rip: u64, flags: u32) -> Option<usize> {
+        pub fn own_hit(
+            self,
+            addresses: [u64; 4],
+            enabled: u64,
+            rip: u64,
+            flags: u32,
+        ) -> Option<usize> {
             // B0..B3 are sticky CPU status, not a one-hot event ID. Select the
             // current execution slot from RIP, then check that slot's B bit.
             let slot = addresses.iter().position(|&address| address == rip)?;
-            if self.address != addresses
-                || self.dr7 & !0x400 != 0x55
+            if enabled & (1 << (slot * 2)) == 0
+                || self.address != Self::default().installed(addresses, enabled).address
+                || self.dr7 & !0x400 != enabled
                 || self.dr6 & (1 << slot) == 0
                 || self.dr6 & 0xE000 != 0 // BD, BS, BT are not ours
                 || flags & 0x100 != 0
@@ -292,21 +305,22 @@ mod policy {
             exception: RawException,
             snapshot: Option<ProbeSnapshot>,
             addresses: [u64; 4],
-            owns_probes: bool,
+            enabled: u64,
         ) -> ExceptionDecision {
             if self.attach.consume(exception) {
                 return ExceptionDecision::AttachBreak;
             }
-            if exception.code == 0x80000004 && owns_probes {
+            if exception.code == 0x80000004 && enabled != 0 {
                 if exception.first_chance != 0 {
                     if let Some(snapshot) = snapshot.filter(|snapshot| {
                         snapshot.armed && snapshot.rip == exception.exception_address
                     }) {
-                        if let Some(slot) =
-                            snapshot
-                                .registers
-                                .own_hit(addresses, snapshot.rip, snapshot.flags)
-                        {
+                        if let Some(slot) = snapshot.registers.own_hit(
+                            addresses,
+                            enabled,
+                            snapshot.rip,
+                            snapshot.flags,
+                        ) {
                             return ExceptionDecision::Probe(slot);
                         }
                     }
@@ -314,10 +328,18 @@ mod policy {
                 // Never turn our own hardware exception into a fatal forwarded
                 // SINGLE_STEP when identity/context readback is inconsistent.
                 // Remove our probes; do not change RIP or repair game state.
-                if addresses.contains(&exception.exception_address)
-                    || snapshot
-                        .is_some_and(|snapshot| snapshot.armed && addresses.contains(&snapshot.rip))
-                {
+                // A static address alone is insufficient: disabled slots and
+                // foreign TF/BD/BS/BT sources must remain application exceptions.
+                if snapshot.is_some_and(|snapshot| {
+                    snapshot.armed
+                        && snapshot.flags & 0x100 == 0
+                        && snapshot.registers.dr6 & 0xE000 == 0
+                        && addresses.iter().enumerate().any(|(slot, &address)| {
+                            enabled & (1 << (slot * 2)) != 0
+                                && snapshot.registers.dr6 & (1 << slot) != 0
+                                && snapshot.rip == address
+                        })
+                }) {
                     return ExceptionDecision::RemoveOwnedProbe;
                 }
             }
@@ -1147,6 +1169,15 @@ mod platform {
 
         fn cache_fields(&self, trigger: Trigger) -> Value {
             let pointer = self.u64_at(trigger.cache_city, 0x16C0);
+            let raw_b8 = self.u64_at(trigger.receiver, 0xB8);
+            let raw_b8_fields = match &raw_b8 {
+                Ok(0) => Value::Null,
+                Ok(pointer) => json!({
+                    "raw_pointer_plus_38_u64": raw_read(self.u64_at(*pointer, 0x38)),
+                    "raw_pointer_plus_40_u64": raw_read(self.u64_at(*pointer, 0x40)),
+                }),
+                Err(error) => json!({"read_error":format!("pointee unavailable: {error}")}),
+            };
             let backpointer = self.u64_at(trigger.receiver, 0x90);
             // Same address is read through both supplied layouts so disagreement
             // is visible; neither pointer is named as a proven semantic object.
@@ -1164,6 +1195,9 @@ mod platform {
                 "raw_cache_plus_16c0_pointer": raw_read(pointer),
                 "raw_receiver_plus_90_pointer": raw_read(backpointer),
                 "raw_receiver_plus_a8_i32": raw_read(self.i32_at(trigger.receiver, 0xA8)),
+                "raw_receiver_plus_b8_pointer": raw_read(raw_b8),
+                "raw_cache_plus_16e8_pointer": raw_read(self.u64_at(trigger.cache_city, 0x16E8)),
+                "raw_b8_pointee_fields": raw_b8_fields,
                 "raw_pointee_fields": pointee,
             })
         }
@@ -1675,6 +1709,7 @@ mod platform {
         handle: Handle,
         original: DebugRegisters,
         armed: bool,
+        enabled: u64,
         suspended: bool,
         cleanup_snapshot: Option<ProbeSnapshot>,
     }
@@ -1876,6 +1911,7 @@ mod platform {
                     handle,
                     original: DebugRegisters::default(),
                     armed: false,
+                    enabled: 0x45,
                     suspended: false,
                     cleanup_snapshot: None,
                 },
@@ -1908,16 +1944,51 @@ mod platform {
             if registers(&value) != thread.original || !thread.original.unused() {
                 return Err("debug registers changed before installation".into());
             }
-            replace_registers(&mut value, thread.original.installed(self.module.addresses));
+            let expected = thread
+                .original
+                .installed(self.module.addresses, thread.enabled);
+            replace_registers(&mut value, expected);
             // Record intent BEFORE the API; even a failed/partial set must restore.
             thread.armed = true;
             self.owns_probes = true;
             set_context(&thread.handle, value)?;
             let installed = registers(&context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?);
-            if installed.address != self.module.addresses || installed.dr7 & !0x400 != 0x55 {
+            if installed.address != expected.address || installed.dr7 & !0x400 != thread.enabled {
                 return Err("hardware probe installation readback mismatch".into());
             }
             self.installed_total += 1;
+            self.trace(json!({"event":"probe_install","tid":tid,"actual":installed}));
+            Ok(())
+        }
+
+        fn enable_trigger_getter(&mut self, tid: u32) -> Result<()> {
+            // The debug event stops all threads. Only the retained setter
+            // thread handle is changed; future threads still start at 0x45.
+            let thread = self.threads.get_mut(&tid).ok_or("missing setter thread")?;
+            let mut value = context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?;
+            let before = registers(&value);
+            let expected = thread
+                .original
+                .installed(self.module.addresses, thread.enabled);
+            if !thread.armed
+                || thread.enabled != 0x45
+                || before.address != expected.address
+                || before.dr7 & !0x400 != thread.enabled
+            {
+                return Err("setter thread probe readback changed before getter enable".into());
+            }
+            // Retain ownership intent before a potentially partial API write.
+            thread.enabled = 0x55;
+            value.Dr2 = self.module.addresses[2];
+            value.Dr7 |= 0x10;
+            set_context(&thread.handle, value)?;
+            let actual = registers(&context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?);
+            if actual.address != self.module.addresses || actual.dr7 & !0x400 != thread.enabled {
+                return Err("trigger getter installation readback mismatch".into());
+            }
+            self.trace(
+                json!({"event":"trigger_getter_enable","tid":tid,"before":before,"actual":actual}),
+            );
             Ok(())
         }
 
@@ -2098,9 +2169,14 @@ mod platform {
                     return Err("registered break-in thread OS start changed".into());
                 }
             }
-            let decision =
-                self.exceptions
-                    .decide(raw, snapshot, self.module.addresses, self.owns_probes);
+            let enabled = self
+                .threads
+                .get(&raw.tid)
+                .filter(|_| self.owns_probes)
+                .map_or(0, |thread| thread.enabled);
+            let decision = self
+                .exceptions
+                .decide(raw, snapshot, self.module.addresses, enabled);
             self.apply_decision(decision);
             Ok(decision)
         }
@@ -2167,6 +2243,7 @@ mod platform {
                     "image_path":self.process.pinned.image_path, "module":self.module.identity,
                     "module_file_sha256":MODULE_SHA256, "probe_rvas":RVAS,
                     "threads_installed":self.installed_total, "ready_path":args.ready_path(),
+                    "initial_local_enable_mask":0x45,"getter_enable_policy":"first_setter_thread_only",
                     "attach_break":self.exceptions.attach, "ntdll_identity":self.ntdll.report(),
                     "semantics":"raw_fields_only"});
                 let mut marker = OpenOptions::new()
@@ -2232,6 +2309,7 @@ mod platform {
                 )? =>
                 {
                     let trigger = self.observation.trigger.ok_or("missing setter trigger")?;
+                    self.enable_trigger_getter(event.dwThreadId)?;
                     Some(json!({"event":"setter_before", "trigger":trigger,
                         "raw_rdx_pointer":value.Rdx, "raw_delta_i32":raw_read(self.process.i32_at(value.Rdx, 0)),
                         "fields":self.process.cache_fields(trigger)}))
@@ -2248,7 +2326,7 @@ mod platform {
                 2 if self.observation.getter() => Some(
                     json!({"event":"getter_raw", "ordinal":self.observation.getters_recorded,
                         "raw_rax_pointer":value.Rax, "raw_rax_plus_8_i32":raw_read(self.process.i32_at(value.Rax, 8)),
-                        "correlation":"after_first_setter_return_only", "city_identity_verified":false}),
+                        "correlation":"first_setter_thread_after_return_only", "city_identity_verified":false}),
                 ),
                 3 if self.observation.candidate(value.Rbx, event.dwThreadId) => {
                     let record = self.process.read::<8>(value.Rdx);
@@ -2663,6 +2741,93 @@ mod platform {
         }
     }
 
+    fn write_json(writer: &mut impl Write, value: &Value) -> Result<()> {
+        serde_json::to_writer(&mut *writer, value).map_err(|e| format!("write JSON: {e}"))?;
+        writer
+            .write_all(b"\n")
+            .map_err(|e| format!("write JSON newline: {e}"))?;
+        writer.flush().map_err(|e| format!("flush JSON: {e}"))
+    }
+
+    pub fn run(args: &Args) -> Result<()> {
+        let setup = (|| -> Result<File> {
+            args.validate()?;
+            match std::fs::symlink_metadata(args.ready_path()) {
+                Ok(_) => return Err("ready file already exists; use a new output name".into()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(format!("check new ready path: {error}")),
+            }
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&args.output)
+                .map_err(|e| format!("create_new output: {e}"))
+        })();
+        let mut output = match setup {
+            Ok(file) => file,
+            Err(error) => {
+                write_json(
+                    &mut std::io::stdout().lock(),
+                    &json!({"event":"exit", "reason":"error",
+                    "error":error, "ready_reached":false, "cleanup_complete":true,
+                    "attach_attempted":false, "semantics":"raw_fields_only", "product_acceptance":false}),
+                )?;
+                return Err(error);
+            }
+        };
+        let started = Instant::now();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let signal = Arc::clone(&cancelled);
+        let mut session = None;
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            ctrlc::set_handler(move || {
+                signal.store(true, Ordering::Relaxed);
+            })
+            .map_err(|e| format!("install cancellation handler: {e}"))?;
+            let process = Process::open(args)?;
+            let module = PinnedModule::open(&process)?;
+            let ntdll = PinnedNtdll::open(&process)?;
+            session = Some(Session::attach(process, module, ntdll)?);
+            session
+                .as_mut()
+                .ok_or("missing debug session")?
+                .observe(args, &mut output, &cancelled)
+        }))
+        .unwrap_or_else(|_| Err("observer panicked; running centralized cleanup".into()));
+        let outcome = require_ready(
+            outcome,
+            session.as_ref().is_some_and(|session| session.ready),
+        );
+        // The only orderly cleanup path, before any completion output can fail.
+        let cleanup_report = session.as_mut().map(Session::finish);
+        let complete = cleanup_report.as_ref().is_none_or(CleanupReport::complete);
+        let exit = json!({"event":"exit", "pid":args.pid, "created":args.created,
+            "reason":outcome.as_ref().copied().unwrap_or("error"), "error":outcome.as_ref().err(),
+            "ready_reached":session.as_ref().is_some_and(|s| s.ready),
+            "elapsed_ms":started.elapsed().as_millis(), "cleanup_complete":complete,
+            "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
+            "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
+            "exceptions":session.as_ref().map(|s| &s.exceptions),
+            "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
+            "debug_trace":session.as_ref().map(|s| &s.debug_trace),
+            "debug_trace_omitted":session.as_ref().map_or(0, |s| s.debug_trace_omitted),
+            "held_process_alive":session.as_ref().map(|s| raw_read(s.process.handle.alive())),
+            "live_target_restoration_complete":cleanup_report.as_ref().is_some_and(|r| r.complete() && !r.process_exited),
+            "ntdll_identity":session.as_ref().map(|s| s.ntdll.report()),
+            "attach_query_error_count":session.as_ref().map_or(0, |s| s.attach_query_error_count),
+            "attach_query_errors":session.as_ref().map(|s| &s.attach_query_errors),
+            "semantics":"raw_fields_only", "product_acceptance":false});
+        let file_result = write_json(&mut output, &exit);
+        let stdout_result = write_json(&mut std::io::stdout().lock(), &exit);
+        file_result?;
+        stdout_result?;
+        outcome?;
+        if !complete {
+            return Err("debug session cleanup incomplete; inspect exit report".into());
+        }
+        Ok(())
+    }
+
     #[cfg(test)]
     mod live_tests {
         use super::*;
@@ -2705,6 +2870,27 @@ mod platform {
             std::hint::black_box(n.wrapping_add(11))
         }
 
+        fn hidden_getter_worker() {
+            std::thread::spawn(|| {
+                let name: Vec<u16> = "ntdll.dll\0".encode_utf16().collect();
+                // SAFETY: local loaded ntdll, no remote thread or game API.
+                let module = unsafe { GetModuleHandleW(name.as_ptr()) };
+                assert!(!module.is_null());
+                let export =
+                    unsafe { GetProcAddress(module, c"NtSetInformationThread".as_ptr().cast()) }
+                        .unwrap();
+                type SetThreadInfo =
+                    unsafe extern "system" fn(HANDLE, u32, *const c_void, u32) -> i32;
+                // SAFETY: ntdll export's native ABI, current thread pseudo handle.
+                let set: SetThreadInfo = unsafe { std::mem::transmute(export) };
+                let status = unsafe { set((-2isize) as HANDLE, 0x11, std::ptr::null(), 0) };
+                assert!(status >= 0, "ThreadHideFromDebugger failed: {status:#x}");
+                assert_eq!(getter(5), 16);
+            })
+            .join()
+            .unwrap();
+        }
+
         #[test]
         #[ignore = "only launched by the owned Windows hardware test"]
         fn owned_hardware_child() {
@@ -2728,14 +2914,46 @@ mod platform {
             let mut go = String::new();
             std::io::stdin().read_line(&mut go).unwrap();
             assert_eq!(go.trim(), "go");
+            // These workers execute the getter with no setter trigger. Their
+            // real contexts must contain only slots 0/1/3, including new threads.
+            std::thread::spawn(|| assert_eq!(getter(5), 16))
+                .join()
+                .unwrap();
+            hidden_getter_worker();
             std::thread::spawn(|| {
                 // SAFETY: callback remains loaded until explicitly removed.
                 let handler = unsafe { AddVectoredExceptionHandler(1, Some(app_exception)) };
                 assert!(!handler.is_null());
-                for _ in 0..3 {
-                    let n = std::hint::black_box(5);
-                    assert_eq!(getter(returned(candidate(setter(n)))), 27);
+                let mut cache = vec![0u8; 0x1800];
+                let mut raw = [0u64; 9];
+                raw[7] = 0x1234;
+                raw[8] = 7;
+                cache[0x16E8..0x16F0].copy_from_slice(&(raw.as_ptr() as u64).to_le_bytes());
+                cache[0x16F0..0x16F4].copy_from_slice(&42i32.to_le_bytes());
+                let base = cache.as_ptr() as u64;
+                // SAFETY: local fixture calls, valid cache allocation, Win64
+                // shadow space/alignment and saved RBX. Production setter /
+                // return matching and raw memory reads use actual trap context.
+                unsafe {
+                    std::arch::asm!(
+                        "push rbx", "sub rsp, 0x28", "mov rbx, rcx",
+                        "lea rcx, [rbx + 0x1630]", "lea rdx, [rbx + 0x16f0]",
+                        "call {setter}", "call {candidate}", "call {returned}",
+                        "mov rcx, 5", "call {getter}",
+                        "mov rcx, 5", "call {getter}",
+                        "mov rcx, 5", "call {getter}",
+                        "add rsp, 0x28", "pop rbx",
+                        setter = sym setter, candidate = sym candidate,
+                        returned = sym returned, getter = sym getter,
+                        in("rcx") base, clobber_abi("C"),
+                    );
                 }
+                // A new nontrigger thread, created after 0x55 was enabled on
+                // its parent, must receive 0x45 rather than inherit slot 2.
+                std::thread::spawn(|| assert_eq!(getter(5), 16))
+                    .join()
+                    .unwrap();
+                hidden_getter_worker();
                 // A genuine application-origin SINGLE_STEP at an unowned
                 // address must reach VEH, rather than being swallowed.
                 unsafe {
@@ -2770,13 +2988,70 @@ mod platform {
         }
 
         #[test]
-        fn windows_hardware_probe_resume_and_thread_exit() {
+        fn windows_trigger_getter_thread_and_exit() {
             run_owned_hardware(false);
         }
 
         #[test]
-        fn windows_hardware_probe_restore_while_alive() {
+        fn windows_trigger_getter_thread_and_restore() {
             run_owned_hardware(true);
+        }
+
+        #[test]
+        fn windows_raw_b8_reads_preserve_null_and_errors() {
+            let mut raw_handle = std::ptr::null_mut();
+            // SAFETY: independent handle to this test process; never a live game.
+            assert_ne!(
+                unsafe {
+                    DuplicateHandle(
+                        GetCurrentProcess(),
+                        GetCurrentProcess(),
+                        GetCurrentProcess(),
+                        &mut raw_handle,
+                        0,
+                        0,
+                        DUPLICATE_SAME_ACCESS,
+                    )
+                },
+                0
+            );
+            let handle = Handle::new(raw_handle, "raw fixture self handle").unwrap();
+            let process = Process {
+                pinned: identity(handle.0).unwrap(),
+                handle,
+            };
+            let mut cache = vec![0u8; 0x1800];
+            let base = cache.as_ptr() as u64;
+            let trigger = Trigger {
+                cache_city: base,
+                receiver: base + 0x1630,
+                tid: 0,
+                rsp: 0,
+                returned: false,
+            };
+            let fields = process.cache_fields(trigger);
+            assert_eq!(fields["raw_receiver_plus_b8_pointer"], 0);
+            assert_eq!(fields["raw_cache_plus_16e8_pointer"], 0);
+            assert!(fields["raw_b8_pointee_fields"].is_null());
+            cache[0x16E8..0x16F0].copy_from_slice(&1u64.to_le_bytes());
+            let fields = process.cache_fields(trigger);
+            assert_eq!(fields["raw_receiver_plus_b8_pointer"], 1);
+            assert!(
+                fields["raw_b8_pointee_fields"]["raw_pointer_plus_38_u64"]["read_error"]
+                    .is_string()
+            );
+            assert!(
+                fields["raw_b8_pointee_fields"]["raw_pointer_plus_40_u64"]["read_error"]
+                    .is_string()
+            );
+            let fields = process.cache_fields(Trigger {
+                cache_city: u64::MAX,
+                receiver: u64::MAX,
+                ..trigger
+            });
+            assert!(fields["raw_receiver_plus_b8_pointer"]["read_error"].is_string());
+            assert!(fields["raw_cache_plus_16e8_pointer"]["read_error"].is_string());
+            assert!(fields["raw_b8_pointee_fields"]["read_error"].is_string());
         }
 
         fn run_owned_hardware(restore_while_alive: bool) {
@@ -2884,18 +3159,7 @@ mod platform {
                 ready: false,
                 pending: None,
                 cleaned: false,
-                // Suppress Civ6-only field reads/receiver matching. Hardware
-                // routing, resume, actual context and continuation stay real.
-                observation: Observation {
-                    trigger: Some(Trigger {
-                        cache_city: u64::MAX,
-                        receiver: u64::MAX,
-                        tid: 0,
-                        rsp: 0,
-                        returned: false,
-                    }),
-                    ..Default::default()
-                },
+                observation: Observation::default(),
                 installed_total: 0,
                 detach_error: None,
             };
@@ -2972,6 +3236,7 @@ mod platform {
             let report = session.finish();
             let trace = json!({"identity":session.process.pinned,"process_exit":process_exit,
                 "restore_while_alive":restore_while_alive,
+                "fixture_nontrigger_getter_calls":4,"fixture_hidden_getter_calls":2,
                 "thread_exit_events":exits,"cleanup":report,"trace":session.debug_trace,
                 "trace_omitted":session.debug_trace_omitted});
             println!("LIVE_HARDWARE_TRACE={trace}");
@@ -3016,7 +3281,67 @@ mod platform {
                     assert_eq!(record["ok"], true);
                 }
             }
-            assert_eq!(counts, [3; 4]);
+            assert_eq!(counts, [1, 1, 3, 1]);
+            let trigger = session.observation.trigger.unwrap();
+            assert!(trigger.returned);
+            assert_eq!(session.observation.getters_recorded, 3);
+            let installs: Vec<_> = session
+                .debug_trace
+                .iter()
+                .filter(|r| r["event"] == "probe_install")
+                .collect();
+            assert!(installs.len() >= 5);
+            for install in installs {
+                assert_eq!(install["actual"]["dr7"].as_u64().unwrap() & !0x400, 0x45);
+                assert_eq!(install["actual"]["address"][2], 0);
+            }
+            let enables: Vec<_> = session
+                .debug_trace
+                .iter()
+                .filter(|r| r["event"] == "trigger_getter_enable")
+                .collect();
+            assert_eq!(enables.len(), 1);
+            assert_eq!(enables[0]["tid"], trigger.tid);
+            assert_eq!(enables[0]["actual"]["dr7"].as_u64().unwrap() & !0x400, 0x55);
+            for record in session
+                .debug_trace
+                .iter()
+                .filter(|r| r["decision"]["Probe"] == 2)
+            {
+                assert_eq!(record["raw"]["tid"], trigger.tid);
+            }
+            let samples: Vec<Value> =
+                std::io::BufRead::lines(std::io::BufReader::new(output.reopen().unwrap()))
+                    .map(|line| serde_json::from_str(&line.unwrap()).unwrap())
+                    .collect();
+            for event in ["setter_before", "setter_return"] {
+                let sample = samples.iter().find(|r| r["event"] == event).unwrap();
+                let fields = &sample["fields"];
+                assert_eq!(
+                    fields["raw_receiver_plus_b8_pointer"],
+                    fields["raw_cache_plus_16e8_pointer"]
+                );
+                assert!(fields["raw_receiver_plus_b8_pointer"].as_u64().unwrap() != 0);
+                assert_eq!(
+                    fields["raw_b8_pointee_fields"]["raw_pointer_plus_38_u64"],
+                    0x1234
+                );
+                assert_eq!(
+                    fields["raw_b8_pointee_fields"]["raw_pointer_plus_40_u64"],
+                    7
+                );
+            }
+            assert_eq!(
+                samples
+                    .iter()
+                    .filter(|r| r["event"] == "getter_raw")
+                    .count(),
+                3
+            );
+            for sample in samples.iter().filter(|r| r["event"] == "getter_raw") {
+                assert_eq!(sample["tid"], trigger.tid);
+                assert_eq!(sample["city_identity_verified"], false);
+            }
             assert_eq!(session.debug_trace_omitted, 0);
             let app = session
                 .debug_trace
@@ -3031,93 +3356,6 @@ mod platform {
             assert_eq!(session.exceptions.unknown_first_chance_count, 1);
             assert_eq!(session.exceptions.second_chance_count, 0);
         }
-    }
-
-    fn write_json(writer: &mut impl Write, value: &Value) -> Result<()> {
-        serde_json::to_writer(&mut *writer, value).map_err(|e| format!("write JSON: {e}"))?;
-        writer
-            .write_all(b"\n")
-            .map_err(|e| format!("write JSON newline: {e}"))?;
-        writer.flush().map_err(|e| format!("flush JSON: {e}"))
-    }
-
-    pub fn run(args: &Args) -> Result<()> {
-        let setup = (|| -> Result<File> {
-            args.validate()?;
-            match std::fs::symlink_metadata(args.ready_path()) {
-                Ok(_) => return Err("ready file already exists; use a new output name".into()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(format!("check new ready path: {error}")),
-            }
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&args.output)
-                .map_err(|e| format!("create_new output: {e}"))
-        })();
-        let mut output = match setup {
-            Ok(file) => file,
-            Err(error) => {
-                write_json(
-                    &mut std::io::stdout().lock(),
-                    &json!({"event":"exit", "reason":"error",
-                    "error":error, "ready_reached":false, "cleanup_complete":true,
-                    "attach_attempted":false, "semantics":"raw_fields_only", "product_acceptance":false}),
-                )?;
-                return Err(error);
-            }
-        };
-        let started = Instant::now();
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let signal = Arc::clone(&cancelled);
-        let mut session = None;
-        let outcome = catch_unwind(AssertUnwindSafe(|| {
-            ctrlc::set_handler(move || {
-                signal.store(true, Ordering::Relaxed);
-            })
-            .map_err(|e| format!("install cancellation handler: {e}"))?;
-            let process = Process::open(args)?;
-            let module = PinnedModule::open(&process)?;
-            let ntdll = PinnedNtdll::open(&process)?;
-            session = Some(Session::attach(process, module, ntdll)?);
-            session
-                .as_mut()
-                .ok_or("missing debug session")?
-                .observe(args, &mut output, &cancelled)
-        }))
-        .unwrap_or_else(|_| Err("observer panicked; running centralized cleanup".into()));
-        let outcome = require_ready(
-            outcome,
-            session.as_ref().is_some_and(|session| session.ready),
-        );
-        // The only orderly cleanup path, before any completion output can fail.
-        let cleanup_report = session.as_mut().map(Session::finish);
-        let complete = cleanup_report.as_ref().is_none_or(CleanupReport::complete);
-        let exit = json!({"event":"exit", "pid":args.pid, "created":args.created,
-            "reason":outcome.as_ref().copied().unwrap_or("error"), "error":outcome.as_ref().err(),
-            "ready_reached":session.as_ref().is_some_and(|s| s.ready),
-            "elapsed_ms":started.elapsed().as_millis(), "cleanup_complete":complete,
-            "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
-            "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
-            "exceptions":session.as_ref().map(|s| &s.exceptions),
-            "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
-            "debug_trace":session.as_ref().map(|s| &s.debug_trace),
-            "debug_trace_omitted":session.as_ref().map_or(0, |s| s.debug_trace_omitted),
-            "held_process_alive":session.as_ref().map(|s| raw_read(s.process.handle.alive())),
-            "live_target_restoration_complete":cleanup_report.as_ref().is_some_and(|r| r.complete() && !r.process_exited),
-            "ntdll_identity":session.as_ref().map(|s| s.ntdll.report()),
-            "attach_query_error_count":session.as_ref().map_or(0, |s| s.attach_query_error_count),
-            "attach_query_errors":session.as_ref().map(|s| &s.attach_query_errors),
-            "semantics":"raw_fields_only", "product_acceptance":false});
-        let file_result = write_json(&mut output, &exit);
-        let stdout_result = write_json(&mut std::io::stdout().lock(), &exit);
-        file_result?;
-        stdout_result?;
-        outcome?;
-        if !complete {
-            return Err("debug session cleanup incomplete; inspect exit report".into());
-        }
-        Ok(())
     }
 }
 
@@ -3312,7 +3550,7 @@ mod tests {
             },
         ] {
             assert!(original.unused());
-            let installed = original.installed([11, 22, 33, 44]);
+            let installed = original.installed([11, 22, 33, 44], 0x55);
             assert_eq!(installed.dr6, original.dr6);
             assert_eq!(installed.dr7 & !0x400, 0x55);
         }
@@ -3345,21 +3583,24 @@ mod tests {
     #[test]
     fn hardware_hits_select_rip_slot_and_exclude_foreign_step() {
         let addresses = [11, 22, 33, 44];
-        let installed = DebugRegisters::default().installed(addresses);
+        let installed = DebugRegisters::default().installed(addresses, 0x55);
         for slot in 0..4 {
             let hit = DebugRegisters {
                 dr6: 1 << slot,
                 ..installed
             };
-            assert_eq!(hit.own_hit(addresses, addresses[slot], 0), Some(slot));
-            assert_eq!(hit.own_hit(addresses, addresses[(slot + 1) % 4], 0), None);
-            assert_eq!(hit.own_hit(addresses, addresses[slot], 0x100), None);
+            assert_eq!(hit.own_hit(addresses, 0x55, addresses[slot], 0), Some(slot));
+            assert_eq!(
+                hit.own_hit(addresses, 0x55, addresses[(slot + 1) % 4], 0),
+                None
+            );
+            assert_eq!(hit.own_hit(addresses, 0x55, addresses[slot], 0x100), None);
             assert_eq!(
                 DebugRegisters {
                     dr6: hit.dr6 | 0x4000,
                     ..hit
                 }
-                .own_hit(addresses, addresses[slot], 0),
+                .own_hit(addresses, 0x55, addresses[slot], 0),
                 None
             );
         }
@@ -3368,20 +3609,69 @@ mod tests {
                 dr6: 3,
                 ..installed
             }
-            .own_hit(addresses, 11, 0),
+            .own_hit(addresses, 0x55, 11, 0),
             Some(0)
         );
-        assert_eq!(installed.own_hit(addresses, 11, 0), None);
+        assert_eq!(installed.own_hit(addresses, 0x55, 11, 0), None);
         assert_eq!(
             DebugRegisters {
                 dr6: 1,
                 dr7: 0,
                 ..installed
             }
-            .own_hit(addresses, 11, 0),
+            .own_hit(addresses, 0x55, 11, 0),
             None
         );
         assert_eq!(RF, 0x10000);
+    }
+
+    #[test]
+    fn trigger_mask_disabled_getter_and_foreign_step_are_forwarded() {
+        let addresses = [11, 22, 33, 44];
+        for enabled in [0x45, 0x55] {
+            let installed = DebugRegisters::default().installed(addresses, enabled);
+            assert_eq!(installed.address[2], if enabled == 0x45 { 0 } else { 33 });
+            for slot in 0..4 {
+                let exception = RawException {
+                    tid: 9,
+                    code: 0x80000004,
+                    first_chance: 1,
+                    exception_address: addresses[slot],
+                };
+                for (dr6, flags) in [
+                    (1 << slot, 0x202),
+                    (1 << slot, 0x302),
+                    ((1 << slot) | 0x2000, 0x202),
+                    ((1 << slot) | 0x4000, 0x202),
+                    ((1 << slot) | 0x8000, 0x202),
+                    (0, 0x202),
+                ] {
+                    let snapshot = ProbeSnapshot {
+                        armed: true,
+                        registers: DebugRegisters { dr6, ..installed },
+                        rip: addresses[slot],
+                        flags,
+                    };
+                    let mut policy = ExceptionPolicy::default();
+                    let decision = policy.decide(exception, Some(snapshot), addresses, enabled);
+                    if enabled & (1 << (slot * 2)) != 0 && dr6 == 1 << slot && flags & 0x100 == 0 {
+                        assert_eq!(decision, ExceptionDecision::Probe(slot));
+                    } else {
+                        assert_eq!(
+                            decision,
+                            ExceptionDecision::ForwardFirstChance { record: true }
+                        );
+                        assert_eq!(decision.resume_debug_flags(dr6, flags), None);
+                    }
+                }
+                // No snapshot, including cleanup context failure, cannot turn
+                // even an enabled address into evidence of an owned exception.
+                assert_eq!(
+                    ExceptionPolicy::default().decide(exception, None, addresses, enabled),
+                    ExceptionDecision::ForwardFirstChance { record: true }
+                );
+            }
+        }
     }
 
     #[test]
@@ -3399,12 +3689,12 @@ mod tests {
                 armed: true,
                 registers: DebugRegisters {
                     dr6,
-                    ..DebugRegisters::default().installed(addresses)
+                    ..DebugRegisters::default().installed(addresses, 0x55)
                 },
                 rip: addresses[slot],
                 flags: 0x202,
             };
-            let decision = policy.decide(exception, Some(snapshot), addresses, true);
+            let decision = policy.decide(exception, Some(snapshot), addresses, 0x55);
             assert_eq!(decision, ExceptionDecision::Probe(slot));
             assert!(decision.handled());
             assert!(!decision.stop_observing());
@@ -3436,21 +3726,26 @@ mod tests {
             flags: 0x202,
         };
         let mut policy = ExceptionPolicy::default();
-        for snapshot in [
-            Some(snapshot),
-            Some(ProbeSnapshot {
-                armed: false,
-                ..snapshot
-            }),
-            None,
-        ] {
-            let decision = policy.decide(exception, snapshot, addresses, true);
+        {
+            let decision = policy.decide(exception, Some(snapshot), addresses, 0x55);
             assert_eq!(decision, ExceptionDecision::RemoveOwnedProbe);
             assert!(decision.handled());
             assert!(decision.stop_observing());
             assert_eq!(
                 decision.resume_debug_flags(0xE003, 0x202),
                 Some((0xE000, 0x10202))
+            );
+        }
+        for unavailable in [
+            None,
+            Some(ProbeSnapshot {
+                armed: false,
+                ..snapshot
+            }),
+        ] {
+            assert_eq!(
+                policy.decide(exception, unavailable, addresses, 0x55),
+                ExceptionDecision::ForwardFirstChance { record: true }
             );
         }
         // ExceptionAddress mismatch while stopped at our RIP also removes only
@@ -3463,7 +3758,7 @@ mod tests {
                 },
                 Some(snapshot),
                 addresses,
-                true
+                0x55
             ),
             ExceptionDecision::RemoveOwnedProbe
         );
@@ -3479,7 +3774,7 @@ mod tests {
                 },
                 Some(foreign),
                 addresses,
-                owns_probes,
+                if owns_probes { 0x55 } else { 0 },
             );
             assert_eq!(
                 decision,
@@ -3492,7 +3787,7 @@ mod tests {
         // A matching static RVA alone does not authorize a probe before any
         // hardware registers have actually been installed by this session.
         assert_eq!(
-            policy.decide(exception, Some(snapshot), addresses, false),
+            policy.decide(exception, Some(snapshot), addresses, 0),
             ExceptionDecision::ForwardFirstChance { record: true }
         );
     }
@@ -3513,7 +3808,7 @@ mod tests {
                 first_chance: 1,
                 exception_address: 11,
             };
-            let decision = policy.decide(exception, None, addresses, true);
+            let decision = policy.decide(exception, None, addresses, 0x55);
             assert_eq!(
                 decision,
                 ExceptionDecision::ForwardFirstChance {
@@ -3537,7 +3832,7 @@ mod tests {
             },
             None,
             addresses,
-            true,
+            0x55,
         );
         assert_eq!(decision, ExceptionDecision::ForwardSecondChance);
         assert!(!decision.handled());
@@ -3556,7 +3851,7 @@ mod tests {
             armed: true,
             registers: DebugRegisters {
                 dr6: 4,
-                ..DebugRegisters::default().installed(addresses)
+                ..DebugRegisters::default().installed(addresses, 0x55)
             },
             rip: 33,
             flags: 0x202,
@@ -3571,7 +3866,7 @@ mod tests {
                 },
                 Some(snapshot),
                 addresses,
-                true,
+                0x55,
             );
             assert_eq!(decision, ExceptionDecision::Probe(2));
             assert!(decision.handled());
@@ -3595,7 +3890,7 @@ mod tests {
             },
             Some(snapshot),
             addresses,
-            true,
+            0x55,
         );
         assert_eq!(
             decision,
@@ -3621,11 +3916,11 @@ mod tests {
             .unwrap());
         let event = breakpoint(breakin_tid, image.breakpoint_address());
         assert_eq!(
-            policy.decide(event, None, [11, 22, 33, 44], false),
+            policy.decide(event, None, [11, 22, 33, 44], 0),
             ExceptionDecision::AttachBreak
         );
         assert_eq!(
-            policy.decide(event, None, [11, 22, 33, 44], false),
+            policy.decide(event, None, [11, 22, 33, 44], 0),
             ExceptionDecision::ForwardFirstChance { record: true }
         );
     }
@@ -3657,7 +3952,7 @@ mod tests {
                 breakpoint(7, image.breakpoint_address()),
                 None,
                 [11, 22, 33, 44],
-                false,
+                0,
             );
             assert_eq!(
                 decision,
@@ -3681,7 +3976,7 @@ mod tests {
             ..breakpoint(7, image.breakpoint_address())
         };
         assert_eq!(
-            policy.decide(second, None, [11, 22, 33, 44], false),
+            policy.decide(second, None, [11, 22, 33, 44], 0),
             ExceptionDecision::ForwardSecondChance
         );
         assert!(!policy
@@ -3788,7 +4083,7 @@ mod tests {
             breakpoint(7, image.breakpoint_address()),
             None,
             [11, 22, 33, 44],
-            false,
+            0,
         );
         assert_eq!(
             decision,
@@ -3994,15 +4289,15 @@ mod tests {
             pid: 123,
             created: 456,
             output: std::env::current_dir().unwrap().join("probe.jsonl"),
-            seconds: 240,
+            seconds: 90,
         };
         assert!(args.validate().is_ok());
         assert!(args.ready_path().ends_with("probe.jsonl.ready"));
         args.seconds = 0;
         assert!(args.validate().is_err());
-        args.seconds = 241;
+        args.seconds = 91;
         assert!(args.validate().is_err());
-        args.seconds = 240;
+        args.seconds = 90;
         args.output = PathBuf::from("relative.jsonl");
         assert!(args.validate().is_err());
     }
