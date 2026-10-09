@@ -5,14 +5,14 @@ use crate::oath_wire::{u32_at, u64_at, Receipt};
 use serde_json::{json, Value};
 
 pub(crate) const HEADER: usize = 64;
-pub(crate) const ROW: usize = 120;
+pub(crate) const ROW: usize = 192;
 pub(crate) const CAPACITY: usize = 1024;
 pub(crate) const SIZE: usize = HEADER + ROW * CAPACITY;
 
 pub(crate) fn validate(bytes: &[u8]) -> Result<(), String> {
     if bytes.len() != SIZE
         || u32_at(bytes, 0) != Some(0x4a41_4352)
-        || u32_at(bytes, 4) != Some(2)
+        || u32_at(bytes, 4) != Some(3)
         || u32_at(bytes, 8).is_none_or(|n| n as usize > CAPACITY)
         || u32_at(bytes, 24).is_none_or(|n| n > 2)
         || u32_at(bytes, 52).is_none_or(|n| n > 1)
@@ -52,6 +52,20 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
         }
         let q = |offset| u64_at(row, offset).unwrap();
         let metadata = stable && matches!(state, 1..=3) && u32_at(row, 72) == Some(1);
+        let name_length = u32_at(row, 120).unwrap() as usize;
+        let name = if metadata && u32_at(row, 124) == Some(1) && (1..=64).contains(&name_length) {
+            let bytes = &row[128..128 + name_length];
+            if bytes
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+            {
+                std::str::from_utf8(bytes).ok()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let hex = |offset| format!("0x{:x}", q(offset));
         rows.push(json!({"sequence":index+1,"state":if !stable { "unknown_unstable" } else { match state {2=>"completed",3=>"unwound",_=>"incomplete"} },
             "slot":slot,"family":match slot / 2 {0=>"military",1=>"naval",2=>"building",3=>"growth",_=>"unknown"},
@@ -61,7 +75,8 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
             "original_rax":if stable && state == 2 { json!(hex(64)) } else { Value::Null },
             "call_entry_metadata":if metadata { json!({"instance_id":u32_at(row,76),"instance":hex(80),"definition":hex(88),
                 "city_wrapper":hex(96),"declared_percent":u32_at(row,104).unwrap() as i32,"owner":u32_at(row,108),"full_id":u32_at(row,112),
-                "definition_vtable_rva":if u32_at(row,116).unwrap() != 0 {json!(format!("0x{:x}",u32_at(row,116).unwrap()))} else {Value::Null}}) } else { Value::Null },
+                "definition_vtable_rva":if u32_at(row,116).unwrap() != 0 {json!(format!("0x{:x}",u32_at(row,116).unwrap()))} else {Value::Null},
+                "definition_name_at_call_entry":name}) } else { Value::Null },
             "quantity_accepted":false}));
     }
     let stopped = receipt.phase == 3 && u32_at(second, 24) == Some(2);
@@ -89,7 +104,7 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     ) && detached
         && counters_match;
     Ok(
-        json!({"capture":"callee","trace_version":2,"rows":rows,"row_count":count,
+        json!({"capture":"callee","trace_version":3,"rows":rows,"row_count":count,
         "completed":u32_at(second,20),"unwound":u32_at(second,28),"in_flight":in_flight,"dropped":dropped,
         "stopped":stopped,"entry_slots_restored":detached,"complete":complete,"snapshot_consistent":complete,"unstable_rows":unstable,"receipt_counters_match":counters_match,
         "image_base":format!("0x{:x}",u64_at(second,32).unwrap()),"deadline_hit":u32_at(second,48)==Some(1),
@@ -105,7 +120,7 @@ mod tests {
         let mut bytes = vec![0; SIZE];
         for (at, value) in [
             (0, 0x4a41_4352u32),
-            (4, 2),
+            (4, 3),
             (8, 1),
             (20, 1),
             (24, 2),
@@ -204,5 +219,39 @@ mod tests {
         assert_eq!(value["complete"], true);
         assert!(value["rows"][0]["original_rax"].is_null());
         assert!(value["rows"][0]["call_entry_metadata"].is_null());
+    }
+
+    #[test]
+    fn name_copy_is_bounded_and_unknown_values_or_unstable_rows_never_gain_a_label() {
+        let mut bytes = sample();
+        let label = b"JAC_OATH_ODA_TENKA_FUBU_E1";
+        for (offset, value) in [(72, 1u32), (120, label.len() as u32), (124, 1)] {
+            bytes[HEADER + offset..HEADER + offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[HEADER + 128..HEADER + 128 + label.len()].copy_from_slice(label);
+        let r = receipt();
+        let value = project(&bytes, &bytes, &r).unwrap();
+        assert_eq!(
+            value["rows"][0]["call_entry_metadata"]["definition_name_at_call_entry"],
+            "JAC_OATH_ODA_TENKA_FUBU_E1"
+        );
+        assert_eq!(value["quantity_accepted"], false);
+        for (offset, value) in [(120, 0u32), (120, 65), (124, 0), (124, 2)] {
+            let mut changed = bytes.clone();
+            changed[HEADER + offset..HEADER + offset + 4].copy_from_slice(&value.to_le_bytes());
+            assert!(
+                project(&changed, &changed, &r).unwrap()["rows"][0]["call_entry_metadata"]
+                    ["definition_name_at_call_entry"]
+                    .is_null()
+            );
+        }
+        let mut changed = bytes.clone();
+        changed[HEADER + 128] = 0xff;
+        assert!(
+            project(&changed, &changed, &r).unwrap()["rows"][0]["call_entry_metadata"]
+                ["definition_name_at_call_entry"]
+                .is_null()
+        );
+        assert!(project(&bytes, &changed, &r).unwrap()["rows"][0]["call_entry_metadata"].is_null());
     }
 }

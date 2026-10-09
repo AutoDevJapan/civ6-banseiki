@@ -89,6 +89,11 @@ impl SourcePlan {
             (0x2c4360, 0x45),
             (0x1332b0, 0x25),
             (0x135890, 0x30),
+            (0x954cc0, 5),
+            (0x950ec0, 8),
+            (0x6dbef8, 0x1d),
+            (0x6dbec5, 0x29),
+            (0xa39998, 3),
         ] {
             windows.push(Window {
                 rva,
@@ -96,6 +101,8 @@ impl SourcePlan {
             });
         }
         let mut slots = Vec::new();
+        slots.push((0xaa3f28, 0x954cc0));
+        slots.push((0xaa3e50, 0x950ec0));
         for table in [0xa76a30, 0xa6cdb8, 0xa90328, 0xa9e0f0] {
             let family = OathEffectFamily::from_vtable_rva(table).ok_or("unknown effect family")?;
             for call in [OathCall::Apply, OathCall::Remove] {

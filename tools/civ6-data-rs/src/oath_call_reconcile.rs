@@ -43,7 +43,7 @@ fn reconcile(
     };
     ensure!(
         if callee {
-            matches!(version, 1 | 2)
+            matches!(version, 1..=3)
         } else {
             matches!(version, 4 | 5)
         },
@@ -158,6 +158,19 @@ fn reconcile(
         } else {
             None
         };
+        let copied_name = if copied && callee && version == 3 {
+            metadata["definition_name_at_call_entry"]
+                .as_str()
+                .filter(|name| {
+                    !name.is_empty()
+                        && name.len() <= 64
+                        && name
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                })
+        } else {
+            None
+        };
         let city = if copied && callee {
             Some(json!({"owner":metadata["owner"],"full_id":metadata["full_id"]}))
         } else if copied {
@@ -185,7 +198,9 @@ fn reconcile(
             "city_identity_source":if callee {"callee_rdx_backpointer_copy"} else {"adapter_subject_copy"},
             "actual_receiver_argument":if callee && stable {row["actual_receiver_argument"].clone()} else {Value::Null},
             "copied_definition_address":if copied {metadata["definition"].clone()} else {Value::Null},
-            "copied_definition_vtable_rva":if copied && callee && version == 2 {metadata["definition_vtable_rva"].clone()} else {Value::Null},
+            "copied_definition_vtable_rva":if copied && callee && version >= 2 {metadata["definition_vtable_rva"].clone()} else {Value::Null},
+            "definition_name_at_call_entry":copied_name,
+            "copied_name_matches_recorded_definition":copied_name.zip(definition).map(|(name,recorded)|name==recorded),
             "indicated_city_present_in_all_recorded_human_frames":public_match,
             "original_al":row["original_al"],
             "original_rax":row["original_rax"],
@@ -324,6 +339,31 @@ mod tests {
         }
         assert_eq!(unknown["quantity_accepted"], false);
         assert_eq!(unknown["product_accepted"], false);
+        trace["trace_version"] = json!(3);
+        trace["rows"][0]["call_entry_metadata"] = json!({"instance_id":464,"declared_percent":15,"owner":0,"full_id":65536,"definition_name_at_call_entry":"JAC_OATH_ODA_TENKA_FUBU_E1"});
+        assert_eq!(
+            reconcile(&trace, &inventory, &expected)?["rows"][0]
+                ["copied_name_matches_recorded_definition"],
+            true
+        );
+        trace["rows"][0]["call_entry_metadata"]["definition_name_at_call_entry"] =
+            json!("DIFFERENT_ID");
+        assert_eq!(
+            reconcile(&trace, &inventory, &expected)?["rows"][0]
+                ["copied_name_matches_recorded_definition"],
+            false
+        );
+        for invalid in [
+            Value::Null,
+            json!(true),
+            json!("bad id"),
+            json!("A".repeat(65)),
+        ] {
+            trace["rows"][0]["call_entry_metadata"]["definition_name_at_call_entry"] = invalid;
+            let value = reconcile(&trace, &inventory, &expected)?;
+            assert!(value["rows"][0]["definition_name_at_call_entry"].is_null());
+            assert!(value["rows"][0]["copied_name_matches_recorded_definition"].is_null());
+        }
         Ok(())
     }
 

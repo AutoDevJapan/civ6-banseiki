@@ -57,6 +57,9 @@ struct Row {
     owner: AtomicU32,
     full_id: AtomicU32,
     definition_vtable_rva: AtomicU32,
+    name_len: AtomicU32,
+    name_valid: AtomicU32,
+    name_words: [AtomicU64; 8],
 }
 #[repr(C)]
 pub struct RecipientTrace {
@@ -81,7 +84,7 @@ impl RecipientTrace {
         unsafe {
             let p = trace.as_mut_ptr();
             ptr::addr_of_mut!((*p).magic).write(0x4a41_4352);
-            ptr::addr_of_mut!((*p).version).write(2);
+            ptr::addr_of_mut!((*p).version).write(3);
             ptr::addr_of_mut!((*p).stopped).write(AtomicU32::new(1));
             ptr::addr_of_mut!((*p).flight).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).next).write(AtomicU32::new(0));
@@ -281,6 +284,16 @@ unsafe extern "system-unwind" fn begin(
         row.owner
             .store(u32::from(identity.owner), Ordering::Relaxed);
         row.full_id.store(identity.full_id, Ordering::Relaxed);
+        if let Some(name) = identity.definition_name {
+            for (word, bytes) in row.name_words.iter().zip(name.bytes.chunks_exact(8)) {
+                word.store(
+                    u64::from_le_bytes(bytes.try_into().unwrap()),
+                    Ordering::Relaxed,
+                );
+            }
+            row.name_len.store(name.len, Ordering::Relaxed);
+            row.name_valid.store(1, Ordering::Relaxed);
+        }
         row.metadata_valid.store(1, Ordering::Relaxed);
     }
     row.state.store(1, Ordering::Release);

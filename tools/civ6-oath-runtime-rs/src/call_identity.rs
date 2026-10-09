@@ -34,6 +34,7 @@ pub struct RecipientIdentity {
     pub definition: u64,
     /// Point-in-time interface table only; no getter is called or name inferred.
     pub definition_vtable_rva: Option<u32>,
+    pub definition_name: Option<DefinitionName>,
     pub declared_percent: i32,
     pub city_wrapper: u64,
     pub owner: u16,
@@ -49,6 +50,58 @@ pub struct RecipientFrame {
     pub rdi: u64,
     pub effect: u64,
     pub actual_receiver: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DefinitionName {
+    pub bytes: [u8; 64],
+    pub len: u32,
+}
+
+/// Copy the pinned Id getter's readonly string reference without calling it.
+/// The observed interface table and leaf return define this exact layout.
+/// This copies a label at call entry, not any lifetime or quantity authority.
+fn definition_name(
+    memory: &mut (impl Memory + ?Sized),
+    base: u64,
+    definition: u64,
+) -> Result<DefinitionName> {
+    if u64::from_le_bytes(read(memory, definition)?) != address(base, 0xaa3f20)?
+        || u64::from_le_bytes(read(memory, address(base, 0xaa3f28)?)?) != address(base, 0x954cc0)?
+        || read::<5>(memory, address(base, 0x954cc0)?)? != [0x48, 0x8d, 0x41, 0x18, 0xc3]
+    {
+        return Err(Error::input("unsupported definition Id interface"));
+    }
+    let string = address(definition, 0x18)?;
+    let length = u64::from_le_bytes(read(memory, address(string, 0x10)?)?);
+    let capacity = u64::from_le_bytes(read(memory, address(string, 0x18)?)?);
+    if length == 0 || length > 64 || capacity < length || capacity < 15 {
+        return Err(Error::input("unsupported definition Id string shape"));
+    }
+    let data = if capacity == 15 {
+        string
+    } else {
+        let data = u64::from_le_bytes(read(memory, string)?);
+        if data == 0 {
+            return Err(Error::input("null definition Id string"));
+        }
+        data
+    };
+    let mut bytes = [0u8; 65];
+    memory.copy(data, &mut bytes[..length as usize + 1])?;
+    if bytes[length as usize] != 0
+        || !bytes[..length as usize]
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+    {
+        return Err(Error::input("invalid definition Id bytes"));
+    }
+    let mut name = DefinitionName {
+        bytes: [0; 64],
+        len: length as u32,
+    };
+    name.bytes[..length as usize].copy_from_slice(&bytes[..length as usize]);
+    Ok(name)
 }
 
 pub fn copy_recipient_identity(
@@ -98,6 +151,7 @@ pub fn copy_recipient_identity(
                 .and_then(|table| table.checked_sub(base))
                 .filter(|rva| (0x9b7000..0xb5f124).contains(rva) && rva & 7 == 0)
                 .and_then(|rva| u32::try_from(rva).ok()),
+            definition_name: definition_name(memory, base, definition).ok(),
             declared_percent: i32::from_le_bytes(read(memory, address(effect, 8)?)?),
             city_wrapper: wrapper,
             owner: indicated.owner,
@@ -504,6 +558,102 @@ mod tests {
         assert!(read(&mut memory, 1, city).is_err());
         memory.u64(city + 0x1968, 0);
         assert!(read(&mut memory, 0, city).is_err());
+    }
+
+    fn named_definition(base: u64, name: &[u8], heap: bool) -> Fixture {
+        let (mut memory, _) = fixture(base);
+        memory.u64(0x6000, base + 0xaa3f20);
+        memory.u64(base + 0xaa3f28, base + 0x954cc0);
+        memory.put(base + 0x954cc0, &[0x48, 0x8d, 0x41, 0x18, 0xc3]);
+        memory.u64(0x6028, name.len() as u64);
+        memory.u64(0x6030, if heap { 127 } else { 15 });
+        let data = if heap {
+            memory.u64(0x6018, 0x9001);
+            0x9001
+        } else {
+            0x6018
+        };
+        memory.put(data, name);
+        memory.put(data + name.len() as u64, &[0]);
+        memory
+    }
+
+    #[test]
+    fn definition_id_copy_supports_inline_heap_and_exact_bounded_length_without_getter_calls() {
+        let base = 0x180000000;
+        for (label, heap) in [
+            (b"SIMPLE_ID".as_slice(), false),
+            (b"JAC_OATH_ODA_TENKA_FUBU_E1".as_slice(), true),
+            (&[b'A'; 64], true),
+        ] {
+            let mut memory = named_definition(base, label, heap);
+            let name = definition_name(&mut memory, base, 0x6000).unwrap();
+            assert_eq!(name.len as usize, label.len());
+            assert_eq!(&name.bytes[..label.len()], label);
+        }
+        for case in 0..8 {
+            let mut memory = named_definition(base, b"JAC_OATH_ODA_TENKA_FUBU_E1", true);
+            match case {
+                0 => memory.u64(0x6000, base + 0xaa3f28),
+                1 => memory.u64(base + 0xaa3f28, base + 0x954cd0),
+                2 => memory.put(base + 0x954cc0, &[0x90]),
+                3 => memory.u64(0x6028, 65),
+                4 => memory.u64(0x6030, 15),
+                5 => memory.u64(0x6018, 0),
+                6 => memory.put(0x9001, b"!"),
+                7 => {
+                    memory
+                        .bytes
+                        .remove(&(0x9001 + b"JAC_OATH_ODA_TENKA_FUBU_E1".len() as u64));
+                }
+                _ => unreachable!(),
+            };
+            assert!(
+                definition_name(&mut memory, base, 0x6000).is_err(),
+                "case {case}"
+            );
+        }
+    }
+
+    #[test]
+    fn changing_definition_name_in_the_same_callee_copy_is_unknown() {
+        let base = 0x180000000;
+        let mut memory = named_definition(base, b"JAC_OATH_ODA_TENKA_FUBU_E1", true);
+        memory.u64(0x10000 + 0x1968, 0x8000);
+        memory.u64(0x8000, base + 0xab4f58);
+        memory.put(0x8138, &[0, 0, 2, 0]);
+        memory.put(0x813c, &65536u32.to_le_bytes());
+        memory.u64(0x8140, 0);
+        struct ChangedName(Fixture, u32);
+        impl Memory for ChangedName {
+            fn copy(&mut self, at: u64, bytes: &mut [u8]) -> Result<()> {
+                if at == 0x9001 {
+                    self.1 += 1;
+                    if self.1 == 2 {
+                        self.0.put(at, b"K");
+                    }
+                }
+                self.0.copy(at, bytes)
+            }
+        }
+        let frame = RecipientFrame {
+            base,
+            slot: 0,
+            caller: base + 0x944f27,
+            rbp: 0x2000,
+            rdi: 0,
+            effect: 0x4000,
+            actual_receiver: 0x10000,
+        };
+        assert_eq!(
+            copy_recipient_identity(&mut memory, frame)
+                .unwrap()
+                .definition_name
+                .unwrap()
+                .bytes[0],
+            b'J'
+        );
+        assert!(copy_recipient_identity(&mut ChangedName(memory, 0), frame).is_err());
     }
 
     #[test]
