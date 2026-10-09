@@ -564,6 +564,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "multiplayer-banseiki-hotseat-growth.json",
                 "multiplayer-hotseat-growth.json",
                 "multiplayer-japan-15km-settlers-hotseat-growth.json",
+                "multiplayer-japan-staging-assignment.json",
+                "multiplayer-japan-staging-diagnostic.json",
                 "mod-selection-rollback.json",
                 "oath-native-apply-observation-134.json",
                 "banseiki-pool-hotseat.json",

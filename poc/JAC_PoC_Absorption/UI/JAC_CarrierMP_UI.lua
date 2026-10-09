@@ -88,9 +88,10 @@ local function Observe(c)
     and not sent[c.MoveToken] then
     local p={}
     local owner=m.MoveOwner or m.Actor
-    assert(owner==(c.Source.BuildingType=='BUILDING_PALACE' and c.Source.Owner or m.Actor),
+    local keepSource=c.Source.BuildingType=='BUILDING_PALACE' or m.SourceOwnerMove==true
+    assert(owner==(keepSource and c.Source.Owner or m.Actor),
       'MP MOVE city owner changed')
-    if c.Source.BuildingType=='BUILDING_PALACE' then
+    if keepSource then
       local sourcePlayer=assert(Players[owner],'MP Palace source owner missing')
       assert(sourcePlayer:IsAlive() and sourcePlayer:IsMajor(),'MP Palace source owner unavailable')
       assert(not sourcePlayer:IsHuman() or m.Actor==owner,
