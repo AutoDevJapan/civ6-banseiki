@@ -157,16 +157,46 @@
       "path": "todo9-staging-before-query.png",
       "capture_only": true
     },
-    {"action": "pause", "seconds": 10},
-    {"action": "screenshot", "path": "todo9-staging-after-10s.png", "capture_only": true},
-    {"action": "pause", "seconds": 10},
-    {"action": "screenshot", "path": "todo9-staging-after-20s.png", "capture_only": true},
-    {"action": "pause", "seconds": 10},
-    {"action": "screenshot", "path": "todo9-staging-after-30s.png", "capture_only": true},
     {
-      "action": "ui_lua",
-      "state_name": "JAC_JapanStagingRoom",
-      "code": "local function v(key) local x=GameConfiguration.GetValue(key); return tostring(x)..':'..type(x) end\nlocal function summary(ids)\n  if type(ids)~='table' then return 'unavailable' end\n  local taken={}\n  for _,id in ipairs(ids) do\n    local p=PlayerConfigurations[id]\n    if p and p:GetSlotStatus()==SlotStatus.SS_TAKEN then\n      taken[#taken+1]=tostring(id)..'='..tostring(p:GetTeam())\n    end\n  end\n  return tostring(#ids)..'/'..tostring(#taken)..'['..table.concat(taken,',')..']'\nend\nlocal participating=summary(GameConfiguration.GetParticipatingPlayerIDs())\nlocal multiplayer=GameConfiguration.GetMultiplayerPlayerIDs and summary(GameConfiguration.GetMultiplayerPlayerIDs()) or 'no-api'\nlocal shown=not ContextPtr:IsHidden()\nlocal panel=Controls.JAC_AssignmentPanel and not Controls.JAC_AssignmentPanel:IsHidden()\nlocal rows=Controls.JAC_AssignmentRows and #Controls.JAC_AssignmentRows:GetChildren() or -1\nreturn 'shown='..tostring(shown)..';panel='..tostring(panel)..';rows='..tostring(rows)..';host='..tostring(Network.IsGameHost())..';hotseat='..tostring(GameConfiguration.IsHotseat())..';ruleset='..v('RULESET')..';map='..tostring(MapConfiguration.GetValue('MAP_SCRIPT'))..';mode='..v('JAC_MP_MODE')..';roster='..v('JAC_MP_ROSTER')..';team='..v('JAC_MP_TEAM')..';noTeams='..v('NO_TEAMS')..';prior='..v('JAC_MP_PRIOR_NO_TEAMS')..';participants='..participating..';multiplayer='..multiplayer"
+      "action": "pause",
+      "seconds": 10
+    },
+    {
+      "action": "screenshot",
+      "path": "todo9-staging-after-10s.png",
+      "capture_only": true
+    },
+    {
+      "action": "pause",
+      "seconds": 10
+    },
+    {
+      "action": "screenshot",
+      "path": "todo9-staging-after-20s.png",
+      "capture_only": true
+    },
+    {
+      "action": "pause",
+      "seconds": 10
+    },
+    {
+      "action": "screenshot",
+      "path": "todo9-staging-after-30s.png",
+      "capture_only": true
+    },
+    {
+      "action": "click",
+      "x": 0.435,
+      "y": 0.837
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "screenshot",
+      "path": "todo9-staging-area-options.png",
+      "capture_only": true
     }
   ]
 }

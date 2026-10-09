@@ -22,6 +22,7 @@ pub struct Trace {
     pub lua: Vec<(String, String, f64)>,
     pub presses: Vec<(u16, f64)>,
     pub captures: Vec<(PathBuf, f64)>,
+    pub clicks: Vec<(f64, f64)>,
     pub disconnects: usize,
     pub require_processes: usize,
     pub process_queries: usize,
@@ -76,6 +77,7 @@ type StateFn = Box<dyn FnMut(f64) -> Result<Vec<String>> + Send>;
 type LuaFn = Box<dyn FnMut(&str, &str, f64) -> Result<String> + Send>;
 type ProcessFn = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type CaptureFn = Box<dyn FnMut(&Path, Option<[f64; 4]>, f64) -> Result<()> + Send>;
+type ClickFn = Box<dyn FnMut(f64, f64) -> Result<(i32, i32)> + Send>;
 
 pub struct SafetyBackend {
     pub trace: Arc<Mutex<Trace>>,
@@ -88,6 +90,7 @@ pub struct SafetyBackend {
     pub on_wait_window: Option<Box<dyn FnMut(f64) -> Result<isize> + Send>>,
     pub on_press: Option<PressFn>,
     pub on_capture: Option<CaptureFn>,
+    pub on_click: Option<ClickFn>,
 }
 impl SafetyBackend {
     pub fn new(trace: Arc<Mutex<Trace>>) -> Self {
@@ -102,6 +105,7 @@ impl SafetyBackend {
             on_wait_window: None,
             on_press: None,
             on_capture: None,
+            on_click: None,
         }
     }
     fn event(&self, event: &str) {
@@ -175,6 +179,15 @@ impl Backend for SafetyBackend {
             callback(key, deadline)
         } else {
             Ok(())
+        }
+    }
+    fn click(&mut self, x: f64, y: f64) -> Result<(i32, i32)> {
+        self.event("click");
+        self.trace.lock().unwrap().clicks.push((x, y));
+        if let Some(callback) = &mut self.on_click {
+            callback(x, y)
+        } else {
+            Ok(((x * 1000.0) as i32, (y * 1000.0) as i32))
         }
     }
     fn capture(&mut self, path: &Path, crop: Option<[f64; 4]>, deadline: f64) -> Result<()> {

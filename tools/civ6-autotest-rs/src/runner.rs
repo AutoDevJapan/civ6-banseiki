@@ -2215,6 +2215,14 @@ impl Runner {
                 self.remaining(deadline)?;
                 Ok(target.display().to_string())
             }
+            "click" => {
+                self.backend.require_single_process()?;
+                self.remaining(deadline)?;
+                let (x, y) = self
+                    .backend
+                    .click(step["x"].as_f64().unwrap(), step["y"].as_f64().unwrap())?;
+                Ok(format!("clicked Civ VI window at {x},{y}"))
+            }
             "save" => self.save_step(step, deadline),
             "load" => self.load_step(step, timeout, deadline),
             "exit_to_menu" => {
