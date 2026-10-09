@@ -154,7 +154,8 @@
     },
     {
       "action": "screenshot",
-      "path": "todo9-staging-before-query.png"
+      "path": "todo9-staging-before-query.png",
+      "capture_only": true
     },
     {
       "action": "ui_lua",

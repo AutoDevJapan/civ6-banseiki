@@ -297,6 +297,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     .map_err(|e| fail(e.to_string()))?;
             }
             "screenshot" => {
+                bool_flags(&["capture_only"])?;
                 safe_relative_path(
                     step["path"]
                         .as_str()

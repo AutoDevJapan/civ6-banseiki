@@ -76,6 +76,7 @@ fn japan_staging_diagnostic_captures_screen_before_probe() {
     assert!(action(&run[3], "wait_for"));
     assert_eq!(run[3]["condition"]["type"], "state");
     assert!(action(&run[4], "screenshot"));
+    assert_eq!(run[4]["capture_only"], true);
     assert!(action(&run[5], "ui_lua"));
     compile_lua(&Lua::new(), code(&run[5]));
 }
