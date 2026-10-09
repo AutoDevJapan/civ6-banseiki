@@ -1867,8 +1867,14 @@ mod native_transport {
             // evidence; Core still verifies the saved city and building.
             resumed.load("local read=JAC_AbsorptionGameplay.ReadNativeCarrierCore;JAC_AbsorptionGameplay.ReadNativeCarrierCore=function(c,l) local v=read(c,l);v.Work=nil;v.Slots=nil;return v end").exec().unwrap();
             let packet = mp_publish(&resumed);
+            resumed
+                .globals()
+                .set("RECONCILE_EVIDENCE", packet.as_str())
+                .unwrap();
+            let packet=resumed.load("local p=JAC_CarrierMP.Decode(RECONCILE_EVIDENCE);local o=JAC_CarrierMP.Decode(p.Payload);o.Source.Extra=string.rep('x',20000);o.Locations[1].Extra=string.rep('y',20000);p.Payload=JAC_CarrierMP.Encode(o);return JAC_CarrierMP.Encode(p)").eval::<String>().unwrap();
             assert!(mp_receive(&resumed, &packet));
             resumed.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Phase=='SELECT' and not c.MP.OriginalUnresolved and c.MP.OriginalReconciled);assert(c.Source.X==4 and c.Source.Owner==1 and TRANSFERS==2 and UI_MOVES==0)").exec().unwrap();
+            resumed.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;local e=c.MP.OriginalReconciled;assert(e.WorldCount==1 and e.Location.Index==c.Index and e.Location.CityID==e.CityID and e.Location.Owner==1 and e.Source.Work==c.Index and e.Source.ID==e.CityID and e.Source.Slot==c.Source.Slot);assert(e.Source.Extra==nil and e.Source.State==nil and e.Source.Properties==nil and e.Location.Extra==nil);assert(#JAC_CarrierMP.Encode(e)<4000)").exec().unwrap();
             assert!(!mp_receive(&resumed, &packet));
             mp_until(&resumed, "DISPATCH");
             assert!(!resumed.load("return MP_OBSERVE()").eval::<bool>().unwrap());

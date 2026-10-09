@@ -730,8 +730,14 @@ local function receive(actor,p)
     -- Expired manual contracts retain their unresolved index reservation.
     if selectedTx and selectedTx.Turn~=Game.GetCurrentGameTurn()
       and not (selectedTx.Request and selectedTx.Request.FlowPolicy) then return false end
-    local expected=reconcileOriginal(c,Decode(p.Payload))
-    m.OriginalReconciled={Turn=p.Turn,CityID=expected,EvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'}
+    local observed=Decode(p.Payload);local expected=reconcileOriginal(c,observed)
+    local seen=observed.Source;local work=observed.Locations[1];local location={}
+    for _,k in ipairs({'Owner','CityID','X','Y','Building','Slot','Index','GreatWorkType','ObjectType',
+        'CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do location[k]=R.Copy(work[k]) end
+    local l=m.Loans[1]
+    m.OriginalReconciled={Turn=p.Turn,CityID=expected,EvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION',
+      WorldCount=1,Location=location,Source={Owner=seen.Owner,ID=seen.ID,X=seen.X,Y=seen.Y,
+        Building=l.Building,Slot=l.Slot,Work=seen.Work,Slots=seen.Slots}}
     m.OriginalUnresolved=nil;m.SourceCurrentID=expected;m.Receipts=nil
     MP.Advance(state,c,nil,expected);return true -- only reselect; no loan or MOVE in this callback
   end
