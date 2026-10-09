@@ -2,7 +2,8 @@
 //!
 //! The city array and saves retain the original Q8 representation. A future
 //! native provider must establish the contribution's identity, target, lifetime
-//! and completed Apply/Remove before supplying `oath_q8` and `oath_percent`.
+//! and completed Apply/Remove before supplying `oath_q8`, `oath_percent`, or
+//! a historical removal residual. No residual is inferred from a city value.
 //! This module does not establish those facts, install a hook, or accept a game.
 
 use crate::{Error, Result};
@@ -45,6 +46,18 @@ fn original(owner: i32, city: i32, other: i32, base: i32) -> Result<i32> {
 /// single division would also change the OFF baseline and its 100% reference.
 /// Negative values use floor, like the native arithmetic right shifts.
 pub fn military(input: MilitaryInput) -> Result<MilitaryQuantity> {
+    military_with_residual(input, 0)
+}
+
+/// Like `military`, but also exclude a separately confirmed, signed residue
+/// accumulated by completed named oath removals. The residue is not an active
+/// percentage: it can persist while OFF and through later reapplications.
+/// Callers must establish and restore its provenance separately, including
+/// after a new-process load; a negative city coefficient alone is insufficient.
+pub fn military_with_residual(
+    input: MilitaryInput,
+    confirmed_residual_q8: i32,
+) -> Result<MilitaryQuantity> {
     if input.oath_percent < 0 || input.oath_q8 < 0 {
         return Err(Error::input("positive oath contribution required"));
     }
@@ -59,10 +72,9 @@ pub fn military(input: MilitaryInput) -> Result<MilitaryQuantity> {
         input.other_rate_q8,
         input.base_q8,
     )?;
-    let baseline_city = input
-        .city_q8
-        .checked_sub(input.oath_q8)
-        .ok_or_else(|| Error::input("military counterfactual coefficient overflow"))?;
+    let baseline_city = i32_quantity(
+        i128::from(input.city_q8) - i128::from(input.oath_q8) - i128::from(confirmed_residual_q8),
+    )?;
     let counterfactual_q8 = original(
         input.owner_q8,
         baseline_city,
@@ -132,6 +144,47 @@ mod tests {
             military(input(256, 256, 64, 0, 0)).unwrap().corrected_q8,
             1_310_720
         );
+    }
+
+    #[test]
+    fn completed_removal_residual_is_removed_from_off_and_reapplied_quantity() {
+        // Live68 index7: 0 -> 38 -> -1 -> 37. The active contribution is
+        // still 38 after reapplication; the historical residue is separately -1.
+        let off = military(input(256, 256, 0, 0, 0)).unwrap();
+        let initial_on = military(input(256, 256, 38, 38, 15)).unwrap();
+        let removed = military_with_residual(input(256, 256, -1, 0, 0), -1).unwrap();
+        let reapplied = military_with_residual(input(256, 256, 37, 38, 15), -1).unwrap();
+        assert_eq!(removed.original_q8, 1_044_480);
+        assert_eq!(removed.corrected_q8, off.original_q8);
+        assert_eq!(reapplied.counterfactual_q8, off.original_q8);
+        assert_eq!(reapplied.corrected_q8, initial_on.corrected_q8);
+    }
+
+    #[test]
+    fn accumulated_named_residual_preserves_unrelated_negative_coefficients() {
+        // Three completed removals have accumulated -3 ticks. The unrelated
+        // -64 coefficient must remain, both OFF and with two named oaths ON.
+        let baseline = military(input(307, 257, -64, 0, 0)).unwrap();
+        let original_on = military(input(307, 257, -64 + 12 + 25, 37, 15)).unwrap();
+        let off = military_with_residual(input(307, 257, -67, 0, 0), -3).unwrap();
+        let on = military_with_residual(input(307, 257, -67 + 12 + 25, 37, 15), -3).unwrap();
+        assert_eq!(off.corrected_q8, baseline.original_q8);
+        assert_eq!(on.counterfactual_q8, baseline.original_q8);
+        assert_eq!(on.corrected_q8, original_on.corrected_q8);
+        assert_ne!(
+            off.corrected_q8,
+            military(input(307, 257, 0, 0, 0)).unwrap().corrected_q8
+        );
+    }
+
+    #[test]
+    fn residual_arithmetic_overflow_is_an_error_even_with_zero_base() {
+        let mut value = input(0, 256, i32::MAX, 0, 0);
+        value.base_q8 = 0;
+        assert!(military_with_residual(value, -1).is_err());
+        value = input(0, 256, i32::MIN, 0, 0);
+        value.base_q8 = 0;
+        assert!(military_with_residual(value, 1).is_err());
     }
 
     #[test]
