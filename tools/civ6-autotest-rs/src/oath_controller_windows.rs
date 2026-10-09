@@ -882,10 +882,31 @@ fn verify_function_owner(target: &Target, function: usize) -> Result<()> {
     let facts = remote_facts(&modules);
     wire::function_owner_in_remote(function, &owner, &facts).map_err(Error::input)?;
     let local = unsafe { std::slice::from_raw_parts(function as *const u8, 32) };
-    if target.read(function, 32)? != local {
-        return Err(Error::input(
-            "remote function bytes differ from the local function",
-        ));
+    let remote = target.read(function, 32)?;
+    if remote != local {
+        // Code only: retain the finite evidence before any remote call. An
+        // address match is not a reason to silently ignore modified code.
+        let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        let jump_target = if remote[0] == 0xe9 {
+            let displacement = i32::from_le_bytes(remote[1..5].try_into().unwrap());
+            function
+                .checked_add(5)
+                .and_then(|next| next.checked_add_signed(displacement as isize))
+        } else if remote[..6] == [0xff, 0x25, 0, 0, 0, 0] {
+            usize::try_from(u64::from_le_bytes(remote[6..14].try_into().unwrap())).ok()
+        } else {
+            None
+        };
+        let jump_owner = jump_target.and_then(|address| {
+            facts.iter().find(|m| {
+                address >= m.base && address.checked_sub(m.base).is_some_and(|rva| rva < m.size)
+            })
+        });
+        return Err(Error::input(format!(
+            "remote function bytes differ from the local function; evidence={}",
+            json!({"owner":owner.path,"rva":function-owner.base,"local_code":hex(local),
+                "remote_code":hex(&remote),"jump_target":jump_target,"jump_owner":jump_owner.map(|m| &m.path)})
+        )));
     }
     Ok(())
 }
