@@ -8,7 +8,7 @@
 //! Portable contribution bookkeeping, save-value encoding and quantity
 //! arithmetic are also provided. Their inputs still require a separately
 //! established native holding/lifecycle contract. There is no live quantity
-//! hook, official property accessor, Lua registration or product bootstrap.
+//! hook, admitted property/save callback, Lua registration or product bootstrap.
 //! The diagnostic export requires fixed process creation,
 //! complete image SHA-256, loaded module and path preflight before publishing
 //! any gateway. Driver ownership/ruleset checks are an additional gate. The low-level
@@ -24,6 +24,8 @@ pub mod preflight;
 pub mod production_copy;
 pub mod quantity;
 
+#[cfg(windows)]
+pub mod game_property;
 #[cfg(windows)]
 mod identity_windows;
 #[cfg(windows)]

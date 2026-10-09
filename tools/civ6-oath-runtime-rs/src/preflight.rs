@@ -25,6 +25,107 @@ struct Window {
     original: Vec<u8>,
 }
 
+/// Source identity for the native Game-property API. This establishes code
+/// and relocated method identity only; it does not admit a host interval.
+pub struct PropertySourcePlan {
+    plan: SourcePlan,
+    disk: Vec<u8>,
+}
+
+impl PropertySourcePlan {
+    pub fn from_disk(disk: &[u8]) -> Result<Self, &'static str> {
+        if disk.len() != FILE_BYTES || format!("{:x}", Sha256::digest(disk)) != CORE_SHA256 {
+            return Err("unknown complete GameCore file identity");
+        }
+        // Property access also runs after effect gateways are installed. Do
+        // not demand original bytes at those independently guarded hook sites.
+        let mut plan = SourcePlan {
+            windows: Vec::new(),
+            slots: Vec::new(),
+        };
+        for (rva, length) in [
+            (0x6d7690, 0x32),  // registered Game.GetProperty
+            (0x6d7f50, 0x70),  // registered Game.SetProperty and COW entry
+            (0x72a920, 0x10f), // only the Game setter's original COW operation
+            (0x989d0, 5),      // container's actual dictionary/allocator
+            (0x9a07b0, 0x33),  // native owned string setter, four arguments
+            (0x9a0890, 0x28e), // typed copy, allocation and container notification
+            (0x99dc00, 0xb5),  // native value construction/copy
+            (0x9a3f10, 0x87),  // property key registration
+            (0x9a4010, 0xc6),
+            (0x99f5c0, 0x48), // borrowed Variant lookup
+            (0x9a4460, 0x45), // notification forwarded by the native setter
+        ] {
+            plan.windows.push(Window {
+                rva,
+                original: disk_range(disk, rva, length)?.to_vec(),
+            });
+        }
+        for (offset, target) in [
+            (0x18, 0x989d0),
+            (0x20, 0x989d0),
+            (0x28, 0x989d0),
+            (0x38, 0x9a4460),
+            (0x60, 0x99f5c0),
+            (0xb0, 0x9a0890),
+            (0xe8, 0x9a07b0),
+        ] {
+            let at = 0xabf080 + offset;
+            if disk_range(disk, at, 8)? != (PREFERRED_BASE + target).to_le_bytes() {
+                return Err("unknown native property method");
+            }
+            plan.slots.push((at, target));
+        }
+        Ok(Self {
+            plan,
+            disk: disk.to_vec(),
+        })
+    }
+
+    pub fn validate_image(
+        &self,
+        base: u64,
+        memory: &mut impl ImageMemory,
+    ) -> Result<(), &'static str> {
+        self.plan.validate_image(base, memory)
+    }
+
+    /// Match an actual dictionary's readonly key-ID method against its pinned
+    /// table and code. This is not a substitute for the dictionary's lifetime.
+    pub fn dictionary_key_method(
+        &self,
+        base: u64,
+        table: u64,
+        memory: &mut impl ImageMemory,
+    ) -> Result<u64, &'static str> {
+        let rva = table.checked_sub(base).ok_or("foreign dictionary table")?;
+        if !(0x9b7000..0xb5f124).contains(&rva) || !table.is_multiple_of(8) {
+            return Err("foreign dictionary table");
+        }
+        let slot = rva.checked_add(8).ok_or("dictionary slot overflow")?;
+        let source = u64::from_le_bytes(disk_range(&self.disk, slot, 8)?.try_into().unwrap());
+        let target_rva = source
+            .checked_sub(PREFERRED_BASE)
+            .ok_or("foreign key method")?;
+        let expected = disk_range(&self.disk, target_rva, 64)?;
+        if !(0x1000..0x9b6627).contains(&target_rva) {
+            return Err("foreign key method");
+        }
+        let target = base.checked_add(target_rva).ok_or("key method overflow")?;
+        let mut actual = [0; 8];
+        memory.copy(base.checked_add(slot).ok_or("table overflow")?, &mut actual)?;
+        if actual != target.to_le_bytes() {
+            return Err("changed dictionary key method");
+        }
+        let mut bytes = [0; 64];
+        memory.copy(target, &mut bytes)?;
+        if bytes != expected {
+            return Err("changed dictionary key code");
+        }
+        Ok(target)
+    }
+}
+
 /// Only `from_disk` can construct this plan outside this module. Matching this
 /// plan does NOT establish ruleset, single-player mode, completed effects or
 /// quantities. It describes the exact module's bytes and relocated pointers.
@@ -269,5 +370,52 @@ mod tests {
         assert!(disk_range(&vec![0; 512], 0x8a75e0, 0x58).is_err());
         assert!(disk_range(&[], 0x9b6620, 8).is_err());
         assert!(disk_range(&[], 0xb5f120, 8).is_err());
+    }
+
+    #[test]
+    fn property_dictionary_method_relocation_and_changed_code_are_checked() {
+        let table = 0xabf410;
+        let target = 0x940010;
+        let mut disk = vec![0; FILE_BYTES];
+        disk[table + 8 - 0x1400..table + 16 - 0x1400]
+            .copy_from_slice(&(PREFERRED_BASE + target as u64).to_le_bytes());
+        disk[target - 0xc00..target - 0xc00 + 64].fill(0xcc);
+        let plan = PropertySourcePlan {
+            plan: SourcePlan {
+                windows: vec![],
+                slots: vec![],
+            },
+            disk,
+        };
+        for base in [PREFERRED_BASE, 0x7ffb_1234_0000] {
+            let mut memory = Fixture(BTreeMap::new());
+            memory.put(
+                base + table as u64 + 8,
+                &(base + target as u64).to_le_bytes(),
+            );
+            memory.put(base + target as u64, &[0xcc; 64]);
+            assert_eq!(
+                plan.dictionary_key_method(base, base + table as u64, &mut memory),
+                Ok(base + target as u64)
+            );
+            memory.put(
+                base + table as u64 + 8,
+                &(base + target as u64 + 1).to_le_bytes(),
+            );
+            assert!(plan
+                .dictionary_key_method(base, base + table as u64, &mut memory)
+                .is_err());
+            memory.put(
+                base + table as u64 + 8,
+                &(base + target as u64).to_le_bytes(),
+            );
+            memory.put(base + target as u64, &[0x90]);
+            assert!(plan
+                .dictionary_key_method(base, base + table as u64, &mut memory)
+                .is_err());
+            assert!(plan
+                .dictionary_key_method(base, base + 0x1000, &mut memory)
+                .is_err());
+        }
     }
 }
