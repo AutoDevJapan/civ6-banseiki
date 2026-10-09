@@ -2243,8 +2243,9 @@ mod native_transport {
               or state.Transactions.checkpoint.NativeWorks[1].Carrier
             assert(actor==LOCAL_PLAYER and actor==c.MP.Actor and Players[actor]:IsHuman())
             if op=='script' then PACKETS[#PACKETS+1]=p;return true end
-            assert(op=='move' and p.owner==actor and p.index==900 and p.slot==0)
-            assert(CITIES[4].owner==actor and CITIES[16].owner==actor)
+            local owner=c.MP.MoveOwner or actor
+            assert(op=='move' and p.owner==owner and p.index==900 and p.slot==0)
+            assert(CITIES[4].owner==owner and CITIES[16].owner==owner)
             assert(p.source==CITIES[4].id and p.target==CITIES[16].id)
             if QUEUED_SWAP then
               -- An independently queued action fills the target after the
@@ -2362,11 +2363,15 @@ mod native_transport {
 
     #[test]
     fn mp_artifact_public_recovery_moves_once_and_preserves_museum_originals() {
-        for recipient in [2, 3] {
-            let left = artifact_world(2, false, recipient);
-            let right = artifact_world(3, false, recipient);
-            for lua in [&left, &right] {
-                lua.load(r#"
+        for capital in [false, true] {
+            for recipient in [2, 3] {
+                let left = artifact_world(2, false, recipient);
+                let right = artifact_world(3, false, recipient);
+                for lua in [&left, &right] {
+                    if capital {
+                        lua.load("local cities=Players[1].GetCities;Players[1].GetCities=function() local c=cities();c.GetCapitalCity=function() return CITIES[4] end;return c end").exec().unwrap();
+                    }
+                    lua.load(r#"
                   ARTIFACT_RECOVERY=true
                   GameInfo.GreatWorks.GREATWORK_TEST=GameInfo.GreatWorks[4]
                   GameEvents.JAC_NativeInventory_Operation={Add=function() end}
@@ -2381,37 +2386,242 @@ mod native_transport {
                     return JAC_ObserveNativeCarrierMP(JAC_AbsorptionGameplay.GetState().Recoveries['recovery:artifact'].NativeCarrier)
                   end
                 "#).exec().unwrap();
-                lua.load(
-                    fs::read_to_string(
-                        repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_NativeInventory.lua"),
+                    lua.load(
+                        fs::read_to_string(
+                            repo_root()
+                                .join("poc/JAC_PoC_Absorption/Scripts/JAC_NativeInventory.lua"),
+                        )
+                        .unwrap(),
                     )
-                    .unwrap(),
-                )
-                .exec()
-                .unwrap();
-                assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                    .exec()
+                    .unwrap();
+                    assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                }
+                for _ in 0..12 {
+                    let phase=left.load("return JAC_AbsorptionGameplay.GetState().Recoveries['recovery:artifact'].NativeCarrier.MP.Phase").eval::<String>().unwrap();
+                    if phase == "DONE" {
+                        break;
+                    }
+                    if phase == "DISPATCH" {
+                        if capital {
+                            left.load("local m=JAC_AbsorptionGameplay.GetState().Recoveries['recovery:artifact'].NativeCarrier.MP;assert(m.SourceOwnerMove and m.MoveOwner==1 and TRANSFERS==1 and CITIES[4].owner==1)").exec().unwrap();
+                        }
+                        assert!(!left.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+                        right.load("WORK_X=16").exec().unwrap();
+                    }
+                    let packet = mp_publish(&left);
+                    for lua in [&right, &left] {
+                        assert!(mp_receive(lua, &packet));
+                    }
+                }
+                for lua in [&left, &right] {
+                    assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                    assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                    lua.load("local r=Players[ARTIFACT_RECIPIENT]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(r.NativeOwnerMoves==2 and r.NativeWork.Index==900 and r.NativeWork.Owner==ARTIFACT_RECIPIENT);for _,index in ipairs({900,901,902,903}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(index)==1) end;assert(CITIES[4].owner==1 and CITIES[16].owner==ARTIFACT_RECIPIENT and WORK_X==16)").exec().unwrap();
+                }
+                assert_eq!(left.load("return UI_MOVES").eval::<i64>().unwrap(), 1);
+                assert_eq!(right.load("return UI_MOVES").eval::<i64>().unwrap(), 0);
             }
-            for _ in 0..12 {
-                let phase=left.load("return JAC_AbsorptionGameplay.GetState().Recoveries['recovery:artifact'].NativeCarrier.MP.Phase").eval::<String>().unwrap();
+        }
+    }
+
+    #[test]
+    fn mp_artifact_capital_or_last_source_stays_owned_during_saved_transfer() {
+        for human in [false, true] {
+            for last in [false, true] {
+                let actor = if human { 1 } else { 2 };
+                let source = artifact_world(actor, human, 3);
+                source.globals().set("LAST_SOURCE", last).unwrap();
+                source
+                    .load(
+                        r#"
+                  if LAST_SOURCE then CityManager.TransferCity(CITIES[8],3);TRANSFERS=0 end
+                  local cities=Players[1].GetCities
+                  Players[1].GetCities=function()
+                    local value=cities()
+                    value.GetCount=function() return LAST_SOURCE and 1 or 2 end
+                    value.GetCapitalCity=function() if not LAST_SOURCE then return CITIES[4] end end
+                    return value
+                  end
+                  MP_PLAN()
+                "#,
+                    )
+                    .exec()
+                    .unwrap();
+                mp_until(&source, "DISPATCH");
+                source.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.SourceOwnerMove==true and c.MP.MoveOwner==1);assert(CITIES[4].owner==1 and CITIES[4].id==c.Source.CityID and TRANSFERS==1)").exec().unwrap();
+                // Retain the claim across a fresh UI without issuing it again.
+                assert!(!source.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+                let saved = artifact_saved(&source);
+                let resumed = artifact_loaded(actor, human, 3, &saved);
+                let peer = artifact_loaded(3, human, 3, &saved);
+                for _ in 0..2 {
+                    let packet = mp_publish(&resumed);
+                    for lua in [&peer, &resumed] {
+                        assert!(mp_receive(lua, &packet));
+                    }
+                }
+                for lua in [&peer, &resumed] {
+                    assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                    lua.load("assert(UI_MOVES==0 and TRANSFERS==2 and CITIES[4].owner==1 and CITIES[16].owner==3 and WORK_X==16);for _,index in ipairs({900,901,902,903}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(index)==1) end").exec().unwrap();
+                }
+                let state =
+                    "return JAC_AbsorptionRules.Canonical(JAC_AbsorptionGameplay.GetState())";
+                assert_eq!(
+                    resumed.load(state).eval::<String>().unwrap(),
+                    peer.load(state).eval::<String>().unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mp_unknown_queue_receipts_remain_bounded_after_observation_and_rejoin() {
+        let first = artifact_world(2, false, 3);
+        first.load("MP_PLAN()").exec().unwrap();
+        mp_until(&first, "DISPATCH");
+        first.load("UNKNOWN_MOVE=true").exec().unwrap();
+        assert!(!first.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+        let peer = artifact_loaded(3, false, 3, &artifact_saved(&first));
+        let mut latest = String::new();
+        for session in 0..32 {
+            let raw = mp_publish(&first);
+            first.globals().set("QUEUE_PACKET", raw).unwrap();
+            latest = first
+                .load(format!("local p=JAC_CarrierMP.Decode(QUEUE_PACKET);p.Session='rejoin-{session}';return JAC_CarrierMP.Encode(p)"))
+                .eval().unwrap();
+            for lua in [&first, &peer] {
+                assert!(mp_receive(lua, &latest));
+                assert!(mp_receive(lua, &latest));
+            }
+        }
+        for lua in [&first, &peer] {
+            lua.load(r#"
+              local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+              local count=0;for _ in pairs(m.Receipts or {}) do count=count+1 end
+              assert(count==1,'queue observations accumulated '..count..' saved payloads')
+              assert(m.Phase=='DISPATCH' and m.WaitingFor=='NATIVE_QUEUE_RESOLUTION')
+              assert(TRANSFERS==2 and WORK_X==4 and CITIES[4].owner==2 and CITIES[16].owner==2)
+            "#).exec().unwrap();
+        }
+        // Load the old format containing all earlier exact observations. Its
+        // first replay must acknowledge the saved packet and shed the history.
+        first
+            .globals()
+            .set("LATEST_QUEUE_PACKET", latest.as_str())
+            .unwrap();
+        first
+            .load(
+                r#"
+          TEST_STATE_EDIT(function(s)
+            local m=s.Transactions.checkpoint.NativeWorks[1].Carrier.MP
+            local p=JAC_CarrierMP.Decode(LATEST_QUEUE_PACKET)
+            for i=1,32 do
+              m.Receipts[JAC_CarrierMP.Encode({Command=p.Command,Actor=p.Actor,Token=p.Token,
+                Phase=p.Phase,Nonce=p.Nonce,Turn=p.Turn,Payload=p.Payload,
+                Session='legacy-'..i,DispatchStatus=p.DispatchStatus or ''})]=true
+            end
+          end)
+        "#,
+            )
+            .exec()
+            .unwrap();
+        let resumed = artifact_loaded(2, false, 3, &artifact_saved(&first));
+        assert!(mp_receive(&resumed, &latest));
+        resumed.load("local n=0;for _ in pairs(JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP.Receipts) do n=n+1 end;assert(n==1,'legacy receipt history remained after replay')").exec().unwrap();
+        for _ in 0..3 {
+            assert!(mp_receive(&resumed, &mp_publish(&resumed)));
+        }
+        resumed
+            .load("assert(UI_MOVES==0 and TRANSFERS==2 and WORK_X==4)")
+            .exec()
+            .unwrap();
+        // The original queue may publish later. The saved claim, rather than
+        // observation receipts, authorizes the single original MOVE.
+        resumed.load("WORK_X=16").exec().unwrap();
+        for _ in 0..2 {
+            assert!(mp_receive(&resumed, &mp_publish(&resumed)));
+        }
+        assert!(resumed.load("return MP_PLAN()").eval::<bool>().unwrap());
+        resumed.load("assert(UI_MOVES==0 and TRANSFERS==4 and CITIES[4].owner==1 and CITIES[16].owner==3)").exec().unwrap();
+    }
+
+    #[test]
+    fn mp_artifact_each_observation_phase_rejoins_with_one_move_and_equal_peer_state() {
+        for phase in [
+            "SELECT", "PREPARE", "BORROWED", "READY", "DISPATCH", "RESTORED", "DONE",
+        ] {
+            let first = artifact_world(2, false, 3);
+            first.load("MP_PLAN()").exec().unwrap();
+            if matches!(phase, "RESTORED" | "DONE") {
+                mp_until(&first, "DISPATCH");
+                assert!(!first.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+                assert!(mp_receive(&first, &mp_publish(&first)));
                 if phase == "DONE" {
+                    assert!(mp_receive(&first, &mp_publish(&first)));
+                }
+            } else {
+                mp_until(&first, phase);
+            }
+            let saved = artifact_saved(&first);
+            drop(first);
+            let actor = artifact_loaded(2, false, 3, &saved);
+            let peer = artifact_loaded(3, false, 3, &saved);
+            let mut issued = false;
+            for _ in 0..24 {
+                let current = actor.load("return JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP.Phase").eval::<String>().unwrap();
+                if current == "DONE" {
                     break;
                 }
-                if phase == "DISPATCH" {
-                    assert!(!left.load("return MP_OBSERVE()").eval::<bool>().unwrap());
-                    right.load("WORK_X=16").exec().unwrap();
+                if current == "DISPATCH" && !issued {
+                    if phase == "DISPATCH" {
+                        // Rejoining cannot know whether the old UI sent its
+                        // claimed request. Wait, then model its delayed result.
+                        for lua in [&actor, &peer] {
+                            lua.load("WORK_X=16").exec().unwrap();
+                        }
+                    } else {
+                        assert!(!actor.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+                        peer.load("WORK_X=16").exec().unwrap();
+                    }
+                    issued = true;
                 }
-                let packet = mp_publish(&left);
-                for lua in [&right, &left] {
-                    assert!(mp_receive(lua, &packet));
+                let packet = mp_publish(&actor);
+                for lua in [&peer, &actor] {
+                    assert!(mp_receive(lua, &packet), "{phase}: {current}");
                 }
             }
-            for lua in [&left, &right] {
-                assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
-                assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
-                lua.load("local r=Players[ARTIFACT_RECIPIENT]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(r.NativeOwnerMoves==2 and r.NativeWork.Index==900 and r.NativeWork.Owner==ARTIFACT_RECIPIENT);for _,index in ipairs({900,901,902,903}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(index)==1) end;assert(CITIES[4].owner==1 and CITIES[16].owner==ARTIFACT_RECIPIENT and WORK_X==16)").exec().unwrap();
+            for lua in [&actor, &peer] {
+                assert!(
+                    lua.load("return MP_PLAN()").eval::<bool>().unwrap(),
+                    "{phase}"
+                );
+                // A recreated UI cannot claim a grant belonging to the old
+                // session. READY returns both loans and starts a fresh pair.
+                let transfers = if phase == "READY" { 8 } else { 4 };
+                lua.load(format!("assert(WORK_X==16 and TRANSFERS=={transfers} and CITIES[4].owner==1 and CITIES[16].owner==3,'{phase}: transfers='..TRANSFERS);for _,i in ipairs({{900,901,902,903}}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(i)==1) end")).exec().unwrap();
             }
-            assert_eq!(left.load("return UI_MOVES").eval::<i64>().unwrap(), 1);
-            assert_eq!(right.load("return UI_MOVES").eval::<i64>().unwrap(), 0);
+            let expected = if matches!(phase, "DISPATCH" | "RESTORED" | "DONE") {
+                0
+            } else {
+                1
+            };
+            assert_eq!(
+                actor.load("return UI_MOVES").eval::<i64>().unwrap(),
+                expected,
+                "{phase}"
+            );
+            assert_eq!(
+                peer.load("return UI_MOVES").eval::<i64>().unwrap(),
+                0,
+                "{phase}"
+            );
+            let state = "return JAC_AbsorptionRules.Canonical(JAC_AbsorptionGameplay.GetState())";
+            assert_eq!(
+                actor.load(state).eval::<String>().unwrap(),
+                peer.load(state).eval::<String>().unwrap(),
+                "{phase}"
+            );
         }
     }
 
