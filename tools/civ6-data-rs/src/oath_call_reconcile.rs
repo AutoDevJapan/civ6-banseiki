@@ -21,7 +21,7 @@ fn copied_family(trace: &Value, row: &Value) -> Option<&'static str> {
     match rva {
         0xa76a30 => Some("military"),
         0xa6cdb8 => Some("naval"),
-        0xa90328 => Some("walls"),
+        0xa90328 => Some("build"),
         0xa9e0f0 => Some("growth"),
         _ => None,
     }
@@ -136,12 +136,12 @@ fn reconcile(
             "sequence":sequence,"call":row["call"],"state":row["state"],"instance_id":id,
             "official_definition":definition,"catalogue_kind":spec.map(|s| &s.0),
             "catalogue_percent":spec.map(|s| s.1),"declared_percent":declared,
-            "copied_effect_family":family,"copied_family_matches_catalogue":family.zip(spec).map(|(f,s)| f == s.0),
+            "copied_effect_family":family,"copied_family_matches_catalogue":family.zip(spec).map(|(f,s)| f == if s.0 == "walls" { "build" } else { &s.0 }),
             "declared_percent_matches_catalogue":declared.zip(spec).map(|(amount,s)| amount==s.1),
             "indicated_city":if copied {metadata["indicated_city"].clone()} else {Value::Null},
             "indicated_city_present_in_all_recorded_human_frames":public_match,
             "original_al":row["original_al"],
-            "limitations":["official instance id may be reused between frames", "wrapper identity is not the actual callee receiver", "completed AL does not measure a contribution"]
+            "limitations":["official instance id may be reused between frames", "wrapper identity is not the actual callee receiver", "completed AL does not measure a contribution", "callee family does not establish unit or building target filters"]
         }));
     }
     Ok(
@@ -277,6 +277,7 @@ mod tests {
             trace["rows"][0]["effect_vtable"] = address.into();
             let value = reconcile(&trace, &inventory, &expected)?;
             if address == "0x180a90328" {
+                assert_eq!(value["rows"][0]["copied_effect_family"], "build");
                 assert_eq!(value["rows"][0]["copied_family_matches_catalogue"], false);
             } else {
                 assert!(value["rows"][0]["copied_family_matches_catalogue"].is_null());
@@ -287,6 +288,23 @@ mod tests {
         assert!(
             reconcile(&trace, &inventory, &expected)?["rows"][0]["copied_effect_family"].is_null()
         );
+        Ok(())
+    }
+    #[test]
+    fn walls_catalogue_matches_the_build_family_without_proving_its_filter() -> Result<()> {
+        let (mut trace, inventory, mut expected) = fixture();
+        trace["rows"][0]["effect_vtable"] = "0x180a90328".into();
+        expected.get_mut("JAC_OATH_ODA_TENKA_FUBU_E1").unwrap().0 = "walls".into();
+        let value = reconcile(&trace, &inventory, &expected)?;
+        assert_eq!(value["rows"][0]["copied_effect_family"], "build");
+        assert_eq!(value["rows"][0]["catalogue_kind"], "walls");
+        assert_eq!(value["rows"][0]["copied_family_matches_catalogue"], true);
+        assert_eq!(value["quantity_accepted"], false);
+        assert!(value["rows"][0]["limitations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str().is_some_and(|s| s.contains("target filters"))));
         Ok(())
     }
     #[test]
