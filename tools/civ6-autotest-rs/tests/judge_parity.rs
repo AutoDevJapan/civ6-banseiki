@@ -514,6 +514,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-japan-native.json",
                 "absorption-context-probe.json",
                 "absorption-ai-palace-deal-readonly.json",
+                "absorption-ai-palace-deal-physical.json",
                 "absorption-carrier-boundary-load.json",
                 "absorption-flow.json",
                 "absorption-native-custody.json",
