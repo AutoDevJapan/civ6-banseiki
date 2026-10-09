@@ -12,7 +12,7 @@ pub(crate) const SIZE: usize = HEADER + ROW * CAPACITY;
 pub(crate) fn validate(bytes: &[u8]) -> Result<(), String> {
     if bytes.len() != SIZE
         || u32_at(bytes, 0) != Some(0x4a41_4352)
-        || u32_at(bytes, 4) != Some(1)
+        || u32_at(bytes, 4) != Some(2)
         || u32_at(bytes, 8).is_none_or(|n| n as usize > CAPACITY)
         || u32_at(bytes, 24).is_none_or(|n| n > 2)
         || u32_at(bytes, 52).is_none_or(|n| n > 1)
@@ -60,7 +60,8 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
             "raw_r8":hex(32),"caller_return":hex(40),"caller_rbp":hex(48),"caller_rdi":hex(56),
             "original_rax":if stable && state == 2 { json!(hex(64)) } else { Value::Null },
             "call_entry_metadata":if metadata { json!({"instance_id":u32_at(row,76),"instance":hex(80),"definition":hex(88),
-                "city_wrapper":hex(96),"declared_percent":u32_at(row,104).unwrap() as i32,"owner":u32_at(row,108),"full_id":u32_at(row,112)}) } else { Value::Null },
+                "city_wrapper":hex(96),"declared_percent":u32_at(row,104).unwrap() as i32,"owner":u32_at(row,108),"full_id":u32_at(row,112),
+                "definition_vtable_rva":if u32_at(row,116).unwrap() != 0 {json!(format!("0x{:x}",u32_at(row,116).unwrap()))} else {Value::Null}}) } else { Value::Null },
             "quantity_accepted":false}));
     }
     let stopped = receipt.phase == 3 && u32_at(second, 24) == Some(2);
@@ -88,7 +89,7 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     ) && detached
         && counters_match;
     Ok(
-        json!({"capture":"callee","trace_version":1,"rows":rows,"row_count":count,
+        json!({"capture":"callee","trace_version":2,"rows":rows,"row_count":count,
         "completed":u32_at(second,20),"unwound":u32_at(second,28),"in_flight":in_flight,"dropped":dropped,
         "stopped":stopped,"entry_slots_restored":detached,"complete":complete,"snapshot_consistent":complete,"unstable_rows":unstable,"receipt_counters_match":counters_match,
         "image_base":format!("0x{:x}",u64_at(second,32).unwrap()),"deadline_hit":u32_at(second,48)==Some(1),
@@ -104,7 +105,7 @@ mod tests {
         let mut bytes = vec![0; SIZE];
         for (at, value) in [
             (0, 0x4a41_4352u32),
-            (4, 1),
+            (4, 2),
             (8, 1),
             (20, 1),
             (24, 2),
@@ -138,6 +139,22 @@ mod tests {
         assert_eq!(value["complete"], true);
         assert_eq!(value["rows"][0]["actual_receiver_argument"], "0x12340000");
         assert_eq!(value["quantity_accepted"], false);
+        let mut with_table = bytes.clone();
+        with_table[HEADER + 72..HEADER + 76].copy_from_slice(&1u32.to_le_bytes());
+        assert!(
+            project(&with_table, &with_table, &r).unwrap()["rows"][0]["call_entry_metadata"]
+                ["definition_vtable_rva"]
+                .is_null()
+        );
+        with_table[HEADER + 116..HEADER + 120].copy_from_slice(&0xab1230u32.to_le_bytes());
+        assert_eq!(
+            project(&with_table, &with_table, &r).unwrap()["rows"][0]["call_entry_metadata"]
+                ["definition_vtable_rva"],
+            "0xab1230"
+        );
+        let mut old_version = bytes.clone();
+        old_version[4..8].copy_from_slice(&1u32.to_le_bytes());
+        assert!(validate(&old_version).is_err());
         for (at, value) in [(12, 1u32), (16, 1), (52, 0), (64, 1), (68, 8)] {
             let mut changed = bytes.clone();
             changed[at..at + 4].copy_from_slice(&value.to_le_bytes());

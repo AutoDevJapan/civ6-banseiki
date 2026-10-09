@@ -43,7 +43,7 @@ fn reconcile(
     };
     ensure!(
         if callee {
-            version == 1
+            matches!(version, 1 | 2)
         } else {
             matches!(version, 4 | 5)
         },
@@ -185,6 +185,7 @@ fn reconcile(
             "city_identity_source":if callee {"callee_rdx_backpointer_copy"} else {"adapter_subject_copy"},
             "actual_receiver_argument":if callee && stable {row["actual_receiver_argument"].clone()} else {Value::Null},
             "copied_definition_address":if copied {metadata["definition"].clone()} else {Value::Null},
+            "copied_definition_vtable_rva":if copied && callee && version == 2 {metadata["definition_vtable_rva"].clone()} else {Value::Null},
             "indicated_city_present_in_all_recorded_human_frames":public_match,
             "original_al":row["original_al"],
             "original_rax":row["original_rax"],
@@ -304,6 +305,12 @@ mod tests {
         assert_eq!(row["actual_receiver_argument"], "0x9000");
         assert_eq!(row["original_rax"], "0x1234");
         assert!(row["original_al"].is_null());
+        trace["trace_version"] = json!(2);
+        trace["rows"][0]["call_entry_metadata"]["definition_vtable_rva"] = json!("0xab1230");
+        assert_eq!(
+            reconcile(&trace, &inventory, &expected)?["rows"][0]["copied_definition_vtable_rva"],
+            "0xab1230"
+        );
         trace["rows"][0]["call_entry_metadata"] = Value::Null;
         let unknown = reconcile(&trace, &inventory, &expected)?;
         for field in [

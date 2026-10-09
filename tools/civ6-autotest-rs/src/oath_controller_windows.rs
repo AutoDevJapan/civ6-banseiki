@@ -362,6 +362,17 @@ impl Target {
         }
     }
 
+    fn verify_after_install<T>(&mut self, check: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
+        // Install has already published entrances. A malformed receipt or
+        // unsupported trace cannot be treated like a pre-install refusal.
+        match check(self) {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                Err(self.kill_report(&format!("installed observer validation failed: {error}")))
+            }
+        }
+    }
+
     /// Observes, without any new termination, whether the pinned process
     /// object has signalled. Only the same handle with the original creation
     /// time counts; anything else leaves the obligation open.
@@ -1105,20 +1116,22 @@ fn bring_up(
     if status != 0 {
         return Err(target.runtime_refusal("OathRuntimeInstall", status));
     }
-    let (trace_address, _) =
-        wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
+    target.verify_after_install(|target| {
+        let (trace_address, _) =
+            wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
+                .map_err(Error::input)?;
+        if callee {
+            crate::oath_recipient_wire::validate(
+                &target.read(trace_address as usize, crate::oath_recipient_wire::SIZE)?,
+            )
             .map_err(Error::input)?;
-    if callee {
-        crate::oath_recipient_wire::validate(
-            &target.read(trace_address as usize, crate::oath_recipient_wire::SIZE)?,
-        )
-        .map_err(Error::input)?;
-    } else {
-        wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
-            .map_err(Error::input)?;
-    }
-    let receipt_buffer = target.alloc(wire::RECEIPT_SIZE)?;
-    Ok((base, exports, trace_address, receipt_buffer))
+        } else {
+            wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
+                .map_err(Error::input)?;
+        }
+        let receipt_buffer = target.alloc(wire::RECEIPT_SIZE)?;
+        Ok((base, exports, trace_address, receipt_buffer))
+    })
 }
 
 fn wide(text: &str) -> Vec<u16> {
@@ -1456,6 +1469,24 @@ mod tests {
         assert!(error.to_string().contains("OathRuntimeInstall refused"));
         assert!(!target.poisoned && !target.unresolved());
         assert!(child.0.try_wait().unwrap().is_none());
+    }
+
+    #[test]
+    fn incompatible_installed_trace_ends_owned_process_instead_of_abandoning_entrances() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_secs(8));
+        let mut bytes = vec![0; crate::oath_recipient_wire::SIZE];
+        bytes[..4].copy_from_slice(&0x4a41_4352u32.to_le_bytes());
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes()); // the previous DLL's schema
+        let result = target.verify_after_install(|_| {
+            crate::oath_recipient_wire::validate(&bytes).map_err(Error::input)
+        });
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("the pinned game was terminated"));
+        assert!(child.0.try_wait().unwrap().is_some());
+        assert!(target.poisoned && !target.unresolved());
     }
 
     #[test]

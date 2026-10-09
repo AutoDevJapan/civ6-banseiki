@@ -56,7 +56,7 @@ struct Row {
     percent: AtomicU32,
     owner: AtomicU32,
     full_id: AtomicU32,
-    reserved: AtomicU32,
+    definition_vtable_rva: AtomicU32,
 }
 #[repr(C)]
 pub struct RecipientTrace {
@@ -81,7 +81,7 @@ impl RecipientTrace {
         unsafe {
             let p = trace.as_mut_ptr();
             ptr::addr_of_mut!((*p).magic).write(0x4a41_4352);
-            ptr::addr_of_mut!((*p).version).write(1);
+            ptr::addr_of_mut!((*p).version).write(2);
             ptr::addr_of_mut!((*p).stopped).write(AtomicU32::new(1));
             ptr::addr_of_mut!((*p).flight).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).next).write(AtomicU32::new(0));
@@ -271,6 +271,10 @@ unsafe extern "system-unwind" fn begin(
             .store(identity.instance_id, Ordering::Relaxed);
         row.instance.store(identity.instance, Ordering::Relaxed);
         row.definition.store(identity.definition, Ordering::Relaxed);
+        row.definition_vtable_rva.store(
+            identity.definition_vtable_rva.unwrap_or(0),
+            Ordering::Relaxed,
+        );
         row.wrapper.store(identity.city_wrapper, Ordering::Relaxed);
         row.percent
             .store(identity.declared_percent as u32, Ordering::Relaxed);

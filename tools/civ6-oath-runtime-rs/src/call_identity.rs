@@ -32,6 +32,8 @@ pub struct RecipientIdentity {
     pub instance: u64,
     pub instance_id: u32,
     pub definition: u64,
+    /// Point-in-time interface table only; no getter is called or name inferred.
+    pub definition_vtable_rva: Option<u32>,
     pub declared_percent: i32,
     pub city_wrapper: u64,
     pub owner: u16,
@@ -90,6 +92,12 @@ pub fn copy_recipient_identity(
             instance,
             instance_id: u32::from_le_bytes(read(memory, address(instance, 0xe8)?)?),
             definition,
+            definition_vtable_rva: read::<8>(memory, definition)
+                .ok()
+                .map(u64::from_le_bytes)
+                .and_then(|table| table.checked_sub(base))
+                .filter(|rva| (0x9b7000..0xb5f124).contains(rva) && rva & 7 == 0)
+                .and_then(|rva| u32::try_from(rva).ok()),
             declared_percent: i32::from_le_bytes(read(memory, address(effect, 8)?)?),
             city_wrapper: wrapper,
             owner: indicated.owner,
@@ -470,6 +478,27 @@ mod tests {
             (464, 15, 0, 65536)
         );
         assert_eq!(identity.city_wrapper, wrapper);
+        assert_eq!(identity.definition_vtable_rva, None);
+        memory.u64(0x6000, base + 0xab1230);
+        assert_eq!(
+            read(&mut memory, 0, city).unwrap().definition_vtable_rva,
+            Some(0xab1230)
+        );
+        memory.u64(0x6000, base + 0x1000);
+        assert_eq!(
+            read(&mut memory, 0, city).unwrap().definition_vtable_rva,
+            None
+        );
+        memory.u64(0x6000, base + 0xab1231);
+        assert_eq!(
+            read(&mut memory, 0, city).unwrap().definition_vtable_rva,
+            None
+        );
+        memory.bytes.remove(&0x6007);
+        assert_eq!(
+            read(&mut memory, 0, city).unwrap().definition_vtable_rva,
+            None
+        );
         assert!(read(&mut memory, 2, city).is_err());
         assert!(read(&mut memory, 0, city + 8).is_err());
         assert!(read(&mut memory, 1, city).is_err());
