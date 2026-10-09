@@ -4,18 +4,21 @@
 //! way. Every decision about what may still be undone lives here, as a pure
 //! function of what is known, so it can be checked over all outcome orders:
 //!
-//! * Reach is a one-way latch. Once any foreign or own writer could have made
-//!   the entry branch into the prefix, the prefix, relay, trampoline, gateway
-//!   and trace are needed for the rest of the process.
+//! * Reach is a one-way latch. It rises when the prefix is written (or when a
+//!   write may have happened), because from that moment any writer of the
+//!   entry, ours or foreign, could branch into the prefix, even for an
+//!   instant. Nothing lowers it: not a second look at the entry, not a
+//!   rollback. The padding is therefore never recycled once written.
 //! * A binding (call type -> target, trampoline, trace) is Held only while
 //!   Reach is Never, and Frozen for good once it is Possibly. Only a verified
-//!   release returns a Held binding to Free.
+//!   release of a Never binding, whose memory was never written, returns it to
+//!   Free.
 //! * A region is settled only when its bytes, its page protection and its
 //!   instruction cache flush are all confirmed. Bytes alone never settle it.
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Reach {
-    /// Nothing could have branched into the prefix.
+    /// No byte of ours was ever written; nothing could have branched in.
     Never,
     /// Something might have; never lowered again.
     Possibly,
@@ -139,8 +142,9 @@ impl Ledger {
         self.binding == Binding::Frozen
     }
 
-    fn normalize(&mut self) {
-        if self.reach == Reach::Possibly && self.binding == Binding::Held {
+    fn raise(&mut self) {
+        self.reach = Reach::Possibly;
+        if self.binding == Binding::Held {
             self.binding = Binding::Frozen;
         }
     }
@@ -164,21 +168,27 @@ impl Ledger {
         };
         previous
     }
+    /// Call right before the bytes are copied (after the page is writable and
+    /// the expected bytes matched): the prefix may be ours from here on.
+    pub fn prefix_copy_begin(&mut self) {
+        self.raise();
+    }
     pub fn prefix_end(&mut self, previous: Region, target: Bytes, result: Write) {
+        if matches!(result, Write::Written { .. }) {
+            self.raise();
+        }
         self.prefix = after_write(previous, target, result);
-        self.normalize();
     }
 
     /// Call right after the entry became writable and before the exchange
     /// runs: from here on the entry may hold bytes that reach the prefix.
     pub fn entry_begin(&mut self) -> Region {
-        self.reach = Reach::Possibly;
+        self.raise();
         let previous = self.entry;
         self.entry = Region {
             bytes: Bytes::Unknown,
             confirm: Confirm::DIRTY,
         };
-        self.normalize();
         previous
     }
     pub fn entry_end(&mut self, previous: Region, target: Bytes, result: Cas) {
@@ -203,20 +213,21 @@ impl Ledger {
                 },
             },
         };
-        self.normalize();
     }
 
-    /// Facts read back from memory. An entry that is not the original while
-    /// the prefix is not the padding could branch into the prefix, whatever
-    /// its bytes are later (the latch is not lowered by a second look).
+    /// Facts read back from memory. A prefix that holds our jump, or an entry
+    /// that is not the original while the prefix is not the padding, could
+    /// branch into the prefix; a second look at the bytes never lowers that.
     pub fn observe(&mut self, prefix: Bytes, entry: Bytes) {
         debug_assert!(prefix != Bytes::Unknown && entry != Bytes::Unknown);
         self.prefix.bytes = prefix;
         self.entry.bytes = entry;
-        if entry != Bytes::Original && prefix != Bytes::Original {
-            self.reach = Reach::Possibly;
+        if prefix == Bytes::Ours
+            || entry == Bytes::Ours
+            || (entry != Bytes::Original && prefix != Bytes::Original)
+        {
+            self.raise();
         }
-        self.normalize();
     }
     pub fn prefix_repaired(&mut self, confirm: Confirm) {
         self.prefix.confirm = confirm;
@@ -225,38 +236,36 @@ impl Ledger {
         self.entry.confirm = confirm;
     }
 
-    /// The padding may be put back only while nothing could have entered it
-    /// and the entry is observed original.
-    pub fn may_rollback_prefix(&self) -> bool {
-        self.reach == Reach::Never
-            && self.entry.bytes == Bytes::Original
-            && matches!(self.prefix.bytes, Bytes::Ours | Bytes::Unknown)
-    }
     pub fn may_restore_entry(&self) -> bool {
         self.entry.bytes == Bytes::Ours
     }
     /// Reservations (trace claim, trampoline cell, target binding) go back
-    /// only when every byte, protection and flush is confirmed original and
-    /// Reach never left Never.
+    /// only when no byte of ours was ever written (Reach is Never) and the
+    /// pages are confirmed as they were. Foreign bytes in the padding are not
+    /// ours to undo; they simply mean this install was refused.
     pub fn may_release(&self) -> bool {
         self.binding == Binding::Held
             && self.reach == Reach::Never
-            && self.prefix.settled_original()
+            && self.prefix.bytes != Bytes::Ours
+            && self.prefix.bytes != Bytes::Unknown
+            && self.prefix.confirm.complete()
             && self.entry.settled_original()
     }
+    /// Frees a Never binding and forgets its regions for the next install.
     pub fn release(&mut self) -> bool {
         if self.may_release() {
-            self.binding = Binding::Free;
+            *self = Self::new();
             true
         } else {
             false
         }
     }
     /// Nothing of ours is left to restore: the entry is original or foreign,
-    /// with protection and flush confirmed.
+    /// with protection and flush confirmed (the prefix too).
     pub fn settled(&self) -> bool {
         matches!(self.entry.bytes, Bytes::Original | Bytes::Foreign)
             && self.entry.confirm.complete()
+            && self.prefix.confirm.complete()
     }
 }
 
@@ -349,16 +358,13 @@ mod tests {
             return out;
         }
         for result in writes() {
-            let mut next = state;
-            let previous = next.prefix_begin();
-            next.prefix_end(previous, Bytes::Ours, result);
-            push(next, false);
-        }
-        if state.may_rollback_prefix() {
-            for result in writes() {
+            for target in [Bytes::Ours, Bytes::Original] {
                 let mut next = state;
                 let previous = next.prefix_begin();
-                next.prefix_end(previous, Bytes::Original, result);
+                if matches!(result, Write::Written { .. }) {
+                    next.prefix_copy_begin();
+                }
+                next.prefix_end(previous, target, result);
                 push(next, false);
             }
         }
@@ -367,9 +373,7 @@ mod tests {
             let previous = next.entry_begin();
             next.entry_end(previous, Bytes::Ours, result);
             push(next, false);
-        }
-        if state.may_restore_entry() {
-            for result in cases() {
+            if state.may_restore_entry() {
                 let mut next = state;
                 let previous = next.entry_begin();
                 next.entry_end(previous, Bytes::Original, result);
@@ -419,14 +423,17 @@ mod tests {
         let states = reachable();
         assert!(states.len() > 300, "explored {}", states.len());
         for state in states {
-            // Reach and the binding agree.
+            // Reach and the binding agree; written bytes always latch.
             if state.reach() == Reach::Possibly {
                 assert_eq!(state.binding(), Binding::Frozen, "{state:?}");
-                assert!(!state.may_rollback_prefix(), "{state:?}");
                 assert!(!state.may_release(), "{state:?}");
             }
+            if state.prefix.bytes == Bytes::Ours || state.entry.bytes == Bytes::Ours {
+                assert_eq!(state.reach(), Reach::Possibly, "{state:?}");
+            }
             if state.may_release() {
-                assert!(state.prefix.settled_original() && state.entry.settled_original());
+                assert_eq!(state.reach(), Reach::Never);
+                assert!(state.prefix.confirm.complete() && state.entry.settled_original());
             }
             for (next, released) in successors(state) {
                 // The latch only rises.
@@ -438,20 +445,21 @@ mod tests {
                 // A binding returns to Free only through a verified release.
                 if state.binding() != Binding::Free && next.binding() == Binding::Free {
                     assert!(released && state.may_release(), "{state:?} -> {next:?}");
-                }
-                if next.binding() == Binding::Free {
-                    assert_eq!(next.prefix, Region::START);
-                    assert_eq!(next.entry, Region::START);
+                    assert_eq!(next, Ledger::new());
                 }
             }
         }
     }
 
     #[test]
-    fn a_lost_entry_race_is_never_forgotten_by_a_second_look() {
+    fn writing_the_prefix_latches_reach_before_anything_else_can_happen() {
         let mut ledger = Ledger::new();
         assert!(ledger.bind());
         let previous = ledger.prefix_begin();
+        // The entry of a foreign writer could branch in right after this.
+        ledger.prefix_copy_begin();
+        assert_eq!(ledger.reach(), Reach::Possibly);
+        assert!(ledger.frozen());
         ledger.prefix_end(
             previous,
             Bytes::Ours,
@@ -461,52 +469,54 @@ mod tests {
                 verified: true,
             },
         );
-        assert!(ledger.may_rollback_prefix());
-        let previous = ledger.entry_begin();
-        ledger.entry_end(previous, Bytes::Ours, Cas::Lost { restored: true });
-        // The foreign writer puts the original bytes back (ABA).
+        // A foreign branch into the prefix and back to the original bytes
+        // (ABA) is invisible to a later look; the latch stays.
         ledger.observe(Bytes::Ours, Bytes::Original);
         assert_eq!(ledger.reach(), Reach::Possibly);
-        assert!(!ledger.may_rollback_prefix() && !ledger.may_release());
-        assert!(ledger.frozen());
+        assert!(!ledger.may_release());
+        let previous = ledger.entry_begin();
+        ledger.entry_end(previous, Bytes::Ours, Cas::Lost { restored: true });
+        assert_eq!(ledger.entry.bytes, Bytes::Foreign);
+        assert!(ledger.settled() || !ledger.prefix.confirm.complete());
     }
 
     #[test]
-    fn bytes_alone_never_release_a_binding() {
+    fn nothing_written_releases_only_when_protection_and_flush_are_confirmed() {
         let mut ledger = Ledger::new();
         assert!(ledger.bind());
-        for (restored, flushed) in [(false, true), (true, false), (false, false)] {
-            let previous = ledger.prefix_begin();
-            ledger.prefix_end(
-                previous,
-                Bytes::Original,
-                Write::Written {
-                    restored,
-                    flushed,
-                    verified: true,
-                },
-            );
-            assert_eq!(ledger.prefix.bytes, Bytes::Original);
-            assert!(
-                !ledger.may_release(),
-                "restored={restored} flushed={flushed}"
-            );
-        }
+        let previous = ledger.prefix_begin();
+        ledger.prefix_end(previous, Bytes::Ours, Write::ProtectionUnverified);
+        assert_eq!(ledger.reach(), Reach::Never, "no byte was written");
+        assert_eq!(ledger.prefix.bytes, Bytes::Original);
+        assert!(!ledger.may_release(), "protection is unconfirmed");
+        ledger.prefix_repaired(Confirm {
+            protection: true,
+            flush: false,
+        });
+        assert!(!ledger.may_release(), "flush is unconfirmed");
         ledger.prefix_repaired(Confirm::OK);
         assert!(ledger.release());
+        assert_eq!(ledger, Ledger::new());
         assert!(ledger.bind(), "a verified release frees the binding");
     }
 
     #[test]
-    fn a_refused_write_leaves_the_previous_knowledge() {
+    fn a_refused_or_mismatched_write_never_latches() {
         let mut ledger = Ledger::new();
         assert!(ledger.bind());
         let previous = ledger.prefix_begin();
         ledger.prefix_end(previous, Bytes::Ours, Write::Refused);
-        assert_eq!(ledger.prefix, Region::START);
+        assert_eq!(
+            (ledger.prefix, ledger.reach()),
+            (Region::START, Reach::Never)
+        );
         let previous = ledger.prefix_begin();
-        ledger.prefix_end(previous, Bytes::Ours, Write::Mismatch { restored: false });
+        ledger.prefix_end(previous, Bytes::Ours, Write::Mismatch { restored: true });
         assert_eq!(ledger.prefix.bytes, Bytes::Foreign);
-        assert!(!ledger.prefix.confirm.protection);
+        assert_eq!(ledger.reach(), Reach::Never);
+        assert!(
+            ledger.release(),
+            "foreign padding: refused, not ours to undo"
+        );
     }
 }

@@ -400,7 +400,7 @@ unsafe extern "system" {
 
 // ---- install state machine -------------------------------------------------
 
-use crate::oath_install_state::{Bytes, Cas, Confirm, Ledger, Region, Write};
+use crate::oath_install_state::{Bytes, Cas, Confirm, Ledger, Reach, Region, Write};
 
 /// Pointers of one installed call type plus the portable ledger. The ledger
 /// (see oath_install_state) alone decides what may be undone or released.
@@ -443,9 +443,8 @@ const SITE_ENTRY_ENABLE: u32 = 6;
 const SITE_ENTRY_RACE: u32 = 7;
 const SITE_ENTRY_RESTORE: u32 = 8;
 const SITE_ENTRY_FLUSH: u32 = 9;
-const SITE_ROLLBACK_ENABLE: u32 = 10;
-const SITE_ROLLBACK_RESTORE: u32 = 11;
-const SITE_ROLLBACK_FLUSH: u32 = 12;
+#[cfg(test)]
+const SITE_PREFIX_RACE: u32 = 10;
 const SITE_UNINSTALL_ENABLE: u32 = 13;
 const SITE_UNINSTALL_RESTORE: u32 = 14;
 const SITE_UNINSTALL_FLUSH: u32 = 15;
@@ -521,12 +520,20 @@ unsafe fn write_prefix(
     target: Bytes,
 ) -> Write {
     let previous = ledger.prefix_begin();
-    let result = if unsafe { protect(sites[0], at, 5, PAGE_EXECUTE_READWRITE) }.is_none() {
+    let writable = unsafe { protect(sites[0], at, 5, PAGE_EXECUTE_READWRITE) }.is_some();
+    // Test only: another writer changes the padding after the checks.
+    #[cfg(test)]
+    if writable && fault(SITE_PREFIX_RACE) {
+        unsafe { ptr::write(at, 0x90) };
+    }
+    let result = if !writable {
         Write::Refused
     } else if unsafe { ptr::read(at.cast::<[u8; 5]>()) } != expected {
         let restored = unsafe { protect_back(sites[1], at, 5, restore_to) };
         Write::Mismatch { restored }
     } else {
+        // From the first copied byte the prefix may be ours: latch the reach.
+        ledger.prefix_copy_begin();
         unsafe { ptr::copy_nonoverlapping(new.as_ptr(), at, 5) };
         let restored = unsafe { protect_back(sites[1], at, 5, restore_to) };
         let flushed = unsafe { flush(sites[2], at, 5) };
@@ -725,24 +732,6 @@ unsafe fn settle(receipt: &mut Receipt) {
             observe(receipt);
         }
     }
-    if receipt.ledger.may_rollback_prefix() {
-        unsafe {
-            write_prefix(
-                &mut receipt.ledger,
-                [
-                    SITE_ROLLBACK_ENABLE,
-                    SITE_ROLLBACK_RESTORE,
-                    SITE_ROLLBACK_FLUSH,
-                ],
-                receipt.page_protection,
-                receipt.slot,
-                receipt.prefix_jump,
-                OATH_PREFIX_PAD,
-                Bytes::Original,
-            );
-            observe(receipt);
-        }
-    }
     if !receipt.ledger.prefix.confirm.complete() {
         let confirm = unsafe {
             confirm_region(
@@ -872,7 +861,9 @@ pub(crate) unsafe fn install_oath_at(
         reported: false,
     });
 
-    // The padding is never executed on a valid path, so it goes first.
+    // The padding is never executed on a valid path, so it goes first. Its
+    // first copied byte latches the reach: from then on a writer of the entry
+    // could branch in, so the padding is never put back.
     {
         let receipt = hooks[index].as_mut().unwrap();
         unsafe {
@@ -892,10 +883,13 @@ pub(crate) unsafe fn install_oath_at(
         };
         if receipt.ledger.prefix != published {
             unsafe { settle(receipt) };
+            let latched = receipt.ledger.reach() == Reach::Possibly;
             return Err(if conclude(&mut hooks, index) {
-                "oath prefix publication failed; rolled back"
+                "oath prefix write refused; nothing was written"
+            } else if latched {
+                "critical: oath prefix publication unverified; binding frozen"
             } else {
-                "critical: oath prefix publication failed; not rolled back"
+                "critical: oath prefix write refused; reservations kept until confirmed"
             });
         }
     }
@@ -918,13 +912,10 @@ pub(crate) unsafe fn install_oath_at(
         )
     };
     match result {
+        // The prefix is already ours and reachable: only repair, never recycle.
         Cas::Untouched => {
             unsafe { settle(receipt) };
-            Err(if conclude(&mut hooks, index) {
-                "oath entry write refused; rolled back"
-            } else {
-                "critical: oath entry write refused; not rolled back"
-            })
+            Err("critical: oath entry write refused; binding frozen")
         }
         // A foreign entry may already branch to the prefix: keep everything.
         Cas::Lost { .. } => Err("critical: oath entry changed after prefix publication"),
