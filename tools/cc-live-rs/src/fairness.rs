@@ -310,6 +310,10 @@ pub struct Lock {
     snapshot: Snapshot,
     path: PathBuf,
 }
+enum SaveError {
+    Open(std::io::Error),
+    Other(String),
+}
 impl Lock {
     pub fn open(p: &Paths) -> Result<Option<Self>, String> {
         let path = p.here.join("civ6.lock");
@@ -324,16 +328,60 @@ impl Lock {
         }))
     }
     pub fn save(&mut self) -> Result<(), String> {
+        self.save_with_runner(&mut crate::process::RealRunner)
+    }
+    fn save_with_runner(&mut self, r: &mut impl Runner) -> Result<(), String> {
+        #[cfg(not(windows))]
+        {
+            let _ = r;
+            self.try_save().map_err(|error| match error {
+                SaveError::Open(error) => format!(
+                    "open Civ6 lock for fairness update {}: {error}",
+                    self.path.display()
+                ),
+                SaveError::Other(error) => error,
+            })
+        }
+        #[cfg(windows)]
+        {
+            let deadline = r.monotonic() + 2.0;
+            loop {
+                if r.monotonic() >= deadline {
+                    return Err(
+                        "Civ6 fairness update sharing conflict exceeded its deadline".into(),
+                    );
+                }
+                match self.try_save() {
+                    #[cfg(windows)]
+                    Err(SaveError::Open(error))
+                        if matches!(error.raw_os_error(), Some(32 | 33)) =>
+                    {
+                        // Other readers may overlap the snapshot-to-write handoff.
+                        // Revalidate before each retry, never turn a new owner into ours.
+                        self.verify()?;
+                        let delay = (deadline - r.monotonic()).clamp(0.0, 0.05);
+                        r.sleep(delay)?;
+                    }
+                    Err(SaveError::Open(error)) => {
+                        return Err(format!(
+                            "open Civ6 lock for fairness update {}: {error}",
+                            self.path.display()
+                        ))
+                    }
+                    Err(SaveError::Other(error)) => return Err(error),
+                    Ok(()) => return Ok(()),
+                }
+            }
+        }
+    }
+    fn try_save(&mut self) -> Result<(), SaveError> {
         #[cfg(unix)]
-        let _guard = UnixGuard::acquire(&self.path)?;
-        let mut file = write_options().open(&self.path).map_err(|e| {
-            format!(
-                "open Civ6 lock for fairness update {}: {e}",
-                self.path.display()
-            )
-        })?;
-        if !self.snapshot.matches(&mut file)? {
-            return Err("Civ6 lock ownership or snapshot changed before fairness update".into());
+        let _guard = UnixGuard::acquire(&self.path).map_err(SaveError::Other)?;
+        let mut file = write_options().open(&self.path).map_err(SaveError::Open)?;
+        if !self.snapshot.matches(&mut file).map_err(SaveError::Other)? {
+            return Err(SaveError::Other(
+                "Civ6 lock ownership or snapshot changed before fairness update".into(),
+            ));
         }
         let bytes = self.info.to_string().into_bytes();
         file.seek(SeekFrom::Start(0))
@@ -345,8 +393,9 @@ impl Lock {
                     "write Civ6 lock fairness update {}: {e}",
                     self.path.display()
                 )
-            })?;
-        self.snapshot = Snapshot::capture(&mut file, &self.path)?;
+            })
+            .map_err(SaveError::Other)?;
+        self.snapshot = Snapshot::capture(&mut file, &self.path).map_err(SaveError::Other)?;
         Ok(())
     }
     fn verify(&self) -> Result<(), String> {
@@ -369,7 +418,7 @@ impl Lock {
                 .remove("competitor_since")
                 .is_some()
             {
-                self.save()?;
+                self.save_with_runner(r)?;
             }
             return Ok(false);
         };
@@ -387,7 +436,7 @@ impl Lock {
         if self.info["competitor_since"].as_f64() != Some(first) {
             self.info["acquired_at"] = json!(acquired);
             self.info["competitor_since"] = json!(first);
-            self.save()?;
+            self.save_with_runner(r)?;
         }
         Ok(now - first >= LEASE_SECONDS)
     }

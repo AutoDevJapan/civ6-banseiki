@@ -299,6 +299,181 @@ pub trait Runner {
 }
 pub struct RealRunner;
 
+#[cfg(any(windows, test))]
+mod identity_reader {
+    use super::*;
+    use std::sync::mpsc::{self, SyncSender};
+
+    type Identity = Result<Option<ProcessIdentity>, String>;
+    struct Request {
+        pid: u32,
+        deadline: Instant,
+        reply: SyncSender<Identity>,
+    }
+
+    /// One read-only worker and one queued request, even if a native call stalls.
+    /// A timed-out reply belongs to its abandoned receiver and cannot authorize
+    /// a later observation. No lock-file or game operation runs on this worker.
+    pub(super) struct Reader {
+        requests: SyncSender<Request>,
+    }
+    impl Reader {
+        pub(super) fn new(
+            query: impl Fn(u32) -> Identity + Send + 'static,
+        ) -> Result<Self, String> {
+            let (requests, incoming) = mpsc::sync_channel::<Request>(1);
+            thread::Builder::new()
+                .name("civ6-process-reader".into())
+                .spawn(move || {
+                    while let Ok(request) = incoming.recv() {
+                        let result = if Instant::now() >= request.deadline {
+                            Err("command timed out".into())
+                        } else {
+                            query(request.pid)
+                        };
+                        // A cancelled caller must never hold up the next query.
+                        let _ = request.reply.try_send(result);
+                    }
+                })
+                .map_err(|error| format!("start native process reader: {error}"))?;
+            Ok(Self { requests })
+        }
+        #[cfg(test)]
+        pub(super) fn lookup(&self, pid: u32, timeout: f64) -> Identity {
+            if !timeout.is_finite() || timeout <= 0.0 {
+                return Err("command timed out".into());
+            }
+            let deadline = Instant::now() + Duration::from_secs_f64(timeout.min(30.0));
+            self.lookup_until(pid, deadline)
+        }
+        pub(super) fn lookup_until(&self, pid: u32, deadline: Instant) -> Identity {
+            if Instant::now() >= deadline {
+                return Err("command timed out".into());
+            }
+            let (reply, result) = mpsc::sync_channel(1);
+            self.requests
+                .try_send(Request {
+                    pid,
+                    deadline,
+                    reply,
+                })
+                .map_err(|error| match error {
+                    mpsc::TrySendError::Full(_) => "command timed out".to_owned(),
+                    mpsc::TrySendError::Disconnected(_) => {
+                        "native process reader exited".to_owned()
+                    }
+                })?;
+            let value = result
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .map_err(|error| match error {
+                    mpsc::RecvTimeoutError::Timeout => "command timed out".to_owned(),
+                    mpsc::RecvTimeoutError::Disconnected => {
+                        "native process reader exited".to_owned()
+                    }
+                })?;
+            if Instant::now() >= deadline {
+                return Err("command timed out".into());
+            }
+            value
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::sync::{atomic::AtomicUsize, Arc};
+
+        #[test]
+        fn slow_native_call_times_out_and_its_reply_is_not_reused() {
+            let (entered, observed) = mpsc::sync_channel(1);
+            let (release, blocked) = mpsc::sync_channel(1);
+            let blocked = std::sync::Mutex::new(blocked);
+            let reader = Reader::new(move |pid| {
+                if pid == 1 {
+                    entered.send(()).unwrap();
+                    let _ = blocked.lock().unwrap().recv_timeout(Duration::from_secs(2));
+                }
+                Ok(Some(ProcessIdentity {
+                    image: pid.to_string(),
+                    created_filetime: Some(pid.into()),
+                }))
+            })
+            .unwrap();
+            let started = Instant::now();
+            assert_eq!(reader.lookup(1, 0.05).unwrap_err(), "command timed out");
+            observed.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(1));
+            release.send(()).unwrap();
+            assert_eq!(
+                reader.lookup(2, 1.0).unwrap().unwrap().created_filetime,
+                Some(2)
+            );
+        }
+
+        #[test]
+        fn stalled_reader_has_one_worker_and_a_bounded_queue() {
+            let (entered, observed) = mpsc::sync_channel(1);
+            let (release, blocked) = mpsc::sync_channel(1);
+            let blocked = std::sync::Mutex::new(blocked);
+            let calls = Arc::new(AtomicUsize::new(0));
+            let queries = Arc::clone(&calls);
+            let reader = Reader::new(move |_| {
+                queries.fetch_add(1, Ordering::SeqCst);
+                entered.send(()).unwrap();
+                let _ = blocked.lock().unwrap().recv_timeout(Duration::from_secs(2));
+                Ok(None)
+            })
+            .unwrap();
+            assert_eq!(reader.lookup(1, 0.05).unwrap_err(), "command timed out");
+            observed.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert_eq!(reader.lookup(2, 0.01).unwrap_err(), "command timed out");
+            for pid in 3..100 {
+                assert_eq!(reader.lookup(pid, 0.01).unwrap_err(), "command timed out");
+            }
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            release.send(()).unwrap();
+        }
+
+        #[test]
+        fn preparation_uses_the_original_deadline_and_does_not_dispatch_expired_work() {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let queries = Arc::clone(&calls);
+            let reader = Reader::new(move |_| {
+                queries.fetch_add(1, Ordering::SeqCst);
+                Ok(None)
+            })
+            .unwrap();
+            reader.lookup(1, 1.0).unwrap();
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            let expired = Instant::now() - Duration::from_millis(1);
+            assert_eq!(
+                reader.lookup_until(2, expired).unwrap_err(),
+                "command timed out"
+            );
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn bounded_windows_process_identity(
+    pid: u32,
+    timeout: f64,
+) -> Result<Option<ProcessIdentity>, String> {
+    if !timeout.is_finite() || timeout <= 0.0 {
+        return Err("command timed out".into());
+    }
+    // Include the one-time worker startup in the caller's original budget.
+    let deadline = Instant::now() + Duration::from_secs_f64(timeout.min(30.0));
+    static READER: std::sync::OnceLock<Result<identity_reader::Reader, String>> =
+        std::sync::OnceLock::new();
+    READER
+        .get_or_init(|| identity_reader::Reader::new(windows_process_identity))
+        .as_ref()
+        .map_err(Clone::clone)?
+        .lookup_until(pid, deadline)
+}
+
 #[cfg(windows)]
 fn process_open_failure(
     pid: u32,
@@ -561,9 +736,9 @@ impl Runner for RealRunner {
     fn process_identity(
         &mut self,
         pid: u32,
-        _timeout: f64,
+        timeout: f64,
     ) -> Result<Option<ProcessIdentity>, String> {
-        windows_process_identity(pid)
+        bounded_windows_process_identity(pid, timeout)
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;

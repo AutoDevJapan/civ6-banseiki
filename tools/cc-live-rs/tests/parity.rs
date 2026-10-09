@@ -889,8 +889,15 @@ impl OwnedReader {
             os::windows::process::CommandExt,
             process::{Command, Stdio},
             thread,
-            time::Duration,
+            time::{Duration, Instant},
         };
+        // A file keeps diagnostic output from blocking the child on a full pipe.
+        let error_path = ready.with_extension("stderr.log");
+        let diagnostics = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&error_path)
+            .unwrap();
         let child = Command::new(std::env::current_exe().unwrap())
             .args(["--ignored", "--exact", "release_reader_child"])
             .env("CC_LIVE_TEST_LOCK", lock)
@@ -899,16 +906,28 @@ impl OwnedReader {
             .env("CC_LIVE_TEST_SHARE", share.to_string())
             .creation_flags(CREATE_NO_WINDOW)
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::from(diagnostics))
             .spawn()
             .unwrap();
-        let reader = Self {
+        let mut reader = Self {
             child: Some(child),
             release: release.into(),
         };
-        for _ in 0..200 {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
             if ready.exists() {
                 break;
+            }
+            if let Some(status) = reader.child.as_mut().unwrap().try_wait().unwrap() {
+                use std::io::Read;
+                let mut reason = String::new();
+                fs::File::open(&error_path)
+                    .unwrap()
+                    .take(4096)
+                    .read_to_string(&mut reason)
+                    .unwrap();
+                reader.child = None;
+                panic!("test reader exited before acquiring its handle: {status}: {reason}");
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -1940,6 +1959,79 @@ fn fairness_save_rejects_changed_owner_and_a_replacement_with_identical_bytes() 
         write_json(&path, &peer).unwrap();
         assert!(snapshot.save().unwrap_err().contains("snapshot changed"));
         assert_eq!(read_json(&path).unwrap(), peer);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn fairness_update_retries_real_read_pins_and_keeps_owner_and_outer_deadline() {
+    use std::{fs::File, os::windows::fs::OpenOptionsExt};
+    struct ReaderBudget {
+        pin: Option<File>,
+        path: PathBuf,
+        time: f64,
+        changed_owner: bool,
+        expires: bool,
+        sleeps: usize,
+    }
+    impl Runner for ReaderBudget {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("no process query is needed");
+        }
+        fn now(&mut self) -> f64 {
+            1000.0
+        }
+        fn monotonic(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.sleeps += 1;
+            self.time += seconds;
+            if self.expires {
+                return Err("Civ6 scenario deadline exhausted".into());
+            }
+            if self.time >= 0.1 {
+                self.pin = None;
+                if self.changed_owner {
+                    write_json(&self.path, &json!({"lock_token":"peer"}))?;
+                }
+            }
+            Ok(())
+        }
+    }
+    for (changed_owner, expires) in [(false, false), (true, false), (false, true)] {
+        let f = Fixture::new();
+        let owner = json!({"lock_token":"ours","competitor_since":100});
+        let path = f.json("here/civ6.lock", owner.clone());
+        let mut lock = fairness::Lock::open(&f.p).unwrap().unwrap();
+        let pin = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        let mut budget = ReaderBudget {
+            pin: Some(pin),
+            path: path.clone(),
+            time: 0.0,
+            changed_owner,
+            expires,
+            sleeps: 0,
+        };
+        let result = lock.expired(&mut budget, &f.p, &f.p.temp.join("absent-todo.json"));
+        assert!(
+            budget.sleeps > 0,
+            "must first encounter an actual sharing conflict"
+        );
+        if expires {
+            assert!(result.unwrap_err().contains("deadline exhausted"));
+            assert_eq!(read_json(&path).unwrap(), owner);
+        } else if changed_owner {
+            assert!(result.unwrap_err().contains("snapshot changed"));
+            assert_eq!(read_json(&path).unwrap(), json!({"lock_token":"peer"}));
+        } else {
+            assert!(!result.unwrap());
+            assert_eq!(read_json(&path).unwrap(), json!({"lock_token":"ours"}));
+        }
     }
 }
 
@@ -3096,12 +3188,13 @@ fn isolation_failure_keeps_known_competition_deadline_for_original_restore() {
             "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
             json!("fixture source"),
         );
-        fs::write(
-            f.p.live()
-                .join("tools/target/release/civ6-save-isolation.exe"),
-            "fixture binary",
-        )
-        .unwrap();
+        for name in ["civ6-save-isolation.exe", "civ6-save-isolation"] {
+            fs::write(
+                f.p.live().join("tools/target/release").join(name),
+                "fixture binary",
+            )
+            .unwrap();
+        }
         let original =
             f.p.profile
                 .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
