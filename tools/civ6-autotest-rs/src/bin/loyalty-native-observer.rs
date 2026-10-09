@@ -1059,9 +1059,10 @@ mod platform {
     };
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, FreeLibrary, GetLastError, DBG_CONTINUE, DBG_EXCEPTION_NOT_HANDLED,
-            ERROR_NO_MORE_FILES, ERROR_SEM_TIMEOUT, EXCEPTION_SINGLE_STEP, FILETIME, HANDLE,
-            HMODULE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+            CloseHandle, DuplicateHandle, FreeLibrary, GetLastError, DBG_CONTINUE,
+            DBG_EXCEPTION_NOT_HANDLED, DUPLICATE_SAME_ACCESS, ERROR_NO_MORE_FILES,
+            ERROR_SEM_TIMEOUT, EXCEPTION_SINGLE_STEP, FILETIME, HANDLE, HMODULE,
+            INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
         },
         Storage::FileSystem::{GetFinalPathNameByHandleW, FILE_SHARE_READ},
         System::{
@@ -1115,10 +1116,31 @@ mod platform {
             }
         }
 
-        // ContinueDebugEvent automatically closes these original debug-event
-        // process/thread handles when their EXIT event is continued.
-        fn closed_by_continue(mut self) {
-            self.0 = std::ptr::null_mut();
+        fn duplicate(raw: HANDLE, operation: &str) -> Result<Self> {
+            if raw.is_null() || raw == INVALID_HANDLE_VALUE {
+                return Err(format!("{operation}: invalid source handle"));
+            }
+            let mut duplicate = std::ptr::null_mut();
+            // The debug API owns its event handles. Retain an independently
+            // owned reference so exit/detach cannot leave an RAII wrapper
+            // closing a recycled handle belonging to another session.
+            // SAFETY: source and destination are this process; no inheritance.
+            let current = unsafe { windows_sys::Win32::System::Threading::GetCurrentProcess() };
+            if unsafe {
+                DuplicateHandle(
+                    current,
+                    raw,
+                    current,
+                    &mut duplicate,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            } == 0
+            {
+                return Err(win_error(operation));
+            }
+            Self::new(duplicate, operation)
         }
 
         fn alive(&self) -> Result<bool> {
@@ -1134,8 +1156,7 @@ mod platform {
     impl Drop for Handle {
         fn drop(&mut self) {
             if !self.0.is_null() {
-                // SAFETY: owned handle, or original event handle whose EXIT
-                // has not been continued; it is closed exactly once.
+                // SAFETY: only independently owned handles reach this wrapper.
                 unsafe { CloseHandle(self.0) };
             }
         }
@@ -2151,13 +2172,13 @@ mod platform {
         }
 
         fn add_thread(&mut self, tid: u32, raw: HANDLE, event_start: Option<u64>) -> Result<()> {
-            let event_handle = Handle::new(raw, "debug event thread handle")?;
+            let event_handle = Handle::duplicate(raw, "duplicate debug event thread handle")?;
             if self.event_threads.contains_key(&tid) {
                 return Err("duplicate live debug thread ID".into());
             }
             self.event_threads.insert(tid, event_handle);
-            // Own a separate minimal-rights handle; Windows only auto-closes
-            // the original event handle. It cannot close this cleanup handle.
+            // Open a minimal-rights handle for context changes, independently
+            // of both the OS event handle and our retained event duplicate.
             // SAFETY: explicit event TID, owner verified before any context set.
             let handle = Handle::new(
                 unsafe {
@@ -2335,13 +2356,15 @@ mod platform {
                 CREATE_PROCESS_DEBUG_EVENT => {
                     // SAFETY: union arm selected by the debug event code.
                     let info = unsafe { event.u.CreateProcessInfo };
-                    // Acquire all supplied handles before verification can fail.
+                    // Files are owned by the debugger; process/thread event
+                    // handles are owned by Windows and must be duplicated.
                     let image_file = if info.hFile.is_null() {
                         None
                     } else {
                         Some(Handle::new(info.hFile, "debug image file")?)
                     };
-                    self.debug_process = Some(Handle::new(info.hProcess, "debug process")?);
+                    self.debug_process =
+                        Some(Handle::duplicate(info.hProcess, "duplicate debug process")?);
                     let thread_result = self.add_thread(
                         event.dwThreadId,
                         info.hThread,
@@ -2398,7 +2421,7 @@ mod platform {
                     return Err("pinned DLL unloaded".into());
                 }
                 EXIT_THREAD_DEBUG_EVENT => {
-                    // Original event handle is retired only after Continue succeeds.
+                    // Retained duplicates are retired after Continue succeeds.
                 }
                 EXIT_PROCESS_DEBUG_EVENT => {
                     // SAFETY: arm selected by event code, no memory read.
@@ -2882,17 +2905,13 @@ mod platform {
                 event.dwDebugEventCode,
                 EXIT_THREAD_DEBUG_EVENT | EXIT_PROCESS_DEBUG_EVENT
             ) {
-                if let Some(handle) = self.event_threads.remove(&event.dwThreadId) {
-                    handle.closed_by_continue();
-                }
+                self.event_threads.remove(&event.dwThreadId);
                 self.threads.remove(&event.dwThreadId);
                 self.exceptions.attach.retire(event.dwThreadId);
                 self.breakin_query_handles.remove(&event.dwThreadId);
             }
             if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
-                if let Some(process) = self.debug_process.take() {
-                    process.closed_by_continue();
-                }
+                self.debug_process.take();
                 // EXIT_PROCESS is delivered before the held process handle is
                 // necessarily signalled. An immediate zero-time check can
                 // falsely report a dead target as successfully restored alive.
@@ -2962,11 +2981,16 @@ mod platform {
                             } else {
                                 Some(Handle::new(info.hFile, "cleanup image file")?)
                             };
-                            self.debug_process =
-                                Some(Handle::new(info.hProcess, "cleanup process handle")?);
+                            self.debug_process = Some(Handle::duplicate(
+                                info.hProcess,
+                                "duplicate cleanup process handle",
+                            )?);
                             self.event_threads.insert(
                                 event.dwThreadId,
-                                Handle::new(info.hThread, "cleanup initial thread")?,
+                                Handle::duplicate(
+                                    info.hThread,
+                                    "duplicate cleanup initial thread",
+                                )?,
                             );
                             self.register_cleanup_thread(
                                 event.dwThreadId,
@@ -2979,7 +3003,7 @@ mod platform {
                             let info = unsafe { event.u.CreateThread };
                             self.event_threads.insert(
                                 event.dwThreadId,
-                                Handle::new(info.hThread, "cleanup new thread")?,
+                                Handle::duplicate(info.hThread, "duplicate cleanup new thread")?,
                             );
                             self.register_cleanup_thread(
                                 event.dwThreadId,
@@ -3656,6 +3680,35 @@ mod platform {
             assert!(fields["raw_receiver_plus_b8_pointer"]["read_error"].is_string());
             assert!(fields["raw_cache_plus_16e8_pointer"]["read_error"].is_string());
             assert!(fields["raw_b8_pointee_fields"]["read_error"].is_string());
+        }
+
+        #[test]
+        fn windows_retained_event_handle_survives_original_release() {
+            // A debug event supplies a real kernel handle, not the -1 process
+            // pseudo-handle. Keep that distinction in the fixture as well.
+            let own = identity(unsafe { GetCurrentProcess() }).unwrap();
+            let original = Handle::new(
+                unsafe {
+                    OpenProcess(
+                        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                        0,
+                        own.pid,
+                    )
+                },
+                "owned fixture event process",
+            )
+            .unwrap();
+            let retained = Handle::duplicate(original.0, "retained fixture event process").unwrap();
+            assert_ne!(original.0, retained.0);
+            let expected = identity(original.0).unwrap();
+            drop(original);
+            assert_eq!(retained.alive(), Ok(true));
+            assert_eq!(identity(retained.0).unwrap(), expected);
+            // The reverse release order must likewise preserve the caller's
+            // handle. A raw event handle must never be adopted by RAII.
+            let second = Handle::duplicate(retained.0, "second fixture event process").unwrap();
+            drop(second);
+            assert_eq!(retained.alive(), Ok(true));
         }
 
         fn run_owned_hardware(mode: OwnedMode) {
