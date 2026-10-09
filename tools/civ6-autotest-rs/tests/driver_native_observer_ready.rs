@@ -285,6 +285,79 @@ fn native_finish_requires_acknowledgement_and_rejects_changed_ownership() {
 }
 
 #[test]
+fn native_finish_sharing_wait_accepts_only_validated_exit_even_after_observer_exit() {
+    use civ6_autotest_rs::native_observer_finish::ExitRead;
+    let (mut fake, evidence) = valid_fake();
+    let mut reads = 0;
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    use std::io::Write;
+    writeln!(file, "{}", completed_exit()).unwrap();
+    file.flush().unwrap();
+    fake.on_native_exit_status = Some(Box::new(move |_, pid, created| {
+        reads += 1;
+        if reads == 1 {
+            Ok(ExitRead::SharingViolation(
+                "synthetic file sharing violation (os error 32)".into(),
+            ))
+        } else {
+            civ6_autotest_rs::native_observer_finish::read_exit_status(file.path(), pid, created)
+        }
+    }));
+    let mut h = harness(fake);
+    h.runner.run_step(&step()).unwrap();
+    evidence.lock().unwrap().processes[2].alive = false;
+    h.runner.run_step(&finish_step()).unwrap();
+    assert_eq!(h.calls().len(), 1);
+    assert_eq!(
+        h.events().iter().filter(|e| *e == "cleanup_record").count(),
+        2
+    );
+}
+
+#[test]
+fn native_finish_persistent_sharing_keeps_original_deadline_and_error() {
+    use civ6_autotest_rs::native_observer_finish::ExitRead;
+    let (mut fake, _) = valid_fake();
+    fake.on_native_exit_status = Some(Box::new(|_, _, _| {
+        Ok(ExitRead::SharingViolation(
+            "held output (os error 32)".into(),
+        ))
+    }));
+    let mut h = harness(fake);
+    h.runner.run_step(&step()).unwrap();
+    let finish = json!({"action":"native_observer_finish","handoff":HANDOFF,"timeout":1});
+    let error = h.runner.run_step(&finish).unwrap_err();
+    assert!(error.message.contains("deadline"), "{error}");
+    assert!(
+        error.message.contains("held output (os error 32)"),
+        "{error}"
+    );
+    assert_eq!(h.calls().len(), 1);
+    assert!(h.events().iter().filter(|e| *e == "cleanup_record").count() < 8);
+}
+
+#[test]
+fn native_finish_permanent_output_error_is_not_retried() {
+    let (mut fake, _) = valid_fake();
+    fake.on_native_exit_status = Some(Box::new(|_, _, _| {
+        Err(Error::new(
+            civ6_autotest_rs::ErrorKind::Io,
+            "storage read failed",
+        ))
+    }));
+    let mut h = harness(fake);
+    h.runner.run_step(&step()).unwrap();
+    let error = h.runner.run_step(&finish_step()).unwrap_err();
+    assert_eq!(error.kind, civ6_autotest_rs::ErrorKind::Io);
+    assert_eq!(error.message, "storage read failed");
+    assert_eq!(h.calls().len(), 1);
+    assert_eq!(
+        h.events().iter().filter(|e| *e == "cleanup_record").count(),
+        1
+    );
+}
+
+#[test]
 fn native_finish_rejects_dead_observer_without_cleanup_or_restoration_failure() {
     for bad_restore in [false, true] {
         let (mut fake, evidence) = valid_fake();

@@ -15,6 +15,9 @@ use tempfile::TempDir;
 
 pub type Calls = Arc<Mutex<Vec<(String, String)>>>;
 type NativeExit = Box<dyn FnMut(&Path, u32, u64) -> Result<Option<Value>> + Send>;
+type NativeExitStatus = Box<
+    dyn FnMut(&Path, u32, u64) -> Result<civ6_autotest_rs::native_observer_finish::ExitRead> + Send,
+>;
 type NativeRequest = Box<dyn FnMut(&Path) -> Result<()> + Send>;
 type NativeCompletion = Box<
     dyn FnMut(
@@ -78,6 +81,7 @@ pub struct FakeBackend {
     pub on_native_completion: NativeCompletion,
     pub on_native_manifest: NativeManifest,
     pub on_native_exit: NativeExit,
+    pub on_native_exit_status: Option<NativeExitStatus>,
     pub on_native_session: NativeSession,
     pub on_native_connection: Box<dyn FnMut() -> Result<()> + Send>,
     pub calls: Calls,
@@ -116,6 +120,7 @@ impl FakeBackend {
             }),
             on_native_manifest: Box::new(|_| Err(Error::input("no mock native manifest"))),
             on_native_exit: Box::new(|_, _, _| Err(Error::input("no mock native cleanup"))),
+            on_native_exit_status: None,
             on_native_session: Box::new(|_| Err(Error::input("no mock native session"))),
             on_native_connection: Box::new(|| Ok(())),
             calls: Arc::new(Mutex::new(Vec::new())),
@@ -187,9 +192,13 @@ impl Backend for FakeBackend {
         path: &Path,
         pid: u32,
         created: u64,
-    ) -> Result<Option<Value>> {
+    ) -> Result<civ6_autotest_rs::native_observer_finish::ExitRead> {
         self.events.lock().unwrap().push("cleanup_record".into());
-        (self.on_native_exit)(path, pid, created)
+        if let Some(reader) = self.on_native_exit_status.as_mut() {
+            reader(path, pid, created)
+        } else {
+            (self.on_native_exit)(path, pid, created).map(Into::into)
+        }
     }
     fn native_observer_manifest(&mut self, path: &Path) -> Result<Option<Vec<u8>>> {
         self.events.lock().unwrap().push("manifest".into());

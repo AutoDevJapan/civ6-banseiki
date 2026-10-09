@@ -38,8 +38,8 @@ pub trait Backend: Send {
         path: &Path,
         game_pid: u32,
         game_created: u64,
-    ) -> Result<Option<Value>> {
-        crate::native_observer_finish::read_completed_exit(path, game_pid, game_created)
+    ) -> Result<crate::native_observer_finish::ExitRead> {
+        crate::native_observer_finish::read_exit_status(path, game_pid, game_created)
     }
     fn pin_native_observer(
         &mut self,
@@ -699,28 +699,46 @@ impl Runner {
                 .strip_suffix(".ready")
                 .ok_or_else(|| Error::scenario("native observer output path missing"))?,
         );
+        let mut last_sharing_error = None;
         loop {
-            self.remaining(deadline)?;
+            self.remaining(deadline).map_err(|error| {
+                if let (ErrorKind::Scenario, Some(sharing)) = (error.kind, &last_sharing_error) {
+                    Error::scenario(format!("{error}; native observer output read: {sharing}"))
+                } else {
+                    error
+                }
+            })?;
             let game_pid = self
                 .backend
                 .single_process(0.0)?
                 .map(|p| p.0)
                 .ok_or_else(|| Error::input("native observer game disappeared before cleanup"))?;
             let alive = session.check_finish(&manifest, game_pid)?;
-            if self
-                .backend
-                .native_observer_exit(output, manifest.game_pid, manifest.game_created)?
-                .is_some()
-            {
-                self.remaining(deadline)?;
-                return Ok(
-                    "native observer restored, continued and detached before game closure".into(),
-                );
-            }
-            if !alive {
-                return Err(Error::scenario(
-                    "native observer exited without a complete cleanup record",
-                ));
+            match self.backend.native_observer_exit(
+                output,
+                manifest.game_pid,
+                manifest.game_created,
+            )? {
+                crate::native_observer_finish::ExitRead::Complete(_) => {
+                    self.remaining(deadline)?;
+                    return Ok(
+                        "native observer restored, continued and detached before game closure"
+                            .into(),
+                    );
+                }
+                crate::native_observer_finish::ExitRead::SharingViolation(error) => {
+                    if last_sharing_error.as_ref() != Some(&error) {
+                        eprintln!("native observer output sharing violation; waiting within the original deadline: {error}");
+                    }
+                    last_sharing_error = Some(error);
+                }
+                crate::native_observer_finish::ExitRead::Pending => {
+                    if !alive {
+                        return Err(Error::scenario(
+                            "native observer exited without a complete cleanup record",
+                        ));
+                    }
+                }
             }
             self.sleep_until(deadline, 0.2);
         }
