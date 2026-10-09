@@ -5,18 +5,24 @@
 //! exactly once and copy its inputs and full RAX, and bounded diagnostic
 //! exports guarded by the current game's identity.
 //!
-//! What is deliberately not here: any link to payment, rates, quantities, Lua
-//! or persona state. The diagnostic export requires fixed process creation,
+//! Portable contribution bookkeeping, save-value encoding and quantity
+//! arithmetic are also provided. Their inputs still require a separately
+//! established native holding/lifecycle contract. There is no live quantity
+//! hook, official property accessor, Lua registration or product bootstrap.
+//! The diagnostic export requires fixed process creation,
 //! complete image SHA-256, loaded module and path preflight before publishing
 //! any gateway. Driver ownership/ruleset checks are an additional gate. The low-level
 //! Win64 ABI, SEH and global_asm stay in Rust because the gateway frames and
 //! the trampoline unwind data must match the native unwinder exactly.
 
 pub mod call_identity;
+pub mod contribution_ledger;
+pub mod contribution_save;
 pub mod oath_install_state;
 pub mod oath_record;
 pub mod preflight;
 pub mod production_copy;
+pub mod quantity;
 
 #[cfg(windows)]
 mod identity_windows;

@@ -1,98 +1,17 @@
-//! Arithmetic model for a completed military oath's contribution.
-//!
-//! The city array and saves retain the original Q8 representation. A future
-//! native provider must establish the contribution's identity, target, lifetime
-//! and completed Apply/Remove before supplying `oath_q8`, `oath_percent`, or
-//! a historical removal residual. No residual is inferred from a city value.
-//! This module does not establish those facts, install a hook, or accept a game.
-
+//! Compatibility entry for the runtime's shared military quantity arithmetic.
+//! Production callers use the runtime ledger binding; tests keep this API.
 use crate::{Error, Result};
-
-#[derive(Clone, Copy, Debug)]
-pub struct MilitaryInput {
-    pub owner_q8: i32,
-    pub city_q8: i32,
-    pub other_rate_q8: i32,
-    pub base_q8: i32,
-    pub oath_q8: i32,
-    pub oath_percent: i32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MilitaryQuantity {
-    pub original_q8: i32,
-    pub counterfactual_q8: i32,
-    pub corrected_q8: i32,
-}
-
-fn i32_quantity(value: i128) -> Result<i32> {
-    i32::try_from(value).map_err(|_| Error::input("military quantity outside native int32 range"))
-}
-
-// Pinned DLL 1059dd..105a02: signed 32-bit sum, signed 64-bit product and
-// arithmetic shift, back to int32, then another product and arithmetic shift.
-// A native overflow is not evidence for a meaningful corrected quantity.
-fn original(owner: i32, city: i32, other: i32, base: i32) -> Result<i32> {
-    let sum = owner
-        .checked_add(city)
-        .ok_or_else(|| Error::input("military coefficient overflow"))?;
-    let first = i32_quantity((i128::from(sum) * i128::from(other)).div_euclid(256))?;
-    i32_quantity((i128::from(first) * i128::from(base)).div_euclid(256))
-}
-
-/// Preserve the actual non-oath baseline's two rounding stages, remove the
-/// confirmed named contribution from that calculation, then add the declared
-/// percentage with one final rounding. Changing the entire calculation to a
-/// single division would also change the OFF baseline and its 100% reference.
-/// Negative values use floor, like the native arithmetic right shifts.
+pub use civ6_oath_runtime_rs::quantity::{MilitaryInput, MilitaryQuantity};
 pub fn military(input: MilitaryInput) -> Result<MilitaryQuantity> {
-    military_with_residual(input, 0)
+    civ6_oath_runtime_rs::quantity::military(input).map_err(|e| Error::input(e.to_string()))
 }
-
-/// Like `military`, but also exclude a separately confirmed, signed residue
-/// accumulated by completed named oath removals. The residue is not an active
-/// percentage: it can persist while OFF and through later reapplications.
-/// Callers must establish and restore its provenance separately, including
-/// after a new-process load; a negative city coefficient alone is insufficient.
 pub fn military_with_residual(
     input: MilitaryInput,
     confirmed_residual_q8: i32,
 ) -> Result<MilitaryQuantity> {
-    if input.oath_percent < 0 || input.oath_q8 < 0 {
-        return Err(Error::input("positive oath contribution required"));
-    }
-    if input.oath_percent == 0 && input.oath_q8 != 0 {
-        return Err(Error::input(
-            "native oath contribution lacks declared percentage",
-        ));
-    }
-    let original_q8 = original(
-        input.owner_q8,
-        input.city_q8,
-        input.other_rate_q8,
-        input.base_q8,
-    )?;
-    let baseline_city = i32_quantity(
-        i128::from(input.city_q8) - i128::from(input.oath_q8) - i128::from(confirmed_residual_q8),
-    )?;
-    let counterfactual_q8 = original(
-        input.owner_q8,
-        baseline_city,
-        input.other_rate_q8,
-        input.base_q8,
-    )?;
-    let delta = (i128::from(input.oath_percent)
-        * i128::from(input.other_rate_q8)
-        * i128::from(input.base_q8))
-    .div_euclid(25_600);
-    let corrected_q8 = i32_quantity(i128::from(counterfactual_q8) + delta)?;
-    Ok(MilitaryQuantity {
-        original_q8,
-        counterfactual_q8,
-        corrected_q8,
-    })
+    civ6_oath_runtime_rs::quantity::military_with_residual(input, confirmed_residual_q8)
+        .map_err(|e| Error::input(e.to_string()))
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
