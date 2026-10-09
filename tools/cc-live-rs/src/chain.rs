@@ -1526,25 +1526,11 @@ fn main_owned(
             p,
             &mut exit_evidence,
         );
+        let saved = save_exit_evidence(Path::new(&artifacts), &mut exit_evidence);
         if let Some(state) = reliability.as_deref_mut() {
-            if let Some(journal) = exit_evidence["sync_journal"].as_str() {
-                if Path::new(journal).is_file() {
-                    let copy = Path::new(&artifacts).join("steam-exit.jsonl");
-                    fs::create_dir_all(&artifacts)
-                        .map_err(|e| format!("prepare exit evidence directory: {e}"))?;
-                    fs::copy(journal, &copy)
-                        .map_err(|e| format!("retain round exit evidence: {e}"))?;
-                    exit_evidence["artifact_journal"] = json!(path(copy));
-                }
-            }
             state.round()["exit"] = exit_evidence;
         }
-        if let Err(error) = closed {
-            return Err(format!(
-                "driver exit {}; Civ6 close failed: {error}",
-                windows_exit_code(run.code)
-            ));
-        }
+        exit_result(windows_exit_code(run.code), closed, saved)?;
         *game_closed = true;
         for line in run.stdout.lines().filter(|s| {
             ["[OK]", "[FAIL]", "PASS", "FAIL"]
@@ -1573,6 +1559,77 @@ fn main_owned(
     Ok(first_failure)
 }
 /// Called only at a scenario boundary; never revoke a running chain from tick.
+#[doc(hidden)]
+pub fn exit_result(
+    driver_code: u32,
+    closed: Result<(), String>,
+    saved: Result<(), String>,
+) -> Result<(), String> {
+    let mut failures = Vec::new();
+    if let Err(error) = closed {
+        failures.push(format!("Civ6 close failed: {error}"));
+    }
+    if let Err(error) = saved {
+        failures.push(format!("evidence save failed: {error}"));
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "driver exit {driver_code}; {}",
+            failures.join("; ")
+        ))
+    }
+}
+
+#[doc(hidden)]
+pub fn save_exit_evidence(artifacts: &Path, evidence: &mut Value) -> Result<(), String> {
+    let mut errors = Vec::new();
+    if let Some(journal) = evidence["sync_journal"].as_str() {
+        let target = artifacts.join("steam-exit.jsonl");
+        let saved = (|| -> Result<(), String> {
+            let mut source = File::open(journal).map_err(|e| format!("read exit journal: {e}"))?;
+            fs::create_dir_all(artifacts).map_err(|e| format!("prepare exit artifacts: {e}"))?;
+            let mut out = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)
+                .map_err(|e| format!("reserve exit journal: {e}"))?;
+            std::io::copy(&mut source, &mut out).map_err(|e| format!("copy exit journal: {e}"))?;
+            out.sync_all()
+                .map_err(|e| format!("sync exit journal: {e}"))
+        })();
+        match saved {
+            Ok(()) => evidence["artifact_journal"] = json!(path(target)),
+            Err(error) => {
+                evidence["artifact_journal_error"] = json!(error);
+                errors.push(error);
+            }
+        }
+    }
+    let saved = (|| -> Result<(), String> {
+        fs::create_dir_all(artifacts).map_err(|e| format!("prepare exit artifacts: {e}"))?;
+        let mut out = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(artifacts.join("exit-evidence.json"))
+            .map_err(|e| format!("reserve exit evidence: {e}"))?;
+        serde_json::to_writer_pretty(&mut out, evidence)
+            .map_err(|e| format!("write exit evidence: {e}"))?;
+        out.sync_all()
+            .map_err(|e| format!("sync exit evidence: {e}"))
+    })();
+    if let Err(error) = saved {
+        evidence["artifact_evidence_error"] = json!(error);
+        errors.push(error);
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<bool, String> {
     let path = p.here.join("civ6.lock");
     let mut first_conflict = None;

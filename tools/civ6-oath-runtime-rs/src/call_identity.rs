@@ -171,11 +171,91 @@ pub fn copy_indicated_city(
     Ok(first)
 }
 
+/// A readable copy of the native low-16-bit table lookup. This is a candidate
+/// only: neither full generation equality, the callee's actual receiver, nor
+/// the candidate's lifetime is established by this copy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CityTableObservation {
+    pub wrapper_object: u64,
+    pub owner: u16,
+    pub full_id: u32,
+    pub candidate_city: u64,
+    pub game_state: u64,
+    pub player: u64,
+    pub table: u64,
+    pub group: u64,
+}
+
+fn read_pointer(memory: &mut impl Memory, at: u64) -> Result<u64> {
+    pointer(u64::from_le_bytes(read(memory, at)?))
+}
+fn city_table_observation(
+    memory: &mut impl Memory,
+    base: u64,
+    object: u64,
+) -> Result<CityTableObservation> {
+    let indicated = observe_city(memory, base, object)?;
+    if indicated.full_id == u32::MAX {
+        return Err(Error::input("invalid City table id"));
+    }
+    let global = read_pointer(memory, address(base, 0xb8aa68)?)?;
+    let game_state = read_pointer(memory, address(global, 0x240)?)?;
+    let owners = read_pointer(memory, address(game_state, 0x2b48)?)?;
+    if i32::from_le_bytes(read(
+        memory,
+        address(owners, u64::from(indicated.owner) * 4)?,
+    )?) == -1
+    {
+        return Err(Error::input("inactive City table owner"));
+    }
+    let players = read_pointer(memory, address(game_state, 0x20)?)?;
+    let player = read_pointer(memory, address(players, u64::from(indicated.owner) * 8)?)?;
+    let table = read_pointer(memory, address(player, 0x6d0)?)?;
+    let begin = read_pointer(memory, address(table, 0x98)?)?;
+    let end = u64::from_le_bytes(read(memory, address(table, 0xa0)?)?);
+    let len = end
+        .checked_sub(begin)
+        .ok_or_else(|| Error::input("reversed City table range"))?;
+    if len % 8 != 0 {
+        return Err(Error::input("unaligned City table range"));
+    }
+    let slot = u64::from(indicated.full_id & 0xffff);
+    let group_index = slot >> 3;
+    if group_index >= len / 8 {
+        return Err(Error::input("City table slot outside range"));
+    }
+    let group = read_pointer(memory, address(begin, group_index * 8)?)?;
+    let candidate_city = read_pointer(memory, address(group, (slot & 7) * 24)?)?;
+    Ok(CityTableObservation {
+        wrapper_object: object,
+        owner: indicated.owner,
+        full_id: indicated.full_id,
+        candidate_city,
+        game_state,
+        player,
+        table,
+        group,
+    })
+}
+
+pub fn copy_city_table_observation(
+    memory: &mut impl Memory,
+    base: u64,
+    object: u64,
+) -> Result<CityTableObservation> {
+    let first = city_table_observation(memory, base, object)?;
+    if city_table_observation(memory, base, object)? != first {
+        return Err(Error::input("City table graph changed while copying"));
+    }
+    Ok(first)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
+    #[derive(Clone)]
     struct Fixture {
         bytes: BTreeMap<u64, u8>,
         changed: bool,
@@ -331,5 +411,100 @@ mod tests {
         memory.change_amount = true;
         let error = copy_identity(&mut memory, frame).unwrap_err();
         assert!(error.to_string().contains("changed while copying"));
+    }
+
+    #[test]
+    fn city_table_observation_returns_subset_and_not_full_resolution() {
+        let mut memory = Fixture {
+            bytes: BTreeMap::new(),
+            changed: false,
+            change_amount: false,
+            count: 0,
+        };
+        let base = 0x180000000;
+        let object = 0x6000;
+
+        // Wrapper object setup
+        memory.u64(object, base + 0xab4f58);
+        memory.put(object + 0x138, &[2, 0, 2, 0]); // owner 2, kind 2
+        let full_id = 0x10005u32; // slot 5
+        memory.put(object + 0x13c, &full_id.to_le_bytes());
+        memory.u64(object + 0x140, 0);
+
+        // Global state setup
+        memory.u64(base + 0xb8aa68, 0x1000);
+        memory.u64(0x1000 + 0x240, 0x2000); // global state
+        memory.u64(0x2000 + 0x2b48, 0x3000); // active owner array
+        memory.put(0x3000 + 2 * 4, &0i32.to_le_bytes()); // active_owner[2] = 0
+        memory.u64(0x2000 + 0x20, 0x4000); // player pointer array
+        memory.u64(0x4000 + 2 * 8, 0x5000); // player = 5000
+        memory.u64(0x5000 + 0x6d0, 0x6000); // city table = 6000
+
+        // City table setup (len > slot_group 0)
+        memory.u64(0x6000 + 0x98, 0x7000); // begin
+        memory.u64(0x6000 + 0xa0, 0x7008); // end (len = 1 element of 8 bytes)
+        memory.u64(0x7000, 0x8000); // group 0 ptr
+
+        // Slot 5 is in group 0 (since 5 >> 3 == 0)
+        // Group index is 5. Slot offset is 5 * 3 = 15. offset in bytes = 15 * 8 = 120 (0x78)
+        let candidate = 0x9000;
+        memory.u64(0x8000 + 120, candidate);
+
+        let obs = copy_city_table_observation(&mut memory, base, object).unwrap();
+        assert_eq!(obs.owner, 2);
+        assert_eq!(obs.full_id, full_id);
+        assert_eq!(obs.wrapper_object, object);
+        assert_eq!(obs.candidate_city, candidate);
+        let mut reversed = memory.clone();
+        reversed.u64(0x6000 + 0xa0, 0x6ff8);
+        assert!(copy_city_table_observation(&mut reversed, base, object).is_err());
+        let mut outside = memory.clone();
+        outside.u64(0x6000 + 0xa0, 0x7000);
+        assert!(copy_city_table_observation(&mut outside, base, object).is_err());
+        let mut partial = memory.clone();
+        partial.bytes.remove(&(0x8000 + 127));
+        assert!(copy_city_table_observation(&mut partial, base, object).is_err());
+        let mut stale = memory.clone();
+        stale.put(object + 0x13c, &u32::MAX.to_le_bytes());
+        assert!(copy_city_table_observation(&mut stale, base, object).is_err());
+        struct ChangedGraph(Fixture, u32);
+        impl Memory for ChangedGraph {
+            fn copy(&mut self, at: u64, data: &mut [u8]) -> Result<()> {
+                if at == 0x8000 + 120 {
+                    self.1 += 1;
+                    if self.1 == 2 {
+                        self.0.u64(at, 0x9010);
+                    }
+                }
+                self.0.copy(at, data)
+            }
+        }
+        let mut changed = ChangedGraph(memory, 0);
+        assert!(copy_city_table_observation(&mut changed, base, object).is_err());
+    }
+
+    #[test]
+    fn city_table_observation_rejects_inactive_owner_without_following_its_player() {
+        let mut memory = Fixture {
+            bytes: BTreeMap::new(),
+            changed: false,
+            change_amount: false,
+            count: 0,
+        };
+        let base = 0x180000000;
+        let object = 0x6000;
+
+        memory.u64(object, base + 0xab4f58);
+        memory.put(object + 0x138, &[2, 0, 2, 0]);
+        let full_id = 0x10005u32;
+        memory.put(object + 0x13c, &full_id.to_le_bytes());
+        memory.u64(object + 0x140, 0);
+
+        memory.u64(base + 0xb8aa68, 0x1000);
+        memory.u64(0x1000 + 0x240, 0x2000);
+        memory.u64(0x2000 + 0x2b48, 0x3000);
+        memory.put(0x3000 + 2 * 4, &(-1i32).to_le_bytes()); // inactive!
+
+        assert!(copy_city_table_observation(&mut memory, base, object).is_err());
     }
 }

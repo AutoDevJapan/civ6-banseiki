@@ -24,6 +24,8 @@ mod native;
 #[cfg(windows)]
 mod oath_trace;
 #[cfg(windows)]
+pub mod recipient_trace;
+#[cfg(windows)]
 pub mod runtime;
 
 #[cfg(windows)]

@@ -82,6 +82,17 @@ impl SourcePlan {
                 original: disk_range(disk, rva, 8)?.to_vec(),
             });
         }
+        for &(rva, len) in &[
+            (0x044d60, 0xf),
+            (0x9723d0, 0x68),
+            (0x950a10, 0x60),
+            (0x2c4360, 0x45),
+        ] {
+            windows.push(Window {
+                rva,
+                original: disk_range(disk, rva, len)?.to_vec(),
+            });
+        }
         let mut slots = Vec::new();
         for table in [0xa76a30, 0xa6cdb8, 0xa90328, 0xa9e0f0] {
             let family = OathEffectFamily::from_vtable_rva(table).ok_or("unknown effect family")?;
@@ -98,6 +109,18 @@ impl SourcePlan {
                 }
                 slots.push((at, target));
             }
+        }
+        for &(table, offset, target) in &[
+            (0xab4f58, 0x00, 0x941f90),
+            (0xab4f58, 0x10, 0x9723d0),
+            (0xab5020, 0x00, 0x950a10),
+        ] {
+            let at = table + offset;
+            let observed = u64::from_le_bytes(disk_range(disk, at, 8)?.try_into().unwrap());
+            if observed != PREFERRED_BASE + target {
+                return Err("unknown wrapper vtable dispatch");
+            }
+            slots.push((at, target));
         }
         Ok(Self { windows, slots })
     }
