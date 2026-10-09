@@ -161,6 +161,8 @@ struct State {
     baseline: serde_json::Value,
     processed: usize,
     prefix_hash: String,
+    #[serde(default)]
+    load_baselines: std::collections::BTreeMap<u8, serde_json::Value>,
 }
 
 fn append_state(path: &Path, state: &State) -> Result<()> {
@@ -272,8 +274,33 @@ fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, port: u16) -> R
             // Write before any key or load: unknown outcomes retain sent markers.
             append_state(&path, &state)?;
             match action {
-                Some(protocol::Action::Begin { .. })
-                | Some(protocol::Action::AcceptDialog { .. }) => {
+                Some(protocol::Action::Begin { .. }) => {
+                    let baseline = state
+                        .load_baselines
+                        .get(&frame.generation)
+                        .unwrap_or(&state.baseline);
+                    loop {
+                        verify_owner(&mut io, &state)?;
+                        let loading = judge::read_since(logs, baseline)?;
+                        if loading.get("Lua.log").is_some_and(|text| {
+                            text.contains(
+                                civ6_autotest_rs::native_carrier_witness::ENGINE_LOAD_READY,
+                            )
+                        }) {
+                            break;
+                        }
+                        if io.now() >= deadline {
+                            return Err(Error::scenario(
+                                "early hook is armed but engine load completion is unproved",
+                            ));
+                        }
+                        io.sleep(0.2);
+                    }
+                    // Stock LoadScreen.OnLoadGameViewStateDone automatically
+                    // calls OnActivateButtonClicked for AnyMultiplayer. A key
+                    // here could instead dismiss PlayerChange or end a turn.
+                }
+                Some(protocol::Action::AcceptDialog { .. }) => {
                     verify_owner(&mut io, &state)?;
                     io.key(0x0D, deadline)?;
                 }
@@ -306,6 +333,10 @@ fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, port: u16) -> R
                         return Err(Error::scenario("frontend is not confirmed; no LoadGame"));
                     }
                     let code=format!("if not UI.IsInFrontEnd() then error('frontend required') end\nNetwork.LeaveGame()\n{}",scenario::load_code(&name,scenario::SessionType::Hotseat));
+                    state
+                        .load_baselines
+                        .insert(generation, judge::snapshot_logs(logs)?);
+                    append_state(&path, &state)?;
                     runner.send_frontend_transition_checked(
                         &code,
                         deadline.min(io.now() + 15.),
@@ -393,6 +424,7 @@ fn run(args: Args) -> Result<()> {
                 baseline: judge::snapshot_logs(&logs)?,
                 processed: 0,
                 prefix_hash: digest(&[])?,
+                load_baselines: std::collections::BTreeMap::new(),
             };
             serde_json::to_writer(&mut file, &value)?;
             file.write_all(b"\n")?;
@@ -439,6 +471,7 @@ mod tests {
             baseline: serde_json::json!({}),
             processed: 0,
             prefix_hash: digest(&[]).unwrap(),
+            load_baselines: std::collections::BTreeMap::new(),
         };
         fs::write(
             &path,
@@ -472,6 +505,7 @@ mod tests {
             baseline: serde_json::json!({}),
             processed: 0,
             prefix_hash: digest(&[]).unwrap(),
+            load_baselines: std::collections::BTreeMap::new(),
         };
         fs::write(&path, b"").unwrap();
         let frame = |serial, kind| protocol::Frame {
@@ -484,10 +518,10 @@ mod tests {
             body: serde_json::json!({"generation":0,"canonical":"actual"}).to_string(),
         };
         value.journal.consume(&frame(1, "BOOT".into())).unwrap();
-        let begin = frame(2, "LOAD_READY".into());
+        let begin = frame(2, "DIALOG_OPEN".into());
         assert!(matches!(
             value.journal.consume(&begin).unwrap(),
-            Some(protocol::Action::Begin { .. })
+            Some(protocol::Action::AcceptDialog { .. })
         ));
         append_state(&path, &value).unwrap();
         let mut restored = state(&path).unwrap();
