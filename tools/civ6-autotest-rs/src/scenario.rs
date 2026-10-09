@@ -5,8 +5,9 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 19] = [
+pub const ACTIONS: [&str; 20] = [
     "native_observer_ready",
+    "native_observer_finish",
     "restart_game",
     "enable_mods",
     "configure",
@@ -140,7 +141,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
-            "native_observer_ready" => crate::native_observer_ready::validate_step(step)?,
+            "native_observer_ready" | "native_observer_finish" => {
+                crate::native_observer_ready::validate_step(step)?
+            }
             "restart_game"
                 if step
                     .as_object()

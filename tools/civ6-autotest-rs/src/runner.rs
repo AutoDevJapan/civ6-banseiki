@@ -21,8 +21,25 @@ pub mod autostart;
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
+    fn request_native_observer(&mut self, path: &Path) -> Result<()> {
+        crate::native_observer_ready::request_observer(path)
+    }
+    fn native_observer_completion(
+        &mut self,
+        path: &Path,
+    ) -> Result<Option<crate::native_observer_ready::ControllerCompletion>> {
+        crate::native_observer_ready::controller_completion(path)
+    }
     fn native_observer_manifest(&mut self, path: &Path) -> Result<Option<Vec<u8>>> {
         crate::native_observer_ready::read_manifest(path)
+    }
+    fn native_observer_exit(
+        &mut self,
+        path: &Path,
+        game_pid: u32,
+        game_created: u64,
+    ) -> Result<Option<Value>> {
+        crate::native_observer_finish::read_completed_exit(path, game_pid, game_created)
     }
     fn pin_native_observer(
         &mut self,
@@ -524,6 +541,12 @@ pub struct Runner {
     pub clock: Arc<dyn Clock>,
     transition_response: Value,
     native_observer_started: bool,
+    native_observer_pending: Option<PathBuf>,
+    native_observer_session: Option<(
+        PathBuf,
+        crate::native_observer_ready::Manifest,
+        Box<dyn crate::native_observer_ready::Session>,
+    )>,
 }
 impl Runner {
     pub fn new(scenario: Value, output: PathBuf, logs: PathBuf, saves: PathBuf, port: u16) -> Self {
@@ -577,9 +600,11 @@ impl Runner {
             clock,
             transition_response: Value::Null,
             native_observer_started: false,
+            native_observer_pending: None,
+            native_observer_session: None,
         }
     }
-    fn native_observer_ready(&mut self, step: &Value) -> Result<String> {
+    fn native_observer_ready(&mut self, step: &Value, deadline: f64) -> Result<String> {
         use crate::native_observer_ready::{parse_manifest, validate_step, ACK_LUA};
         if self.native_observer_started {
             return Err(Error::input(
@@ -588,8 +613,9 @@ impl Runner {
         }
         self.native_observer_started = true;
         validate_step(step)?;
-        let deadline = self.clock.now() + step["timeout"].as_f64().unwrap_or(240.0);
         let path = Path::new(text(step, "handoff"));
+        self.backend.request_native_observer(path)?;
+        self.native_observer_pending = Some(path.to_path_buf());
         let manifest = loop {
             self.remaining(deadline)?;
             if let Some(bytes) = self.backend.native_observer_manifest(path)? {
@@ -619,13 +645,85 @@ impl Runner {
         session.check(&manifest, game_pid)?;
         let budget = self.remaining(deadline)?;
         // No lua()/states() retry path: never reconnect, disconnect, or resend.
-        let response = self.backend.run_lua(&states[index], ACK_LUA, budget)?;
+        let response = self.backend.run_lua(&states[index], ACK_LUA, budget);
+        session.after_ack();
+        self.native_observer_session = Some((path.to_path_buf(), manifest, session));
+        let response = response?;
         if response != "native observer ready acknowledged" {
             return Err(Error::lua(
                 "unexpected native observer acknowledgement response",
             ));
         }
         Ok(response)
+    }
+    fn drain_native_observer(&mut self) -> Result<()> {
+        let Some(path) = self.native_observer_pending.clone() else {
+            return Ok(());
+        };
+        let deadline = self.clock.now() + 120.0;
+        loop {
+            if self.clock.now() >= deadline {
+                return Err(Error::scenario(
+                    "native observer completion deadline expired",
+                ));
+            }
+            if let Some(completion) = self.backend.native_observer_completion(&path)? {
+                self.native_observer_pending = None;
+                return match completion {
+                    crate::native_observer_ready::ControllerCompletion::Exited(0) => Ok(()),
+                    other => Err(Error::scenario(format!(
+                        "native observer completion: {other:?}"
+                    ))),
+                };
+            }
+            // Once interrupted, ordinary step waits stop immediately. Cleanup
+            // still drains the already-started observer before returning.
+            self.clock
+                .sleep((deadline - self.clock.now()).clamp(0.0, 0.2));
+        }
+    }
+    fn native_observer_finish(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        crate::native_observer_ready::validate_step(step)?;
+        let (path, manifest, mut session) =
+            self.native_observer_session.take().ok_or_else(|| {
+                Error::scenario("native observer finish needs one acknowledged session")
+            })?;
+        if path != Path::new(text(step, "handoff")) {
+            return Err(Error::scenario(
+                "native observer finish handoff differs from acknowledgement",
+            ));
+        }
+        let output = Path::new(
+            manifest
+                .ready_path
+                .strip_suffix(".ready")
+                .ok_or_else(|| Error::scenario("native observer output path missing"))?,
+        );
+        loop {
+            self.remaining(deadline)?;
+            let game_pid = self
+                .backend
+                .single_process(0.0)?
+                .map(|p| p.0)
+                .ok_or_else(|| Error::input("native observer game disappeared before cleanup"))?;
+            let alive = session.check_finish(&manifest, game_pid)?;
+            if self
+                .backend
+                .native_observer_exit(output, manifest.game_pid, manifest.game_created)?
+                .is_some()
+            {
+                self.remaining(deadline)?;
+                return Ok(
+                    "native observer restored, continued and detached before game closure".into(),
+                );
+            }
+            if !alive {
+                return Err(Error::scenario(
+                    "native observer exited without a complete cleanup record",
+                ));
+            }
+            self.sleep_until(deadline, 0.2);
+        }
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
         crate::time::check_interrupt()?;
@@ -2206,14 +2304,17 @@ impl Runner {
         }
         let timeout = step["timeout"]
             .as_f64()
-            .unwrap_or(if action == "restart_game" {
+            .unwrap_or(if action == "native_observer_ready" {
+                240.0
+            } else if action == "restart_game" {
                 360.0
             } else {
                 120.0
             });
         let deadline = self.clock.now() + timeout;
         match action {
-            "native_observer_ready" => self.native_observer_ready(step),
+            "native_observer_ready" => self.native_observer_ready(step, deadline),
+            "native_observer_finish" => self.native_observer_finish(step, deadline),
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
@@ -3272,7 +3373,7 @@ impl Runner {
         let scenario_name = text(&self.scenario, "name").to_owned();
         self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;
-        let code = match self.run_inner() {
+        let mut code = match self.run_inner() {
             Ok(v) => v,
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
@@ -3291,6 +3392,18 @@ impl Runner {
                 1
             }
         };
+        if let Err(error) = self.drain_native_observer() {
+            self.result_passed = false;
+            code = 1;
+            self.record_failure(
+                Some(&json!({"action":"native_observer_cleanup"})),
+                None,
+                &error,
+            );
+            let earlier = self.failure.take().unwrap_or_default();
+            self.failure = Some(format!("{earlier}; native observer cleanup: {error}"));
+            self.log("native_observer_cleanup", "FAIL", &error.to_string())?;
+        }
         if !self.result_passed && self.failure.is_none() {
             self.failure = Some("Run did not finish".into());
         }
@@ -3342,7 +3455,10 @@ impl Runner {
     }
     fn run_inner(&mut self) -> Result<i32> {
         let mut frontend_ready = false;
-        let native_handoff_first = self.scenario["steps"][0]["action"] == "native_observer_ready";
+        let native_handoff_first = matches!(
+            self.scenario["steps"][0]["action"].as_str(),
+            Some("native_observer_ready" | "native_observer_finish")
+        );
         // Installation errors are independent of process freshness. The chain
         // disables automatic restarts, but must still reject missing MODs before
         // spending a shared game slot launching Steam.

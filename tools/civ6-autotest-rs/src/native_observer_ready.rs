@@ -10,7 +10,7 @@ pub const LOCK_PATH: &str = "D:/CC/Tools/civ6-live/civ6.lock";
 const ROOT: &str = "D:/CC/Work/todo995/";
 const MAX_RECORD: usize = 64 * 1024;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub version: u32,
@@ -110,6 +110,28 @@ pub fn validate_evidence(
     identities: [Identity; 3],
     game_pid: u32,
 ) -> Result<()> {
+    validate_lifecycle_evidence(m, lease, ready, identities, game_pid, true)
+}
+
+pub fn validate_finish_evidence(
+    m: &Manifest,
+    lease: &[u8],
+    ready: &[u8],
+    identities: [Identity; 3],
+    game_pid: u32,
+) -> Result<bool> {
+    validate_lifecycle_evidence(m, lease, ready, identities, game_pid, false)?;
+    Ok(identities[2].alive)
+}
+
+fn validate_lifecycle_evidence(
+    m: &Manifest,
+    lease: &[u8],
+    ready: &[u8],
+    identities: [Identity; 3],
+    game_pid: u32,
+    observer_must_be_alive: bool,
+) -> Result<()> {
     let lease: Value = json(lease)?;
     if lease["live_chain"] != true
         || lease["pid"].as_u64() != Some(u64::from(m.chain_pid))
@@ -122,12 +144,19 @@ pub fn validate_evidence(
             "native observer lease or game identity changed",
         ));
     }
-    for (actual, (pid, created)) in identities.into_iter().zip([
-        (m.chain_pid, m.chain_created),
-        (m.game_pid, m.game_created),
-        (m.observer_pid, m.observer_created),
-    ]) {
-        if !actual.alive || actual.pid != pid || actual.created != created {
+    for (index, (actual, (pid, created))) in identities
+        .into_iter()
+        .zip([
+            (m.chain_pid, m.chain_created),
+            (m.game_pid, m.game_created),
+            (m.observer_pid, m.observer_created),
+        ])
+        .enumerate()
+    {
+        if ((!actual.alive) && (index != 2 || observer_must_be_alive))
+            || actual.pid != pid
+            || actual.created != created
+        {
             return Err(Error::input(
                 "native observer process exited or identity changed",
             ));
@@ -150,6 +179,128 @@ pub fn validate_evidence(
 
 pub trait Session: Send {
     fn check(&mut self, manifest: &Manifest, game_pid: u32) -> Result<()>;
+    /// The short lease file pin is only needed across the acknowledgement.
+    fn after_ack(&mut self) {}
+    /// Keep the original process handles while allowing the observer to exit.
+    fn check_finish(&mut self, _manifest: &Manifest, _game_pid: u32) -> Result<bool> {
+        Err(Error::input(
+            "native observer session cannot prove completed cleanup",
+        ))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ControllerCompletion {
+    NotStarted,
+    Exited(i32),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Done {
+    version: u32,
+    run_tag: String,
+    chain_pid: u32,
+    chain_created: u64,
+    observer_started: bool,
+    manifest: Option<Manifest>,
+    exit_code: Option<i32>,
+}
+
+pub fn sidecar(path: &Path, suffix: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(format!("{}{suffix}", path.display()))
+}
+
+pub fn parse_completion(
+    path: &Path,
+    bytes: &[u8],
+    started: Option<&[u8]>,
+) -> Result<(ControllerCompletion, u32, u64)> {
+    let done: Done = json(bytes)?;
+    let tag = path
+        .file_name()
+        .and_then(|p| p.to_str())
+        .and_then(|p| p.strip_suffix("-handoff.json"))
+        .ok_or_else(|| Error::input("native completion handoff name invalid"))?;
+    if done.version != 1 || done.run_tag != tag || done.chain_pid == 0 || done.chain_created == 0 {
+        return Err(Error::input(
+            "native controller completion belongs to another request",
+        ));
+    }
+    let result = if done.observer_started {
+        let original = parse_manifest(
+            path,
+            started.ok_or_else(|| Error::input("native observer launch record missing"))?,
+        )?;
+        if done.manifest.as_ref() != Some(&original)
+            || done.chain_pid != original.chain_pid
+            || done.chain_created != original.chain_created
+        {
+            return Err(Error::input(
+                "native observer completion differs from launch identity",
+            ));
+        }
+        ControllerCompletion::Exited(
+            done.exit_code
+                .ok_or_else(|| Error::input("native observer exit code missing"))?,
+        )
+    } else {
+        if done.manifest.is_some() || done.exit_code.is_some() || started.is_some() {
+            return Err(Error::input(
+                "native observer launch cannot be labelled not started",
+            ));
+        }
+        ControllerCompletion::NotStarted
+    };
+    Ok((result, done.chain_pid, done.chain_created))
+}
+
+#[cfg(windows)]
+pub fn request_observer(path: &Path) -> Result<()> {
+    use std::io::Write;
+    let tag = path
+        .file_name()
+        .and_then(|p| p.to_str())
+        .and_then(|p| p.strip_suffix("-handoff.json"))
+        .ok_or_else(|| Error::input("native request name invalid"))?;
+    let tmp = sidecar(path, ".request.tmp");
+    let target = sidecar(path, ".request");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    file.write_all(&serde_json::to_vec(
+        &serde_json::json!({"version":1,"run_tag":tag}),
+    )?)?;
+    file.sync_all()?;
+    drop(file);
+    windows::publish_request(&tmp, &target)
+}
+
+#[cfg(not(windows))]
+pub fn request_observer(_path: &Path) -> Result<()> {
+    Err(Error::input(
+        "native observer operation unsupported outside Windows",
+    ))
+}
+
+#[cfg(windows)]
+pub fn controller_completion(path: &Path) -> Result<Option<ControllerCompletion>> {
+    let Some(bytes) = read_manifest(&sidecar(path, ".done"))? else {
+        return Ok(None);
+    };
+    let started = read_manifest(&sidecar(path, ".started"))?;
+    let (completion, chain_pid, chain_created) =
+        parse_completion(path, &bytes, started.as_deref())?;
+    windows::check_completion_chain(chain_pid, chain_created)?;
+    Ok(Some(completion))
+}
+
+#[cfg(not(windows))]
+pub fn controller_completion(_path: &Path) -> Result<Option<ControllerCompletion>> {
+    Err(Error::input(
+        "native observer operation unsupported outside Windows",
+    ))
 }
 
 #[cfg(windows)]

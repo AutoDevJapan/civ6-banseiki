@@ -14,6 +14,15 @@ use std::{
 use tempfile::TempDir;
 
 pub type Calls = Arc<Mutex<Vec<(String, String)>>>;
+type NativeExit = Box<dyn FnMut(&Path, u32, u64) -> Result<Option<Value>> + Send>;
+type NativeRequest = Box<dyn FnMut(&Path) -> Result<()> + Send>;
+type NativeCompletion = Box<
+    dyn FnMut(
+            &Path,
+        )
+            -> Result<Option<civ6_autotest_rs::native_observer_ready::ControllerCompletion>>
+        + Send,
+>;
 
 pub fn object_keys(value: &Value) -> Vec<&str> {
     let mut keys: Vec<_> = value
@@ -65,7 +74,10 @@ type NativeSession = Box<
 >;
 
 pub struct FakeBackend {
+    pub on_native_request: NativeRequest,
+    pub on_native_completion: NativeCompletion,
     pub on_native_manifest: NativeManifest,
+    pub on_native_exit: NativeExit,
     pub on_native_session: NativeSession,
     pub on_native_connection: Box<dyn FnMut() -> Result<()> + Send>,
     pub calls: Calls,
@@ -96,7 +108,14 @@ pub struct FakeBackend {
 impl FakeBackend {
     pub fn new() -> Self {
         Self {
+            on_native_request: Box::new(|_| Ok(())),
+            on_native_completion: Box::new(|_| {
+                Ok(Some(
+                    civ6_autotest_rs::native_observer_ready::ControllerCompletion::Exited(0),
+                ))
+            }),
             on_native_manifest: Box::new(|_| Err(Error::input("no mock native manifest"))),
+            on_native_exit: Box::new(|_, _, _| Err(Error::input("no mock native cleanup"))),
             on_native_session: Box::new(|_| Err(Error::input("no mock native session"))),
             on_native_connection: Box::new(|| Ok(())),
             calls: Arc::new(Mutex::new(Vec::new())),
@@ -154,6 +173,24 @@ impl Default for FakeBackend {
     }
 }
 impl Backend for FakeBackend {
+    fn request_native_observer(&mut self, path: &Path) -> Result<()> {
+        (self.on_native_request)(path)
+    }
+    fn native_observer_completion(
+        &mut self,
+        path: &Path,
+    ) -> Result<Option<civ6_autotest_rs::native_observer_ready::ControllerCompletion>> {
+        (self.on_native_completion)(path)
+    }
+    fn native_observer_exit(
+        &mut self,
+        path: &Path,
+        pid: u32,
+        created: u64,
+    ) -> Result<Option<Value>> {
+        self.events.lock().unwrap().push("cleanup_record".into());
+        (self.on_native_exit)(path, pid, created)
+    }
     fn native_observer_manifest(&mut self, path: &Path) -> Result<Option<Vec<u8>>> {
         self.events.lock().unwrap().push("manifest".into());
         (self.on_native_manifest)(path)

@@ -51,6 +51,20 @@ struct MockSession {
     events: Arc<Mutex<Vec<String>>>,
 }
 impl Session for MockSession {
+    fn check_finish(&mut self, manifest: &Manifest, game: u32) -> Result<bool> {
+        self.events
+            .lock()
+            .unwrap()
+            .push("finish_identity_check".into());
+        let e = self.evidence.lock().unwrap();
+        native::validate_finish_evidence(
+            manifest,
+            &serde_json::to_vec(&e.lease).unwrap(),
+            &serde_json::to_vec(&e.ready).unwrap(),
+            e.processes,
+            game,
+        )
+    }
     fn check(&mut self, manifest: &Manifest, game: u32) -> Result<()> {
         self.events.lock().unwrap().push("identity_check".into());
         let e = self.evidence.lock().unwrap();
@@ -99,6 +113,225 @@ fn no_ack(h: &Harness) {
         .events()
         .iter()
         .any(|e| e == "connect" || e == "disconnect"));
+}
+
+fn finish_step() -> Value {
+    json!({"action":"native_observer_finish","handoff":HANDOFF,"timeout":120})
+}
+
+#[test]
+fn native_run_failure_and_unknown_ack_drain_observer_before_returning() {
+    for unknown_ack in [false, true] {
+        let (mut fake, _) = valid_fake();
+        fake.on_lua = Box::new(move |_, code| {
+            if code == ACK_LUA && !unknown_ack {
+                return Ok("native observer ready acknowledged".into());
+            }
+            if unknown_ack {
+                Err(Error::unknown("ack lost after send"))
+            } else {
+                Err(Error::lua("planned setter failure"))
+            }
+        });
+        let polls = Arc::new(Mutex::new(0));
+        let seen = polls.clone();
+        fake.on_native_completion = Box::new(move |_| {
+            let mut count = seen.lock().unwrap();
+            *count += 1;
+            Ok((*count >= 4).then_some(native::ControllerCompletion::Exited(0)))
+        });
+        let mut h = Harness::new(
+            json!({"name":"failure cleanup", "steps":[step(),
+            {"action":"ui_lua","state_name":"InGame","code":"return error('planned setter failure')"}]}),
+            fake,
+        );
+        h.runner.output = h.root.path().join("run-output");
+        for name in ["Lua.log", "Database.log", "Modding.log"] {
+            std::fs::write(h.runner.logs.join(name), "").unwrap();
+        }
+        assert_eq!(h.runner.run().unwrap(), 1);
+        assert_eq!(*polls.lock().unwrap(), 4);
+        assert_eq!(h.calls().len(), if unknown_ack { 1 } else { 2 });
+        assert!(h.runner.failure.as_ref().unwrap().contains(if unknown_ack {
+            "ack lost"
+        } else {
+            "planned setter failure"
+        }));
+        assert!(!h.events().iter().any(|e| e == "disconnect"));
+        if unknown_ack {
+            assert!(!h.events().iter().any(|e| e == "connect"));
+        }
+    }
+}
+
+#[test]
+fn native_controller_completion_rejects_changed_launch_identity_and_false_not_started() {
+    let path = std::path::Path::new(HANDOFF);
+    let started = serde_json::to_vec(&manifest()).unwrap();
+    let done = json!({"version":1,"run_tag":"native-1743-live05","chain_pid":123,
+        "chain_created":134360000000000000_u64,"observer_started":true,"manifest":manifest(),"exit_code":0});
+    assert_eq!(
+        native::parse_completion(path, &serde_json::to_vec(&done).unwrap(), Some(&started))
+            .unwrap()
+            .0,
+        native::ControllerCompletion::Exited(0)
+    );
+    for field in ["chain_pid", "game_created", "observer_created"] {
+        let mut changed = done.clone();
+        changed["manifest"][field] = json!(999);
+        assert!(native::parse_completion(
+            path,
+            &serde_json::to_vec(&changed).unwrap(),
+            Some(&started)
+        )
+        .is_err());
+    }
+    let not_started = json!({"version":1,"run_tag":"native-1743-live05","chain_pid":123,
+        "chain_created":134360000000000000_u64,"observer_started":false});
+    assert_eq!(
+        native::parse_completion(path, &serde_json::to_vec(&not_started).unwrap(), None)
+            .unwrap()
+            .0,
+        native::ControllerCompletion::NotStarted
+    );
+    assert!(native::parse_completion(
+        path,
+        &serde_json::to_vec(&not_started).unwrap(),
+        Some(&started)
+    )
+    .is_err());
+    assert!(native::parse_completion(path, &serde_json::to_vec(&done).unwrap(), None).is_err());
+    assert!(native::parse_completion(path, b"{", Some(&started)).is_err());
+}
+
+#[cfg(windows)]
+#[test]
+fn native_request_publish_is_complete_and_does_not_overwrite_an_existing_request() {
+    let root = tempfile::tempdir().unwrap();
+    let handoff = root.path().join("native-request-test-handoff.json");
+    native::request_observer(&handoff).unwrap();
+    let request = native::sidecar(&handoff, ".request");
+    let original = std::fs::read(&request).unwrap();
+    let data: Value = serde_json::from_slice(&original).unwrap();
+    assert_eq!(data, json!({"version":1,"run_tag":"native-request-test"}));
+    assert!(native::request_observer(&handoff).is_err());
+    assert_eq!(std::fs::read(request).unwrap(), original);
+}
+
+fn completed_exit() -> Value {
+    json!({"event":"exit","pid":456,"created":134360000000000001_u64,
+        "reason":"deadline","error":null,"ready_reached":true,"cleanup_complete":true,
+        "cleanup":{"continue_pending_ok":true,"debug_active_process_stop_ok":true,"process_exited":false,"errors":[]}})
+}
+
+#[test]
+fn native_finish_waits_for_complete_cleanup_and_does_not_send_another_command() {
+    use std::io::Write;
+    let (mut fake, evidence) = valid_fake();
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    write!(file, "{{\"event\":\"ready\"}}\n{{\"event\":").unwrap();
+    let mut reads = 0;
+    fake.on_native_exit = Box::new(move |path, pid, created| {
+        assert_eq!(
+            path.to_str().unwrap(),
+            "D:/CC/Work/todo995/native-1743-live05-observer.jsonl"
+        );
+        reads += 1;
+        if reads == 2 {
+            file.as_file_mut().set_len(0).unwrap();
+            use std::io::{Seek, SeekFrom};
+            file.as_file_mut().seek(SeekFrom::Start(0)).unwrap();
+            writeln!(file, "{}", completed_exit()).unwrap();
+            file.flush().unwrap();
+        }
+        civ6_autotest_rs::native_observer_finish::read_completed_exit(file.path(), pid, created)
+    });
+    let mut h = harness(fake);
+    h.runner.run_step(&step()).unwrap();
+    h.runner.run_step(&finish_step()).unwrap();
+    assert_eq!(h.calls().len(), 1);
+    assert_eq!(
+        h.events().iter().filter(|e| *e == "cleanup_record").count(),
+        2
+    );
+    assert!(h.runner.run_step(&finish_step()).is_err());
+    assert_eq!(h.calls().len(), 1);
+    assert!(evidence.lock().unwrap().processes[1].alive);
+}
+
+#[test]
+fn native_finish_requires_acknowledgement_and_rejects_changed_ownership() {
+    let (fake, _) = valid_fake();
+    let mut h = harness(fake);
+    assert!(h.runner.run_step(&finish_step()).is_err());
+    no_ack(&h);
+    for changed in ["game", "chain", "observer_creation", "lease"] {
+        let (mut fake, evidence) = valid_fake();
+        fake.on_native_exit =
+            Box::new(|_, _, _| panic!("changed identity must fail before reading cleanup"));
+        let mut h = harness(fake);
+        h.runner.run_step(&step()).unwrap();
+        let mut e = evidence.lock().unwrap();
+        match changed {
+            "game" => e.processes[1].alive = false,
+            "chain" => e.processes[0].alive = false,
+            "observer_creation" => e.processes[2].created += 1,
+            _ => e.lease["lock_token"] = json!("another-lease"),
+        }
+        drop(e);
+        assert!(h.runner.run_step(&finish_step()).is_err(), "{changed}");
+        assert_eq!(h.calls().len(), 1);
+    }
+}
+
+#[test]
+fn native_finish_rejects_dead_observer_without_cleanup_or_restoration_failure() {
+    for bad_restore in [false, true] {
+        let (mut fake, evidence) = valid_fake();
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        if bad_restore {
+            let mut record = completed_exit();
+            record["cleanup"]["debug_active_process_stop_ok"] = json!(false);
+            use std::io::Write;
+            writeln!(file, "{record}").unwrap();
+            file.flush().unwrap();
+        }
+        fake.on_native_exit = Box::new(move |_, pid, created| {
+            civ6_autotest_rs::native_observer_finish::read_completed_exit(file.path(), pid, created)
+        });
+        let mut h = harness(fake);
+        h.runner.run_step(&step()).unwrap();
+        evidence.lock().unwrap().processes[2].alive = false;
+        assert!(h.runner.run_step(&finish_step()).is_err());
+        assert_eq!(h.calls().len(), 1);
+    }
+}
+
+#[test]
+fn native_finish_has_a_finite_deadline_and_accepts_a_cleanly_exited_observer() {
+    for complete in [false, true] {
+        let (mut fake, evidence) = valid_fake();
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        if complete {
+            use std::io::Write;
+            writeln!(file, "{}", completed_exit()).unwrap();
+            file.flush().unwrap();
+        }
+        fake.on_native_exit = Box::new(move |_, pid, created| {
+            civ6_autotest_rs::native_observer_finish::read_completed_exit(file.path(), pid, created)
+        });
+        let mut h = harness(fake);
+        h.runner.run_step(&step()).unwrap();
+        if complete {
+            evidence.lock().unwrap().processes[2].alive = false;
+        }
+        assert_eq!(h.runner.run_step(&finish_step()).is_ok(), complete);
+        assert_eq!(h.calls().len(), 1);
+        let reads = h.events().iter().filter(|e| *e == "cleanup_record").count();
+        if !complete {
+            assert!((500..=601).contains(&reads), "{reads}");
+        }
+    }
 }
 
 #[test]
