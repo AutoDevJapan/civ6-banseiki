@@ -1186,6 +1186,14 @@ mod platform {
                 "semantics":"unidentified_external_interface_slot_not_called"})
         }
 
+        fn main_image_fields(&self) -> Value {
+            let name = Path::new(&self.pinned.image_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| "pinned image has no Unicode file name".to_owned());
+            raw_read(name.and_then(|name| find_named_module(self, &self.pinned.image_path, name)))
+        }
+
         fn cache_fields(&self, trigger: Trigger) -> Value {
             let pointer = self.u64_at(trigger.cache_city, 0x16C0);
             let raw_b8 = self.u64_at(trigger.receiver, 0xB8);
@@ -1305,12 +1313,16 @@ mod platform {
         )?)
     }
 
-    fn find_ntdll(process: &Process, expected_path: &str) -> Result<ModuleIdentity> {
+    fn find_named_module(
+        process: &Process,
+        expected_path: &str,
+        expected_name: &str,
+    ) -> Result<ModuleIdentity> {
         process.verify()?;
         // SAFETY: metadata snapshot only for the already pinned PID.
         let snapshot = Handle::new(
             unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process.pinned.pid) },
-            "ntdll module snapshot",
+            "named module snapshot",
         )?;
         let mut entry = MODULEENTRY32W {
             dwSize: size_of::<MODULEENTRY32W>() as u32,
@@ -1318,13 +1330,13 @@ mod platform {
         };
         // SAFETY: valid snapshot and sized metadata destination.
         if unsafe { Module32FirstW(snapshot.0, &mut entry) } == 0 {
-            return Err(win_error("Module32FirstW(ntdll)"));
+            return Err(win_error("Module32FirstW(named module)"));
         }
         let mut found = None;
         loop {
             if wide_path(&entry.szModule)?
                 .to_str()
-                .is_some_and(|name| name.eq_ignore_ascii_case("ntdll.dll"))
+                .is_some_and(|name| name.eq_ignore_ascii_case(expected_name))
             {
                 let image = ModuleIdentity {
                     path: path_key(&canonical(&wide_path(&entry.szExePath)?)?)?,
@@ -1335,7 +1347,7 @@ mod platform {
                     || image.path != expected_path
                     || entry.th32ProcessID != process.pinned.pid
                 {
-                    return Err("ntdll path/PID/unique-image mismatch".into());
+                    return Err("named module path/PID/unique-image mismatch".into());
                 }
                 found = Some(image);
             }
@@ -1343,13 +1355,13 @@ mod platform {
             if unsafe { Module32NextW(snapshot.0, &mut entry) } == 0 {
                 // SAFETY: inspect the enumeration status immediately.
                 if unsafe { GetLastError() } != ERROR_NO_MORE_FILES {
-                    return Err(win_error("Module32NextW(ntdll)"));
+                    return Err(win_error("Module32NextW(named module)"));
                 }
                 break;
             }
         }
         process.verify()?;
-        found.ok_or_else(|| "native system ntdll is not loaded in the pinned process".into())
+        found.ok_or_else(|| "specified image is not loaded in the pinned process".into())
     }
 
     type NtQueryThread = unsafe extern "system" fn(HANDLE, i32, *mut c_void, u32, *mut u32) -> i32;
@@ -1478,7 +1490,7 @@ mod platform {
     impl PinnedNtdll {
         fn open(process: &Process) -> Result<Self> {
             let path = system_ntdll_path()?;
-            let identity = find_ntdll(process, &path)?;
+            let identity = find_named_module(process, &path, "ntdll.dll")?;
             let mut file = OpenOptions::new()
                 .read(true)
                 .share_mode(FILE_SHARE_READ)
@@ -1509,7 +1521,7 @@ mod platform {
         }
 
         fn verify(&self, process: &Process) -> Result<VerifiedAttachExports> {
-            if find_ntdll(process, &self.identity.path)? != self.identity {
+            if find_named_module(process, &self.identity.path, "ntdll.dll")? != self.identity {
                 return Err("pinned ntdll module identity changed".into());
             }
             self.image
@@ -2265,6 +2277,7 @@ mod platform {
                     "initial_local_enable_mask":0x45,"getter_enable_policy":"first_setter_thread_only",
                     "attach_break":self.exceptions.attach, "ntdll_identity":self.ntdll.report(),
                     "raw_notification_interface":self.process.interface_fields(self.module.identity.base),
+                    "raw_main_image_module":self.process.main_image_fields(),
                     "semantics":"raw_fields_only"});
                 let mut marker = OpenOptions::new()
                     .write(true)
