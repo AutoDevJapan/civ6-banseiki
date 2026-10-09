@@ -604,3 +604,19 @@ fn hotseat_switch_opens_same_proposer_for_the_new_accepting_house() {
     p.same();
     p.check("GPROPS.JAC_UNIFICATION_PACT_LEAD_3==1 and GPROPS.JAC_UNIFICATION_PACT_LEAD_0==nil");
 }
+
+#[test]
+fn unowned_castle_blocks_pact_and_start_alliance_without_aborting_gameplay() {
+    let pact = Pair::new(false);
+    pact.both("CITIES[166].owner=-1; ALLIED['0-1']=true");
+    pact.request(0, "Propose", 1);
+    pact.check("GPROPS.JAC_UNIFICATION_PACT_LEAD_0==0 and GPROPS.JAC_UNIFICATION_PACT_LEAD_1==0 and #BUILT==0");
+    pact.both("CITIES[166].owner=0; FIRE('CityBuilt',0,166,6,5)");
+    pact.check("#BUILT==1 and CITIES[166].buildings[8]==true");
+
+    let start_alliance = Pair::new(false);
+    start_alliance.both("CITIES[166].owner=-1; GPROPS['JAC_1534_ALLIANCE_DATE-ODA']=16603; FIRE('OnGameTurnStarted',TURN)");
+    start_alliance.check("#BUILT==0");
+    start_alliance.both("CITIES[166].owner=0; FIRE('CityBuilt',0,166,6,5)");
+    start_alliance.check("#BUILT==1 and CITIES[166].buildings[8]==true");
+}

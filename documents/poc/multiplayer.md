@@ -51,7 +51,7 @@ civ6-growth-sync compare host.json guest.json
 
 APIの文脈は本体StagingRoomと、作者の[GameConfiguration実測一覧](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/Objects/GameConfiguration/GameConfiguration.md)を照合した。人間枠の読み取りはUI、ネットワーク判定はScriptとUIの双方で利用される。手番の再確認には[Playerの実測一覧](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/Objects/Player/Player.md)のScript・UI共通の `IsTurnActive` を使う。実エンジンの配送・表示・保存の確認は後日のプレイへ残す。
 
-同盟と家名には `clans_alliance_multiplayer.rs` の13検査を追加した。家名の状態変更は公式Gameplayのターンイベントで行い、存在しない同盟要求者を拒否する。独立した二環境で要求順・二重要求・所有者変更・保存再構成を照合する。ホットシートで同じ申し込み元から別の人間へ操作が移った場合も、申し込みを表示する。
+同盟と家名には `clans_alliance_multiplayer.rs` の14検査を追加した。家名の状態変更は公式Gameplayのターンイベントで行い、存在しない同盟要求者を拒否する。独立した二環境で要求順・二重要求・所有者変更・保存再構成を照合する。ホットシートで同じ申し込み元から別の人間へ操作が移った場合も、申し込みを表示する。城を主要文明以外が所有している間は、同盟と開始時の連合の勝利判定を保留し、所有者が戻った後に再判定する。
 
 宗教は8分岐と本人の英雄操作を同期要求へ接続し、MODのマルチプレイ対応を有効にした。英雄の加入先・クラス・寿命を画面側で読み、本人が送った観測を保存予約・実ユニットの所有者と種類に照合する。画面由来の加入先・寿命をGameplayが独立して確認した証拠とは扱わず、その限界も保存する。詳しい対応範囲とAIの合法代替は [宗教の記録](religion-persistence.md)を参照する。
 
