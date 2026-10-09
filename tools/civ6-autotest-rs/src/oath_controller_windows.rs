@@ -513,6 +513,7 @@ struct Inner {
     max_seconds: u32,
     phase: Phase,
     stop_value: Option<Value>,
+    callee: bool,
 }
 unsafe impl Send for Inner {}
 
@@ -525,13 +526,23 @@ pub(crate) struct Session {
 }
 
 impl Session {
+    #[cfg(test)]
     pub(crate) fn install(
         game: GameProcess,
         dll_path: &Path,
         expected_sha: &str,
         max_seconds: u32,
     ) -> Result<Self> {
-        Inner::install(game, dll_path, expected_sha, max_seconds).map(|inner| Self {
+        Self::install_capture(game, dll_path, expected_sha, max_seconds, false)
+    }
+    pub(crate) fn install_capture(
+        game: GameProcess,
+        dll_path: &Path,
+        expected_sha: &str,
+        max_seconds: u32,
+        callee: bool,
+    ) -> Result<Self> {
+        Inner::install(game, dll_path, expected_sha, max_seconds, callee).map(|inner| Self {
             inner: std::mem::ManuallyDrop::new(inner),
         })
     }
@@ -579,6 +590,7 @@ impl Inner {
         dll_path: &Path,
         expected_sha: &str,
         max_seconds: u32,
+        callee: bool,
     ) -> Result<Self> {
         if game.pid == 0
             || game.pid == std::process::id()
@@ -646,7 +658,7 @@ impl Inner {
             kill_limit: KILL_LIMIT,
             allocations: Vec::new(),
         };
-        let built = bring_up(&mut target, &dll, game.pid, max_seconds, created);
+        let built = bring_up(&mut target, &dll, game.pid, max_seconds, created, callee);
         let (base, exports, trace_address, receipt_buffer) = match built {
             Ok(done) => done,
             Err(error) => {
@@ -672,6 +684,7 @@ impl Inner {
             phase: Phase::Installed,
             stop_value: None,
             _dll: dll,
+            callee,
         })
     }
 
@@ -684,7 +697,8 @@ impl Inner {
             "dll_path": display_path(&self._dll.path),
             "module_base": format!("0x{:x}", self.module_base),
             "trace_address": format!("0x{:x}", self.trace_address),
-            "trace_size": wire::TRACE_SIZE,
+            "trace_size": self.trace_size(),
+            "capture":if self.callee { "callee" } else { "adapter" },
             "max_seconds": self.max_seconds,
             "quantity_accepted": false,
         })
@@ -698,6 +712,13 @@ impl Inner {
             "quantity_accepted": false,
             "accepted": false,
         })
+    }
+    fn trace_size(&self) -> usize {
+        if self.callee {
+            crate::oath_recipient_wire::SIZE
+        } else {
+            wire::TRACE_SIZE
+        }
     }
 
     /// Starts the one observation window. A second start is refused locally
@@ -767,11 +788,13 @@ impl Inner {
                 wire::status_name(status)
             )));
         }
-        let receipt =
-            wire::decode_receipt(&self.target.read(self.receipt_buffer, wire::RECEIPT_SIZE)?)
-                .map_err(Error::input)?;
+        let receipt_bytes = self.target.read(self.receipt_buffer, wire::RECEIPT_SIZE)?;
+        if wire::u32_at(&receipt_bytes, 12) != Some(u32::from(self.callee)) {
+            return Err(Error::input("receipt capture differs from install"));
+        }
+        let receipt = wire::decode_receipt(&receipt_bytes).map_err(Error::input)?;
         if receipt.trace_address != self.trace_address as u64
-            || receipt.trace_size as usize != wire::TRACE_SIZE
+            || receipt.trace_size as usize != self.trace_size()
             || receipt.max_seconds != self.max_seconds
         {
             return Err(Error::input(
@@ -796,6 +819,22 @@ impl Inner {
         let until = Instant::now() + self.target.call_limit;
         loop {
             time::check_interrupt()?;
+            if self.callee {
+                let first = self.target.read(self.trace_address, self.trace_size())?;
+                let second = self.target.read(self.trace_address, self.trace_size())?;
+                let mut value = crate::oath_recipient_wire::project(&first, &second, &receipt)
+                    .map_err(Error::input)?;
+                if !stopped
+                    || (first == second && value["in_flight"] == 0)
+                    || Instant::now() >= until
+                {
+                    value["controller_phase"] = json!(format!("{:?}", self.phase));
+                    value["trace_address"] = json!(format!("0x{:x}", self.trace_address));
+                    return Ok(value);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            }
             let first =
                 wire::TraceView::parse(&self.target.read(self.trace_address, wire::TRACE_SIZE)?)
                     .map_err(Error::input)?;
@@ -1040,11 +1079,13 @@ fn bring_up(
     pid: u32,
     max_seconds: u32,
     created: u64,
+    callee: bool,
 ) -> Result<BroughtUp> {
     let base = load_dll(target, dll)?;
     let exports = dll.exports.map(|rva| base + rva as usize);
     verify_remote_image(target, dll, base, &exports)?;
-    let config = wire::encode_config(pid, max_seconds, created);
+    let mut config = wire::encode_config(pid, max_seconds, created);
+    config[28..32].copy_from_slice(&u32::from(callee).to_le_bytes());
     let config_at = target.alloc(wire::CONFIG_SIZE)?;
     target.write(config_at, &config)?;
     let status = target.call(exports[0], config_at)?;
@@ -1057,8 +1098,15 @@ fn bring_up(
     let (trace_address, _) =
         wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
             .map_err(Error::input)?;
-    wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
+    if callee {
+        crate::oath_recipient_wire::validate(
+            &target.read(trace_address as usize, crate::oath_recipient_wire::SIZE)?,
+        )
         .map_err(Error::input)?;
+    } else {
+        wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
+            .map_err(Error::input)?;
+    }
     let receipt_buffer = target.alloc(wire::RECEIPT_SIZE)?;
     Ok((base, exports, trace_address, receipt_buffer))
 }

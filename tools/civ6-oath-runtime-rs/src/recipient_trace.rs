@@ -1,13 +1,26 @@
 //! Diagnostic entry at the pinned effect vtable's actual callee boundary.
 //! RDX is the receiver delivered by the City adapter, not a shared_ptr.
 //! This records raw arguments and completion only. There is no quantity write,
-//! City lifetime authority, public export or product bootstrap in this module.
+//! City lifetime authority or product bootstrap in this module.
 use crate::native::*;
 use crate::oath_record::{OathCall, OathEffectFamily};
 
 const CAPACITY: usize = 1024;
 const COUNTED: u64 = 1 << 63;
 const MASK: u64 = 0xffff_ffff;
+
+#[cfg(test)]
+pub(crate) static CLOCK_OVERRIDE: AtomicU64 = AtomicU64::new(0);
+fn clock_ms() -> u64 {
+    #[cfg(test)]
+    {
+        let clock = CLOCK_OVERRIDE.load(Ordering::Acquire);
+        if clock != 0 {
+            return clock;
+        }
+    }
+    unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RecipientRecord {
@@ -22,6 +35,7 @@ pub struct RecipientRecord {
     pub caller_rdi: u64,
     pub original_rax: Option<u64>,
 }
+#[repr(C)]
 #[derive(Default)]
 struct Row {
     state: AtomicU32,
@@ -34,14 +48,31 @@ struct Row {
     rbp: AtomicU64,
     rdi: AtomicU64,
     rax: AtomicU64,
+    metadata_valid: AtomicU32,
+    instance_id: AtomicU32,
+    instance: AtomicU64,
+    definition: AtomicU64,
+    wrapper: AtomicU64,
+    percent: AtomicU32,
+    owner: AtomicU32,
+    full_id: AtomicU32,
+    reserved: AtomicU32,
 }
+#[repr(C)]
 pub struct RecipientTrace {
-    stopped: AtomicU32,
-    flight: AtomicU32,
+    magic: u32,
+    version: u32,
     next: AtomicU32,
     dropped: AtomicU32,
+    flight: AtomicU32,
     completed: AtomicU32,
+    stopped: AtomicU32,
     unwound: AtomicU32,
+    image_base: AtomicU64,
+    deadline_ms: AtomicU64,
+    expired: AtomicU32,
+    detached: AtomicU32,
+    reserved: u64,
     rows: [Row; CAPACITY],
 }
 impl RecipientTrace {
@@ -49,12 +80,19 @@ impl RecipientTrace {
         let mut trace = Box::<Self>::new_uninit();
         unsafe {
             let p = trace.as_mut_ptr();
+            ptr::addr_of_mut!((*p).magic).write(0x4a41_4352);
+            ptr::addr_of_mut!((*p).version).write(1);
             ptr::addr_of_mut!((*p).stopped).write(AtomicU32::new(1));
             ptr::addr_of_mut!((*p).flight).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).next).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).dropped).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).completed).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).unwound).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*p).image_base).write(AtomicU64::new(0));
+            ptr::addr_of_mut!((*p).deadline_ms).write(AtomicU64::new(0));
+            ptr::addr_of_mut!((*p).expired).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*p).detached).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*p).reserved).write(0);
             let rows = ptr::addr_of_mut!((*p).rows).cast::<Row>();
             for i in 0..CAPACITY {
                 rows.add(i).write(Row::default());
@@ -67,6 +105,43 @@ impl RecipientTrace {
             .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Acquire)
             .map(|_| ())
             .map_err(|_| "recipient observation cannot restart")
+    }
+    pub(crate) fn set_image_base(&self, base: u64) {
+        self.image_base.store(base, Ordering::Release);
+    }
+    pub(crate) fn start_with_deadline(&self, seconds: u32) -> Result<(), &'static str> {
+        let due = clock_ms().saturating_add(u64::from(seconds) * 1000).max(1);
+        self.deadline_ms.store(due, Ordering::Release);
+        self.start()
+    }
+    pub(crate) fn poll_deadline(&self) -> bool {
+        let due = self.deadline_ms.load(Ordering::Acquire);
+        if due != 0 && clock_ms() >= due {
+            self.expired.store(1, Ordering::Release);
+            self.stop();
+        }
+        self.expired.load(Ordering::Acquire) != 0
+    }
+    #[cfg(test)]
+    pub(crate) fn detached(&self) -> bool {
+        self.detached.load(Ordering::Acquire) != 0
+    }
+    pub(crate) fn counters(&self) -> (u32, u32, u32, u32, u32) {
+        let flight = self.flight.load(Ordering::Acquire);
+        (
+            flight,
+            self.next.load(Ordering::Acquire).min(CAPACITY as u32),
+            self.completed.load(Ordering::Acquire),
+            self.dropped.load(Ordering::Acquire),
+            self.unwound.load(Ordering::Acquire),
+        )
+    }
+    pub fn wire_layout() -> (usize, usize, usize) {
+        (
+            std::mem::offset_of!(Self, rows),
+            std::mem::size_of::<Row>(),
+            std::mem::size_of::<Self>(),
+        )
     }
     pub fn stop(&self) {
         self.stopped.store(2, Ordering::Release);
@@ -135,6 +210,7 @@ unsafe extern "system-unwind" fn begin(
     };
     trace.flight.fetch_add(1, Ordering::AcqRel);
     unsafe { ptr::write_volatile(token, COUNTED) };
+    trace.poll_deadline();
     if trace.stopped.load(Ordering::Acquire) != 0 {
         return;
     }
@@ -158,6 +234,51 @@ unsafe extern "system-unwind" fn begin(
     row.caller.store(caller, Ordering::Relaxed);
     row.rbp.store(rbp, Ordering::Relaxed);
     row.rdi.store(rdi, Ordering::Relaxed);
+    struct Current;
+    impl crate::call_identity::Memory for Current {
+        fn copy(&mut self, address: u64, bytes: &mut [u8]) -> crate::call_identity::Result<()> {
+            let mut read = 0;
+            let ok = unsafe {
+                ReadProcessMemory(
+                    GetCurrentProcess(),
+                    address as *const c_void,
+                    bytes.as_mut_ptr().cast(),
+                    bytes.len(),
+                    &mut read,
+                )
+            };
+            if ok == 0 || read != bytes.len() {
+                return Err(crate::call_identity::Error::input(
+                    "unreadable callee identity",
+                ));
+            }
+            Ok(())
+        }
+    }
+    if let Ok(identity) = crate::call_identity::copy_recipient_identity(
+        &mut Current,
+        crate::call_identity::RecipientFrame {
+            base: trace.image_base.load(Ordering::Acquire),
+            slot: slot as usize,
+            caller,
+            rbp,
+            rdi,
+            effect,
+            actual_receiver: city,
+        },
+    ) {
+        row.instance_id
+            .store(identity.instance_id, Ordering::Relaxed);
+        row.instance.store(identity.instance, Ordering::Relaxed);
+        row.definition.store(identity.definition, Ordering::Relaxed);
+        row.wrapper.store(identity.city_wrapper, Ordering::Relaxed);
+        row.percent
+            .store(identity.declared_percent as u32, Ordering::Relaxed);
+        row.owner
+            .store(u32::from(identity.owner), Ordering::Relaxed);
+        row.full_id.store(identity.full_id, Ordering::Relaxed);
+        row.metadata_valid.store(1, Ordering::Relaxed);
+    }
     row.state.store(1, Ordering::Release);
 }
 unsafe fn settle(token: *mut u64, rax: Option<u64>) {
@@ -257,9 +378,8 @@ fn gateway_address(index: usize) -> u64 {
 /// # Safety
 /// The caller owns the writable eight-byte slot and original three-argument
 /// callee, pins both images, and never releases the trace or slot while a
-/// gateway could run. This internal entry is for synthetic validation only;
-/// it is not reachable from runtime exports or normal product startup.
-#[allow(dead_code)]
+/// gateway could run. The runtime reaches this only after CurrentGameGate;
+/// tests use private synthetic slots. There is no product startup path.
 pub(crate) unsafe fn install_at(
     index: usize,
     address: usize,
@@ -315,7 +435,6 @@ pub(crate) unsafe fn install_at(
     }
     Ok(())
 }
-#[allow(dead_code)]
 pub(crate) unsafe fn uninstall() -> Result<(), &'static str> {
     let mut bindings = BINDINGS.lock().map_err(|_| "recipient bindings poisoned")?;
     let mut failed = false;
@@ -363,6 +482,9 @@ pub(crate) unsafe fn uninstall() -> Result<(), &'static str> {
     if failed {
         Err("recipient uninstallation unresolved; bindings retained")
     } else {
+        if let Some(trace) = unsafe { TRACE.load(Ordering::Acquire).as_ref() } {
+            trace.detached.store(1, Ordering::Release);
+        }
         Ok(())
     }
 }

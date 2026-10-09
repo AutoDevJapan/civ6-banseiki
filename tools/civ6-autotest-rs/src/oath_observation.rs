@@ -18,6 +18,7 @@ pub struct Install {
     pub dll: PathBuf,
     pub sha256: String,
     pub max_seconds: u32,
+    pub callee: bool,
 }
 
 pub fn operation(action: &str) -> Result<Operation> {
@@ -48,7 +49,10 @@ pub fn validate_step(step: &Value) -> Result<Operation> {
         name != "action"
             && name != "timeout"
             && !(op == Operation::Install
-                && matches!(name.as_str(), "dll" | "dll_sha256" | "max_seconds"))
+                && matches!(
+                    name.as_str(),
+                    "dll" | "dll_sha256" | "max_seconds" | "capture"
+                ))
     }) {
         return Err(Error::scenario("unsupported oath observer field"));
     }
@@ -59,6 +63,11 @@ pub fn validate_step(step: &Value) -> Result<Operation> {
 }
 
 pub fn install_request(step: &Value) -> Result<Install> {
+    let callee = match step.get("capture") {
+        None => false,
+        Some(Value::String(value)) if value == "callee" => true,
+        _ => return Err(Error::scenario("oath capture must be absent or callee")),
+    };
     let dll = step["dll"]
         .as_str()
         .filter(|p| !p.is_empty())
@@ -75,6 +84,7 @@ pub fn install_request(step: &Value) -> Result<Install> {
         dll: PathBuf::from(dll),
         sha256: digest.to_ascii_lowercase(),
         max_seconds: seconds as u32,
+        callee,
     })
 }
 
@@ -125,5 +135,14 @@ mod tests {
         let mut value = install();
         value["quantity_accepted"] = json!(true);
         assert!(validate_step(&value).is_err());
+        let mut value = install();
+        assert!(!install_request(&value).unwrap().callee);
+        value["capture"] = json!("callee");
+        assert!(install_request(&value).unwrap().callee);
+        validate_step(&value).unwrap();
+        for capture in [json!(true), json!("quantity"), json!(null)] {
+            value["capture"] = capture;
+            assert!(validate_step(&value).is_err());
+        }
     }
 }

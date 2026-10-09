@@ -21,6 +21,8 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcessId, GetProcessTimes
 pub const OATH_RUNTIME_VERSION: u32 = 0x0134_0002;
 /// The only accepted mode: observe and report, never adjust anything.
 pub const OATH_MODE_DIAGNOSTIC: u32 = 1;
+/// Explicit callee-entry observation; default flags=0 retains the v5 adapter.
+pub const OATH_CAPTURE_RECIPIENT: u32 = 1;
 pub const OATH_MAX_ACTIVE_SECONDS: u32 = 300;
 
 /// Public input and receipt in one 48 byte block. The two out fields must be
@@ -130,7 +132,7 @@ pub fn validate(config: &OathRuntimeConfig) -> Result<(), OathStatus> {
         || config.created_filetime == 0
         || !(1..=OATH_MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.mode != OATH_MODE_DIAGNOSTIC
-        || config.flags != 0
+        || config.flags > OATH_CAPTURE_RECIPIENT
         || config.out_trace_address != 0
         || config.trace_size != 0
         || config.reserved != 0
@@ -148,6 +150,7 @@ pub(crate) struct Verified {
     pub core_module: usize,
     pub apply_entry: usize,
     pub remove_entry: usize,
+    pub recipient_slots: Option<[(usize, u64); 8]>,
 }
 
 /// Port for the deep identity checks. It must not write anything. Sealed to
@@ -194,20 +197,27 @@ struct Runtime {
     lifecycle: Lifecycle,
     trace: Option<&'static OathTrace>,
     max_seconds: u32,
+    recipient: Option<&'static crate::recipient_trace::RecipientTrace>,
+    restore_failed: bool,
 }
 
 static RUNTIME: Mutex<Runtime> = Mutex::new(Runtime {
     lifecycle: Lifecycle::new(),
     trace: None,
     max_seconds: 0,
+    recipient: None,
+    restore_failed: false,
 });
 
 impl Runtime {
     /// The trace enforces its own deadline in the begin callback; this only
     /// brings the lifecycle in line with a trace that has stopped by itself.
-    fn apply_deadline(&mut self) {
+    fn apply_deadline(&mut self) -> Result<(), OathStatus> {
+        if self.restore_failed {
+            return Err(OathStatus::Critical);
+        }
         if self.lifecycle.phase() != Phase::Started {
-            return;
+            return Ok(());
         }
         if let Some(trace) = self.trace {
             if trace.poll_deadline() || trace.is_stopped() {
@@ -215,6 +225,18 @@ impl Runtime {
                 trace.stop();
             }
         }
+        if let Some(trace) = self.recipient {
+            if trace.poll_deadline() {
+                let _ = self.lifecycle.stop();
+                // Restore entrance slots but retain every trace, original and
+                // pinned gateway: a fetched call may still arrive afterwards.
+                if unsafe { crate::recipient_trace::uninstall() }.is_err() {
+                    self.restore_failed = true;
+                    return Err(OathStatus::Critical);
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -288,6 +310,35 @@ fn install_locked(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
     if pin_module(install_locked as *const () as usize).is_none() {
         return OathStatus::HookFailure;
     }
+    if config.flags == OATH_CAPTURE_RECIPIENT {
+        let Some(slots) = verified.recipient_slots else {
+            return OathStatus::EntryBytes;
+        };
+        let trace = Box::leak(crate::recipient_trace::RecipientTrace::boxed());
+        trace.set_image_base(verified.image_base as u64);
+        for (index, (address, original)) in slots.into_iter().enumerate() {
+            if let Err(error) =
+                unsafe { crate::recipient_trace::install_at(index, address, original, trace) }
+            {
+                trace.stop();
+                let restored = unsafe { crate::recipient_trace::uninstall() }.is_ok();
+                runtime.restore_failed = !restored;
+                let _ = runtime.lifecycle.failed();
+                return if restored {
+                    hook_status(error)
+                } else {
+                    OathStatus::Critical
+                };
+            }
+        }
+        config.out_trace_address = trace as *const _ as u64;
+        config.trace_size = std::mem::size_of_val(trace) as u32;
+        unsafe { ptr::write(input.cast::<OathRuntimeConfig>(), config) };
+        runtime.recipient = Some(trace);
+        runtime.max_seconds = config.max_seconds;
+        let _ = runtime.lifecycle.installed();
+        return OathStatus::Ok;
+    }
     let trace: &'static OathTrace = Box::leak(OathTrace::boxed_inactive());
     trace.set_image_base_once(verified.image_base as u64);
     let hook = |entry: usize, call: OathCall| unsafe {
@@ -298,9 +349,13 @@ fn install_locked(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
     if let Err(error) = result {
         // A half installed pair is taken back as far as the ledger allows;
         // the call type stays bound and the lifecycle is terminal.
-        let _ = unsafe { uninstall_oath() };
+        let restored = unsafe { uninstall_oath() }.is_ok();
         let _ = runtime.lifecycle.failed();
-        return hook_status(error);
+        return if restored {
+            hook_status(error)
+        } else {
+            OathStatus::Critical
+        };
     }
     config.out_trace_address = trace as *const OathTrace as u64;
     config.trace_size = std::mem::size_of::<OathTrace>() as u32;
@@ -314,11 +369,17 @@ fn install_locked(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
 /// Starts recording, once. Call it before the official choice is sent.
 pub fn start_observation() -> OathStatus {
     transition(|runtime| {
-        runtime.apply_deadline();
+        runtime.apply_deadline()?;
         runtime.lifecycle.start()?;
-        let trace = runtime.trace.ok_or(OathStatus::WrongState)?;
-        if !trace.start_with_deadline(runtime.max_seconds) {
-            return Err(OathStatus::Critical);
+        if let Some(trace) = runtime.recipient {
+            trace
+                .start_with_deadline(runtime.max_seconds)
+                .map_err(|_| OathStatus::Critical)?;
+        } else {
+            let trace = runtime.trace.ok_or(OathStatus::WrongState)?;
+            if !trace.start_with_deadline(runtime.max_seconds) {
+                return Err(OathStatus::Critical);
+            }
         }
         Ok(())
     })
@@ -330,6 +391,13 @@ pub fn stop_observation() -> OathStatus {
         runtime.lifecycle.stop()?;
         if let Some(trace) = runtime.trace {
             trace.stop();
+        }
+        if let Some(trace) = runtime.recipient {
+            trace.stop();
+            runtime.restore_failed = unsafe { crate::recipient_trace::uninstall() }.is_err();
+            if runtime.restore_failed {
+                return Err(OathStatus::Critical);
+            }
         }
         Ok(())
     })
@@ -372,7 +440,7 @@ pub fn read_receipt() -> Result<OathReceipt, OathStatus> {
     let Ok(mut runtime) = RUNTIME.lock() else {
         return Err(OathStatus::Panic);
     };
-    runtime.apply_deadline();
+    runtime.apply_deadline()?;
     let mut receipt = OathReceipt {
         version: OATH_RUNTIME_VERSION,
         size: std::mem::size_of::<OathReceipt>() as u32,
@@ -390,6 +458,17 @@ pub fn read_receipt() -> Result<OathReceipt, OathStatus> {
         receipt.dropped = dropped;
         receipt.filtered = filtered;
         receipt.in_flight = in_flight;
+    }
+    if let Some(trace) = runtime.recipient {
+        receipt.flags = OATH_CAPTURE_RECIPIENT;
+        receipt.expired = u32::from(trace.poll_deadline());
+        let (flight, rows, completed, dropped, _unwound) = trace.counters();
+        receipt.trace_address = trace as *const _ as u64;
+        receipt.trace_size = std::mem::size_of_val(trace) as u32;
+        receipt.rows = rows;
+        receipt.completed = completed;
+        receipt.dropped = dropped;
+        receipt.in_flight = flight;
     }
     Ok(receipt)
 }

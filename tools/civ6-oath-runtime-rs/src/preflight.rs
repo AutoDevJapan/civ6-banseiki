@@ -87,6 +87,8 @@ impl SourcePlan {
             (0x9723d0, 0x68),
             (0x950a10, 0x60),
             (0x2c4360, 0x45),
+            (0x1332b0, 0x25),
+            (0x135890, 0x30),
         ] {
             windows.push(Window {
                 rva,
@@ -96,6 +98,13 @@ impl SourcePlan {
         let mut slots = Vec::new();
         for table in [0xa76a30, 0xa6cdb8, 0xa90328, 0xa9e0f0] {
             let family = OathEffectFamily::from_vtable_rva(table).ok_or("unknown effect family")?;
+            for call in [OathCall::Apply, OathCall::Remove] {
+                let rva = family.callee_rva(call);
+                windows.push(Window {
+                    rva,
+                    original: disk_range(disk, rva, 0x80)?.to_vec(),
+                });
+            }
             for (offset, target) in [
                 (0x28, 0x8a75e0),
                 (0x30, 0x8a8440),

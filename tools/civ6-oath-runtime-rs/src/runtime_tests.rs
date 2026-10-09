@@ -67,7 +67,7 @@ fn validation_rejects_every_field_that_is_not_exactly_the_diagnostic_request() {
         |c| c.max_seconds = OATH_MAX_ACTIVE_SECONDS + 1,
         |c| c.mode = 0,
         |c| c.mode = 2,
-        |c| c.flags = 1,
+        |c| c.flags = 2,
         |c| c.out_trace_address = 1,
         |c| c.trace_size = 1,
         |c| c.reserved = 1,
@@ -77,6 +77,9 @@ fn validation_rejects_every_field_that_is_not_exactly_the_diagnostic_request() {
         mutate(&mut config);
         assert_eq!(validate(&config), Err(OathStatus::InvalidInput), "case {n}");
     }
+    let mut callee = good_config();
+    callee.flags = OATH_CAPTURE_RECIPIENT;
+    assert_eq!(validate(&callee), Ok(()));
 }
 
 #[test]
@@ -226,6 +229,10 @@ fn flows_run_in_owned_children() {
         "runtime::tests::half_install_child",
         "runtime::tests::wrong_module_child",
         "runtime::tests::deadline_child",
+        "runtime::tests::recipient_runtime_child",
+        "runtime::tests::recipient_half_install_child",
+        "runtime::tests::recipient_restore_failure_child",
+        "runtime::tests::recipient_deadline_child",
     ] {
         run_child(name);
     }
@@ -288,6 +295,7 @@ fn verified(page: *mut u8) -> Verified {
         core_module: synthetic_page as *const () as usize,
         apply_entry: unsafe { page.add(0x20) } as usize,
         remove_entry: unsafe { page.add(0x80) } as usize,
+        recipient_slots: None,
     }
 }
 
@@ -377,6 +385,68 @@ fn flow_child() {
 }
 
 #[test]
+fn recipient_runtime_child() {
+    if !in_child() {
+        return;
+    }
+    unsafe extern "system-unwind" fn original(effect: u64, city: u64, r8: u64) -> u64 {
+        effect ^ city ^ r8
+    }
+    let target = original as *const () as u64;
+    let slots = Box::leak(Box::new(std::array::from_fn::<AtomicU64, 8, _>(|_| {
+        AtomicU64::new(target)
+    })));
+    let mut verified = verified(synthetic_page());
+    verified.recipient_slots = Some(std::array::from_fn(|index| {
+        (&slots[index] as *const _ as usize, target)
+    }));
+    let gate = TestGate(Ok(verified));
+    let mut config = good_config();
+    config.flags = OATH_CAPTURE_RECIPIENT;
+    assert_eq!(
+        install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
+        OathStatus::Ok
+    );
+    assert_eq!(
+        config.trace_size as usize,
+        std::mem::size_of::<crate::recipient_trace::RecipientTrace>()
+    );
+    assert_eq!(start_observation(), OathStatus::Ok);
+    for slot in slots.iter() {
+        let function: unsafe extern "system-unwind" fn(u64, u64, u64) -> u64 =
+            unsafe { std::mem::transmute(slot.load(Ordering::Acquire)) };
+        assert_eq!(unsafe { function(7, 0x12340000, 91) }, 7 ^ 0x12340000 ^ 91);
+    }
+    assert_eq!(stop_observation(), OathStatus::Ok);
+    let done = receipt();
+    assert_eq!(
+        (
+            done.flags,
+            done.rows,
+            done.completed,
+            done.dropped,
+            done.in_flight,
+            done.quantity_accepted
+        ),
+        (1, 8, 8, 0, 0, 0)
+    );
+    let trace =
+        unsafe { &*(config.out_trace_address as *const crate::recipient_trace::RecipientTrace) };
+    assert!(trace.detached());
+    for slot in slots.iter() {
+        assert_eq!(slot.load(Ordering::Acquire), target);
+    }
+    assert_eq!(start_observation(), OathStatus::WrongState);
+    assert_eq!(stop_observation(), OathStatus::Ok);
+    let mut config2 = good_config();
+    config2.flags = OATH_CAPTURE_RECIPIENT;
+    assert_eq!(
+        install_with(&gate, (&mut config2 as *mut OathRuntimeConfig).cast()),
+        OathStatus::WrongState
+    );
+}
+
+#[test]
 fn gate_refusal_child() {
     if !in_child() {
         return;
@@ -418,6 +488,104 @@ fn gate_refusal_child() {
         install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
         OathStatus::Ok
     );
+}
+
+fn recipient_fixture() -> (&'static [AtomicU64; 8], u64, TestGate, OathRuntimeConfig) {
+    unsafe extern "system-unwind" fn original(a: u64, b: u64, c: u64) -> u64 {
+        a ^ b ^ c
+    }
+    let target = original as *const () as u64;
+    let slots = Box::leak(Box::new(std::array::from_fn(|_| AtomicU64::new(target))));
+    let mut proof = verified(synthetic_page());
+    proof.recipient_slots = Some(std::array::from_fn(|i| {
+        (&slots[i] as *const _ as usize, target)
+    }));
+    let mut config = good_config();
+    config.flags = OATH_CAPTURE_RECIPIENT;
+    (slots, target, TestGate(Ok(proof)), config)
+}
+
+#[test]
+fn recipient_half_install_child() {
+    if !in_child() {
+        return;
+    }
+    let (slots, target, mut gate, mut config) = recipient_fixture();
+    gate.0.as_mut().unwrap().recipient_slots.as_mut().unwrap()[4].1 ^= 8;
+    let before = config;
+    assert_eq!(
+        install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
+        OathStatus::HookFailure
+    );
+    assert_eq!(config, before);
+    assert!(slots.iter().all(|s| s.load(Ordering::Acquire) == target));
+    assert_eq!(receipt().phase, Phase::Failed as u32);
+    assert_eq!(start_observation(), OathStatus::WrongState);
+}
+
+#[test]
+fn recipient_restore_failure_child() {
+    if !in_child() {
+        return;
+    }
+    let (slots, target, gate, mut config) = recipient_fixture();
+    assert_eq!(
+        install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
+        OathStatus::Ok
+    );
+    assert_eq!(start_observation(), OathStatus::Ok);
+    let foreign = target ^ 8;
+    slots[3].store(foreign, Ordering::Release);
+    assert_eq!(stop_observation(), OathStatus::Critical);
+    assert_eq!(
+        slots[3].load(Ordering::Acquire),
+        foreign,
+        "foreign writer is preserved"
+    );
+    assert_eq!(read_receipt(), Err(OathStatus::Critical));
+    assert_eq!(start_observation(), OathStatus::Critical);
+    let trace =
+        unsafe { &*(config.out_trace_address as *const crate::recipient_trace::RecipientTrace) };
+    assert!(!trace.detached());
+    slots[3].store(target, Ordering::Release);
+    assert_eq!(stop_observation(), OathStatus::Ok);
+    assert!(trace.detached());
+    assert_eq!(receipt().phase, Phase::Stopped as u32);
+}
+
+#[test]
+fn recipient_deadline_child() {
+    if !in_child() {
+        return;
+    }
+    let (slots, target, gate, mut config) = recipient_fixture();
+    config.max_seconds = 1;
+    crate::recipient_trace::CLOCK_OVERRIDE.store(10_000, Ordering::Release);
+    assert_eq!(
+        install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
+        OathStatus::Ok
+    );
+    assert_eq!(start_observation(), OathStatus::Ok);
+    // Keep a fetched entrance across stop: its original and trace remain valid.
+    let fetched: unsafe extern "system-unwind" fn(u64, u64, u64) -> u64 =
+        unsafe { std::mem::transmute(slots[0].load(Ordering::Acquire)) };
+    assert_eq!(unsafe { fetched(7, 9, 11) }, 7 ^ 9 ^ 11);
+    crate::recipient_trace::CLOCK_OVERRIDE.store(11_000, Ordering::Release);
+    assert_eq!(unsafe { fetched(7, 9, 11) }, 7 ^ 9 ^ 11);
+    let stopped = receipt();
+    assert_eq!(
+        (
+            stopped.phase,
+            stopped.expired,
+            stopped.rows,
+            stopped.completed
+        ),
+        (3, 1, 1, 1)
+    );
+    assert!(slots.iter().all(|s| s.load(Ordering::Acquire) == target));
+    assert_eq!(unsafe { fetched(7, 9, 11) }, 7 ^ 9 ^ 11);
+    assert_eq!(receipt(), stopped);
+    assert_eq!(start_observation(), OathStatus::WrongState);
 }
 
 #[test]

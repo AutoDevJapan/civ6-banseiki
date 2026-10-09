@@ -202,6 +202,11 @@ impl Gate for CurrentGameGate {
             core_module: base,
             apply_entry: base + OathCall::Apply.pinned_rva(),
             remove_entry: base + OathCall::Remove.pinned_rva(),
+            recipient_slots: Some(std::array::from_fn(|index| {
+                let (address, original) =
+                    crate::recipient_trace::pinned_slot(index, base as u64).unwrap();
+                (address as usize, original)
+            })),
         })
     }
 }

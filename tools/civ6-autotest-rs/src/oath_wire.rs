@@ -125,9 +125,14 @@ pub(crate) fn check_installed_config(
     if address == 0 || !address.is_multiple_of(8) {
         return Err("install returned no usable trace address".into());
     }
-    if size as usize != TRACE_SIZE {
+    let expected = match u32_at(sent, 28) {
+        Some(0) => TRACE_SIZE,
+        Some(1) => crate::oath_recipient_wire::SIZE,
+        _ => return Err("unknown capture flag".into()),
+    };
+    if size as usize != expected {
         return Err(format!(
-            "install returned trace size {size}, expected {TRACE_SIZE}"
+            "install returned trace size {size}, expected {expected}"
         ));
     }
     Ok((address, size))

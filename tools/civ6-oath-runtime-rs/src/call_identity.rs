@@ -23,6 +23,86 @@ pub trait Memory {
     fn copy(&mut self, address: u64, bytes: &mut [u8]) -> Result<()>;
 }
 
+/// Copies from the actual callee's RDX and original caller registers, without
+/// invoking the component getter (which performs COW/map operations).
+/// It relates this invocation to its current backpointer only; no lifetime,
+/// ABA exclusion, contribution amount or later pointer validity is inferred.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RecipientIdentity {
+    pub instance: u64,
+    pub instance_id: u32,
+    pub definition: u64,
+    pub declared_percent: i32,
+    pub city_wrapper: u64,
+    pub owner: u16,
+    pub full_id: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RecipientFrame {
+    pub base: u64,
+    pub slot: usize,
+    pub caller: u64,
+    pub rbp: u64,
+    pub rdi: u64,
+    pub effect: u64,
+    pub actual_receiver: u64,
+}
+
+pub fn copy_recipient_identity(
+    memory: &mut impl Memory,
+    frame: RecipientFrame,
+) -> Result<RecipientIdentity> {
+    let RecipientFrame {
+        base,
+        slot,
+        caller,
+        rbp,
+        rdi,
+        effect,
+        actual_receiver,
+    } = frame;
+    let observe = |memory: &mut dyn Memory| -> Result<RecipientIdentity> {
+        // Each adapter tail dispatch preserves the original return and RBP/RDI.
+        let offset = caller
+            .checked_sub(base)
+            .ok_or_else(|| Error::input("recipient caller outside image"))?;
+        let instance = pointer(match (slot % 2, offset) {
+            (0, 0x944e55 | 0x944f27) => rbp,
+            (1, 0x974287) => rdi,
+            _ => return Err(Error::input("unsupported recipient caller")),
+        })?;
+        let table = *[0xa76a30u64, 0xa6cdb8, 0xa90328, 0xa9e0f0]
+            .get(slot / 2)
+            .ok_or_else(|| Error::input("invalid recipient family"))?;
+        let effect = pointer(effect)?;
+        if u64::from_le_bytes(read(memory, instance)?) != address(base, 0xaa3e38)?
+            || u64::from_le_bytes(read(memory, address(instance, 0x1b8)?)?) != effect
+            || u64::from_le_bytes(read(memory, effect)?) != address(base, table)?
+        {
+            return Err(Error::input("recipient instance or effect differs"));
+        }
+        let definition = pointer(u64::from_le_bytes(read(memory, address(instance, 0x168)?)?))?;
+        let city = pointer(actual_receiver)?;
+        let wrapper = read_pointer(memory, address(city, 0x1968)?)?;
+        let indicated = observe_city(memory, base, wrapper)?;
+        Ok(RecipientIdentity {
+            instance,
+            instance_id: u32::from_le_bytes(read(memory, address(instance, 0xe8)?)?),
+            definition,
+            declared_percent: i32::from_le_bytes(read(memory, address(effect, 8)?)?),
+            city_wrapper: wrapper,
+            owner: indicated.owner,
+            full_id: indicated.full_id,
+        })
+    };
+    let first = observe(memory)?;
+    if observe(memory)? != first {
+        return Err(Error::input("recipient identity changed during copy"));
+    }
+    Ok(first)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Call {
     Apply,
@@ -66,7 +146,7 @@ fn pointer(value: u64) -> Result<u64> {
     Ok(value)
 }
 
-fn read<const N: usize>(memory: &mut impl Memory, address: u64) -> Result<[u8; N]> {
+fn read<const N: usize>(memory: &mut (impl Memory + ?Sized), address: u64) -> Result<[u8; N]> {
     let mut data = [0; N];
     memory.copy(address, &mut data)?;
     Ok(data)
@@ -143,7 +223,11 @@ pub struct IndicatedCity {
     pub owner: u16,
     pub full_id: u32,
 }
-fn observe_city(memory: &mut impl Memory, module_base: u64, object: u64) -> Result<IndicatedCity> {
+fn observe_city(
+    memory: &mut (impl Memory + ?Sized),
+    module_base: u64,
+    object: u64,
+) -> Result<IndicatedCity> {
     let object = pointer(object)?;
     if u64::from_le_bytes(read(memory, object)?) != address(module_base, 0xab4f58)? {
         return Err(Error::input("unknown City wrapper vtable"));
@@ -186,7 +270,7 @@ pub struct CityTableObservation {
     pub group: u64,
 }
 
-fn read_pointer(memory: &mut impl Memory, at: u64) -> Result<u64> {
+fn read_pointer(memory: &mut (impl Memory + ?Sized), at: u64) -> Result<u64> {
     pointer(u64::from_le_bytes(read(memory, at)?))
 }
 fn city_table_observation(
@@ -347,6 +431,50 @@ mod tests {
                 instance_id: 464,
             },
         )
+    }
+
+    #[test]
+    fn actual_callee_copy_uses_rdx_backpointer_and_never_r8_as_instance_id() {
+        let base = 0x180000000;
+        let (mut memory, frame) = fixture(base);
+        let city = 0x10000;
+        let wrapper = 0x8000;
+        memory.u64(city + 0x1968, wrapper);
+        memory.u64(wrapper, base + 0xab4f58);
+        memory.put(wrapper + 0x138, &0u16.to_le_bytes());
+        memory.put(wrapper + 0x13a, &2u16.to_le_bytes());
+        memory.put(wrapper + 0x13c, &65536u32.to_le_bytes());
+        memory.u64(wrapper + 0x140, 0);
+        let read = |memory: &mut Fixture, slot, receiver| {
+            copy_recipient_identity(
+                memory,
+                RecipientFrame {
+                    base,
+                    slot,
+                    caller: frame.caller_return,
+                    rbp: frame.rbp,
+                    rdi: 0,
+                    effect: frame.effect,
+                    actual_receiver: receiver,
+                },
+            )
+        };
+        let identity = read(&mut memory, 0, city).unwrap();
+        assert_eq!(
+            (
+                identity.instance_id,
+                identity.declared_percent,
+                identity.owner,
+                identity.full_id
+            ),
+            (464, 15, 0, 65536)
+        );
+        assert_eq!(identity.city_wrapper, wrapper);
+        assert!(read(&mut memory, 2, city).is_err());
+        assert!(read(&mut memory, 0, city + 8).is_err());
+        assert!(read(&mut memory, 1, city).is_err());
+        memory.u64(city + 0x1968, 0);
+        assert!(read(&mut memory, 0, city).is_err());
     }
 
     #[test]
