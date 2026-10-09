@@ -56,6 +56,39 @@ enum LoaderAction {
     Rebuild,
 }
 
+#[derive(Clone, Copy)]
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
+struct LoaderInvocation {
+    phase: Phase,
+    generation: u64,
+    tid: u32,
+    caller: Option<u64>,
+}
+
+/// A successful target return must still belong to the transition at entry.
+/// Inspecting only the return phase would miss Closing -> Closed -> Open ABA.
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
+fn loader_return_action(
+    entry: LoaderInvocation,
+    phase: Phase,
+    generation: u64,
+    tid: u32,
+    result: usize,
+    caller: Option<u64>,
+) -> Result<LoaderAction, &'static str> {
+    if result & 0xff != 0
+        && caller == Some(0x24b52d)
+        && (entry.phase != phase
+            || entry.generation != generation
+            || entry.tid == 0
+            || entry.tid != tid
+            || entry.caller != caller)
+    {
+        return Err("target loader invocation crossed a context transition");
+    }
+    loader_action(phase, result, caller)
+}
+
 /// A retained XP2 module does not identify what an unrelated loader is doing.
 /// Only Closed+the verified caller may reopen; initial preparation stays strict.
 #[cfg(any(test, all(windows, target_arch = "x86_64")))]
@@ -64,14 +97,18 @@ fn loader_action(
     result: usize,
     caller: Option<u64>,
 ) -> Result<LoaderAction, &'static str> {
-    if result & 0xff == 0 || !matches!(phase, Phase::Prepared | Phase::Closed) {
+    if result & 0xff == 0 {
         return Ok(LoaderAction::Ignore);
     }
     match (phase, caller) {
+        (Phase::Closing | Phase::UnsupportedInlineExchange, Some(0x24b52d)) => {
+            Err("target loader returned before the previous context transition completed")
+        }
         (Phase::Closed, Some(0x24b52d)) => Ok(LoaderAction::Rebuild),
         (Phase::Closed, _) => Ok(LoaderAction::Ignore),
         (Phase::Prepared, Some(0x24b52d)) => Ok(LoaderAction::Install),
-        _ => Err("initial loader caller differs before factory"),
+        (Phase::Prepared, _) => Err("initial loader caller differs before factory"),
+        _ => Ok(LoaderAction::Ignore),
     }
 }
 
@@ -272,6 +309,57 @@ mod tests {
         assert_eq!(
             loader_action(Phase::Open, 1, Some(0x24b52d)),
             Ok(LoaderAction::Ignore)
+        );
+    }
+
+    #[test]
+    fn successful_target_return_keeps_its_entry_generation_phase_and_thread() {
+        let entry = LoaderInvocation {
+            phase: Phase::Closed,
+            generation: 7,
+            tid: 9,
+            caller: Some(0x24b52d),
+        };
+        assert_eq!(
+            loader_return_action(entry, Phase::Closed, 7, 9, 1, entry.caller),
+            Ok(LoaderAction::Rebuild)
+        );
+        for (phase, generation, tid) in [
+            (Phase::Closed, 8, 9),
+            (Phase::Open, 7, 9),
+            (Phase::Closed, 7, 10),
+        ] {
+            assert!(loader_return_action(entry, phase, generation, tid, 1, entry.caller).is_err());
+            assert_eq!(
+                loader_return_action(entry, phase, generation, tid, 0x100, entry.caller),
+                Ok(LoaderAction::Ignore)
+            );
+        }
+        let unverified = LoaderInvocation {
+            caller: None,
+            ..entry
+        };
+        assert!(loader_return_action(unverified, Phase::Closed, 7, 9, 1, entry.caller).is_err());
+    }
+
+    #[test]
+    fn target_loader_cannot_skip_rebuild_during_an_unfinished_release() {
+        // Release runs the native original outside STATE's mutex. A second
+        // loader may return while that original still holds the old Context.
+        // It must not continue into a fresh factory with the runtime closed.
+        for phase in [Phase::Closing, Phase::UnsupportedInlineExchange] {
+            assert!(loader_action(phase, 1, Some(0x24b52d)).is_err());
+            assert_eq!(
+                loader_action(phase, 0x100, Some(0x24b52d)),
+                Ok(LoaderAction::Ignore)
+            );
+            for caller in [None, Some(0x245cea), Some(0x24b5d5)] {
+                assert_eq!(loader_action(phase, 1, caller), Ok(LoaderAction::Ignore));
+            }
+        }
+        assert_eq!(
+            loader_action(Phase::Closed, 1, Some(0x24b52d)),
+            Ok(LoaderAction::Rebuild)
         );
     }
 }

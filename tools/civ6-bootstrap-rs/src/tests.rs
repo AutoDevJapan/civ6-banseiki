@@ -5,6 +5,113 @@ use std::{
     time::{Duration, Instant},
 };
 
+thread_local! {
+    pub(super) static CORE_MODULE_OVERRIDE: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+#[test]
+fn real_loader_return_rejects_overlap_and_crossed_generation() {
+    const CHILD: &str = "JAC_BOOTSTRAP_LOADER_OVERLAP_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        struct OwnedChild(Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                if self.0.try_wait().ok().flatten().is_none() {
+                    let _ = self.0.kill();
+                }
+                let _ = self.0.wait();
+            }
+        }
+        let mut child = OwnedChild(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "windows::tests::real_loader_return_rejects_overlap_and_crossed_generation",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .creation_flags(0x0800_0000)
+                .spawn()
+                .unwrap(),
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            if let Some(status) = child.0.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            assert!(Instant::now() < deadline, "owned loader child deadline");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        return;
+    }
+
+    static API_CALLS: AtomicU64 = AtomicU64::new(0);
+    unsafe extern "system" fn counted_api(_: *mut c_void) -> u32 {
+        API_CALLS.fetch_add(1, Ordering::Relaxed);
+        0
+    }
+    // Local process-owned memory for the actual E8 decoder/ReadProcessMemory.
+    // The module override supplies only presence; any identity/path validation
+    // would fail. Neither the real Core nor a fixture DLL is loaded or executed.
+    let mut image = vec![0u8; 0x24b532];
+    image[0x24b52d] = 0xe8;
+    image[0x24b52e..0x24b532].copy_from_slice(&(LOADER as i32 - 0x24b532i32).to_le_bytes());
+    let exe = image.as_ptr() as usize;
+    let ret = exe + 0x24b532;
+    *STATE.lock().unwrap() = Some(Resident {
+        exe,
+        core: 1,
+        install: counted_api,
+        stop: counted_api,
+        close: counted_api,
+        rebuild: counted_api,
+        phase: Phase::Closing,
+        generation: 7,
+        close_tid: unsafe { GetCurrentThreadId() },
+        config: RuntimeConfig {
+            version: 0,
+            size: 0,
+            pid: 0,
+            max_seconds: 0,
+            created_filetime: 0,
+            trace_address: 0,
+            trace_size: 0,
+            mode: 0,
+        },
+        _source: File::open(std::env::current_exe().unwrap()).unwrap(),
+        _hooks: Vec::new(),
+    });
+    CORE_MODULE_OVERRIDE.with(|value| value.set(Some(1)));
+    let closing = loader_begin(ret).unwrap();
+    assert_eq!(closing.caller, Some(0x24b52d));
+    let error = target_loader_return(1, ret, closing).unwrap_err();
+    assert!(error.contains("previous context transition completed"));
+    assert_eq!(API_CALLS.load(Ordering::Acquire), 0);
+    assert_eq!(
+        STATE.lock().unwrap().as_ref().unwrap().phase,
+        Phase::Closing
+    );
+
+    STATE.lock().unwrap().as_mut().unwrap().phase = Phase::Open;
+    let open = loader_begin(ret).unwrap();
+    // Positive control uses the same production entry and return handlers.
+    target_loader_return(1, ret, open).unwrap();
+    STATE.lock().unwrap().as_mut().unwrap().generation = 8;
+    assert!(target_loader_return(1, ret, open)
+        .unwrap_err()
+        .contains("crossed a context transition"));
+    target_loader_return(0x100, ret, open).unwrap(); // Original AL=false.
+    let current = loader_begin(ret).unwrap();
+    let other_thread = LoaderInvocation { tid: 0, ..current };
+    assert!(target_loader_return(1, ret, other_thread).is_err());
+    STATE.lock().unwrap().as_mut().unwrap().phase = Phase::Closed;
+    assert!(target_loader_return(1, ret, current).is_err());
+    assert_eq!(API_CALLS.load(Ordering::Acquire), 0);
+    *STATE.lock().unwrap() = None;
+    CORE_MODULE_OVERRIDE.with(|value| value.set(None));
+}
+
 // No other test in this process admits bootstrap trace records. The native
 // gateway fixtures run in their own child process and never use this trace.
 #[test]

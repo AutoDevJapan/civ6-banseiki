@@ -315,6 +315,12 @@ fn created() -> u64 {
     ((a.dwHighDateTime as u64) << 32) | u64::from(a.dwLowDateTime)
 }
 fn module(name: &str) -> usize {
+    #[cfg(test)]
+    if name == "GameCore_XP2_FinalRelease.dll" {
+        if let Some(value) = tests::CORE_MODULE_OVERRIDE.with(std::cell::Cell::get) {
+            return value;
+        }
+    }
     let w: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
     unsafe { GetModuleHandleW(w.as_ptr()) as usize }
 }
@@ -486,17 +492,35 @@ extern "system-unwind" fn set_entry(receiver: usize, incoming: usize, ret: usize
     result
 }
 
-fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
+fn loader_begin(ret: usize) -> Result<LoaderInvocation, String> {
+    let lock = STATE.lock().map_err(|_| "resident lock")?;
+    let s = lock.as_ref().ok_or("resident absent")?;
+    Ok(LoaderInvocation {
+        phase: s.phase,
+        generation: s.generation,
+        tid: unsafe { GetCurrentThreadId() },
+        caller: caller(s.exe, ret, LOADER).ok(),
+    })
+}
+
+fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> Result<(), String> {
     let mut lock = STATE.lock().map_err(|_| "resident lock")?;
     let s = lock.as_mut().ok_or("resident absent")?;
-    if !matches!(s.phase, Phase::Prepared | Phase::Closed) || result & 0xff == 0 {
+    if result & 0xff == 0 {
         return Ok(());
     }
     let core = module("GameCore_XP2_FinalRelease.dll");
     if core == 0 {
         return Ok(());
     } // A Base/other loader is not target activation.
-    let action = loader_action(s.phase, result, caller(s.exe, ret, LOADER).ok())?;
+    let action = loader_return_action(
+        entry,
+        s.phase,
+        s.generation,
+        unsafe { GetCurrentThreadId() },
+        result,
+        caller(s.exe, ret, LOADER).ok(),
+    )?;
     if action == LoaderAction::Ignore {
         return Ok(());
     }
@@ -575,9 +599,20 @@ fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
     Ok(())
 }
 extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usize) -> usize {
+    let error = unsafe { GetLastError() };
+    let entry = match std::panic::catch_unwind(|| loader_begin(ret)) {
+        Ok(Ok(entry)) => entry,
+        _ => {
+            LAST_STATUS.store(usize::MAX, Ordering::Release);
+            std::process::abort();
+        }
+    };
+    unsafe { SetLastError(error) };
     let result = unsafe { boot_loader_original(argument, unused) };
     let error = unsafe { GetLastError() };
-    if !std::panic::catch_unwind(|| target_loader_return(result, ret)).is_ok_and(|r| r.is_ok()) {
+    if !std::panic::catch_unwind(|| target_loader_return(result, ret, entry))
+        .is_ok_and(|r| r.is_ok())
+    {
         LAST_STATUS.store(usize::MAX, Ordering::Release);
         std::process::abort();
     }
