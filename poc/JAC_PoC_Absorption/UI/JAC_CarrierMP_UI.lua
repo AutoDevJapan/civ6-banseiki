@@ -84,7 +84,6 @@ local function Observe(c)
   end
   if m.Phase=='DISPATCH' and m.DispatchSession==session and claimed[c.MoveToken]==m.ClaimNonce
     and not sent[c.MoveToken] then
-    sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local p={}
     p[PlayerOperations.PARAM_PLAYER_ONE]=m.Actor
     p[PlayerOperations.PARAM_CITY_SRC]=c.MoveSource.City
@@ -93,6 +92,13 @@ local function Observe(c)
     p[PlayerOperations.PARAM_BUILDING_DEST]=c.MoveTarget.Building
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
+    if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+      local api=assert(ExposedMembers.JAC_Absorption)
+      local ok,target=pcall(function() return api.ReadNativeCarrier(
+        assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
+      if not ok or target.Work~=-1 then sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false end
+    end
+    sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local ok,result=pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)
     status[c.MoveToken]=ok and result==false and 'REJECTED' or ok and result==true and 'ACCEPTED' or 'UNKNOWN'
     return false -- reconcile at a later native publication, not the send call
@@ -102,6 +108,20 @@ local function Observe(c)
   for _,l in ipairs(m.Loans or {}) do
     local current=assert(CityManager.GetCityAt(l.X,l.Y))
     o.Cities[#o.Cities+1]=api.ReadNativeCarrier(current,l)
+  end
+  if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+    o.ArtifactWorks={[c.Index]=o.Locations}
+    for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+    for _,observed in ipairs(o.Cities) do
+      if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
+        o.ArtifactWorks[observed.Work]=api.ReadNativeLocations(observed.Work)
+      end
+      for _,asset in pairs(observed.State.Assets) do
+        for _,index in pairs(asset.Works or {}) do
+          if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+        end
+      end
+    end
   end
   if m.Phase=='READY' then
     if m.GrantSession~=session then return request(c,'ABORT',o) end
