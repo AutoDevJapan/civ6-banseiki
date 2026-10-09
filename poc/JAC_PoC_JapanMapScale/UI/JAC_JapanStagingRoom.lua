@@ -650,10 +650,30 @@ if Controls then
     order[child] = child == Controls.JAC_AssignmentPanel and 0 or index
   end
   Controls.GameSummaryStack:SortChildren(function(a, b) return order[a] < order[b] end)
+  local diagnosticDone = false
   ContextPtr:SetShowHandler(function()
     stockOnShow()
     resetAttempts()
     syncState()
+    if not diagnosticDone and read("JAC_MP_DIAG_AUTO_ASSIGN") == true
+      and not ContextPtr:IsHidden() and scoped() and canEdit() and mode() == JAPAN then
+      local ids = humans()
+      if #ids == 2 then
+        diagnosticDone = true
+        JAC_SetPlayerArea(ids[1], "EAST")
+        JAC_SetPlayerArea(ids[2], "WEST")
+        JAC_SetSubject(ids[1])
+        local ready = valid(ids)
+        local teamA = PlayerConfigurations[ids[1]]:GetTeam()
+        local teamB = PlayerConfigurations[ids[2]]:GetTeam()
+        local success = ready and read(assignmentKey(ids[1])) == "EAST"
+          and read(assignmentKey(ids[2])) == "WEST"
+          and tonumber(read(SUBJECT)) == ids[1]
+          and teamA == teamB and teamA == tonumber(read(TEAM))
+        print("JAC_MP_DIAG|ok=" .. tostring(success) .. "|team=" ..
+          tostring(teamA) .. "|roster=" .. tostring(read(ROSTER)))
+      end
+    end
   end)
   Events.GameConfigChanged.Add(syncState)
   Events.PlayerInfoChanged.Add(syncState)

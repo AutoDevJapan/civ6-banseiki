@@ -67,12 +67,13 @@ fn japan_staging_assignment_live_scenario_validates_and_compiles() {
 }
 
 #[test]
-fn japan_staging_diagnostic_captures_transition_and_area_menu_without_tuner() {
+fn japan_staging_engine_diagnostic_checks_saved_assignment_without_tuner() {
     let data = scenario("multiplayer-japan-staging-diagnostic.json");
     validate_scenario(&data).unwrap();
     assert_eq!(data["session_type"], "hotseat");
     let run = steps(&data);
-    assert_eq!(run.len(), 14);
+    assert_eq!(run.len(), 12);
+    assert!(code(&run[2]).contains("JAC_MP_DIAG_AUTO_ASSIGN"));
     assert!(action(&run[3], "wait_for"));
     assert_eq!(run[3]["condition"]["type"], "state");
     assert!(action(&run[4], "screenshot"));
@@ -85,12 +86,9 @@ fn japan_staging_diagnostic_captures_transition_and_area_menu_without_tuner() {
         assert!(action(&run[index], "pause"));
         assert_eq!(run[index]["seconds"], 10);
     }
-    assert!(action(&run[11], "window_click"));
-    assert_eq!(run[11]["x"], 0.435);
-    assert_eq!(run[11]["y"], 0.837);
-    assert!(action(&run[12], "pause"));
-    assert!(action(&run[13], "screenshot"));
-    assert_eq!(run[13]["capture_only"], true);
+    assert!(action(&run[11], "wait_for"));
+    assert_eq!(run[11]["condition"]["type"], "log_line");
+    assert_eq!(run[11]["condition"]["contains"], "JAC_MP_DIAG|ok=true");
 }
 
 #[test]

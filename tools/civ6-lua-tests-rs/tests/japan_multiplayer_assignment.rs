@@ -309,6 +309,26 @@ assert(values.JAC_MP_ROSTER=='0,1')
 }
 
 #[test]
+fn diagnostic_hook_assigns_once_after_visible_show() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+values.JAC_MP_DIAG_AUTO_ASSIGN=true
+values.JAC_MP_MODE='JAPAN'
+ContextPtr:show()
+assert(values.JAC_MP_AREA_0=='EAST' and values.JAC_MP_AREA_1=='WEST')
+assert(values.JAC_MP_SUBJECT==0)
+assert(PlayerConfigurations[0].team==PlayerConfigurations[1].team)
+assert(not Controls.ReadyButton.disabled)
+JAC_SetPlayerArea(0, 'HOKKAIDO')
+ContextPtr:show()
+assert(values.JAC_MP_AREA_0=='HOKKAIDO')
+"#,
+    );
+}
+
+#[test]
 fn coerced_or_rejected_config_values_do_not_rebroadcast_forever() {
     let lua = fixture();
     exec(
