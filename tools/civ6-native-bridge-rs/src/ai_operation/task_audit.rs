@@ -34,6 +34,90 @@ fn same_byte_target(rva: u32, leaf: &[u8]) -> Result<i64, String> {
     Ok(read)
 }
 
+fn rip_reference(
+    image: &[u8],
+    rva: u32,
+    prefix: &[u8],
+    suffix: &[u8],
+    target: u32,
+) -> Result<(), String> {
+    let length = prefix.len() + 4 + suffix.len();
+    let displacement = i32::try_from(i64::from(target) - i64::from(rva) - length as i64)
+        .map_err(|_| "RIP displacement out of range")?;
+    let mut expected = prefix.to_vec();
+    expected.extend(displacement.to_le_bytes());
+    expected.extend_from_slice(suffix);
+    bytes(image, rva, &expected)
+}
+
+fn byte_b61e00_consumer(core: &[u8], leaf_target: i64) -> Result<Value, String> {
+    const TARGET: u32 = 0xb61e00;
+    if leaf_target != i64::from(TARGET) {
+        return Err("consumer byte differs from leaf reference".into());
+    }
+    for (rva, prefix, suffix) in [
+        (0x7bbf0, &[0x0f, 0xb6, 0x05][..], &[][..]),
+        (0x7bbf7, &[0x88, 0x0d][..], &[][..]),
+        (0x7c0e9, &[0xc6, 0x05][..], &[1][..]),
+        (0x7c687, &[0x80, 0x3d][..], &[0][..]),
+        (0x7c7ff, &[0xc6, 0x05][..], &[0][..]),
+    ] {
+        rip_reference(core, rva, prefix, suffix, TARGET)?;
+    }
+    // Complete local compare/copies/conditional branch, not just a CMP anchor.
+    bytes(
+        core,
+        0x7c687,
+        &[
+            0x80, 0x3d, 0x72, 0x57, 0xae, 0x00, 0x00, 0x4c, 0x8b, 0xf2, 0x8b, 0xf1, 0x0f, 0x84,
+            0x3d, 0x01, 0x00, 0x00,
+        ],
+    )?;
+    // Local callback-like loop: no flag read in this exact interval. This does
+    // not establish reachability from the entry or behavior of an invoked callee.
+    bytes(
+        core,
+        0x7c798,
+        &[
+            0x48, 0x8b, 0x5f, 0x08, 0x48, 0x3b, 0x5f, 0x10, 0x74, 0x24, 0x48, 0x8b, 0x0b, 0x48,
+            0x85, 0xc9, 0x75, 0x06, 0x48, 0x39, 0x4b, 0x08, 0x74, 0x0c, 0x4d, 0x8b, 0xce, 0x4c,
+            0x8d, 0x45, 0xe7, 0x8b, 0xd6, 0xff, 0x53, 0x08, 0x48, 0x83, 0xc3, 0x20, 0x48, 0x3b,
+            0x5f, 0x10, 0x75, 0xdc,
+        ],
+    )?;
+    bytes(
+        core,
+        0x7c7d6,
+        &[
+            0x4c, 0x8d, 0x9c, 0x24, 0x90, 0x00, 0x00, 0x00, 0x49, 0x8b, 0x73, 0x20, 0x4d, 0x8b,
+            0x73, 0x28, 0x49, 0x8b, 0xe3, 0x5d, 0xc3,
+        ],
+    )?;
+    branch(core, 0x5fa8d6, 0xe8, 0x7c670)?;
+    // The normal-return continuation loads a different indirect receiver and
+    // tail-jumps through its table+A0. Role and runtime target remain unknown.
+    bytes(
+        core,
+        0x5fa8db,
+        &[
+            0x48, 0x8b, 0x0d, 0x9e, 0x01, 0x59, 0x00, 0x4c, 0x8b, 0xc3, 0x8b, 0xd7, 0x48, 0x8b,
+            0x01, 0x48, 0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83, 0xc4, 0x20, 0x5f, 0x48, 0xff, 0xa0,
+            0xa0, 0x00, 0x00, 0x00,
+        ],
+    )?;
+    Ok(json!({
+        "byte_rva":TARGET,
+        "rip_instruction_sites":[0x7bbf0,0x7bbf7,0x7c0e9,0x7c687,0x7c7ff],
+        "read_site_scan_basis":"LLVM linear text disassembly displayed five explicit RIP-relative references; not an exhaustive indirect/data-flow reference analysis",
+        "reader_entry_candidate_rva":0x7c670,"compare_rva":0x7c687,"zero_branch_rva":0x7c693,"zero_branch_target":0x7c7d6,
+        "local_loop":{"start_rva":0x7c798,"bytes":46,"indirect_call_rva":0x7c7b9,"call_operand":"[RBX+8]","record_stride":0x20,"back_branch_target":0x7c7a2,"flag_recheck":"absent in this checked interval only"},
+        "zero_branch_epilogue":{"rva":0x7c7d6,"bytes":21,"ret_rva":0x7c7ea},
+        "caller_5fa8d6_continuation":{"direct_call_rva":0x5fa8d6,"direct_target":0x7c670,"start_rva":0x5fa8db,"bytes":32,"indirect_tail_rva":0x5fa8f4,"table_slot":0xa0,"role_and_target":"not established by this audit","scope":"normal return from the checked direct call falls through this continuation; wrapper entry reachability and actual native return not certified"},
+        "unestablished":["entry-to-loop reachability and receiver/register identity","callee role and callback return","all readers and writers via indirect aliases","zero store sealing every AI publisher","already-entered frames and queued work drained","native lifetime order and Close/Rebuild authority"],
+        "scope":"zero branch at7C693 targets7C7D6 beyond the checked loop; entry-to-guard and nonzero-path reachability are not established; a byte store alone supplies no join/drain certificate"
+    }))
+}
+
 fn core_rdata_pointer(image: &[u8], rva: u32, target: u32) -> Result<(), String> {
     // Independently read PE section: .rdata RVA9B7000/raw9B5C00,
     // virtual size1A8124. This mapping never applies to .text or .data.
@@ -298,7 +382,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
     bytes(host, 0x985e50, &[0x48, 0xc7, 0x47, 8, 0, 0, 0, 0])?;
     bytes(host, 0x985e12, &[0x48, 0x8b, 7, 0x48, 0x89, 0x47, 8])?;
     Ok(json!({
-        "schema":"todo880-native-job-lifecycle-static-v4",
+        "schema":"todo880-native-job-lifecycle-static-v5",
         "core_sha256":core_sha,"host_sha256":host_sha,"witnesses":witnesses,
         "manager":{"from_world_offset":0x250,"job_set_offset":0x400,"list_id_offset":0x410,"lifecycle_state_offset":0x38a8},
         "abi":{
@@ -308,6 +392,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
         "receipt_candidates":{"wait_return_core":0x4a1196,"conditional_host_callback_merge_core":0x4a11b3,"free_list_return_core":0x4a120e,"host_wait_pointer_clear":0x985e50},
         "file_offset_basis":"SHA-pinned images with independently verified text RVA1000/raw400; Core rdata RVA9B7000/raw9B5C00 virtual size1A8124 and preferred ImageBase180000000; not a general PE parser",
         "release_leaf":{"wrapper_rva":0x58ff70,"leaf_rva":0x7bbf0,"instruction_bytes":14,"same_byte_target_rva":read_target,"behavior":"non-atomic read then write of one RIP-relative byte; not world teardown","world_shutdown_link_evidence":"not established by this audit"},
+        "byte_b61e00_consumer":byte_b61e00_consumer(core, read_target)?,
         "context_world_path":context_world_path(core)?,
         "shutdown_guard":{"entry_rva":0x63e160,"compare_rva":0x63e166,"compare_base":"RCX at63E166","receiver_byte_offset":0x2a4,"compare_value":0,"zero_branch_target":0x63e2d9,"virtual_call_rva":0x63e1b5,"virtual_slot":0x48,"virtual_load_base":"RBX saved from entry RCX at63E16D; contiguous prefix has no later RBX assignment, conditional on normal-return callees obeying Win64 nonvolatile ABI","local_byte_store_offset":0x2a7,"receiver_type_evidence":"constructor/table path recorded separately; source-language type name not established","manager_load_base":"same conditional RBX+250 at63E1C9 under the stated ABI assumption","caller_evidence":"verified conditional call at471BD in RBX+60 block; receiver identity across blocks unestablished","runtime_lifetime_order_evidence":"not established by this audit"},
         "shutdown_pre_wait_flow":{
@@ -392,5 +477,20 @@ mod tests {
         assert!(shutdown_pre_wait(&image).is_err());
         image[offset + (0x63e18c - 0x63e160)] ^= 1;
         assert!(shutdown_pre_wait(&image[..image.len() - 1]).is_err());
+    }
+
+    #[test]
+    fn rip_reference_accounts_for_trailing_immediate_and_negative_displacement() {
+        let mut image = vec![0; 0x108];
+        image[0x100..0x107].copy_from_slice(&[0xc6, 0x05, 0xe9, 0xff, 0xff, 0xff, 1]);
+        assert!(rip_reference(&image, 0xd00, &[0xc6, 0x05], &[1], 0xcf0).is_ok());
+        assert!(rip_reference(&image, 0xd00, &[0xc6, 0x05], &[0], 0xcf0).is_err());
+        assert!(rip_reference(&image, 0xd00, &[0xc6, 0x05], &[1], 0xcf1).is_err());
+        assert!(rip_reference(&image[..0x106], 0xd00, &[0xc6, 0x05], &[1], 0xcf0).is_err());
+        assert!(rip_reference(&image, 0xbff, &[0xc6, 0x05], &[1], 0xcf0).is_err());
+        assert!(rip_reference(&image, 0xd00, &[0xc6, 0x05], &[1], u32::MAX).is_err());
+        assert!(byte_b61e00_consumer(&[], 0xb61e01)
+            .unwrap_err()
+            .contains("differs from leaf"));
     }
 }
