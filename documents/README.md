@@ -55,6 +55,7 @@
 | [`poc/autotest-native.md`](poc/autotest-native.md) | PR87のPythonを実行しないRust検証ドライバー、標準の待ち列との接続、対応範囲と検査結果 |
 | [`poc/banseiki-pool.md`](poc/banseiki-pool.md) | 300人の登録、2人の選択、保存・再読込の検証と画像の参照元 |
 | [`poc/hotseat-log-bridge.md`](poc/hotseat-log-bridge.md) | PR100の検証専用MODによるLua.log通信、元21手順と2回の保存・再読込の実機結果 |
+| [`poc/multiplayer.md`](poc/multiplayer.md) | 共有ToDo9の完了済みホットシート3件、未実証のLAN受入、他PoCの照合対象と分担 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`poc/leader-persona.md`](poc/leader-persona.md) | 22人の性格・史料、進化用称号と人物別の功績、専攻・分岐を永久固定するツリー全表と専用画面、公式APIの根拠、実機用シナリオ |
 | [`poc/native-slots-diagnostic.md`](poc/native-slots-diagnostic.md) | PR86の匿名本体総督枠と支払い候補を分離したテストMOD、Rust/Lua検査結果、実機で未確認の条件 |

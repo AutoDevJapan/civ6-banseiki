@@ -15,6 +15,15 @@ enum Command {
     Generate {
         output: PathBuf,
     },
+    GenerateUi {
+        output: PathBuf,
+    },
+    GenerateInventory {
+        output: PathBuf,
+    },
+    GenerateInventoryUi {
+        output: PathBuf,
+    },
     SendQuery {
         checkpoint: PathBuf,
         active_humans: String,
@@ -23,6 +32,11 @@ enum Command {
 fn run(args: Args) -> Result<()> {
     match args.command {
         Command::Generate { output } => fs::write(output, transport::gameplay_binding())?,
+        Command::GenerateUi { output } => fs::write(output, transport::ui_binding())?,
+        Command::GenerateInventory { output } => fs::write(output, transport::inventory_binding())?,
+        Command::GenerateInventoryUi { output } => {
+            fs::write(output, transport::inventory_ui_binding())?
+        }
         Command::SendQuery {
             checkpoint,
             active_humans,

@@ -1,6 +1,7 @@
 //! Civ VI scenario driver, with platform-independent protocol and artifact handling.
 pub mod bootstrap_scenario;
 pub mod capture;
+mod carrier_mp;
 pub mod carrier_sync;
 pub mod carrier_transport;
 pub mod catalog_check;
@@ -8,12 +9,14 @@ pub mod catalog_scenario;
 pub mod checkpoint;
 pub mod click;
 pub mod error;
+pub mod growth_roster;
 pub mod growth_sync;
 pub mod hotseat_bridge;
 pub mod judge;
 pub mod live_lease;
 pub mod metrics;
 pub mod native_bridge;
+mod native_inventory;
 pub mod native_order;
 pub mod native_trace;
 pub mod payment_scenario;

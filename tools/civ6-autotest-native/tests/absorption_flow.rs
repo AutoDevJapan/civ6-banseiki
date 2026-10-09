@@ -1424,7 +1424,7 @@ fn ui_exports_only_detached_reads_and_cannot_forge_selection() -> mlua::Result<(
         r#"
         local A,F=TEST_ABSORPTION,TEST_FLOW
         local allowedA={GetState=true,GetRoster=true,GetUIPhase=true,Canonical=true,
-          GetPropertyKeys=true}
+          GetPropertyKeys=true,ReadNativeCarrier=true,ReadNativeLocations=true}
         local allowedF={Get=true,GetPending=true,GetWorld=true,GetPendingWorlds=true}
         local countA,countF=0,0
         for key,value in pairs(ExposedMembers.JAC_Absorption) do
@@ -1433,7 +1433,7 @@ fn ui_exports_only_detached_reads_and_cannot_forge_selection() -> mlua::Result<(
         for key,value in pairs(ExposedMembers.JAC_AbsorptionFlow) do
           assert(allowedF[key] and type(value)=='function',key);countF=countF+1
         end
-        assert(countA==5 and countF==4)
+        assert(countA==7 and countF==4)
         local keys=ExposedMembers.JAC_Absorption.GetPropertyKeys()
         assert(keys.PERSON_KEY==A.Rules.PERSON_KEY and keys.TOKEN_KEY==A.Rules.TOKEN_KEY)
         keys.PERSON_KEY='forged person key';keys.TOKEN_KEY='forged token key'
@@ -1458,6 +1458,45 @@ fn ui_exports_only_detached_reads_and_cannot_forge_selection() -> mlua::Result<(
         assert(Players[2]:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1').Accepted)
         assert(F.Get(flow.ID).Entries[1].SelectedAction==flow.Entries[1].AllowedActions[1])
     "#,
+    )
+    .exec()
+}
+
+#[test]
+fn native_carrier_ui_reads_are_detached_and_do_not_mutate_city_or_game_state() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+        local api=ExposedMembers.JAC_Absorption
+        PlayerManager.GetAliveIDs=function() return {0,1,2,3} end
+        GameInfo.GreatWorkSlotTypes={[0]={GreatWorkSlotType='GREATWORKSLOT_RELIC'}}
+        local city=CITIES[4]
+        local original=city.GetBuildings
+        city.GetBuildings=function(self)
+          local result=original(self)
+          result.GetGreatWorkSlotType=function() return 0 end
+          return result
+        end
+        ExposedMembers.JAC_HeroReadAPI={ReadCarrierPlots=function() return {4,5} end}
+        local gameBefore,cityBefore=api.Canonical(Game.props),api.Canonical(city.props)
+        local loan={Building=1,Slot=0,X=4,Y=0}
+        local observation=api.ReadNativeCarrier(city,loan)
+        observation.State.Faith.Scriptures[1]='forged scripture'
+        observation.Properties.JAC_ABSORPTION_CITY_FAITH_V1.Followers=999
+        observation.State.PurchasedPlots[1]=999
+        local fresh=api.ReadNativeCarrier(city,loan)
+        assert(fresh.State.Faith.Scriptures[1]=='book')
+        assert(fresh.Properties.JAC_ABSORPTION_CITY_FAITH_V1.Followers==4)
+        assert(fresh.State.PurchasedPlots[1]==4)
+        local index=1003+city:GetX()
+        local locations=api.ReadNativeLocations(index)
+        assert(#locations==1 and locations[1].Index==index)
+        locations[1].Owner=99;locations[1].Effects[1]='forged effect'
+        fresh=api.ReadNativeLocations(index)
+        assert(fresh[1].Owner==1 and #fresh[1].Effects==0)
+        assert(api.Canonical(Game.props)==gameBefore and api.Canonical(city.props)==cityBefore)
+        assert(TRANSFERS==0 and SPAWNS==0 and KILLS==0)
+        "#,
     )
     .exec()
 }
@@ -1890,9 +1929,14 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     ))
     .map_err(mlua::Error::external)?;
     // The absorption entry owns its private modules. The independent carrier
-    // boundary receiver has its own context and must also load exactly once.
-    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 2);
-    for id in ["JAC_Absorption_Gameplay", "JAC_CarrierBoundary"] {
+    // boundary and inventory receivers have their own contexts and must also
+    // load exactly once.
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 3);
+    for id in [
+        "JAC_Absorption_Gameplay",
+        "JAC_CarrierBoundary",
+        "JAC_NativeInventory",
+    ] {
         assert_eq!(
             manifest
                 .matches(&format!(
@@ -1906,6 +1950,7 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
     assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
+    assert!(manifest.contains("<File>Scripts/JAC_NativeInventory.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(

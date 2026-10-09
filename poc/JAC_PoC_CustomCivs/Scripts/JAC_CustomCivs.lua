@@ -91,7 +91,7 @@ local function LogTakedaName(stage)
 		tostring(GetProp(RENAME_NAME_PROPERTY)), tostring(GetProp(RENAME_PROPERTY))))
 end
 
-local function OnLoadScreenClose()
+local function LogInitialState()
 	Log("loaded custom civs")
 	LogPlayers()
 	LogTakedaName("load")
@@ -130,5 +130,14 @@ local function OnTurnBegin(turn)
 		found and "setter_found" or "unavailable", NEW_NAME))
 end
 
-Events.LoadScreenClose.Add(OnLoadScreenClose)
-Events.TurnBegin.Add(OnTurnBegin)
+-- LoadScreenClose is a UI event and is not guaranteed in Gameplay. Registering
+-- it here can abort loading before the rename handler is installed. Use the official
+-- Gameplay turn event (DLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:64).
+local observedPlayers = false
+GameEvents.OnGameTurnStarted.Add(function(turn)
+	if not observedPlayers then
+		observedPlayers = true
+		LogInitialState()
+	end
+	OnTurnBegin(turn)
+end)
