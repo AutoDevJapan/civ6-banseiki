@@ -198,7 +198,7 @@
       "timeout": 60,
       "action": "oath_trace_install",
       "max_seconds": 300,
-      "dll_sha256": "b870a2be9357577ad36a8bee9330cbaece7d5b3446f6363eb40dba5770c2e676"
+      "dll_sha256": "cfbf753105c1ea37fcfac2c3403263cccb29d147256526ac6f065e9a0e6d8a62"
     },
     {
       "action": "oath_trace_start",

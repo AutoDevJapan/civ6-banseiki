@@ -1596,7 +1596,16 @@ fn default_chain_retains_failure_even_after_a_later_success() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 7);
     // Two normal closes (6 commands each), preparation and scenario = 14 calls.
-    r.replies.extend(ready_chain(&f, 0).replies);
+    let mut second = ready_chain(&f, 0);
+    second.replies[READY_PREPARE_REPLY] = Ok(Output {
+        stdout: format!(
+            "{}\n{}\n",
+            path(f.root.join("scenario.json")),
+            path(f.root.join("artifacts-second"))
+        ),
+        ..Output::default()
+    });
+    r.replies.extend(second.replies);
     assert_eq!(
         cli(&mut r, &f.p, &args(&["a:s.json", "b:s.json"])).unwrap(),
         7
@@ -1604,6 +1613,8 @@ fn default_chain_retains_failure_even_after_a_later_success() {
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 2);
     assert_eq!(r.printed.last().unwrap(), "CHAIN FAILED");
     assert!(!r.printed.iter().any(|s| s == "CHAIN DONE"));
+    assert!(f.root.join("artifacts/exit-evidence.json").is_file());
+    assert!(f.root.join("artifacts-second/exit-evidence.json").is_file());
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 

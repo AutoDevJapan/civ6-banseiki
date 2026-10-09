@@ -8,6 +8,9 @@ use std::{
 
 use crate::{oaths, Outputs, Repository};
 
+#[path = "oath_call_reconcile.rs"]
+mod call_reconcile;
+
 pub(crate) const BASE: &str = "tools/civ6-autotest/scenarios/sengoku-oaths-oda.json";
 const DIR: &str = "tools/civ6-autotest/scenarios/oath-effects";
 const INVENTORY: &str = "documents/poc/data/oath-effect-scenarios.json";
@@ -1538,6 +1541,13 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
 }
 
 pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
+    if args.len() == 2 && args[0] == "--read-native-observation" {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&call_reconcile::read(repo, Path::new(&args[1]))?)?
+        );
+        return Ok(());
+    }
     if args.len() == 2 && args[0] == "--read-modifier-inventory" {
         println!(
             "{}",
@@ -1558,7 +1568,7 @@ pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
     let Some(check) = crate::parse_check_args(
         "generate-oath-effect-audit",
         args,
-        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory; --read-modifier-inventory ARTIFACTS reads recorded frames without asserting acceptance.",
+        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory; --read-modifier-inventory ARTIFACTS reads recorded frames; --read-native-observation ARTIFACTS reconciles v4/v5 copied call metadata with the recorded official inventory and catalogue without asserting quantity or product acceptance.",
     )?
     else {
         return Ok(());
