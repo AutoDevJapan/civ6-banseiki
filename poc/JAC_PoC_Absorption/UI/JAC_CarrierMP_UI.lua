@@ -76,7 +76,8 @@ local function Observe(c)
     local tx=api and api.GetState().Transactions[m.Transaction]
     if tx and tx.Turn~=Game.GetCurrentGameTurn() and not (tx.Request and tx.Request.FlowPolicy) then return false end
   end
-  if m.Phase=='BORROW' or m.Phase=='RETURN' or m.Phase=='ABORT_RETURN' or m.Phase=='ABORT_DONE' then
+  if m.Phase=='BORROW' or m.Phase=='RETURN'
+    or (m.Phase=='ABORT_RETURN' and m.DispatchStatus~='NOT_SENT') or m.Phase=='ABORT_DONE' then
     return request(c,'RESUME')
   end
   if m.Phase=='SELECT' then
@@ -124,7 +125,8 @@ local function Observe(c)
   end
   local api=assert(ExposedMembers.JAC_Absorption)
   local unresolved=(m.Phase=='DISPATCH' and (m.DispatchStatus=='NOT_SENT'
-    or status[c.MoveToken]=='NOT_SENT')) or (m.Phase=='ABORT_RESTORED' and m.OriginalUnresolved)
+    or status[c.MoveToken]=='NOT_SENT'))
+    or ((m.Phase=='ABORT_RESTORED' or m.Phase=='ABORT_RETURN') and m.DispatchStatus=='NOT_SENT')
   local o={Cities={}}
   local function locations(index)
     local ok,result=pcall(api.ReadNativeLocations,index)
@@ -135,10 +137,12 @@ local function Observe(c)
   o.Locations=locations(c.Index)
   for i,l in ipairs(m.Loans or {}) do
     if i==1 and unresolved then
-      local ok,observed=pcall(function()
-        return api.ReadNativeCarrier(assert(CityManager.GetCityAt(l.X,l.Y)),l)
-      end)
-      o.Cities[i]=ok and observed or {Missing=true}
+      local current=CityManager.GetCityAt(l.X,l.Y)
+      if not current then o.Cities[i]={Missing=true}
+      else
+        local ok,observed=pcall(api.ReadNativeCarrier,current,l)
+        o.Cities[i]=ok and observed or {ReadFailed=true,Owner=current:GetOwner(),ID=current:GetID(),X=l.X,Y=l.Y}
+      end
     else
       local current=assert(CityManager.GetCityAt(l.X,l.Y))
       o.Cities[i]=api.ReadNativeCarrier(current,l)
@@ -166,7 +170,8 @@ local function Observe(c)
     return request(c,'CLAIM',o)
   end
   if m.Phase=='BORROWED' or m.Phase=='PREPARE' or m.Phase=='DISPATCH' or m.Phase=='RESTORED'
-    or m.Phase=='ABORT_RESTORED' or m.Phase=='RECHECK' then return request(c,'OBSERVE',o) end
+    or m.Phase=='ABORT_RESTORED' or m.Phase=='RECHECK'
+    or (m.Phase=='ABORT_RETURN' and m.DispatchStatus=='NOT_SENT') then return request(c,'OBSERVE',o) end
   return false
 end
 local diagnostic

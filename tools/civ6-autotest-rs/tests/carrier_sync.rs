@@ -2321,6 +2321,159 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_unsent_source_read_failures_do_not_finalize_a_present_original_as_unresolved() {
+        for throws in [true, false] {
+            let lua = ai_palace_world(2);
+            lua.globals().set("SOURCE_READ_THROWS", throws).unwrap();
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(&lua, "DISPATCH");
+            lua.load(r#"
+              local api=ExposedMembers.JAC_Absorption;SAVED_SOURCE_READ=api.ReadNativeCarrier
+              api.ReadNativeCarrier=function(city,l)
+                if city:GetX()==4 and SOURCE_READ_THROWS then error('UI city cache is not ready') end
+                local out=SAVED_SOURCE_READ(city,l)
+                if city:GetX()==4 then out.Work=-1 end
+                return out
+              end
+              assert(not MP_OBSERVE() and UI_MOVES==0)
+            "#).exec().unwrap();
+            let raw = mp_publish(&lua);
+            lua.globals().set("CACHE_PACKET", raw.as_str()).unwrap();
+            lua.load(
+                r#"
+              local p=JAC_CarrierMP.Decode(CACHE_PACKET);local o=JAC_CarrierMP.Decode(p.Payload)
+              assert(p.DispatchStatus=='NOT_SENT' and not o.Cities[1].Missing)
+              if SOURCE_READ_THROWS then assert(o.Cities[1].ReadFailed) end
+            "#,
+            )
+            .exec()
+            .unwrap();
+            assert!(!mp_receive(&lua, &raw));
+            lua.load(r#"
+              local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+              assert(m.Phase=='DISPATCH' and not m.OriginalUnresolved)
+              assert(TRANSFERS==1 and CITIES[16].owner==1 and WORK_X==4)
+              ExposedMembers.JAC_Absorption.ReadNativeCarrier=SAVED_SOURCE_READ
+            "#).exec().unwrap();
+            assert!(mp_receive(&lua, &mp_publish(&lua)));
+            lua.load(r#"
+              local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+              assert(m.Phase=='ABORT_RESTORED' and not m.OriginalUnresolved)
+              assert(TRANSFERS==2 and CITIES[16].owner==2 and WORK_X==4 and UI_MOVES==0)
+            "#).exec().unwrap();
+        }
+    }
+
+    #[test]
+    fn mp_unsent_captured_source_with_original_in_place_returns_only_borrowed_target() {
+        let lua = ai_palace_world(2);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "DISPATCH");
+        lua.load(
+            r#"
+          local source=CITIES[4];Players[1].cities[4]=nil;Players[0].cities[4]=source
+          source.owner=0;source.id=source.id+100
+          assert(not MP_OBSERVE() and UI_MOVES==0)
+        "#,
+        )
+        .exec()
+        .unwrap();
+        assert!(mp_receive(&lua, &mp_publish(&lua)));
+        lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RESTORED' and m.OriginalUnresolved and m.Loans[1].SourceUnavailable)
+          assert(TRANSFERS==2 and CITIES[4].owner==0 and CITIES[16].owner==2 and WORK_X==4)
+        "#).exec().unwrap();
+        assert!(mp_receive(&lua, &mp_publish(&lua)));
+        lua.load("assert(not MP_PLAN() and UI_MOVES==0 and TRANSFERS==2)")
+            .exec()
+            .unwrap();
+    }
+
+    #[test]
+    fn mp_unsent_partial_return_reobserves_all_loans_and_restores_interrupted_source_properties() {
+        for relocated in [true, false] {
+            let lua = artifact_world(2, false, 3);
+            lua.globals().set("ORIGINAL_RELOCATED", relocated).unwrap();
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(&lua, "DISPATCH");
+            lua.load(
+                r#"
+          local api=ExposedMembers.JAC_Absorption;local read=api.ReadNativeCarrier
+          if ORIGINAL_RELOCATED then WORK_X=12
+          else
+            api.ReadNativeCarrier=function(city,l)
+              if city.x==4 then error('temporary source cache failure') end
+              return read(city,l)
+            end
+          end
+          assert(not MP_OBSERVE() and UI_MOVES==0)
+          api.ReadNativeCarrier=read
+          local transfer=CityManager.TransferCity;FAIL_SOURCE=true;FAIL_TARGET=true
+          CityManager.TransferCity=function(city,owner)
+            if city.x==4 and owner==1 and FAIL_SOURCE then
+              FAIL_SOURCE=false;transfer(city,owner);city:SetProperty('MP_TEST_PROPERTY',nil)
+              error('interrupt after returning source, before restoring properties')
+            end
+            if city.x==16 and owner==3 and FAIL_TARGET then error('target return delayed') end
+            return transfer(city,owner)
+          end
+        "#,
+            )
+            .exec()
+            .unwrap();
+            assert!(mp_receive(&lua, &mp_publish(&lua)));
+            lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RETURN' and (m.OriginalUnresolved~=nil)==ORIGINAL_RELOCATED and m.Loans[1].ReturnIssued)
+          assert(not m.Loans[1].RestoredCore and CITIES[4]:GetProperty('MP_TEST_PROPERTY')==nil)
+          assert(TRANSFERS==3 and CITIES[4].owner==1 and CITIES[16].owner==2)
+          FAIL_TARGET=false;OCCUPIED_TARGET=true
+          assert(not MP_PLAN() and TRANSFERS==3)
+        "#).exec().unwrap();
+            lua.load(
+                fs::read_to_string(
+                    repo_root().join("poc/JAC_PoC_Absorption/UI/JAC_CarrierMP_UI.lua"),
+                )
+                .unwrap(),
+            )
+            .exec()
+            .unwrap();
+            for _ in 0..2 {
+                assert!(!mp_receive(&lua, &mp_publish(&lua)));
+            }
+            lua.load(
+                r#"
+          assert(TRANSFERS==3 and CITIES[16].owner==2 and UI_MOVES==0)
+          assert(CITIES[16]:GetBuildings():GetGreatWorkInSlot(1,0)==905)
+          OCCUPIED_TARGET=false
+        "#,
+            )
+            .exec()
+            .unwrap();
+            assert!(mp_receive(&lua, &mp_publish(&lua)));
+            lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RESTORED' and not m.Loans[1].SourceUnavailable and m.Loans[1].RestoredCore)
+          assert(CITIES[4]:GetProperty('MP_TEST_PROPERTY').Value=='復元')
+          assert(CITIES[4]:GetProperty('MP_TEST_PROPERTY').Accumulation==1.0000000000000002)
+          assert(TRANSFERS==4 and CITIES[4].owner==1 and CITIES[16].owner==3 and UI_MOVES==0)
+          OCCUPIED_TARGET=true -- the returned owner may legitimately fill its own slot
+        "#).exec().unwrap();
+            assert!(mp_receive(&lua, &mp_publish(&lua)));
+            lua.load(r#"
+          local tx=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint
+          assert(tx.NativeWorks[1].Carrier.MP.Phase=='ABORT_DONE')
+          if ORIGINAL_RELOCATED then
+            assert(not MP_PLAN())
+            assert(JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.WaitingFor=='MP_ORIGINAL_UNRESOLVED')
+          end
+          assert(TRANSFERS==4 and UI_MOVES==0)
+        "#).exec().unwrap();
+        }
+    }
+
+    #[test]
     fn mp_artifact_unsent_abort_checks_foreign_works_in_every_returned_city() {
         for extra_slot in [false, true] {
             let left = artifact_world(2, false, 3);
@@ -2403,6 +2556,28 @@ mod native_transport {
                 left.load(state).eval::<String>().unwrap(),
                 right.load(state).eval::<String>().unwrap()
             );
+            for lua in [&left, &right] {
+                lua.load(
+                    r#"
+                  local s=JAC_AbsorptionGameplay.GetState();local previous=s.Transactions.checkpoint
+                  local nextTx=JAC_AbsorptionRules.Copy(previous);nextTx.ID='after-unknown'
+                  local snap=nextTx.NativeWorks[1];snap.Carrier=nil
+                  snap.Source=assert(JAC_AbsorptionGameplay.NativeWorkLocations(900)[1])
+                  s.Transactions[nextTx.ID]=nextTx
+                  assert(not JAC_CarrierMP.AdvanceSnap(s,nextTx,snap))
+                "#,
+                )
+                .exec()
+                .unwrap();
+            }
+            assert!(left.load("return JAC_ObserveNativeCarrierMP(JAC_AbsorptionGameplay.GetState().Transactions['after-unknown'].NativeWorks[1].Carrier)").eval::<bool>().unwrap());
+            let raw = left.load("return MP_LAST()").eval::<String>().unwrap();
+            for lua in [&left, &right] {
+                assert!(!mp_receive(lua, &raw));
+                lua.load("assert(TRANSFERS==4 and UI_MOVES==0)")
+                    .exec()
+                    .unwrap();
+            }
         }
     }
 
