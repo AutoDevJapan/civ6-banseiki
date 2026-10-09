@@ -340,23 +340,36 @@ impl PeImage {
         let first = found.next()?;
         found.next().is_none().then_some(first.1)
     }
+    /// File offset of `len` bytes at `rva`, only if the whole width lies in
+    /// the raw data of one section (a read never straddles two sections).
+    fn offset_for(&self, rva: u32, len: usize) -> Option<usize> {
+        let len = u32::try_from(len).ok().filter(|n| *n > 0)?;
+        self.sections.iter().find_map(|&(va, _, raw, rawsize, _)| {
+            let rel = rva.checked_sub(va)?;
+            let end = rel.checked_add(len)?;
+            (end <= rawsize)
+                .then(|| u64::from(raw) + u64::from(rel))
+                .and_then(|offset| usize::try_from(offset).ok())
+        })
+    }
     fn file_offset(&self, rva: u32) -> Option<usize> {
-        self.sections
-            .iter()
-            .find_map(|&(va, vsize, raw, rawsize, _)| {
-                let span = vsize.max(rawsize);
-                (rva >= va && rva - va < span && rva - va < rawsize)
-                    .then(|| u64::from(raw) + u64::from(rva - va))
-                    .and_then(|offset| usize::try_from(offset).ok())
-            })
+        self.offset_for(rva, 1)
     }
     /// The bytes at an RVA, only if they lie inside one section's raw data.
     pub fn bytes_at<'a>(&self, file: &'a [u8], rva: u32, len: usize) -> Option<&'a [u8]> {
-        let start = self.file_offset(rva)?;
-        let last = self.file_offset(rva.checked_add(u32::try_from(len.checked_sub(1)?).ok()?)?)?;
-        (last - start == len - 1)
-            .then(|| file.get(start..start + len))
-            .flatten()
+        let start = self.offset_for(rva, len)?;
+        file.get(start..start.checked_add(len)?)
+    }
+    /// Up to `max` bytes from `rva` to the end of that section's raw data.
+    fn tail<'a>(&self, file: &'a [u8], rva: u32, max: usize) -> Option<&'a [u8]> {
+        self.sections.iter().find_map(|&(va, _, raw, rawsize, _)| {
+            let rel = rva.checked_sub(va).filter(|rel| *rel < rawsize)?;
+            let start = usize::try_from(u64::from(raw) + u64::from(rel)).ok()?;
+            let end = start
+                .checked_add(max)?
+                .min(usize::try_from(u64::from(raw) + u64::from(rawsize)).ok()?);
+            file.get(start..end)
+        })
     }
     pub fn rva_is_executable(&self, rva: u32) -> bool {
         self.sections.iter().any(|&(va, vsize, _, rawsize, ch)| {
@@ -386,7 +399,7 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
     let size_of_headers = u32_at(bytes, opt + 60).ok_or_else(|| bad("size"))?;
     let export_rva = u32_at(bytes, opt + 112).ok_or_else(|| bad("export dir"))?;
     let export_size = u32_at(bytes, opt + 116).ok_or_else(|| bad("export dir"))?;
-    let mut sections = Vec::new();
+    let mut sections: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
     for n in 0..section_count {
         let at = opt + optional_size + n * 40;
         let f = |o| u32_at(bytes, at + o).ok_or_else(|| bad("section"));
@@ -395,6 +408,22 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
             || va as u64 + vsize as u64 > size_of_image as u64
         {
             return Err(bad("section outside the file or image"));
+        }
+        // Raw data and virtual ranges of different sections must not overlap.
+        let overlaps = |a: (u64, u64), b: (u64, u64)| a.0 < b.1 && b.0 < a.1;
+        for &(ova, ovsize, oraw, orawsize, _) in &sections {
+            if overlaps(
+                (u64::from(va), u64::from(va) + u64::from(vsize.max(1))),
+                (u64::from(ova), u64::from(ova) + u64::from(ovsize.max(1))),
+            ) || (rawsize > 0
+                && orawsize > 0
+                && overlaps(
+                    (u64::from(raw), u64::from(raw) + u64::from(rawsize)),
+                    (u64::from(oraw), u64::from(oraw) + u64::from(orawsize)),
+                ))
+            {
+                return Err(bad("overlapping sections"));
+            }
         }
         sections.push((va, vsize, raw, rawsize, ch));
     }
@@ -409,7 +438,7 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
         return Err(bad("no export directory"));
     }
     let dir = image
-        .file_offset(export_rva)
+        .offset_for(export_rva, 40)
         .ok_or_else(|| bad("export directory"))?;
     let count = u32_at(bytes, dir + 20).ok_or_else(|| bad("export"))? as usize;
     let names = u32_at(bytes, dir + 24).ok_or_else(|| bad("export"))? as usize;
@@ -420,28 +449,29 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
         return Err(bad("export table too large"));
     }
     for n in 0..names {
-        let name_rva = image
-            .file_offset(
-                name_table
-                    .checked_add(4 * n as u32)
-                    .ok_or_else(|| bad("export name table"))?,
-            )
-            .and_then(|o| u32_at(bytes, o));
-        let ordinal = image
-            .file_offset(
-                ordinals
-                    .checked_add(2 * n as u32)
-                    .ok_or_else(|| bad("export ordinal table"))?,
-            )
-            .and_then(|o| u16_at(bytes, o));
+        // Every table element is read at its full width inside one section.
+        let element = |table: u32, width: u32, index: u32, what: &str| {
+            let at = width
+                .checked_mul(index)
+                .and_then(|off| table.checked_add(off))
+                .ok_or_else(|| bad(what))?;
+            image
+                .bytes_at(bytes, at, width as usize)
+                .ok_or_else(|| bad(what))
+        };
+        let name_rva = element(name_table, 4, n as u32, "export name table")?
+            .try_into()
+            .map(u32::from_le_bytes)
+            .ok();
+        let ordinal = element(ordinals, 2, n as u32, "export ordinal table")?
+            .try_into()
+            .map(u16::from_le_bytes)
+            .ok();
         let (Some(name_rva), Some(ordinal)) = (name_rva, ordinal) else {
             return Err(bad("export name tables"));
         };
-        let start = image
-            .file_offset(name_rva)
-            .ok_or_else(|| bad("export name"))?;
-        let tail = bytes
-            .get(start..(start + 128).min(bytes.len()))
+        let tail = image
+            .tail(bytes, name_rva, 128)
             .ok_or_else(|| bad("export name"))?;
         let end = tail
             .iter()
@@ -451,14 +481,11 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
         if ordinal as usize >= count {
             return Err(bad("export ordinal"));
         }
-        let rva = image
-            .file_offset(
-                functions
-                    .checked_add(4 * u32::from(ordinal))
-                    .ok_or_else(|| bad("export function table"))?,
-            )
-            .and_then(|o| u32_at(bytes, o))
-            .ok_or_else(|| bad("export function table"))?;
+        let rva = u32::from_le_bytes(
+            element(functions, 4, u32::from(ordinal), "export function table")?
+                .try_into()
+                .map_err(|_| bad("export function table"))?,
+        );
         if rva >= export_rva && u64::from(rva) < u64::from(export_rva) + u64::from(export_size) {
             return Err(bad("forwarded export"));
         }
@@ -802,6 +829,53 @@ pub(crate) mod tests {
         assert!(parse_pe(&x86).is_err());
         assert!(parse_pe(&dll[..0x300]).is_err());
         assert!(parse_pe(b"MZ").is_err());
+    }
+
+    #[test]
+    fn tables_that_straddle_a_section_end_or_overlap_are_refused() {
+        let good = synthetic_dll(&EXPORTS, false);
+        assert!(parse_pe(&good).is_ok());
+        let dir = 0x200 + 0x100; // export directory at RVA 0x1100
+        let put = |bytes: &mut Vec<u8>, at: usize, value: u32| {
+            bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        };
+        // each table pointer one byte short of the section end (0x1400)
+        for (field, rva) in [(32usize, 0x13feu32), (36, 0x13ff), (28, 0x13fd)] {
+            let mut bytes = good.clone();
+            put(&mut bytes, dir + field, rva);
+            assert!(parse_pe(&bytes).is_err(), "table field {field} at {rva:#x}");
+        }
+        // export directory whose 40 bytes cross the section end
+        let mut bytes = good.clone();
+        put(&mut bytes, 0x80 + 24 + 112, 0x13f0);
+        assert!(parse_pe(&bytes).is_err());
+        // a name that starts at the last byte must not read into the next section
+        let mut bytes = good.clone();
+        let names = 0x200 + 0x150; // name pointer table at RVA 0x1150
+        put(&mut bytes, names, 0x13ff);
+        bytes[0x200 + 0x3ff] = b'A';
+        assert!(parse_pe(&bytes).is_err(), "unterminated inside the section");
+        // two sections sharing the same raw data, in either order
+        let mut bytes = good.clone();
+        let first = 0x80 + 24 + 240;
+        let copy = bytes[first..first + 40].to_vec();
+        bytes[first + 40..first + 80].copy_from_slice(&copy);
+        bytes[0x80 + 6] = 2;
+        assert!(parse_pe(&bytes).is_err(), "same raw and virtual range");
+        let mut reversed = good.clone();
+        reversed[first + 40..first + 80].copy_from_slice(&copy);
+        reversed[first + 40 + 12..first + 40 + 16].copy_from_slice(&0x2000u32.to_le_bytes());
+        reversed[0x80 + 6] = 2;
+        assert!(
+            parse_pe(&reversed).is_err(),
+            "same raw data under another address"
+        );
+        // bytes_at: zero width, width past the section, and a normal read
+        let image = parse_pe(&good).unwrap();
+        assert!(image.bytes_at(&good, 0x1010, 0).is_none());
+        assert!(image.bytes_at(&good, 0x13ff, 2).is_none());
+        assert!(image.bytes_at(&good, u32::MAX, 4).is_none());
+        assert_eq!(image.bytes_at(&good, 0x1010, 32).map(<[u8]>::len), Some(32));
     }
 
     #[test]

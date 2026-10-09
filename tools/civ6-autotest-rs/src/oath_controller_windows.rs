@@ -343,9 +343,27 @@ impl Target {
             Error::unknown(format!("{why}; the pinned game was terminated"))
         } else {
             Error::unknown(format!(
-                "{why}; termination of the pinned game is NOT confirmed, ownership is retained"
+                "{why}; termination of the pinned game is NOT confirmed, ownership is retained (retention=known_pending)"
             ))
         }
+    }
+
+    /// Observes, without any new termination, whether the pinned process
+    /// object has signalled. Only the same handle with the original creation
+    /// time counts; anything else leaves the obligation open.
+    fn observe_end(&mut self) -> bool {
+        if !self.unresolved() {
+            return true;
+        }
+        if creation(self.process.0).ok() != Some(self.created) {
+            return false;
+        }
+        if unsafe { WaitForSingleObject(self.process.0, 0) } == 0 {
+            self.flight = false;
+            self.unconfirmed = false;
+            return true;
+        }
+        false
     }
 
     /// Runs one remote thread to completion exactly once. No retry exists: a
@@ -435,6 +453,44 @@ impl Drop for Target {
     }
 }
 
+/// Everything an unresolved game obligation keeps alive: the pinned process
+/// handle and remote allocations (in the target), and the lease, exe and DLL
+/// file pins.
+struct Held {
+    target: Target,
+    #[allow(dead_code)]
+    keep: Vec<Box<dyn std::any::Any>>,
+}
+// Used from one thread at a time under the PENDING lock.
+unsafe impl Send for Held {}
+
+static PENDING: std::sync::Mutex<Vec<Held>> = std::sync::Mutex::new(Vec::new());
+
+fn retain(held: Held) {
+    PENDING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push(held);
+}
+
+/// Releases retained owners whose process has been observed to end on the
+/// same handle. Called by the driver at an operation start or tick; returns
+/// how many are still pending. Nothing here terminates a process.
+pub(crate) fn drain_pending() -> usize {
+    let mut pending = PENDING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    pending.retain_mut(|held| !held.target.observe_end());
+    pending.len()
+}
+
+pub(crate) fn pending_count() -> usize {
+    PENDING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .len()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
     Installed,
@@ -500,11 +556,21 @@ impl Session {
 }
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.inner.target.unresolved() {
-            // One last attempt on the same pinned handle; otherwise keep all.
-            if self.inner.target.kill() {
-                unsafe { std::mem::ManuallyDrop::drop(&mut self.inner) };
-            }
+        // One last attempt on the same pinned handle. Without a confirmed
+        // end every pin is handed to the pending list, not released.
+        if self.inner.target.unresolved() && !self.inner.target.kill() {
+            let inner = unsafe { std::mem::ManuallyDrop::take(&mut self.inner) };
+            let Inner {
+                target,
+                _lease,
+                _exe_file,
+                _dll,
+                ..
+            } = inner;
+            retain(Held {
+                target,
+                keep: vec![Box::new(_lease), Box::new(_exe_file), Box::new(_dll)],
+            });
         } else {
             unsafe { std::mem::ManuallyDrop::drop(&mut self.inner) };
         }
@@ -529,6 +595,7 @@ impl Inner {
                 "invalid caller-pinned game process (own process refused)",
             ));
         }
+        drain_pending();
         if !(1..=wire::MAX_SECONDS).contains(&max_seconds) {
             return Err(Error::input("max_seconds is outside 1..=300"));
         }
@@ -591,7 +658,10 @@ impl Inner {
             Err(error) => {
                 if target.unresolved() {
                     // The game may still run our thread: keep every pin.
-                    std::mem::forget((target, lease, exe_file, dll));
+                    retain(Held {
+                        target,
+                        keep: vec![Box::new(lease), Box::new(exe_file), Box::new(dll)],
+                    });
                 }
                 return Err(error);
             }
@@ -1168,6 +1238,50 @@ mod tests {
         // Dropping while still unresolved keeps the pinned handle open.
         drop(target);
         assert!(child.0.try_wait().unwrap().is_none());
+    }
+
+    #[test]
+    fn an_unresolved_owner_stays_pending_until_the_same_handle_signals() {
+        let bytes = synthetic_dll(&wire::EXPORTS, false);
+        let (_dir, path) = dll_file(&bytes);
+        let local = LocalDll::open(&path, &sha(&bytes)).unwrap();
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_millis(100));
+        target.fail_terminate = true; // the end of the process cannot be observed
+        assert!(target.call(kernel32_export(b"Sleep\0"), 60_000).is_err());
+        let before = pending_count();
+        retain(Held {
+            target,
+            keep: vec![Box::new(local)],
+        });
+        assert_eq!(pending_count(), before + 1);
+        let locked = || OpenOptions::new().write(true).open(&path).is_err();
+        assert!(locked(), "the file pin is kept while the end is unknown");
+        // a drain with the process still running releases nothing
+        assert_eq!(drain_pending(), before + 1);
+        assert!(locked());
+        // the process ends on its own; only now does the same handle signal
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert_eq!(drain_pending(), before);
+        assert!(!locked(), "pin released after the observed end");
+    }
+
+    #[test]
+    fn a_pending_owner_whose_handle_lost_its_creation_time_is_never_released() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_millis(100));
+        target.fail_terminate = true;
+        assert!(target.call(kernel32_export(b"Sleep\0"), 60_000).is_err());
+        target.created += 1; // as if the PID now named another process
+        let before = pending_count();
+        retain(Held {
+            target,
+            keep: Vec::new(),
+        });
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert_eq!(drain_pending(), before + 1, "false success is refused");
     }
 
     #[test]
