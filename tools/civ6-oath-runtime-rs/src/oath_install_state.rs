@@ -269,6 +269,15 @@ impl Ledger {
     }
 }
 
+/// The trace is one object shared by both call types. It is needed while
+/// any call type holds a binding (Held, or Frozen for good) and only then; who
+/// claimed it first does not matter.
+pub fn trace_needed<'a>(ledgers: impl IntoIterator<Item = &'a Ledger>) -> bool {
+    ledgers
+        .into_iter()
+        .any(|ledger| ledger.binding() != Binding::Free)
+}
+
 fn after_write(previous: Region, target: Bytes, result: Write) -> Region {
     match result {
         Write::Refused => previous,
@@ -518,5 +527,25 @@ mod tests {
             ledger.release(),
             "foreign padding: refused, not ours to undo"
         );
+    }
+
+    #[test]
+    fn the_shared_trace_is_needed_exactly_while_any_binding_is() {
+        let states = reachable();
+        for a in &states {
+            for b in &states {
+                let held = a.binding() != Binding::Free || b.binding() != Binding::Free;
+                assert_eq!(trace_needed([a, b]), held);
+                // A frozen binding keeps the trace whatever the other one does.
+                if a.frozen() {
+                    assert!(trace_needed([a, &Ledger::new()]));
+                }
+                // Releasing one kind leaves the trace to the other kind.
+                let mut released = *a;
+                if released.release() {
+                    assert_eq!(trace_needed([&released, b]), b.binding() != Binding::Free);
+                }
+            }
+        }
     }
 }

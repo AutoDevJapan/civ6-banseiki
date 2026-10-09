@@ -1322,3 +1322,52 @@ fn binding_freeze_child() {
         "old original ran, new one did not"
     );
 }
+
+#[test]
+fn the_shared_trace_follows_the_last_binding_runs_in_an_owned_child() {
+    run_child("oath_trace::tests::shared_trace_child");
+}
+
+/// The trace belongs to the aggregate of both call types, not to whichever
+/// install claimed it first: it is returned with the last binding.
+#[test]
+fn shared_trace_child() {
+    if !in_child() {
+        return;
+    }
+    let first_trace = leaked_trace();
+    let apply_page = fresh_rx_page();
+    let remove_page = fresh_rx_page();
+    let install_remove = |page: *mut u8| unsafe {
+        install_oath_at(
+            page.add(0x80),
+            OathCall::Remove,
+            first_trace,
+            OATH_ENTRY_HEAD,
+        )
+    };
+    // Both kinds fail on a foreign padding byte and cannot confirm RX again.
+    arm_persistent(&[SITE_PREFIX_RESTORE, SITE_REPAIR_PREFIX_RESTORE]);
+    arm(&[SITE_PREFIX_RACE]);
+    assert!(install_apply(apply_page, first_trace).is_err());
+    arm(&[SITE_PREFIX_RACE]);
+    assert!(install_remove(remove_page).is_err());
+    assert!(OATH_HOOKS.lock().unwrap().iter().all(Option::is_some));
+    assert_eq!(protection(apply_page), Some(PAGE_EXECUTE_READWRITE));
+    assert_eq!(protection(remove_page), Some(PAGE_EXECUTE_READWRITE));
+    // Both recover; Apply is released first, Remove (which never claimed the
+    // trace) last. The trace must go with the last one.
+    arm_persistent(&[]);
+    assert_eq!(uninstall_now(), Ok(true));
+    assert!(hooks_idle());
+    assert_eq!(protection(apply_page), Some(PAGE_EXECUTE_READ));
+    assert_eq!(protection(remove_page), Some(PAGE_EXECUTE_READ));
+    assert!(
+        OATH_TRACE_PTR.load(Ordering::SeqCst).is_null(),
+        "no receipt is left, so no trace is claimed"
+    );
+    let second_trace = leaked_trace();
+    let fresh = fresh_rx_page();
+    install_apply(fresh, second_trace).unwrap();
+    assert_eq!(uninstall_now(), Ok(true));
+}

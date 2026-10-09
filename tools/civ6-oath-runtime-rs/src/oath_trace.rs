@@ -400,7 +400,7 @@ unsafe extern "system" {
 
 // ---- install state machine -------------------------------------------------
 
-use crate::oath_install_state::{Bytes, Cas, Confirm, Ledger, Reach, Region, Write};
+use crate::oath_install_state::{trace_needed, Bytes, Cas, Confirm, Ledger, Reach, Region, Write};
 
 /// Pointers of one installed call type plus the portable ledger. The ledger
 /// (see oath_install_state) alone decides what may be undone or released.
@@ -414,7 +414,6 @@ pub(super) struct Receipt {
     prefix_jump: [u8; OATH_PREFIX_PAD.len()],
     /// Protection of the page before the first write; every restore returns to it.
     page_protection: u32,
-    claimed_trace: bool,
     prior_trampoline: *mut u8,
     pub(super) ledger: Ledger,
     /// A frozen, settled receipt stays as a tombstone; this reports it once.
@@ -674,9 +673,11 @@ unsafe fn write_code_page(
 fn release_reservation(hooks: &mut [Option<Receipt>; 2], index: usize) {
     if let Some(receipt) = hooks[index].take() {
         trampoline_cell(index).store(receipt.prior_trampoline, Ordering::Release);
-        if receipt.claimed_trace && hooks.iter().all(Option::is_none) {
-            OATH_TRACE_PTR.store(null_mut(), Ordering::Release);
-        }
+    }
+    // The trace is shared by both call types: it goes back with the last
+    // binding, whichever install claimed it. A frozen receipt is a binding.
+    if !trace_needed(hooks.iter().flatten().map(|receipt| &receipt.ledger)) {
+        OATH_TRACE_PTR.store(null_mut(), Ordering::Release);
     }
 }
 
@@ -839,9 +840,8 @@ pub(crate) unsafe fn install_oath_at(
     }
     // The page and its table stay for the process lifetime from here on; the
     // reservations below are returned only by a verified Never release.
-    let claimed_trace = OATH_TRACE_PTR
-        .compare_exchange(null_mut(), trace_ptr, Ordering::AcqRel, Ordering::Acquire)
-        .is_ok();
+    let _ =
+        OATH_TRACE_PTR.compare_exchange(null_mut(), trace_ptr, Ordering::AcqRel, Ordering::Acquire);
     let prior_trampoline = trampoline_cell(index).swap(trampoline, Ordering::AcqRel);
     let mut ledger = Ledger::new();
     ledger.bind();
@@ -855,7 +855,6 @@ pub(crate) unsafe fn install_oath_at(
         entry_patched: patched,
         prefix_jump,
         page_protection,
-        claimed_trace,
         prior_trampoline,
         ledger,
         reported: false,
