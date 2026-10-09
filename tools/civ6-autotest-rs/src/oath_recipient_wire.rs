@@ -1,4 +1,6 @@
 //! Raw callee arguments only. Copies establish neither City lifetime nor quantity.
+// The controller consumes this module on Win64; other hosts run its parser tests.
+#![allow(dead_code)]
 use crate::oath_wire::{u32_at, u64_at, Receipt};
 use serde_json::{json, Value};
 

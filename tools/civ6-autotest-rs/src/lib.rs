@@ -17,7 +17,6 @@ mod oath_controller_windows;
 pub mod oath_exact_removal;
 pub mod oath_observation;
 pub mod oath_quantity;
-#[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod oath_recipient_wire;
 mod oath_wire;
 pub mod reliability;
