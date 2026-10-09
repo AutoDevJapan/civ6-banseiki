@@ -1,0 +1,198 @@
+use super::*;
+use std::{sync::mpsc, time::Duration};
+
+fn deadline() -> Instant {
+    Instant::now() + Duration::from_secs(5)
+}
+
+fn pending_now(closing: Closing<'_>) {
+    assert!(matches!(closing.wait(Instant::now()), Err(Error::Timeout)));
+}
+
+#[test]
+fn idle_generation_can_close_and_advance_but_old_issued_entry_cannot_borrow_new_world() {
+    let world = WorldFlights::new(17).unwrap();
+    let drained = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(drained), Ok(18));
+    assert!(matches!(world.enter(17), Err(Error::Stale)));
+    let current = world.enter(18).unwrap();
+    assert_eq!(current.generation(), 18);
+}
+
+#[test]
+fn inner_job_completion_does_not_drain_its_outer_native_caller() {
+    let world = WorldFlights::new(1).unwrap();
+    thread::scope(|scope| {
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (leave_tx, leave_rx) = mpsc::channel();
+        let world_ref = &world;
+        let worker = scope.spawn(move || {
+            let caller = world_ref.enter(1).unwrap();
+            caller
+                .issue()
+                .unwrap()
+                .publish()
+                .unwrap()
+                .complete_after_native_join()
+                .unwrap();
+            ready_tx.send(()).unwrap();
+            leave_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            // This represents the original outer epilogue, after its final
+            // receiver read, not the inner Wait/callback return.
+            drop(caller);
+        });
+        ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let closing = world.close().unwrap();
+        let late_rejected = matches!(world.enter(1), Err(Error::Closed));
+        let result = closing.wait(Instant::now());
+        leave_tx.send(()).unwrap();
+        worker.join().unwrap();
+        assert!(late_rejected);
+        assert!(matches!(result, Err(Error::Timeout)));
+        let drained = world.close().unwrap().wait(deadline()).unwrap();
+        assert_eq!(world.rebuild(drained), Ok(2));
+    });
+}
+
+#[test]
+fn pending_publication_survives_caller_exit_and_close() {
+    let world = WorldFlights::new(5).unwrap();
+    let caller = world.enter(5).unwrap();
+    let pending = caller.issue().unwrap();
+    drop(caller);
+    pending_now(world.close().unwrap());
+    assert_eq!(pending.generation(), 5);
+    let job = pending.publish().unwrap();
+    assert_eq!(job.generation(), 5);
+    pending_now(world.close().unwrap());
+    job.complete_after_native_join().unwrap();
+    let drained = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(drained), Ok(6));
+}
+
+#[test]
+fn admitted_outer_caller_can_reenter_after_seal_without_changing_generation() {
+    let world = WorldFlights::new(9).unwrap();
+    let caller = world.enter(9).unwrap();
+    assert!(matches!(world.close(), Err(Error::Reentrant)));
+    assert!(matches!(world.enter(9), Err(Error::Closed)));
+    // Native continuation is preserved: admitted caller finishes its own
+    // second callback. Closure does not skip a native call or adopt epoch10.
+    let repeated = caller.issue().unwrap();
+    assert_eq!(repeated.generation(), 9);
+    let job = repeated.publish().unwrap();
+    job.complete_after_native_join().unwrap();
+    drop(caller);
+    let drained = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(drained), Ok(10));
+}
+
+#[test]
+fn unpublished_and_published_jobs_are_both_required_to_settle() {
+    let world = WorldFlights::new(1).unwrap();
+    let caller = world.enter(1).unwrap();
+    let pending = caller.issue().unwrap();
+    let published = caller.issue().unwrap().publish().unwrap();
+    drop(caller);
+    pending_now(world.close().unwrap());
+    published.complete_after_native_join().unwrap();
+    pending_now(world.close().unwrap());
+    pending.cancel_before_submission().unwrap();
+    let drained = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(drained), Ok(2));
+}
+
+#[test]
+fn losing_unpublished_work_is_unresolved_instead_of_false_zero() {
+    let world = WorldFlights::new(1).unwrap();
+    let caller = world.enter(1).unwrap();
+    let pending = caller.issue().unwrap();
+    drop(caller);
+    let closing = world.close().unwrap();
+    drop(pending);
+    assert!(matches!(closing.wait(deadline()), Err(Error::Unresolved)));
+    assert!(matches!(world.enter(1), Err(Error::Unresolved)));
+}
+
+#[test]
+fn losing_published_work_does_not_substitute_rust_drop_for_native_wait() {
+    let world = WorldFlights::new(1).unwrap();
+    let caller = world.enter(1).unwrap();
+    let published = caller.issue().unwrap().publish().unwrap();
+    drop(caller);
+    let closing = world.close().unwrap();
+    drop(published);
+    assert!(matches!(closing.wait(deadline()), Err(Error::Unresolved)));
+}
+
+#[test]
+fn all_outer_frames_on_one_thread_must_exit() {
+    let world = WorldFlights::new(1).unwrap();
+    let outer = world.enter(1).unwrap();
+    let nested = world.enter(1).unwrap();
+    assert!(matches!(world.close(), Err(Error::Reentrant)));
+    drop(nested);
+    assert!(matches!(world.close(), Err(Error::Reentrant)));
+    drop(outer);
+    world.close().unwrap().wait(deadline()).unwrap();
+}
+
+#[test]
+fn blocking_drain_wakes_when_old_world_work_finishes() {
+    let world = WorldFlights::new(1).unwrap();
+    let caller = world.enter(1).unwrap();
+    let job = caller.issue().unwrap().publish().unwrap();
+    drop(caller);
+    let closing = world.close().unwrap();
+    thread::scope(|scope| {
+        let worker = scope.spawn(|| {
+            job.complete_after_native_join().unwrap();
+        });
+        let drained = closing.wait(deadline()).unwrap();
+        worker.join().unwrap();
+        assert_eq!(world.rebuild(drained), Ok(2));
+    });
+}
+
+#[test]
+fn a_drain_from_another_tracker_and_an_old_close_cannot_reopen() {
+    let first = WorldFlights::new(1).unwrap();
+    let second = WorldFlights::new(1).unwrap();
+    let stale_close = first.close().unwrap();
+    let drain = first.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(second.rebuild(drain), Err(Error::Stale));
+    assert_eq!(
+        first.rebuild(first.close().unwrap().wait(deadline()).unwrap()),
+        Ok(2)
+    );
+    assert!(matches!(stale_close.wait(deadline()), Err(Error::Stale)));
+}
+
+#[test]
+fn duplicate_drain_cannot_advance_the_same_generation_twice() {
+    let world = WorldFlights::new(1).unwrap();
+    let first = world.close().unwrap().wait(deadline()).unwrap();
+    let second = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(first), Ok(2));
+    assert_eq!(world.rebuild(second), Err(Error::Stale));
+}
+
+#[test]
+fn generation_exhaustion_leaves_admission_closed() {
+    assert!(matches!(WorldFlights::new(0), Err(Error::Exhausted)));
+    let world = WorldFlights::new(u64::MAX).unwrap();
+    let drain = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(drain), Err(Error::Exhausted));
+    assert!(matches!(world.enter(u64::MAX), Err(Error::Closed)));
+}
+
+#[test]
+fn rust_unwind_settles_the_complete_caller_scope() {
+    let world = WorldFlights::new(1).unwrap();
+    assert!(std::panic::catch_unwind(|| {
+        let _caller = world.enter(1).unwrap();
+        panic!("finite fixture unwind; not a native SEH execution");
+    })
+    .is_err());
+    world.close().unwrap().wait(deadline()).unwrap();
+}

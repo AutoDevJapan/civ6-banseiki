@@ -27,6 +27,7 @@ pub const PINNED_GAMECORE_SHA256: &str =
 
 pub mod appointment_glue;
 pub mod governor_payment;
+pub mod native_flight;
 pub mod paid_artifact;
 pub mod paid_catalog;
 pub mod paid_glue;
