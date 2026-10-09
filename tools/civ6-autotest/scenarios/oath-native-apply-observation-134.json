@@ -198,7 +198,7 @@
       "timeout": 60,
       "action": "oath_trace_install",
       "max_seconds": 300,
-      "dll_sha256": "4279bddff7e87efda7536d708b3454312174e452869435f0805175379363f55f"
+      "dll_sha256": "b870a2be9357577ad36a8bee9330cbaece7d5b3446f6363eb40dba5770c2e676"
     },
     {
       "action": "oath_trace_start",
@@ -275,6 +275,9 @@
     "scope": "official-choice-apply-adapter-v1",
     "source_sha256": "f283f3b4cd8ae20032c28b262c4152e201b3ed5d2a98b636436f6ad73c4a75a3",
     "product_accepted": false,
-    "quantity_accepted": false
+    "quantity_accepted": false,
+    "trace_version": 5,
+    "runtime_version": "0x01340002",
+    "metadata_live_proved": false
   }
 }
