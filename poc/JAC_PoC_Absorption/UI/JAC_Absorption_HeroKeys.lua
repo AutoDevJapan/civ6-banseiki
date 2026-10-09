@@ -2,6 +2,10 @@
 -- Share the engine's actual numeric enum value; never invent a replacement property.
 local uiPlayers, uiGame = Players, Game
 include('JAC_CarrierMP_UI')
+local nativeWitnessNonce=GameConfiguration and GameConfiguration.GetValue and GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+if type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
+  include('JAC_NativeCarrierWitness_UI')
+end
 include('JAC_NativeInventory_UI')
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}

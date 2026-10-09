@@ -738,6 +738,10 @@ if Controls then
   end
   Controls.ReadyButton:RegisterCallback(Mouse.eLClick, OnReadyButton)
   Controls.ReadyCheck:RegisterCallback(Mouse.eLClick, OnReadyButton)
+  local nativeWitnessNonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+  if type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
+    include('JAC_NativeCarrierWitness_Staging')
+  end
   Controls.JAC_AllJapanButton:RegisterCallback(Mouse.eLClick, function() onMode(JAPAN) end)
   Controls.JAC_DifferentButton:RegisterCallback(Mouse.eLClick, function() onMode(DIFFERENT) end)
 
