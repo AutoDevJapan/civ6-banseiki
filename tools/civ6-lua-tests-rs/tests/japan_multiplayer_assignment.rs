@@ -527,6 +527,75 @@ assert(PlayerConfigurations[3].team==7)
 }
 
 #[test]
+fn reconnect_without_departure_discards_previous_occupants_subject_and_team() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+rowsManager.instances[1].AreaPullDown.select(2)
+rowsManager.instances[2].AreaPullDown.select(3)
+Controls.JAC_SubjectPullDown.select(3)
+assert(values.JAC_MP_SUBJECT==1)
+PlayerConfigurations[1].team=7
+Events.MultiplayerPlayerConnected.fire(1)
+assert(values.JAC_MP_AREA_1==nil and values.JAC_MP_SUBJECT==nil)
+assert(values.JAC_MP_PRIOR_TEAM_1==7)
+assert(PlayerConfigurations[1].team==values.JAC_MP_TEAM)
+assert(Controls.ReadyButton.disabled)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[1].team==7)
+"#,
+    );
+}
+
+#[test]
+fn reconnect_waits_for_rejected_subject_cleanup_across_context_reload() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+Controls.JAC_SubjectPullDown.select(3)
+assert(values.JAC_MP_SUBJECT==1)
+PlayerConfigurations[1].team=7
+rejectedConfigKeys.JAC_MP_SUBJECT=true
+Events.MultiplayerPlayerConnected.fire(1)
+assert(values.JAC_MP_RETIRING_1=='REJOINING' and values.JAC_MP_SUBJECT==1)
+assert(Controls.ReadyButton.disabled)
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_RETIRING_1=='REJOINING' and Controls.ReadyButton.disabled)
+rejectedConfigKeys.JAC_MP_SUBJECT=nil
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_SUBJECT==nil and values.JAC_MP_RETIRING_1==nil)
+assert(values.JAC_MP_PRIOR_TEAM_1==7 and Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
+fn reconnect_clears_subject_when_retiring_marker_is_rejected() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+Controls.JAC_SubjectPullDown.select(3)
+assert(values.JAC_MP_SUBJECT==1)
+PlayerConfigurations[1].team=7
+rejectedConfigKeys.JAC_MP_RETIRING_1=true
+Events.MultiplayerPlayerConnected.fire(1)
+assert(values.JAC_MP_SUBJECT==nil and values.JAC_MP_AREA_1==nil)
+assert(values.JAC_MP_PRIOR_TEAM_1==7 and Controls.ReadyButton.disabled)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[1].team==7)
+"#,
+    );
+}
+
+#[test]
 fn client_connection_event_does_not_create_host_only_pending_state() {
     let lua = fixture();
     exec(

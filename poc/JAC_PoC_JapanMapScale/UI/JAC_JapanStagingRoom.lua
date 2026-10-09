@@ -54,6 +54,8 @@ if Controls then
   local TEAM = "JAC_MP_TEAM"
   local PRIOR_NO_TEAMS = "JAC_MP_PRIOR_NO_TEAMS"
   local RESTORE_DONE = "JAC_MP_RESTORE_DONE"
+  -- A reused slot must not receive the previous occupant's saved team.
+  local REJOINING = "REJOINING"
   local JAPAN = "JAPAN"
   local DIFFERENT = "DIFFERENT"
   local choices = {
@@ -310,7 +312,8 @@ if Controls then
   end
   local function retirePlayer(id)
     local key = retiringKey(id)
-    if not sameValue(read(key), true) then return false end
+    local marker = read(key)
+    if not sameValue(marker, true) and marker ~= REJOINING then return false end
     local current = rosterIds()
     local kept = {}
     local wasTracked = false
@@ -319,9 +322,13 @@ if Controls then
       else kept[#kept + 1] = old end
     end
     if wasTracked then
-      if not restoreTeam(id) then return false end
+      if marker ~= REJOINING and not restoreTeam(id) then return false end
       write(ROSTER, rosterValue(kept))
       if read(ROSTER) ~= rosterValue(kept) then return false end
+    end
+    if tonumber(read(SUBJECT)) == id then
+      write(SUBJECT, nil)
+      if read(SUBJECT) ~= nil then return false end
     end
     write(assignmentKey(id), nil)
     write(priorTeamKey(id), nil)
@@ -378,8 +385,8 @@ if Controls then
     end
     local currentSet = humanSet(ids)
     for id in pairs(pendingRejoin) do
-      write(retiringKey(id), true)
-      if not sameValue(read(retiringKey(id)), true) then
+      write(retiringKey(id), REJOINING)
+      if read(retiringKey(id)) ~= REJOINING then
         -- If this key is rejected, remove the slot from the saved roster
         -- before the context can reload and forget the connection event.
         local kept = {}
@@ -403,6 +410,10 @@ if Controls then
     local oldSet = humanSet(rosterIds())
     for _, id in ipairs(ids) do
       if not oldSet[id] then
+        if tonumber(read(SUBJECT)) == id then
+          write(SUBJECT, nil)
+          if read(SUBJECT) ~= nil then return end
+        end
         write(assignmentKey(id), nil)
         if read(assignmentKey(id)) ~= nil then return end
         write(priorTeamKey(id), PlayerConfigurations[id]:GetTeam())
