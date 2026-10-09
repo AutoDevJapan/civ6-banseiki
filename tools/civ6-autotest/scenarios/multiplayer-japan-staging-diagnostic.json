@@ -157,6 +157,12 @@
       "path": "todo9-staging-before-query.png",
       "capture_only": true
     },
+    {"action": "pause", "seconds": 10},
+    {"action": "screenshot", "path": "todo9-staging-after-10s.png", "capture_only": true},
+    {"action": "pause", "seconds": 10},
+    {"action": "screenshot", "path": "todo9-staging-after-20s.png", "capture_only": true},
+    {"action": "pause", "seconds": 10},
+    {"action": "screenshot", "path": "todo9-staging-after-30s.png", "capture_only": true},
     {
       "action": "ui_lua",
       "state_name": "JAC_JapanStagingRoom",

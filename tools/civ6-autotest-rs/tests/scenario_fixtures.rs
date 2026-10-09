@@ -72,13 +72,21 @@ fn japan_staging_diagnostic_captures_screen_before_probe() {
     validate_scenario(&data).unwrap();
     assert_eq!(data["session_type"], "hotseat");
     let run = steps(&data);
-    assert_eq!(run.len(), 6);
+    assert_eq!(run.len(), 12);
     assert!(action(&run[3], "wait_for"));
     assert_eq!(run[3]["condition"]["type"], "state");
     assert!(action(&run[4], "screenshot"));
     assert_eq!(run[4]["capture_only"], true);
-    assert!(action(&run[5], "ui_lua"));
-    compile_lua(&Lua::new(), code(&run[5]));
+    for index in [4, 6, 8, 10] {
+        assert!(action(&run[index], "screenshot"));
+        assert_eq!(run[index]["capture_only"], true);
+    }
+    for index in [5, 7, 9] {
+        assert!(action(&run[index], "pause"));
+        assert_eq!(run[index]["seconds"], 10);
+    }
+    assert!(action(&run[11], "ui_lua"));
+    compile_lua(&Lua::new(), code(&run[11]));
 }
 
 #[test]
