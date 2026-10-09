@@ -24,6 +24,17 @@ pub const COPY_EFFECT_VTABLE: u32 = 1;
 pub const COPY_SUBJECT_POINTER: u32 = 2;
 pub const COPY_SUBJECT_OBJECT_PRESENT: u32 = 4;
 pub const COPY_ALL: u32 = COPY_EFFECT_VTABLE | COPY_SUBJECT_POINTER | COPY_SUBJECT_OBJECT_PRESENT;
+pub const META_INSTANCE: u32 = 1;
+pub const META_INDICATED_CITY: u32 = 2;
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct OathMetadata {
+    pub flags: u32,
+    pub instance: u64,
+    pub definition: u64,
+    pub declared_percent: i32,
+    pub indicated_city_owner: u32,
+    pub indicated_city_id: u32,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -131,7 +142,7 @@ pub struct OathRecord {
     pub subject: u64,
     pub caller: u64,
     /// Raw RBP / RDI of the caller at gateway entry. Observations only: they
-    /// are copied, never dereferenced, and grant nothing.
+    /// may supply invocation-local validated copies, and grant nothing.
     pub caller_rbp: u64,
     pub caller_rdi: u64,
     pub effect_vtable: u64,
@@ -142,6 +153,8 @@ pub struct OathRecord {
     pub original_rax: u64,
     /// 1-based order in which calls returned; 0 until Completed.
     pub completion_order: u32,
+    /// Call-entry copies only, never a City lifetime or quantity authority.
+    pub metadata: OathMetadata,
 }
 
 impl OathRecord {
@@ -189,6 +202,7 @@ mod tests {
             copy_flags: flags,
             original_rax: rax,
             completion_order: 1,
+            metadata: OathMetadata::default(),
         }
     }
 

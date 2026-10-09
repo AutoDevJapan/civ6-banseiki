@@ -18,7 +18,7 @@ use windows_sys::Win32::System::LibraryLoader::{
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcessId, GetProcessTimes};
 
-pub const OATH_RUNTIME_VERSION: u32 = 0x0134_0001;
+pub const OATH_RUNTIME_VERSION: u32 = 0x0134_0002;
 /// The only accepted mode: observe and report, never adjust anything.
 pub const OATH_MODE_DIAGNOSTIC: u32 = 1;
 pub const OATH_MAX_ACTIVE_SECONDS: u32 = 300;

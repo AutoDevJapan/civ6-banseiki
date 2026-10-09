@@ -1402,6 +1402,83 @@ fn filter_unwind_runs_in_an_owned_child() {
     run_child("oath_trace::tests::filter_unwind_child");
 }
 
+#[test]
+fn call_entry_metadata_runs_in_an_owned_child() {
+    run_child("oath_trace::tests::call_entry_metadata_child");
+}
+#[test]
+fn call_entry_metadata_child() {
+    if !in_child() {
+        return;
+    }
+    let mut vtable = Box::new([0u64; 14]);
+    let base = vtable.as_ptr() as u64 - 0xa76a30;
+    for (slot, rva) in [
+        (0x28, 0x8a75e0),
+        (0x30, 0x8a8440),
+        (0x60, 0x817810),
+        (0x68, 0x8188a0),
+    ] {
+        vtable[slot / 8] = base + rva;
+    }
+    let effect = Box::new([vtable.as_ptr() as u64, 15]);
+    let definition = Box::new([0u64; 2]);
+    let mut instance = Box::new([0u64; 57]);
+    instance[0] = base + 0xaa3e38;
+    instance[0xe8 / 8] = 464;
+    instance[0x168 / 8] = definition.as_ptr() as u64;
+    instance[0x1b8 / 8] = effect.as_ptr() as u64;
+    let mut object = Box::new([0u64; 41]);
+    object[0] = base + 0xab4f58;
+    object[0x138 / 8] = (65536u64 << 32) | (2 << 16);
+    let subject = [object.as_ptr() as u64, definition.as_ptr() as u64];
+    let trace = leaked_trace();
+    assert!(trace.set_image_base_once(base));
+    OATH_TRACE_PTR.store(trace as *const _ as *mut _, Ordering::Release);
+    let mut token = 0;
+    unsafe {
+        oath_begin(
+            effect.as_ptr() as u64,
+            subject.as_ptr() as u64,
+            464,
+            1,
+            base + 0x944f27,
+            &mut token,
+            instance.as_ptr() as u64,
+            0,
+        );
+        oath_end(&mut token, 1);
+        // A readable Instance pointer from an unknown caller gives no metadata.
+        oath_begin(
+            effect.as_ptr() as u64,
+            subject.as_ptr() as u64,
+            464,
+            1,
+            base + 1,
+            &mut token,
+            instance.as_ptr() as u64,
+            0,
+        );
+        oath_end(&mut token, 1);
+    }
+    trace.stop();
+    let records = trace.records().unwrap();
+    assert_eq!(records.len(), 2);
+    assert_eq!(
+        records[0].metadata,
+        OathMetadata {
+            flags: META_INSTANCE | META_INDICATED_CITY,
+            instance: instance.as_ptr() as u64,
+            definition: definition.as_ptr() as u64,
+            declared_percent: 15,
+            indicated_city_owner: 0,
+            indicated_city_id: 65536,
+        }
+    );
+    assert_eq!(records[1].metadata, OathMetadata::default());
+    assert_eq!((trace.in_flight(), trace.counters()), (0, (2, 2, 0)));
+}
+
 const FILTER_BASE: u64 = 0x10_0000_0000;
 const OTHER_VTABLE: u64 = FILTER_BASE + 0xa7_6a38;
 const FAMILY_VTABLE: u64 = FILTER_BASE + 0xa7_6a30;

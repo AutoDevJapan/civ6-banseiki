@@ -5,8 +5,9 @@
 //! The original is called exactly once with every register as received.
 //!
 //! This module is independent of the product payment authority: nothing here
-//! reads or writes persona reservation, payment, rate or AI state, enters Lua,
+//! writes persona reservation, payment, rate or AI state, enters Lua,
 //! or changes a quantity. The diagnostic runtime uses the guarded current-game
+//! gate; bounded copies include the declared percentage and indicated wrapper.
 //! Install; synthetic targets independently exercise the Win64 ABI contract.
 //!
 //! Hot patch: both wrappers start with "push rbx; sub rsp,30h; movups
@@ -33,7 +34,8 @@ pub const OATH_MAGIC: u32 = 0x4a41_434f; // JACO
 /// 3: image base for the family filter and the filtered counter.
 /// 4: a monotonic deadline (GetTickCount64 ms) the begin callback enforces;
 /// the trace grows by 16 bytes (deadline, hit flag, padding) before the rows.
-pub const OATH_VERSION: u32 = 4;
+/// 5: bounded Instance/definition/percentage and indicated-wrapper identity.
+pub const OATH_VERSION: u32 = 5;
 const COUNTED: u64 = 1 << 63;
 const SLOT_MASK: u64 = 0xffff_ffff;
 const CALL_SHIFT: u32 = 48;
@@ -58,6 +60,12 @@ pub struct OathRow {
     subject_object: AtomicU64,
     subject_control: AtomicU64,
     original_rax: AtomicU64,
+    metadata_instance: AtomicU64,
+    metadata_definition: AtomicU64,
+    metadata_percent: AtomicU32,
+    metadata_flags: AtomicU32,
+    indicated_city_owner: AtomicU32,
+    indicated_city_id: AtomicU32,
 }
 
 /// Finite observation buffer. Never wraps; calls beyond capacity only count.
@@ -87,7 +95,7 @@ pub struct OathTrace {
 impl OathTrace {
     /// Structural wire facts computed from this compiled ABI, without reading
     /// a trace, mutating a process, or establishing a quantity.
-    pub const fn wire_layout() -> (usize, usize, usize, [usize; 9], [usize; 16]) {
+    pub const fn wire_layout() -> (usize, usize, usize, [usize; 9], [usize; 22]) {
         use std::mem::{offset_of, size_of};
         (
             offset_of!(Self, rows),
@@ -121,6 +129,12 @@ impl OathTrace {
                 offset_of!(OathRow, subject_object),
                 offset_of!(OathRow, subject_control),
                 offset_of!(OathRow, original_rax),
+                offset_of!(OathRow, metadata_instance),
+                offset_of!(OathRow, metadata_definition),
+                offset_of!(OathRow, metadata_percent),
+                offset_of!(OathRow, metadata_flags),
+                offset_of!(OathRow, indicated_city_owner),
+                offset_of!(OathRow, indicated_city_id),
             ],
         )
     }
@@ -271,6 +285,14 @@ impl OathTrace {
                 copy_flags: row.copy_flags.load(Ordering::Relaxed),
                 original_rax: row.original_rax.load(Ordering::Relaxed),
                 completion_order: row.completion_order.load(Ordering::Relaxed),
+                metadata: OathMetadata {
+                    flags: row.metadata_flags.load(Ordering::Relaxed),
+                    instance: row.metadata_instance.load(Ordering::Relaxed),
+                    definition: row.metadata_definition.load(Ordering::Relaxed),
+                    declared_percent: row.metadata_percent.load(Ordering::Relaxed) as i32,
+                    indicated_city_owner: row.indicated_city_owner.load(Ordering::Relaxed),
+                    indicated_city_id: row.indicated_city_id.load(Ordering::Relaxed),
+                },
             });
         }
         Ok(out)
@@ -341,6 +363,19 @@ fn now_ms() -> u64 {
         }
     }
     unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() }
+}
+
+struct CurrentCallMemory;
+impl crate::call_identity::Memory for CurrentCallMemory {
+    fn copy(&mut self, address: u64, bytes: &mut [u8]) -> crate::call_identity::Result<()> {
+        let error = || crate::call_identity::Error::input("unreadable call-entry metadata");
+        match bytes.len() {
+            4 => bytes.copy_from_slice(&copy_current::<4>(address).ok_or_else(error)?),
+            8 => bytes.copy_from_slice(&copy_current::<8>(address).ok_or_else(error)?),
+            _ => return Err(error()),
+        }
+        Ok(())
+    }
 }
 
 /// Takes the in-flight claim and publishes it in the frame slot at once.
@@ -433,6 +468,42 @@ unsafe extern "system-unwind" fn oath_begin(
     // Raw observations of the caller's nonvolatile registers, never authority.
     row.caller_rbp.store(caller_rbp, Ordering::Relaxed);
     row.caller_rdi.store(caller_rdi, Ordering::Relaxed);
+    if base != 0 {
+        use crate::call_identity::{copy_identity, copy_indicated_city, Call, Frame};
+        let frame = Frame {
+            module_base: base,
+            call: if call == OathCall::Apply as u64 {
+                Call::Apply
+            } else {
+                Call::Remove
+            },
+            caller_return: caller,
+            rbp: caller_rbp,
+            rdi: caller_rdi,
+            effect,
+            instance_id: raw_r8 as u32,
+        };
+        if let Ok(identity) = copy_identity(&mut CurrentCallMemory, frame) {
+            row.metadata_instance
+                .store(identity.instance, Ordering::Relaxed);
+            row.metadata_definition
+                .store(identity.definition, Ordering::Relaxed);
+            row.metadata_percent
+                .store(identity.declared_percent as u32, Ordering::Relaxed);
+            let mut metadata_flags = META_INSTANCE;
+            if let Ok(city) = copy_indicated_city(
+                &mut CurrentCallMemory,
+                base,
+                row.subject_object.load(Ordering::Relaxed),
+            ) {
+                row.indicated_city_owner
+                    .store(u32::from(city.owner), Ordering::Relaxed);
+                row.indicated_city_id.store(city.full_id, Ordering::Relaxed);
+                metadata_flags |= META_INDICATED_CITY;
+            }
+            row.metadata_flags.store(metadata_flags, Ordering::Relaxed);
+        }
+    }
     row.copy_flags.store(flags, Ordering::Relaxed);
     row.state.store(1, Ordering::Release);
     stage_point(STAGE_BEGIN_PUBLISHED);

@@ -1,5 +1,5 @@
 //! Portable wire layer of the Oath diagnostic controller: byte layouts of the
-//! runtime DLL (trace v4, 48 byte config, 64 byte receipt), PE export parsing
+//! runtime DLL (trace v5, 48 byte config, 64 byte receipt), PE export parsing
 //! and the JSON projection. It touches no process and no file, so it is
 //! tested on any host. Every number here is observation metadata: nothing in
 //! this module produces, accepts or adjusts a quantity.
@@ -8,17 +8,17 @@
 #![cfg_attr(not(windows), allow(dead_code))]
 use serde_json::{json, Value};
 
-pub(crate) const RUNTIME_VERSION: u32 = 0x0134_0001;
+pub(crate) const RUNTIME_VERSION: u32 = 0x0134_0002;
 pub(crate) const MODE_DIAGNOSTIC: u32 = 1;
 pub(crate) const MAX_SECONDS: u32 = 300;
 pub(crate) const CONFIG_SIZE: usize = 48;
 pub(crate) const RECEIPT_SIZE: usize = 64;
 
 pub(crate) const TRACE_MAGIC: u32 = 0x4a41_434f;
-pub(crate) const TRACE_VERSION: u32 = 4;
+pub(crate) const TRACE_VERSION: u32 = 5;
 pub(crate) const CAPACITY: usize = 1024;
 pub(crate) const HEADER_SIZE: usize = 64;
-pub(crate) const ROW_SIZE: usize = 104;
+pub(crate) const ROW_SIZE: usize = 136;
 pub(crate) const TRACE_SIZE: usize = HEADER_SIZE + CAPACITY * ROW_SIZE;
 /// Upper bound of any raw trace read.
 pub(crate) const MAX_TRACE_READ: usize = 256 * 1024;
@@ -48,7 +48,10 @@ fn controller_layout_matches_the_compiled_runtime_abi() {
     assert_eq!(header_offsets, [8, 12, 16, 20, 24, 32, 40, 48, 56]);
     assert_eq!(
         row_offsets,
-        [0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
+        [
+            0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 124, 128,
+            132
+        ]
     );
     assert_eq!(
         std::mem::size_of::<civ6_oath_runtime_rs::runtime::OathRuntimeConfig>(),
@@ -244,6 +247,10 @@ fn project_row(index: usize, row: &[u8], stable: bool) -> Value {
         (true, _) => "unknown_state",
     };
     let completed = stable && u(0) == 2;
+    let metadata_flags = u(124);
+    let identity_copied =
+        stable && matches!(u(0), 1..=3) && metadata_flags & !3 == 0 && metadata_flags & 1 != 0;
+    let city_copied = identity_copied && metadata_flags & 2 != 0;
     json!({
         "sequence": index + 1,
         "call": call_name(u(4)),
@@ -265,6 +272,14 @@ fn project_row(index: usize, row: &[u8], stable: bool) -> Value {
         // Only a completed call has a result; AL is the boolean reading.
         "original_rax": if completed { json!(hex(q(96))) } else { Value::Null },
         "original_al": if completed { json!(q(96) & 0xff) } else { Value::Null },
+        "call_entry_metadata": {
+            "identity_copied": identity_copied,
+            "instance": if identity_copied { json!(hex(q(104))) } else { Value::Null },
+            "definition": if identity_copied { json!(hex(q(112))) } else { Value::Null },
+            "declared_percent": if identity_copied { json!(u(120) as i32) } else { Value::Null },
+            "indicated_city": if city_copied { json!({"owner":u(128),"full_id":u(132),"resolved_receiver_proved":false}) } else { Value::Null },
+            "lifetime_proved":false,"quantity_accepted":false,
+        },
         "authority": "observation_only",
     })
 }
@@ -673,13 +688,13 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn layout_constants_follow_the_v4_trace() {
+    fn layout_constants_follow_the_v5_trace() {
         assert_eq!(HEADER_SIZE + ROW_SIZE * CAPACITY, TRACE_SIZE);
-        assert_eq!(TRACE_SIZE, 106_560);
+        assert_eq!(TRACE_SIZE, 139_328);
         const { assert!(TRACE_SIZE <= MAX_TRACE_READ) };
         assert_eq!(H_NEXT + 4, H_DROPPED);
         assert_eq!(H_DEADLINE_HIT, 56);
-        assert_eq!(ROW_SIZE, 13 * 8);
+        assert_eq!(ROW_SIZE, 17 * 8);
     }
 
     #[test]
@@ -750,6 +765,38 @@ pub(crate) mod tests {
         bytes[at + 96..at + 104].copy_from_slice(&rax.to_le_bytes());
         let next = (index as u32 + 1).to_le_bytes();
         bytes[H_NEXT..H_NEXT + 4].copy_from_slice(&next);
+    }
+    #[test]
+    fn call_entry_metadata_is_nullable_and_never_establishes_a_receiver_or_lifetime() {
+        let mut bytes = blank_trace(2);
+        set_row(&mut bytes, 0, 2, 1, 1);
+        let at = HEADER_SIZE;
+        bytes[at + 104..at + 112].copy_from_slice(&0x2000u64.to_le_bytes());
+        bytes[at + 112..at + 120].copy_from_slice(&0x3000u64.to_le_bytes());
+        bytes[at + 120..at + 124].copy_from_slice(&(-15i32).to_le_bytes());
+        bytes[at + 124..at + 128].copy_from_slice(&3u32.to_le_bytes());
+        bytes[at + 132..at + 136].copy_from_slice(&65536u32.to_le_bytes());
+        let row = &bytes[at..at + ROW_SIZE];
+        let value = project_row(0, row, true);
+        let meta = &value["call_entry_metadata"];
+        assert_eq!(meta["declared_percent"], -15);
+        assert_eq!(meta["indicated_city"]["full_id"], 65536);
+        assert_eq!(meta["indicated_city"]["resolved_receiver_proved"], false);
+        assert_eq!(meta["lifetime_proved"], false);
+        assert_eq!(meta["quantity_accepted"], false);
+        assert!(project_row(0, row, false)["call_entry_metadata"]["declared_percent"].is_null());
+        bytes[at + 124..at + 128].copy_from_slice(&0u32.to_le_bytes());
+        assert!(
+            project_row(0, &bytes[at..at + ROW_SIZE], true)["call_entry_metadata"]
+                ["declared_percent"]
+                .is_null()
+        );
+        bytes[at + 124..at + 128].copy_from_slice(&0x83u32.to_le_bytes());
+        assert_eq!(
+            project_row(0, &bytes[at..at + ROW_SIZE], true)["call_entry_metadata"]
+                ["identity_copied"],
+            false
+        );
     }
     fn receipt() -> Receipt {
         decode_receipt(&receipt_bytes()).unwrap()
