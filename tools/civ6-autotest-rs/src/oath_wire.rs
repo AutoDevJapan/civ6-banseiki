@@ -528,6 +528,45 @@ pub(crate) struct ModuleFact {
     pub size: usize,
 }
 
+/// Decode only a local RIP-relative import jump, and require its pointer slot
+/// to be wholly inside that image. Never follow a game's modified entry.
+pub(crate) fn local_import_slot(
+    function: usize,
+    owner: &ModuleFact,
+    code: &[u8],
+) -> Result<Option<usize>, String> {
+    let end = owner
+        .base
+        .checked_add(owner.size)
+        .ok_or("local image bounds overflow")?;
+    let (length, displacement) = if code.starts_with(&[0x48, 0xff, 0x25]) {
+        (7, code.get(3..7))
+    } else if code.starts_with(&[0xff, 0x25]) {
+        (6, code.get(2..6))
+    } else {
+        return Ok(None);
+    };
+    let displacement = i32::from_le_bytes(
+        displacement
+            .ok_or("truncated local import jump")?
+            .try_into()
+            .unwrap(),
+    );
+    let next = function
+        .checked_add(length)
+        .ok_or("local import jump overflow")?;
+    if function < owner.base || next > end {
+        return Err("local import jump outside its image".into());
+    }
+    let slot = next
+        .checked_add_signed(displacement as isize)
+        .ok_or("local import slot overflow")?;
+    if slot < owner.base || slot.checked_add(8).is_none_or(|last| last > end) {
+        return Err("local import slot outside its image".into());
+    }
+    Ok(Some(slot))
+}
+
 fn same_path(a: &str, b: &str) -> bool {
     let norm = |s: &str| {
         s.strip_prefix(r"\\?\")
@@ -598,6 +637,40 @@ pub(crate) fn judge_load(low: u32, expected_size: usize, matching: &[ModuleFact]
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn only_bounded_local_import_jumps_can_name_a_pointer_slot() {
+        let owner = ModuleFact {
+            path: "kernel32.dll".into(),
+            base: 0x1000,
+            size: 0x1000,
+        };
+        let jump = |displacement: i32| {
+            let mut code = vec![0x48, 0xff, 0x25];
+            code.extend(displacement.to_le_bytes());
+            code
+        };
+        assert_eq!(
+            local_import_slot(0x1100, &owner, &jump(0x99)).unwrap(),
+            Some(0x11a0)
+        );
+        assert_eq!(
+            local_import_slot(0x1100, &owner, &jump(-7)).unwrap(),
+            Some(0x1100)
+        );
+        assert!(local_import_slot(0x1100, &owner, &jump(-0x108)).is_err());
+        assert!(local_import_slot(0x1100, &owner, &jump(0xef2)).is_err());
+        assert!(local_import_slot(0x1ffa, &owner, &jump(0)).is_err());
+        assert!(local_import_slot(0x1100, &owner, &[0x48, 0xff, 0x25]).is_err());
+        assert_eq!(
+            local_import_slot(0x1100, &owner, &[0xe9, 0, 0, 0, 0]).unwrap(),
+            None
+        );
+        assert_eq!(
+            local_import_slot(0x1100, &owner, &[0x48, 0x83, 0xec, 0x28]).unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn layout_constants_follow_the_v4_trace() {

@@ -911,8 +911,11 @@ fn verify_function_owner(target: &Target, function: usize) -> Result<()> {
     Ok(())
 }
 
-/// Fresh remote load of the pinned DLL; returns its verified base.
-fn load_dll(target: &mut Target, dll: &LocalDll) -> Result<usize> {
+/// Resolve the local documented entry's import to the same named KernelBase
+/// implementation. The remote kernel32 entry can be intercepted; we never
+/// follow that unknown redirect. The implementation still needs the full
+/// remote owner/address/code proof before it is called.
+fn local_load_library() -> Result<usize> {
     let local_kernel32 = unsafe { GetModuleHandleW(wide("kernel32.dll").as_ptr()) } as usize;
     let load_library = unsafe {
         GetProcAddress(
@@ -923,6 +926,39 @@ fn load_dll(target: &mut Target, dll: &LocalDll) -> Result<usize> {
     if local_kernel32 == 0 || load_library == 0 {
         return Err(Error::input("local LoadLibraryW is unavailable"));
     }
+    let owner = local_owner(load_library)?;
+    if load_library
+        .checked_add(7)
+        .is_none_or(|end| end > owner.base.saturating_add(owner.size))
+    {
+        return Err(Error::input("local LoadLibraryW entry leaves its image"));
+    }
+    let code = unsafe { std::slice::from_raw_parts(load_library as *const u8, 7) };
+    let Some(slot) = wire::local_import_slot(load_library, &owner, code).map_err(Error::input)?
+    else {
+        return Ok(load_library);
+    };
+    let destination = unsafe { std::ptr::read_unaligned(slot as *const usize) };
+    let kernelbase = unsafe { GetModuleHandleW(wide("KernelBase.dll").as_ptr()) };
+    if kernelbase.is_null() {
+        return Err(Error::input("local KernelBase is unavailable"));
+    }
+    let implementation =
+        unsafe { GetProcAddress(kernelbase, c"LoadLibraryW".as_ptr().cast()) } as usize;
+    if implementation == 0
+        || destination != implementation
+        || local_owner(implementation)?.base != kernelbase as usize
+    {
+        return Err(Error::input(
+            "local import is not the same named KernelBase LoadLibraryW implementation",
+        ));
+    }
+    Ok(implementation)
+}
+
+/// Fresh remote load of the pinned DLL; returns its verified base.
+fn load_dll(target: &mut Target, dll: &LocalDll) -> Result<usize> {
+    let load_library = local_load_library()?;
     verify_function_owner(target, load_library)?;
     let ours = display_path(&dll.path);
     let file_name = dll
@@ -1194,6 +1230,8 @@ mod tests {
             assert!(f >= owner.base && f < owner.base + owner.size);
             verify_function_owner(&target, f).unwrap();
         }
+        let implementation = local_load_library().unwrap();
+        verify_function_owner(&target, implementation).unwrap();
         // an address in a non-image page has no owner
         let heap = Box::new(0u64);
         assert!(local_owner(&*heap as *const u64 as usize).is_err());
