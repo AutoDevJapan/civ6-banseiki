@@ -1,5 +1,7 @@
 #[path = "fixtures/banseiki_ruleset.rs"]
 mod banseiki_ruleset;
+#[path = "fixtures/shipped_scenarios.rs"]
+mod shipped_scenarios;
 mod support_fixture;
 
 use civ6_autotest_rs::scenario::{
@@ -1385,7 +1387,7 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
 #[test]
 fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_boundary() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
-    let mut count = 0;
+    let mut covered_names = std::collections::BTreeSet::new();
     let mut blocked_recovery_seen = false;
     let mut hotseat_growth_seen = false;
     let mut banseiki_hotseat_growth_seen = false;
@@ -1395,17 +1397,19 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
         if !name.ends_with(".json")
-            || name == "leader-persona-static-gate-15km.json"
-            || name == "leader-persona-native-trace-15km.json"
-            || name == "leader-persona-property-abi-15km.json"
-            || name == "leader-persona-lifecycle-15km.json"
+            || shipped_scenarios::SHIPPED_SCENARIOS
+                .iter()
+                .any(|(declared, boundary)| {
+                    *declared == name
+                        && *boundary == shipped_scenarios::SelectionBoundary::DirectDiagnostic
+                })
         {
             continue;
         }
         let data = scenario(&name);
         let first = &steps(&data)[0];
         if action(first, "enable_mods") {
-            count += 1;
+            covered_names.insert(name.clone());
             if matches!(
                 name.as_str(),
                 "banseiki-pool-bridge.json"
@@ -1489,7 +1493,15 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     assert!(blocked_recovery_seen);
     assert!(hotseat_growth_seen);
     assert!(banseiki_hotseat_growth_seen);
-    assert_eq!(count, 149);
+    let expected_names: std::collections::BTreeSet<_> = shipped_scenarios::SHIPPED_SCENARIOS
+        .iter()
+        .filter(|(_, boundary)| *boundary == shipped_scenarios::SelectionBoundary::Shared)
+        .map(|(name, _)| (*name).to_string())
+        .collect();
+    assert_eq!(
+        covered_names, expected_names,
+        "diagnostic isolation coverage differs"
+    );
     assert!(japan_hotseat_growth_seen);
     assert_eq!(pool_scenarios_seen.len(), 4);
 }
