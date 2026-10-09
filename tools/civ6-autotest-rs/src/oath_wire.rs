@@ -184,9 +184,12 @@ impl TraceView {
             return Err("trace magic or version differs".into());
         }
         let next = u32_at(bytes, H_NEXT).unwrap_or(u32::MAX) as usize;
+        if next > CAPACITY {
+            return Err("trace reservation count exceeds the finite capacity".into());
+        }
         Ok(Self {
             bytes: bytes.to_vec(),
-            rows: next.min(CAPACITY),
+            rows: next,
         })
     }
     pub fn in_flight(&self) -> u32 {
@@ -712,6 +715,10 @@ pub(crate) mod tests {
         assert!(TraceView::parse(&good[..TRACE_SIZE - 1]).is_err());
         let mut overflow = good;
         overflow[H_NEXT..H_NEXT + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(TraceView::parse(&overflow).is_err());
+        overflow[H_NEXT..H_NEXT + 4].copy_from_slice(&(CAPACITY as u32 + 1).to_le_bytes());
+        assert!(TraceView::parse(&overflow).is_err());
+        overflow[H_NEXT..H_NEXT + 4].copy_from_slice(&(CAPACITY as u32).to_le_bytes());
         assert_eq!(TraceView::parse(&overflow).unwrap().rows, CAPACITY);
     }
 
