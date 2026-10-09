@@ -175,7 +175,7 @@ local function attemptReturn(state,c)
 end
 local function abort(state,c,reason)
   local m=c.MP
-  assert(not m.Claimed or m.DispatchStatus=='REJECTED','MP unknown MOVE must be preserved')
+  assert(not m.Claimed or m.DispatchStatus=='REJECTED' or m.DispatchStatus=='NOT_SENT','MP unknown MOVE must be preserved')
   m.AbortCycles=(m.AbortCycles or 0)+1
   m.AbortReason=reason;m.MoveCanceled=true
   phase(state,c,'ABORT_RETURN')
@@ -260,6 +260,11 @@ function MP.Advance(state,c,preferred)
       m.RejectedCandidates[key(m.Loans[2])]=m.AbortReason
     end
     m.Loans=nil;m.Claimed=nil;m.DispatchStatus=nil;m.DispatchSession=nil;m.MoveCanceled=nil
+    m.GrantSession=nil;m.ClaimNonce=nil;m.UncertainActorObservation=nil
+    m.ReportedMovedObservation=nil;m.RollbackActorObservation=nil;m.FinalActorObservation=nil
+    -- A new target needs a new inventory baseline. Keep the abort reason and
+    -- cycle count, but never compare the next PREPARE with the returned loan.
+    m.ArtifactOriginals=nil;m.ArtifactEvidenceKind=nil;m.HeldObservation=nil;m.HeldReason=nil;m.HeldStatus=nil
     c.BorrowIssued=false;c.Phase='BORROW';phase(state,c,'SELECT');return false
   end
   if m.Phase=='BORROW' then
@@ -338,6 +343,17 @@ local function artifactOriginals(c,o,placement)
           assert(now.Works and now.Works[slot]==index,'MP artifact swap or unrelated slot change')
         end
       end
+    end
+  end
+  if m.Phase=='RECHECK' then
+    for index,previous in pairs(m.ArtifactOriginals) do
+      local locations=o.ArtifactWorks[index]
+      assert(type(locations)=='table' and #locations==1,'MP recheck original missing or duplicated')
+      local now=locations[1]
+      for _,k in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do
+        assert(Equal(previous[k],now[k]),'MP recheck original provenance changed: '..k)
+      end
+      originals[index]=R.Copy(now) -- legal subsequent placement changes are allowed
     end
   end
   for index in pairs(o.ArtifactWorks) do assert(originals[index],'MP artifact inventory has unrelated entry') end
@@ -501,6 +517,10 @@ local function receive(actor,p)
   if p.Command=='ABORT' and (m.Phase=='BORROWED' or m.Phase=='READY') then
     abort(state,c,'actor canceled before dispatch claim');return true
   end
+  if m.Phase=='DISPATCH' and p.Session==m.DispatchSession and p.DispatchStatus=='NOT_SENT'
+    and m.DispatchStatus~='NOT_SENT' then
+    m.DispatchStatus='NOT_SENT';m.WaitingFor='NOT_SENT_TARGET_RECONCILIATION';save(state)
+  end
   local decoded,o=pcall(Decode,p.Payload)
   if not decoded then
     if not m.Claimed and (m.Phase=='BORROWED' or m.Phase=='READY') then
@@ -514,6 +534,13 @@ local function receive(actor,p)
   end
   local valid,err=pcall(validateObservation,c,o,placement)
   if not valid then
+    if m.Phase=='DISPATCH' and c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+      local reason=tostring(err)
+      if m.HeldReason~=reason or m.HeldStatus~=p.DispatchStatus or not Equal(m.HeldObservation,o) then
+        m.WaitingFor=m.DispatchStatus=='NOT_SENT' and 'NOT_SENT_TARGET_RECONCILIATION' or 'HELD_NATIVE_PLACEMENT'
+        m.HeldObservation=R.Copy(o);m.HeldReason=reason;m.HeldStatus=p.DispatchStatus;save(state)
+      end
+    end
     if not m.Claimed and (m.Phase=='BORROWED' or m.Phase=='READY') then
       local malformed=type(o)~='table' or type(o.Cities)~='table' or #o.Cities~=2
         or type(o.Locations)~='table' or #o.Locations~=1
@@ -533,7 +560,8 @@ local function receive(actor,p)
     end
     error(err)
   end
-  m.StaleCount,m.StaleNonce,m.WaitingFor=nil,nil,nil
+  m.StaleCount,m.StaleNonce,m.WaitingFor,m.HeldStatus=nil,nil,nil,nil
+  m.HeldObservation,m.HeldReason=nil,nil
   m.Receipts=m.Receipts or {};m.Receipts[id]=true
   if m.Phase=='PREPARE' then
     assert(p.Command=='OBSERVE','MP prepare command')
@@ -564,8 +592,8 @@ local function receive(actor,p)
     if placement=='TARGET' then
       m.ReportedMovedObservation=R.Copy(o);c.Phase='RETURN';c.ReturnToken=c.Token..':mp:return'
       phase(state,c,'RETURN');MP.Advance(state,c)
-    elseif p.Session==m.DispatchSession and p.DispatchStatus=='REJECTED' then
-      m.DispatchStatus='REJECTED';abort(state,c,'native MOVE explicitly rejected');return true
+    elseif p.Session==m.DispatchSession and (p.DispatchStatus=='REJECTED' or p.DispatchStatus=='NOT_SENT') then
+      m.DispatchStatus=p.DispatchStatus;abort(state,c,'native MOVE rejected or not sent after safe source reconciliation');return true
     else
       -- An original-slot observation alone does not drain an engine queue.
       -- Session loss / unknown result preserves the loan; never retry MOVE or
@@ -626,7 +654,6 @@ local function Observe(c)
   end
   if m.Phase=='DISPATCH' and m.DispatchSession==session and claimed[c.MoveToken]==m.ClaimNonce
     and not sent[c.MoveToken] then
-    sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local p={}
     p[PlayerOperations.PARAM_PLAYER_ONE]=m.Actor
     p[PlayerOperations.PARAM_CITY_SRC]=c.MoveSource.City
@@ -637,9 +664,11 @@ local function Observe(c)
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
     if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
       local api=assert(ExposedMembers.JAC_Absorption)
-      local target=api.ReadNativeCarrier(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y),c.MP.Loans[2])
-      if target.Work~=-1 then status[c.MoveToken]='REJECTED';return false end
+      local ok,target=pcall(function() return api.ReadNativeCarrier(
+        assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
+      if not ok or target.Work~=-1 then sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false end
     end
+    sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local ok,result=pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)
     status[c.MoveToken]=ok and result==false and 'REJECTED' or ok and result==true and 'ACCEPTED' or 'UNKNOWN'
     return false -- reconcile at a later native publication, not the send call
@@ -652,7 +681,11 @@ local function Observe(c)
   end
   if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
     o.ArtifactWorks={[c.Index]=o.Locations}
+    for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
     for _,observed in ipairs(o.Cities) do
+      if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
+        o.ArtifactWorks[observed.Work]=api.ReadNativeLocations(observed.Work)
+      end
       for _,asset in pairs(observed.State.Assets) do
         for _,index in pairs(asset.Works or {}) do
           if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=api.ReadNativeLocations(index) end

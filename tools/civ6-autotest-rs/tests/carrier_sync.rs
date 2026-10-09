@@ -1426,7 +1426,7 @@ mod native_transport {
             local cities=Players[3].GetCities
             Players[3].GetCities=function() local out=cities();out.GetCapitalCity=function() return CITIES[0] end;return out end
           end
-          TRANSFERS=0;OTHER_CREATOR={[901]=1,[902]=0,[903]=3}
+          TRANSFERS=0;OTHER_CREATOR={[901]=1,[902]=0,[903]=3,[904]=3,[905]=3}
           GameInfo.GreatWorks[4].GreatWorkObjectType='GREATWORKOBJECT_ARTIFACT'
           GameInfo.GreatWorkSlotTypes[1].GreatWorkSlotType='GREATWORKSLOT_ARTIFACT'
           GameInfo.GreatWork_ValidSubTypes=function()
@@ -1442,12 +1442,14 @@ mod native_transport {
               b.GetNumGreatWorkSlots=function(_,building) return building==1 and 3 or 0 end
               b.GetGreatWorkInSlot=function(_,building,slot)
                 if building~=1 then return -1 end
+                if slot==0 and c.x==COUNTER_X then return 904 end
                 if slot==0 and c.x==WORK_X then return 900 end
                 if c.x==4 and slot>0 and slot<3 and LOST_OTHER~=900+slot
-                  and not (slot==1 and RELOCATED_OTHER) then return 900+slot end
+                  and not (slot==1 and RELOCATED_OTHER_HOME) then return 900+slot end
                 if c.x==8 and slot==0 then return 903 end -- recipient-independent original
-                if c.x==16 and slot==1 and (DUPLICATE_OTHER or RELOCATED_OTHER) then return 901 end
-                if c.x==16 and slot==0 and OCCUPIED_TARGET then return 903 end
+                if c.x==8 and slot==1 and RELOCATED_OTHER_HOME then return 901 end
+                if c.x==16 and slot==1 and DUPLICATE_OTHER then return 901 end
+                if c.x==16 and slot==0 and OCCUPIED_TARGET then return 905 end
                 return -1
               end
               b.GetGreatWorkTypeFromIndex=function() return 4 end
@@ -1475,6 +1477,11 @@ mod native_transport {
             assert(op=='move' and p.owner==actor and p.index==900 and p.slot==0)
             assert(CITIES[4].owner==actor and CITIES[16].owner==actor)
             assert(p.source==CITIES[4].id and p.target==CITIES[16].id)
+            if QUEUED_SWAP then
+              -- An independently queued action fills the target after the
+              -- UI empty check; the genuine engine operation swaps it.
+              COUNTER_X=4;UI_MOVES=UI_MOVES+1;WORK_X=16;return true
+            end
             assert(CITIES[16]:GetBuildings():GetGreatWorkInSlot(1,0)==-1,'occupied target must never swap')
             UI_MOVES=UI_MOVES+1
             if UNKNOWN_MOVE then return nil end
@@ -1660,7 +1667,7 @@ mod native_transport {
     }
 
     #[test]
-    fn mp_artifact_occupied_target_and_unqualified_sender_never_send_move() {
+    fn mp_artifact_occupied_target_reconciles_and_retries_with_fresh_baseline() {
         let lua = artifact_world(2, false, 2);
         lua.load("MP_PLAN()").exec().unwrap();
         mp_until(&lua, "PREPARE");
@@ -1677,6 +1684,75 @@ mod native_transport {
         lua.load("assert(UI_MOVES==0 and WORK_X==4 and TRANSFERS==1)")
             .exec()
             .unwrap();
+        lua.load("local old=Game.SetProperty;HELD_SAVES=0;Game.SetProperty=function(self,k,v) HELD_SAVES=HELD_SAVES+1;return old(self,k,v) end").exec().unwrap();
+        let duplicate = mp_publish(&lua);
+        assert!(!mp_receive(&lua, &duplicate));
+        assert_eq!(lua.load("return HELD_SAVES").eval::<i64>().unwrap(), 0);
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.DispatchStatus=='NOT_SENT' and c.MP.WaitingFor=='NOT_SENT_TARGET_RECONCILIATION' and c.MP.HeldReason:find('source/target mismatch',1,true));OCCUPIED_TARGET=false").exec().unwrap();
+        let raw = mp_publish(&lua);
+        assert!(mp_receive(&lua, &raw));
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Phase=='ABORT_RESTORED' and TRANSFERS==2 and UI_MOVES==0 and CITIES[4].owner==1 and CITIES[16].owner==2 and WORK_X==4)").exec().unwrap();
+        mp_until(&lua, "SELECT");
+        // Another legal operation moves an unrelated work between the donor's
+        // own cities before a new attempt prepares its baseline.
+        lua.load("RELOCATED_OTHER_HOME=true").exec().unwrap();
+        mp_until(&lua, "PREPARE");
+        let raw = mp_publish(&lua);
+        assert!(mp_receive(&lua, &raw));
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Phase=='BORROWED' and TRANSFERS==3 and UI_MOVES==0 and #JAC_AbsorptionGameplay.NativeWorkLocations(901)==1 and JAC_AbsorptionGameplay.NativeWorkLocations(901)[1].X==8)").exec().unwrap();
+    }
+
+    #[test]
+    fn mp_artifact_queued_swap_preserves_both_originals_without_return_or_resend() {
+        let lua = artifact_world(2, false, 3);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "DISPATCH");
+        lua.load("QUEUED_SWAP=true").exec().unwrap();
+        assert!(!lua.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+        let first = mp_publish(&lua);
+        assert!(!mp_receive(&lua, &first));
+        assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.WaitingFor=='HELD_NATIVE_PLACEMENT')").exec().unwrap();
+        lua.load("local old=Game.SetProperty;HELD_SAVES=0;Game.SetProperty=function(self,k,v) HELD_SAVES=HELD_SAVES+1;return old(self,k,v) end").exec().unwrap();
+        for _ in 0..3 {
+            let packet = mp_publish(&lua);
+            assert!(!mp_receive(&lua, &packet));
+        }
+        assert_eq!(lua.load("return HELD_SAVES").eval::<i64>().unwrap(), 0);
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Phase=='DISPATCH' and c.MP.WaitingFor=='HELD_NATIVE_PLACEMENT' and c.MP.HeldObservation and c.MP.HeldReason);assert(TRANSFERS==2 and UI_MOVES==1 and WORK_X==16 and COUNTER_X==4 and CITIES[4].owner==2 and CITIES[16].owner==2);for _,i in ipairs({900,901,902,903,904}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(i)==1) end;assert(OTHER_CREATOR[904]==3)").exec().unwrap();
+    }
+
+    #[test]
+    fn mp_artifact_recheck_preserves_identity_after_legal_other_work_moves() {
+        for mutation in [
+            "RELOCATED_OTHER_HOME=true",
+            "LOST_OTHER=901",
+            "OTHER_CREATOR[901]=3",
+        ] {
+            let lua = artifact_world(2, false, 3);
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(&lua, "DISPATCH");
+            assert!(!lua.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+            mp_until(&lua, "DONE");
+            assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+            lua.load("CURRENT_TURN=CURRENT_TURN+1;TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.Request.FlowPolicy=true end)").exec().unwrap();
+            lua.load(mutation).exec().unwrap();
+            assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+            let packet = mp_publish(&lua);
+            let accepted = mp_receive(&lua, &packet);
+            assert_eq!(
+                accepted,
+                mutation == "RELOCATED_OTHER_HOME=true",
+                "{mutation}"
+            );
+            assert_eq!(
+                lua.load("return MP_PLAN()").eval::<bool>().unwrap(),
+                accepted
+            );
+            lua.load("assert(UI_MOVES==1 and TRANSFERS==4)")
+                .exec()
+                .unwrap();
+        }
     }
 
     #[test]
@@ -1698,7 +1774,7 @@ mod native_transport {
             "LOST_OTHER=901",
             "OTHER_CREATOR[901]=3",
             "DUPLICATE_OTHER=true",
-            "RELOCATED_OTHER=true",
+            "RELOCATED_OTHER_HOME=true",
             "TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.MP.ArtifactOriginals=nil end)",
         ] {
             let lua = artifact_world(2, false, 3);
