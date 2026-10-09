@@ -565,7 +565,12 @@ local function validateUnresolvedReturn(c,o,restored,sourcePresent)
   local m=c.MP
   for i,l in ipairs(m.Loans) do
     local current=CityManager.GetCityAt(l.X,l.Y)
-    if i==2 or (l.Issued and not sourceUnavailable(c,l,current)) then
+    if l.ReturnIssued and l.FinalID and current and current:GetOwner()==l.Owner
+      and current:GetID()==l.FinalID then
+      -- Already returned: another owner may now use the city and station
+      -- units there. Core identity suffices; no city transfer follows.
+      if restored then assert(l.RestoredCore,'MP trusted restoration incomplete') end
+    elseif i==2 or (l.Issued and not sourceUnavailable(c,l,current)) then
       validateUnresolvedLoan(c,o,i,restored,sourcePresent)
     end
   end
@@ -581,6 +586,12 @@ local function unresolvedOriginal(c,o)
   if o.LocationsUnavailable or type(o.Locations)~='table' or #o.Locations~=1 then return false end
   local work=o.Locations[1]
   return work.X~=l.X or work.Y~=l.Y or work.Building~=l.Building or work.Slot~=l.Slot
+end
+local function recordUnresolvedOriginal(m,o)
+  local source=o.Cities[1]
+  m.OriginalUnresolved={Locations=R.Copy(o.Locations),Source={Owner=source.Owner,ID=source.ID,
+    X=source.X,Y=source.Y,Work=source.Work,Missing=source.Missing==true},
+    LocationReadFailed=o.LocationsUnavailable==true}
 end
 local function reserved(state,c,l)
   local function busy(other)
@@ -687,14 +698,16 @@ local function receive(actor,p)
   if m.Phase=='DISPATCH' then
     placement=o.Cities and o.Cities[2] and o.Cities[2].Work==c.Index and 'TARGET' or 'SOURCE'
   end
-  local unresolvedSource=m.Phase=='DISPATCH' and m.DispatchStatus=='NOT_SENT' and unresolvedOriginal(c,o)
+  local unresolvedSource=m.Phase=='DISPATCH' and placement~='TARGET'
+    and m.DispatchStatus=='NOT_SENT' and unresolvedOriginal(c,o)
   local unresolvedAbort=m.Phase=='ABORT_RESTORED' and m.DispatchStatus=='NOT_SENT'
   local unresolvedRetry=m.Phase=='ABORT_RETURN' and m.DispatchStatus=='NOT_SENT'
+  local retrySourceUnresolved=unresolvedRetry and unresolvedOriginal(c,o)
   local valid,err
   if unresolvedSource or unresolvedAbort or unresolvedRetry then
     valid,err=pcall(function()
-      if unresolvedRetry and not m.OriginalUnresolved then validateObservation(c,o,'SOURCE') end
-      validateUnresolvedReturn(c,o,unresolvedAbort,unresolvedRetry and not m.OriginalUnresolved)
+      validateUnresolvedReturn(c,o,unresolvedAbort,
+        unresolvedRetry and not (m.OriginalUnresolved or retrySourceUnresolved))
     end)
   else
     valid,err=pcall(validateObservation,c,o,placement)
@@ -728,6 +741,9 @@ local function receive(actor,p)
   end
   m.StaleCount,m.StaleNonce,m.WaitingFor,m.HeldStatus=nil,nil,nil,nil
   m.HeldObservation,m.HeldReason=nil,nil
+  if retrySourceUnresolved and not m.OriginalUnresolved then
+    recordUnresolvedOriginal(m,o);save(state)
+  end
   m.Receipts=m.Receipts or {}
   -- A failed city return has not consumed this observation. The same actor
   -- may need to retry it after the transient transfer failure clears.
@@ -760,10 +776,7 @@ local function receive(actor,p)
   elseif m.Phase=='DISPATCH' then
     assert(p.Command=='OBSERVE','MP dispatch observation')
     if unresolvedSource then
-      local source=o.Cities[1]
-      m.OriginalUnresolved={Locations=R.Copy(o.Locations),Source={Owner=source.Owner,ID=source.ID,
-        X=source.X,Y=source.Y,Work=source.Work,Missing=source.Missing==true},
-        LocationReadFailed=o.LocationsUnavailable==true}
+      recordUnresolvedOriginal(m,o)
       abort(state,c,'native MOVE not sent; original location unresolved');return true
     elseif placement=='TARGET' then
       m.ReportedMovedObservation=R.Copy(o);c.Phase='RETURN';c.ReturnToken=c.Token..':mp:return'
