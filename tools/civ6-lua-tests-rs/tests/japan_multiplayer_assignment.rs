@@ -118,6 +118,10 @@ function include(name)
   function OnReadyButton() stockReady=stockReady+1 end
   function CheckGameAutoStart() stockAutostart=stockAutostart+1 end
   function SetLocalReady(value) PlayerConfigurations[0].ready=value end
+  function UpdateReadyButton()
+    Controls.ReadyButton:SetDisabled(false)
+    if not hotseat then Controls.ReadyCheck:SetDisabled(false) end
+  end
   function IsLaunchCountdownActive() return launchActive end
   function StopCountdown() launchActive=false;stoppedLaunches=stoppedLaunches+1 end
 end
@@ -142,6 +146,9 @@ assert(values.JAC_MP_TEAM==4)
 assert(PlayerConfigurations[0].team==4 and PlayerConfigurations[1].team==4)
 assert(PlayerConfigurations[2].team==3)
 assert(PlayerConfigurations[0].ready==false)
+assert(Controls.ReadyButton.disabled and Controls.ReadyCheck.disabled)
+UpdateReadyButton()
+assert(Controls.ReadyButton.disabled and Controls.ReadyCheck.disabled)
 OnReadyButton();assert(stockReady==0)
 SetLocalReady(true);assert(PlayerConfigurations[0].ready==false)
 assert(#rowsManager.instances==2)
@@ -155,6 +162,7 @@ assert(values.JAC_MP_AREA_0=='EAST' and values.JAC_MP_AREA_1=='WEST')
 assert(values.JAC_MP_SUBJECT==0)
 assert(Controls.JAC_SubjectIs.text=='LOC_JAC_MP_SUBJECT_IS Player 0')
 assert(Controls.JAC_AssignmentStatus.text=='LOC_JAC_MP_READY')
+assert(not Controls.ReadyButton.disabled and not Controls.ReadyCheck.disabled)
 SetLocalReady(true);assert(PlayerConfigurations[0].ready==true)
 OnReadyButton();assert(stockReady==1)
 CheckGameAutoStart();assert(stockAutostart==1)
@@ -254,6 +262,12 @@ map='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map'
 ContextPtr:show()
 assert(not Controls.JAC_AssignmentPanel.hidden)
 assert(not Controls.InfoContainer.hidden)
+Controls.JAC_AllJapanButton.click()
+assert(Controls.ReadyCheck.disabled)
+rowsManager.instances[1].AreaPullDown.select(2)
+rowsManager.instances[2].AreaPullDown.select(3)
+Controls.JAC_SubjectPullDown.select(2)
+assert(not Controls.ReadyCheck.disabled)
 "#,
     );
 }

@@ -79,10 +79,12 @@ if Controls then
   local departing = {}
   local configDirty = false
   local lastError = nil
+  local guardedReadyCheck = false
   local stockOnShow = OnShow
   local stockOnReadyButton = OnReadyButton
   local stockCheckGameAutoStart = CheckGameAutoStart
   local stockSetLocalReady = SetLocalReady
+  local stockUpdateReadyButton = UpdateReadyButton
 
   local function read(key) return GameConfiguration.GetValue(key) end
   local function write(key, value)
@@ -345,6 +347,7 @@ if Controls then
     Controls.JAC_AssignmentContent:CalculateSize()
     Controls.GameSummaryStack:CalculateSize()
     Controls.ParametersScrollPanel:CalculateSize()
+    UpdateReadyButton()
   end
 
   local function syncState()
@@ -459,6 +462,20 @@ if Controls then
   function CheckGameAutoStart()
     if stopInvalidLaunch() then return end
     stockCheckGameAutoStart()
+  end
+  function UpdateReadyButton()
+    stockUpdateReadyButton()
+    if scoped() and mode() == JAPAN and not valid(humans()) then
+      Controls.ReadyButton:SetDisabled(true)
+      Controls.ReadyCheck:SetDisabled(true)
+      guardedReadyCheck = true
+    elseif guardedReadyCheck then
+      -- Stock hotseat updates only ReadyButton; restore our own ReadyCheck lock.
+      if GameConfiguration.IsHotseat() then
+        Controls.ReadyCheck:SetDisabled(false)
+      end
+      guardedReadyCheck = false
+    end
   end
   Controls.ReadyButton:RegisterCallback(Mouse.eLClick, OnReadyButton)
   Controls.ReadyCheck:RegisterCallback(Mouse.eLClick, OnReadyButton)
