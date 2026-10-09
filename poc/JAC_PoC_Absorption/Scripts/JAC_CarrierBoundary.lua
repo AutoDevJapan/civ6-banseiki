@@ -270,6 +270,9 @@ local function returnLoans(state,c)
     end
     l.SourceUnavailable=nil
     current=assert(current,'MP loan city missing')
+    if l.ReturnIssued and l.Owner~=owner and current:GetOwner()==l.Owner then
+      assert(l.FinalID and current:GetID()==l.FinalID,'MP return identity unproven')
+    end
     -- Save current authoritative values before a transfer can clear them.
     -- Refresh only while still borrowed; a completed transfer must not replace
     -- its saved pre-return values with the cleared post-transfer properties.
@@ -280,7 +283,14 @@ local function returnLoans(state,c)
       assert(l.Issued,'MP cannot return an unissued loan')
       assert(l.BorrowedID==nil or current:GetID()==l.BorrowedID,'MP borrowed return identity changed')
       l.BorrowedID=current:GetID()
-      l.ReturnIssued=true;save(state);CityManager.TransferCity(current,l.Owner)
+      l.ReturnIssued=true;save(state)
+      local returned,result=pcall(CityManager.TransferCity,current,l.Owner)
+      -- Capture the physical ID at this synchronous operation boundary, even
+      -- if the call throws after the transfer. A later city at these same
+      -- coordinates must never inherit our saved restoration properties.
+      local observed=CityManager.GetCityAt(l.X,l.Y)
+      if observed and observed:GetOwner()==l.Owner then l.FinalID=observed:GetID();save(state) end
+      if not returned then error(result) end
     end
     current=city(l)
     assert(current:GetOwner()==l.Owner,'MP return owner changed')
@@ -591,9 +601,10 @@ local function validateUnresolvedLoan(c,o,i,restored,sourcePresent)
     and type(o.Locations)=='table' and type(seen)=='table','MP unresolved observation shape')
   local current=city(l);local core=A.ReadNativeCarrierCore(current,l)
   local released=restored or (l.ReturnIssued and current:GetOwner()==l.Owner)
+  if released then assert(l.FinalID,'MP return identity unproven') end
   local expectedWork=i==1 and sourcePresent and c.Index or -1
   local expectedOwner=released and l.Owner or moveOwner(c)
-  local expectedID=released and (l.FinalID or current:GetID()) or l.BorrowedID
+  local expectedID=released and l.FinalID or l.BorrowedID
   assert(expectedID and current:GetOwner()==expectedOwner and current:GetID()==expectedID
     and seen.Owner==expectedOwner and seen.ID==expectedID
     and seen.X==l.X and seen.Y==l.Y,'MP unresolved target identity changed')
@@ -803,7 +814,10 @@ local function receive(actor,p)
   end
   m.StaleCount,m.StaleNonce,m.WaitingFor,m.HeldStatus=nil,nil,nil,nil
   m.HeldObservation,m.HeldReason=nil,nil
-  m.Receipts=m.Receipts or {};m.Receipts[id]=true
+  m.Receipts=m.Receipts or {}
+  -- A failed city return has not consumed this observation. The same actor
+  -- may need to retry it after the transient transfer failure clears.
+  if not unresolvedRetry then m.Receipts[id]=true end
   if m.Phase=='PREPARE' then
     assert(p.Command=='OBSERVE','MP prepare command')
     if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
@@ -853,6 +867,7 @@ local function receive(actor,p)
   elseif unresolvedRetry then
     assert(p.Command=='OBSERVE','MP unresolved return observation')
     attemptReturn(state,c)
+    if m.Phase~='ABORT_RETURN' then m.Receipts[id]=true;save(state) end
   elseif m.Phase=='ABORT_RESTORED' then
     assert(p.Command=='OBSERVE','MP abort publication')
     m.RollbackActorObservation=R.Copy(o)

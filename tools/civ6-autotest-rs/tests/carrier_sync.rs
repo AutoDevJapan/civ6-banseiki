@@ -1943,6 +1943,44 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_ai_palace_unsent_return_retries_an_unchanged_observation_after_transfer_failure() {
+        let lua = ai_palace_world(2);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "DISPATCH");
+        lua.load(r#"
+          local transfer=CityManager.TransferCity
+          RETURN_BLOCKED=true
+          CityManager.TransferCity=function(city,owner)
+            if city:GetX()==16 and owner==2 and RETURN_BLOCKED then error('return temporarily blocked') end
+            return transfer(city,owner)
+          end
+          WORK_X=12
+          assert(not MP_OBSERVE() and UI_MOVES==0)
+        "#).exec().unwrap();
+        assert!(mp_receive(&lua, &mp_publish(&lua)));
+        lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RETURN' and m.OriginalUnresolved and TRANSFERS==1)
+        "#).exec().unwrap();
+        let first = mp_publish(&lua);
+        assert!(mp_receive(&lua, &first));
+        lua.load("assert(CITIES[16].owner==1 and TRANSFERS==1);RETURN_BLOCKED=false")
+            .exec()
+            .unwrap();
+        let second = mp_publish(&lua);
+        assert_eq!(
+            first, second,
+            "the retry uses the same synchronized observation"
+        );
+        assert!(mp_receive(&lua, &second));
+        lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RESTORED' and CITIES[16].owner==2)
+          assert(TRANSFERS==2 and UI_MOVES==0 and WORK_X==12)
+        "#).exec().unwrap();
+    }
+
+    #[test]
     fn mp_ai_palace_pre_send_rechecks_both_city_owners_and_ids() {
         for mutation in [
             "CITIES[4].id=CITIES[4].id+1",
@@ -2388,6 +2426,50 @@ mod native_transport {
         lua.load("assert(not MP_PLAN() and UI_MOVES==0 and TRANSFERS==2)")
             .exec()
             .unwrap();
+    }
+
+    #[test]
+    fn mp_unsent_interrupted_return_records_identity_and_never_restores_a_replacement_city() {
+        for missing_witness in [true, false] {
+            let lua = artifact_world(2, false, 3);
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(&lua, "DISPATCH");
+            lua.load(r#"
+              WORK_X=12;assert(not MP_OBSERVE())
+              local transfer=CityManager.TransferCity;FAIL_SOURCE_ONCE=true;RETURN_TARGET_BLOCKED=true
+              CityManager.TransferCity=function(city,owner)
+                if city.x==4 and owner==1 and FAIL_SOURCE_ONCE then
+                  FAIL_SOURCE_ONCE=false;transfer(city,owner);city:SetProperty('MP_TEST_PROPERTY',nil)
+                  error('return completed, property restoration interrupted')
+                end
+                if city.x==16 and owner==3 and RETURN_TARGET_BLOCKED then error('target blocked') end
+                return transfer(city,owner)
+              end
+            "#).exec().unwrap();
+            assert!(mp_receive(&lua, &mp_publish(&lua)));
+            lua.load(r#"
+              local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+              assert(m.Phase=='ABORT_RETURN' and m.Loans[1].FinalID==CITIES[4].id)
+              assert(CITIES[4]:GetProperty('MP_TEST_PROPERTY')==nil and TRANSFERS==3)
+              RETURN_TARGET_BLOCKED=false
+            "#).exec().unwrap();
+            if missing_witness {
+                lua.load("TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.MP.Loans[1].FinalID=nil end);CITIES[4].id=CITIES[4].id+100").exec().unwrap();
+                assert!(!mp_receive(&lua, &mp_publish(&lua)));
+                lua.load("assert(TRANSFERS==3 and CITIES[16].owner==2 and CITIES[4]:GetProperty('MP_TEST_PROPERTY')==nil)").exec().unwrap();
+            } else {
+                lua.load("CITIES[4].id=CITIES[4].id+100").exec().unwrap();
+                assert!(mp_receive(&lua, &mp_publish(&lua)));
+                lua.load(r#"
+                  local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+                  assert(m.Phase=='ABORT_RESTORED' and m.Loans[1].SourceUnavailable)
+                  assert(TRANSFERS==4 and CITIES[16].owner==3 and CITIES[4]:GetProperty('MP_TEST_PROPERTY')==nil)
+                "#).exec().unwrap();
+            }
+            lua.load("assert(UI_MOVES==0 and WORK_X==12)")
+                .exec()
+                .unwrap();
+        }
     }
 
     #[test]
