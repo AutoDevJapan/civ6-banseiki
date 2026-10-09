@@ -1,0 +1,64 @@
+{
+  "name": "Read AI Palace Great Work deal eligibility and recipient capacity without transfer",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-product-fixture-before-core-clear-absorb-flow-60-2e25a3f9c37d",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game and Game.GetCurrentGameTurn and Game.GetCurrentGameTurn()>=0"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal index=0\nlocal tag='creator-owned'\nlocal before=A.NativeWorkLocations(index)\nassert(#before==1 and before[1].Owner==2 and before[1].BuildingType=='BUILDING_PALACE',\n  'AI Palace original not present at this checkpoint: '..tag)\nlocal work=before[1]\nlocal empty=0\nlocal first=''\nfor _,city in Players[1]:GetCities():Members() do\n  local buildings=city:GetBuildings()\n  for building in GameInfo.Buildings() do\n    if buildings:HasBuilding(building.Index) then\n      for slot=0,buildings:GetNumGreatWorkSlots(building.Index)-1 do\n        if buildings:GetGreatWorkInSlot(building.Index,slot)==-1 then\n          local slotID=buildings:GetGreatWorkSlotType(building.Index,slot)\n          local slotInfo=GameInfo.GreatWorkSlotTypes[slotID]\n          if slotInfo then\n            for match in GameInfo.GreatWork_ValidSubTypes() do\n              if match.GreatWorkObjectType==work.ObjectType\n                and match.GreatWorkSlotType==slotInfo.GreatWorkSlotType then\n                empty=empty+1\n                if first=='' then first=city:GetX()..','..city:GetY()..':'..building.BuildingType..':'..slot end\n                break\n              end\n            end\n          end\n        end\n      end\n    end\n  end\nend\nlocal possible='unavailable'\nif DealManager and DealDirection and DealItemTypes\n  and DealManager.GetWorkingDeal and DealManager.GetPossibleDealItems then\n  local ok,working=pcall(DealManager.GetWorkingDeal,DealDirection.OUTGOING,2,1)\n  if ok and working then\n    local read,items=pcall(DealManager.GetPossibleDealItems,2,1,DealItemTypes.GREATWORK,working)\n    if read then\n      possible='missing'\n      for _,item in ipairs(items or {}) do\n        if item.ForType==index then possible=tostring(item.IsValid);break end\n      end\n    else possible='read-error' end\n  else possible='working-unavailable' end\nend\nlocal after=A.NativeWorkLocations(index)\nassert(#after==1 and after[1].Owner==work.Owner and after[1].CityID==work.CityID\n  and after[1].Building==work.Building and after[1].Slot==work.Slot,\n  'read-only Palace probe changed the original')\nprint('[JAC_AI_PALACE_READ] tag='..tag..' index='..index\n  ..' creator='..tostring(work.CreatedByPlayer)..' owner='..work.Owner\n  ..' emptyCompatible='..empty..' first='..first..' dealItemValid='..possible)\nreturn 'AI Palace read-only source and recipient capacity recorded: '..tag"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-freecity-carrier-ready-absorb-flow-66-e55121899171",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game and Game.GetCurrentGameTurn and Game.GetCurrentGameTurn()>=0"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal index=2\nlocal tag='acquired'\nlocal before=A.NativeWorkLocations(index)\nassert(#before==1 and before[1].Owner==2 and before[1].BuildingType=='BUILDING_PALACE',\n  'AI Palace original not present at this checkpoint: '..tag)\nlocal work=before[1]\nlocal empty=0\nlocal first=''\nfor _,city in Players[1]:GetCities():Members() do\n  local buildings=city:GetBuildings()\n  for building in GameInfo.Buildings() do\n    if buildings:HasBuilding(building.Index) then\n      for slot=0,buildings:GetNumGreatWorkSlots(building.Index)-1 do\n        if buildings:GetGreatWorkInSlot(building.Index,slot)==-1 then\n          local slotID=buildings:GetGreatWorkSlotType(building.Index,slot)\n          local slotInfo=GameInfo.GreatWorkSlotTypes[slotID]\n          if slotInfo then\n            for match in GameInfo.GreatWork_ValidSubTypes() do\n              if match.GreatWorkObjectType==work.ObjectType\n                and match.GreatWorkSlotType==slotInfo.GreatWorkSlotType then\n                empty=empty+1\n                if first=='' then first=city:GetX()..','..city:GetY()..':'..building.BuildingType..':'..slot end\n                break\n              end\n            end\n          end\n        end\n      end\n    end\n  end\nend\nlocal possible='unavailable'\nif DealManager and DealDirection and DealItemTypes\n  and DealManager.GetWorkingDeal and DealManager.GetPossibleDealItems then\n  local ok,working=pcall(DealManager.GetWorkingDeal,DealDirection.OUTGOING,2,1)\n  if ok and working then\n    local read,items=pcall(DealManager.GetPossibleDealItems,2,1,DealItemTypes.GREATWORK,working)\n    if read then\n      possible='missing'\n      for _,item in ipairs(items or {}) do\n        if item.ForType==index then possible=tostring(item.IsValid);break end\n      end\n    else possible='read-error' end\n  else possible='working-unavailable' end\nend\nlocal after=A.NativeWorkLocations(index)\nassert(#after==1 and after[1].Owner==work.Owner and after[1].CityID==work.CityID\n  and after[1].Building==work.Building and after[1].Slot==work.Slot,\n  'read-only Palace probe changed the original')\nprint('[JAC_AI_PALACE_READ] tag='..tag..' index='..index\n  ..' creator='..tostring(work.CreatedByPlayer)..' owner='..work.Owner\n  ..' emptyCompatible='..empty..' first='..first..' dealItemValid='..possible)\nreturn 'AI Palace read-only source and recipient capacity recorded: '..tag"
+    }
+  ]
+}
