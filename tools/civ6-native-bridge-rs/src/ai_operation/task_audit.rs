@@ -133,6 +133,221 @@ fn core_rdata_pointer(image: &[u8], rva: u32, target: u32) -> Result<(), String>
     Ok(())
 }
 
+// Complete small functions or explicitly bounded local blocks, independently
+// decoded with LLVM from the hash-pinned Core. No runtime receiver is inferred
+// from sharing an offset, global address, or normal-return call site.
+const MANAGER_FLOW_BLOCKS: &[(u32, &[u8])] = &[
+    (
+        0x35fa5,
+        &[
+            0xe8, 0xa6, 0xb5, 0x91, 0x00, 0x48, 0x8b, 0xc8, 0xe8, 0x2e, 0x83, 0x60, 0x00, 0x80,
+            0xbb, 0x88, 0x02, 0x00, 0x00, 0x00, 0x74, 0x12, 0xe8, 0x90, 0xb5, 0x91, 0x00, 0x48,
+            0x8b, 0xc8, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xe9, 0x13, 0x83, 0x60, 0x00, 0x48, 0x83,
+            0xc4, 0x20, 0x5b, 0xc3,
+        ],
+    ),
+    (
+        0x63e2e0,
+        &[
+            0x48, 0x83, 0xec, 0x28, 0xe8, 0xd7, 0xcc, 0xa0, 0xff, 0xe8, 0x72, 0x8b, 0xb4, 0xff,
+            0x48, 0x83, 0xc4, 0x28, 0xe9, 0xe9, 0xd8, 0xa3, 0xff,
+        ],
+    ),
+    (0x49b1ba, &[0x44, 0x89, 0xbf, 0xa8, 0x38, 0x00, 0x00]),
+    (
+        0x49c7e0,
+        &[0xc7, 0x81, 0xa8, 0x38, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00],
+    ),
+    (
+        0x49defb,
+        &[0xc7, 0x86, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00],
+    ),
+    (
+        0x4a1161,
+        &[0xc7, 0x81, 0xa8, 0x38, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00],
+    ),
+    (0x4a16ce, &[0x89, 0xb3, 0xa8, 0x38, 0x00, 0x00]),
+    (0x951550, &[0x48, 0x8b, 0x05, 0x11, 0x95, 0x23, 0x00, 0xc3]),
+    (0x49c630, &[0x48, 0x8b, 0x81, 0x50, 0x02, 0x00, 0x00, 0xc3]),
+    (
+        0x49c640,
+        &[
+            0x48, 0x83, 0xec, 0x28, 0xe8, 0x07, 0x4f, 0x4b, 0x00, 0x48, 0x8b, 0x80, 0x50, 0x02,
+            0x00, 0x00, 0x48, 0x83, 0xc4, 0x28, 0xc3,
+        ],
+    ),
+    (
+        0x4a7a27,
+        &[
+            0x48, 0x8b, 0x05, 0x3a, 0x30, 0x6e, 0x00, 0x48, 0x8d, 0x96, 0xd0, 0x00, 0x00, 0x00,
+            0x48, 0x89, 0x5c, 0x24, 0x38, 0x4c, 0x8d, 0x05, 0xdf, 0xee, 0x55, 0x00, 0x48, 0x8b,
+            0x98, 0x50, 0x02, 0x00, 0x00, 0x48, 0x8b, 0xcb, 0xe8, 0xb0, 0x96, 0xff, 0xff, 0x48,
+            0x8b, 0xcb, 0xe8, 0x58, 0x96, 0xff, 0xff,
+        ],
+    ),
+    (
+        0x4a1100,
+        &[
+            0x48, 0x83, 0xec, 0x38, 0x4d, 0x85, 0xc0, 0xc7, 0x44, 0x24, 0x28, 0x00, 0x00, 0x00,
+            0x00, 0xc7, 0x44, 0x24, 0x2c, 0x1f, 0x00, 0x00, 0x00, 0x48, 0x8d, 0x05, 0xa2, 0x4e,
+            0x52, 0x00, 0x49, 0x0f, 0x45, 0xc0, 0x4c, 0x8d, 0x4c, 0x24, 0x20, 0x48, 0x89, 0x44,
+            0x24, 0x20, 0x4c, 0x8d, 0x81, 0x00, 0x04, 0x00, 0x00, 0x0f, 0x28, 0x44, 0x24, 0x20,
+            0x48, 0x8b, 0x89, 0x10, 0x04, 0x00, 0x00, 0x66, 0x0f, 0x7f, 0x44, 0x24, 0x20, 0xe8,
+            0xc6, 0x10, 0x4f, 0x00, 0x48, 0x83, 0xc4, 0x38, 0xc3,
+        ],
+    ),
+    (
+        0x4a10b0,
+        &[
+            0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xac, 0x38, 0x00, 0x00, 0x00, 0x48,
+            0x8b, 0xd9, 0x75, 0x2b, 0x48, 0x8b, 0x0d, 0xb7, 0x99, 0x6e, 0x00, 0x48, 0x8b, 0x01,
+            0xff, 0x50, 0x30, 0x88, 0x83, 0xad, 0x38, 0x00, 0x00, 0x84, 0xc0, 0x74, 0x0d, 0x48,
+            0x8b, 0x0d, 0xa0, 0x99, 0x6e, 0x00, 0x48, 0x8b, 0x01, 0xff, 0x50, 0x38, 0xc6, 0x83,
+            0xac, 0x38, 0x00, 0x00, 0x01, 0x48, 0x8b, 0x8b, 0x10, 0x04, 0x00, 0x00, 0x48, 0x83,
+            0xc4, 0x20, 0x5b, 0xe9, 0x82, 0x11, 0x4f, 0x00,
+        ],
+    ),
+];
+
+// Call, returned RAX comparison, and complete JNE, with no unverified gap.
+const MANAGER_STATE_PROBES: &[(u32, u32, u32, &[u8])] = &[
+    (
+        0x2f929c,
+        0x49c640,
+        0x2f933a,
+        &[
+            0xe8, 0x9f, 0x33, 0x1a, 0x00, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x0f, 0x85,
+            0x8c, 0x00, 0x00, 0x00,
+        ],
+    ),
+    (
+        0x2f9366,
+        0x49c640,
+        0x2f9464,
+        &[
+            0xe8, 0xd5, 0x32, 0x1a, 0x00, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x0f, 0x85,
+            0xec, 0x00, 0x00, 0x00,
+        ],
+    ),
+    (
+        0x5242e2,
+        0x49c640,
+        0x52433b,
+        &[
+            0xe8, 0x59, 0x83, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x75, 0x4b,
+        ],
+    ),
+    (
+        0x52484b,
+        0x49c640,
+        0x524890,
+        &[
+            0xe8, 0xf0, 0x7d, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x75, 0x37,
+        ],
+    ),
+    (
+        0x52493b,
+        0x49c640,
+        0x524982,
+        &[
+            0xe8, 0x00, 0x7d, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x75, 0x39,
+        ],
+    ),
+    (
+        0x524cfd,
+        0x49c640,
+        0x524ddd,
+        &[
+            0xe8, 0x3e, 0x79, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x0f, 0x85,
+            0xce, 0x00, 0x00, 0x00,
+        ],
+    ),
+    (
+        0x524ef2,
+        0x49c640,
+        0x524f3e,
+        &[
+            0xe8, 0x49, 0x77, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x75, 0x3e,
+        ],
+    ),
+    (
+        0x52526e,
+        0x49c640,
+        0x5252b3,
+        &[
+            0xe8, 0xcd, 0x73, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x75, 0x37,
+        ],
+    ),
+    (
+        0x5252ed,
+        0x49c640,
+        0x525332,
+        &[
+            0xe8, 0x4e, 0x73, 0xf7, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x75, 0x37,
+        ],
+    ),
+    (
+        0x561286,
+        0x49c630,
+        0x5614fb,
+        &[
+            0xe8, 0xa5, 0xb3, 0xf3, 0xff, 0x83, 0xb8, 0xa8, 0x38, 0x00, 0x00, 0x02, 0x0f, 0x85,
+            0x63, 0x02, 0x00, 0x00,
+        ],
+    ),
+];
+
+fn manager_receiver_flow(core: &[u8]) -> Result<Value, String> {
+    for &(rva, block) in MANAGER_FLOW_BLOCKS {
+        bytes(core, rva, block)?;
+    }
+    for (rva, op, target) in [
+        (0x35fa5, 0xe8, 0x951550),
+        (0x35fad, 0xe8, 0x63e2e0),
+        (0x35fbb, 0xe8, 0x951550),
+        (0x35fc8, 0xe9, 0x63e2e0),
+        (0x63e2e4, 0xe8, 0x4afc0),
+        (0x63e2e9, 0xe8, 0x186e60),
+        (0x63e2f2, 0xe9, 0x7bbe0),
+        (0x49c644, 0xe8, 0x951550),
+        (0x4a7a4b, 0xe8, 0x4a1100),
+        (0x4a7a53, 0xe8, 0x4a10b0),
+        (0x4a1145, 0xe8, 0x992210),
+        (0x4a10f9, 0xe9, 0x992280),
+    ] {
+        branch(core, rva, op, target)?;
+    }
+    for rva in [0x951550, 0x4a7a27] {
+        rip_reference(core, rva, &[0x48, 0x8b, 0x05], &[], 0xb8aa68)?;
+    }
+    let mut probes = Vec::new();
+    for &(call, getter, target, block) in MANAGER_STATE_PROBES {
+        bytes(core, call, block)?;
+        branch(core, call, 0xe8, getter)?;
+        let displacement = match block.get(12..) {
+            Some([0x75, rel]) => i64::from(*rel as i8),
+            Some([0x0f, 0x85, a, b, c, d]) => i64::from(i32::from_le_bytes([*a, *b, *c, *d])),
+            _ => return Err("state comparison lacks complete JNE".into()),
+        };
+        if i64::from(call) + block.len() as i64 + displacement != i64::from(target) {
+            return Err("state comparison JNE target mismatch".into());
+        }
+        probes.push(json!({"call_rva":call,"getter_rva":getter,"compare_rva":call+5,"not_equal_branch_target":target,"receiver_basis":if getter==0x49c640 {"returned value loaded from [global B8AA68]+250 at this invocation"} else {"returned value loaded from incoming RCX+250; not assumed equal to global receiver"}}));
+    }
+    Ok(json!({
+        "global_pointer_rva":0xb8aa68,
+        "getter":{"leaf_rva":0x951550,"manager_rva":0x49c640,"explicit_receiver_rva":0x49c630,"field_offset":0x250},
+        "state2_probes":probes,
+        "local_submit_spawn":{"start_rva":0x4a7a27,"bytes":49,"manager_load_rva":0x4a7a41,"push_call_rva":0x4a7a4b,"spawn_call_rva":0x4a7a53,"receiver_continuity":"RBX loaded from [global B8AA68]+250 and passed as RCX to both calls; conditional on normal Push return preserving Win64 RBX"},
+        "push_wrapper":{"entry_rva":0x4a1100,"bytes":79,"set_address_offset":0x400,"list_id_offset":0x410,"state38a8_read":"absent in this complete checked wrapper; invoked host callee semantics not certified"},
+        "spawn_wrapper":{"entry_rva":0x4a10b0,"bytes":78,"byte_guard_offset":0x38ac,"callback_result_offset":0x38ad,"indirect_slots":[0x30,0x38],"indirect_receiver_global_rva":0xb8aa80,"state38a8_read":"absent in this complete checked wrapper; indirect callee semantics not certified"},
+        "higher_dispatch_continuation":{"wrapper_rva":0x63e2e0,"wrapper_bytes":23,"outer_call_rva":0x63e2e4,"after_outer_call_rva":0x63e2e9,"after_outer_target":0x186e60,"tail_target":0x7bbe0,"caller_local_rva":0x35fa5,"caller_local_bytes":46,"caller_call_rva":0x35fad,"after_wrapper_compare_rva":0x35fb2,"compare_operand":"byte [RBX+288]","zero_branch_target":0x35fcd,"nonzero_path":"calls951550 again, copies returned global pointer toRCX, restores caller stack/RBX, tail-jumps63E2E0 at35FC8","scope":"normal returns with Win64 RBX preservation; caller entry reachability, RBX provenance/type/lifetime and callee semantics unestablished;4AFC0 exit alone does not establish this caller exit"},
+        "state_store_sites":[{"rva":0x49b1ba,"base":"RDI","source":"R15D; value and entry receiver continuity not established here"},{"rva":0x49c7e0,"base":"RCX","immediate":1},{"rva":0x49defb,"base":"RSI","immediate":2,"continuity":"not connected to49C7E0 across the unverified intervening function body"},{"rva":0x4a1161,"base":"RCX","immediate":3},{"rva":0x4a16ce,"base":"RBX","source":"ESI; value and path continuity not established here"}],
+        "scope":"nine global-derived comparisons and one explicit-receiver comparison, plus five store sites: fifteen displayed explicit offset38A8 sites only; not exhaustive alias analysis",
+        "unestablished":["global pointer and manager field stability across separate calls or worlds","entry reachability of bounded local blocks","state2 checks sealing every publisher or already-passed caller","pending list publication and same-set full join","synchronous4AFC0/34840 and their higher callers, including35F70, exited without reentry","Close/Rebuild authority and native receiver lifetime"]
+    }))
+}
+
 const SHUTDOWN_PRE_WAIT: [u8; 117] = [
     0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xa4, 0x02, 0x00, 0x00, 0x00, 0x48, 0x8b, 0xd9,
     0x0f, 0x84, 0x63, 0x01, 0x00, 0x00, 0xc6, 0x81, 0xa6, 0x02, 0x00, 0x00, 0x01, 0x48, 0x8d, 0x54,
@@ -382,7 +597,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
     bytes(host, 0x985e50, &[0x48, 0xc7, 0x47, 8, 0, 0, 0, 0])?;
     bytes(host, 0x985e12, &[0x48, 0x8b, 7, 0x48, 0x89, 0x47, 8])?;
     Ok(json!({
-        "schema":"todo880-native-job-lifecycle-static-v5",
+        "schema":"todo880-native-job-lifecycle-static-v6",
         "core_sha256":core_sha,"host_sha256":host_sha,"witnesses":witnesses,
         "manager":{"from_world_offset":0x250,"job_set_offset":0x400,"list_id_offset":0x410,"lifecycle_state_offset":0x38a8},
         "abi":{
@@ -393,6 +608,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
         "file_offset_basis":"SHA-pinned images with independently verified text RVA1000/raw400; Core rdata RVA9B7000/raw9B5C00 virtual size1A8124 and preferred ImageBase180000000; not a general PE parser",
         "release_leaf":{"wrapper_rva":0x58ff70,"leaf_rva":0x7bbf0,"instruction_bytes":14,"same_byte_target_rva":read_target,"behavior":"non-atomic read then write of one RIP-relative byte; not world teardown","world_shutdown_link_evidence":"not established by this audit"},
         "byte_b61e00_consumer":byte_b61e00_consumer(core, read_target)?,
+        "manager_receiver_flow":manager_receiver_flow(core)?,
         "context_world_path":context_world_path(core)?,
         "shutdown_guard":{"entry_rva":0x63e160,"compare_rva":0x63e166,"compare_base":"RCX at63E166","receiver_byte_offset":0x2a4,"compare_value":0,"zero_branch_target":0x63e2d9,"virtual_call_rva":0x63e1b5,"virtual_slot":0x48,"virtual_load_base":"RBX saved from entry RCX at63E16D; contiguous prefix has no later RBX assignment, conditional on normal-return callees obeying Win64 nonvolatile ABI","local_byte_store_offset":0x2a7,"receiver_type_evidence":"constructor/table path recorded separately; source-language type name not established","manager_load_base":"same conditional RBX+250 at63E1C9 under the stated ABI assumption","caller_evidence":"verified conditional call at471BD in RBX+60 block; receiver identity across blocks unestablished","runtime_lifetime_order_evidence":"not established by this audit"},
         "shutdown_pre_wait_flow":{
@@ -492,5 +708,41 @@ mod tests {
         assert!(byte_b61e00_consumer(&[], 0xb61e01)
             .unwrap_err()
             .contains("differs from leaf"));
+    }
+
+    #[test]
+    fn manager_flow_rejects_changed_receiver_and_branch_and_keeps_explicit_source_separate() {
+        let mut image = vec![0; 0x951558 - 0xc00];
+        for &(rva, block) in MANAGER_FLOW_BLOCKS {
+            let offset = (rva - 0xc00) as usize;
+            image[offset..offset + block.len()].copy_from_slice(block);
+        }
+        for &(rva, _, _, block) in MANAGER_STATE_PROBES {
+            let offset = (rva - 0xc00) as usize;
+            image[offset..offset + block.len()].copy_from_slice(block);
+        }
+        let flow = manager_receiver_flow(&image).unwrap();
+        assert_eq!(flow["state2_probes"].as_array().unwrap().len(), 10);
+        assert_eq!(flow["state_store_sites"].as_array().unwrap().len(), 5);
+        assert_eq!(flow["state2_probes"][9]["getter_rva"], 0x49c630);
+        assert!(flow["state2_probes"][9]["receiver_basis"]
+            .as_str()
+            .unwrap()
+            .contains("not assumed equal"));
+        // Change the intervening MOV RCX,RBX to MOV RCX,RDX. The former
+        // direct-call anchors alone would still match, but identity no longer does.
+        assert_eq!(
+            flow["higher_dispatch_continuation"]["caller_local_bytes"],
+            46
+        );
+        for rva in [
+            0x4a7a52, 0x49c64c, 0x951553, 0x5252ed, 0x5242ef, 0x35fb9, 0x63e2e9,
+        ] {
+            let offset = (rva - 0xc00) as usize;
+            image[offset] ^= 1;
+            assert!(manager_receiver_flow(&image).is_err(), "mutation {rva:#x}");
+            image[offset] ^= 1;
+        }
+        assert!(manager_receiver_flow(&image[..image.len() - 1]).is_err());
     }
 }
