@@ -1,6 +1,7 @@
 //! Win64 synthetic regression tests. Each scenario runs in an owned child
 //! process because the observer is a process-lifetime singleton.
 use super::*;
+use crate::oath_install_state::{Binding, Bytes, Reach};
 use std::os::windows::process::CommandExt;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -51,6 +52,8 @@ global_asm!(
     "mov rax, [rcx+0xf8]", "add rsp, 0x30", "pop rbx", "ret",
     ".globl oath_original_clobber", "oath_original_clobber:",
     "mov r12, 1", "pxor xmm7, xmm7", "mov rax, [rcx+0xf8]", "add rsp, 0x30", "pop rbx", "ret",
+    ".globl oath_original_other", "oath_original_other:",
+    "inc qword ptr [rcx+0x108]", "mov rax, [rcx+0xf8]", "add rsp, 0x30", "pop rbx", "ret",
     ".globl oath_original_raise", "oath_original_raise:",
     "add rsp, 0x30", "pop rbx", "jmp {hook}",
     hook = sym oath_test_hook,
@@ -58,6 +61,7 @@ global_asm!(
 unsafe extern "system" {
     fn oath_original_body();
     fn oath_original_clobber();
+    fn oath_original_other();
     fn oath_original_raise();
 }
 
@@ -856,30 +860,106 @@ fn handler_child() {
 }
 
 #[test]
+fn a_lost_entry_race_runs_in_an_owned_child() {
+    run_child("oath_trace::tests::race_child");
+}
+#[test]
+fn unverified_entry_publication_runs_in_owned_children() {
+    run_child_case("oath_trace::tests::unverified_entry_child", "restore");
+    run_child_case("oath_trace::tests::unverified_entry_child", "flush");
+}
+#[test]
+fn uninstall_failures_run_in_owned_children() {
+    for case in ["enable", "restore", "flush"] {
+        run_child_case("oath_trace::tests::uninstall_failure_child", case);
+    }
+}
+#[test]
+fn receipt_retention_runs_in_owned_children() {
+    run_child("oath_trace::tests::rollback_retention_child");
+    run_child("oath_trace::tests::lost_race_retention_child");
+}
+#[test]
+fn a_foreign_entry_window_never_unlatches_runs_in_an_owned_child() {
+    run_child("oath_trace::tests::reachability_latch_child");
+}
+#[test]
+fn a_reachable_binding_is_frozen_runs_in_an_owned_child() {
+    run_child("oath_trace::tests::binding_freeze_child");
+}
+
+fn run_child_case(name: &str, case: &str) {
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--nocapture"])
+        .env("JAC_OATH_SYNTHETIC_CHILD", "1")
+        .env("JAC_OATH_CASE", case)
+        .creation_flags(0x0800_0000)
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(
+                status.success(),
+                "owned oath child {name}/{case} failed: {status}"
+            );
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "owned oath child {name}/{case} timed out"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+fn case() -> String {
+    std::env::var("JAC_OATH_CASE").unwrap_or_default()
+}
+
+fn uninstall_now() -> Result<bool, &'static str> {
+    unsafe { uninstall_oath() }
+}
+fn mask(sites: &[u32]) -> u64 {
+    sites.iter().fold(0, |m, s| m | 1u64 << s)
+}
+fn arm(sites: &[u32]) {
+    OATH_FAULTS.store(mask(sites), Ordering::SeqCst);
+}
+fn arm_persistent(sites: &[u32]) {
+    OATH_FAULTS_PERSIST.store(mask(sites), Ordering::SeqCst);
+}
+fn fresh_rx_page() -> *mut u8 {
+    let page = unsafe { build_page(oath_original_body) };
+    make_rx(page);
+    page
+}
+fn install_apply(page: *mut u8, trace: &'static OathTrace) -> Result<(), &'static str> {
+    unsafe { install_oath_at(page.add(0x20), OathCall::Apply, trace, OATH_ENTRY_HEAD) }
+}
+fn prefix_of(page: *mut u8) -> [u8; 5] {
+    unsafe { ptr::read(page.add(0x1b).cast::<[u8; 5]>()) }
+}
+fn entry_of(page: *mut u8) -> [u8; 8] {
+    entry_head(unsafe { page.add(0x20) })
+}
+fn hooks_idle() -> bool {
+    OATH_HOOKS.lock().unwrap().iter().all(Option::is_none)
+}
+fn apply_ledger() -> Option<Ledger> {
+    OATH_HOOKS.lock().unwrap()[0].as_ref().map(|r| r.ledger)
+}
+fn protection(page: *mut u8) -> Option<u32> {
+    page_protection_of(page)
+}
+
+/// Failures that can never have exposed the prefix are undone completely:
+/// bytes, protection, flush and every reservation.
+#[test]
 fn install_failure_child() {
     if !in_child() {
         return;
     }
     let trace = leaked_trace();
-    let arm = |sites: &[u32]| {
-        OATH_FAULTS.store(sites.iter().fold(0, |m, s| m | 1u64 << s), Ordering::SeqCst)
-    };
-    let fresh = || {
-        let page = unsafe { build_page(oath_original_body) };
-        make_rx(page);
-        page
-    };
-    let install = |page: *mut u8| unsafe {
-        install_oath_at(page.add(0x20), OathCall::Apply, trace, OATH_ENTRY_HEAD)
-    };
-    let idle = || OATH_HOOKS.lock().unwrap().iter().all(Option::is_none);
-    let stage = || OATH_HOOKS.lock().unwrap()[0].as_ref().map(|r| r.stage);
-    let entry = |page: *mut u8| entry_head(unsafe { page.add(0x20) });
-    let prefix = |page: *mut u8| unsafe { ptr::read(page.add(0x1b).cast::<[u8; 5]>()) };
-    let uninstall = || unsafe { uninstall_oath() };
-
-    // Refused before the entry could be reached: the starting bytes and
-    // protection return and every reservation is released.
     for (site, other) in [
         (SITE_TABLE_ADD, None),
         (SITE_CODE_PROTECT, None),
@@ -888,10 +968,10 @@ fn install_failure_child() {
         (SITE_PREFIX_RESTORE, Some("rolled back")),
         (SITE_ENTRY_ENABLE, Some("rolled back")),
     ] {
-        let page = fresh();
+        let page = fresh_rx_page();
         let snapshot = page_bytes(page);
         arm(&[site]);
-        let error = install(page).unwrap_err();
+        let error = install_apply(page, trace).unwrap_err();
         assert_eq!(
             OATH_FAULTS.load(Ordering::SeqCst),
             0,
@@ -901,97 +981,285 @@ fn install_failure_child() {
             assert!(error.contains(word), "{error}");
         }
         assert_eq!(page_bytes(page), snapshot, "site {site} left bytes behind");
-        assert_eq!(
-            page_protection_of(page),
-            Some(PAGE_EXECUTE_READ),
-            "site {site}"
-        );
-        assert!(idle());
+        assert_eq!(protection(page), Some(PAGE_EXECUTE_READ), "site {site}");
+        assert!(hooks_idle());
         assert!(OATH_TRACE_PTR.load(Ordering::SeqCst).is_null());
         assert!(OATH_APPLY_TRAMPOLINE.load(Ordering::SeqCst).is_null());
     }
 
-    // Prefix written but neither verified nor rolled back: keep everything,
-    // never guess. A later uninstall puts the padding back, then install works.
-    let page = fresh();
+    // Prefix written, neither verified nor rolled back: nothing is guessed.
+    // The reach is still Never, so a later uninstall puts everything back.
+    let page = fresh_rx_page();
     let snapshot = page_bytes(page);
     arm(&[SITE_PREFIX_FLUSH, SITE_ROLLBACK_ENABLE]);
-    assert!(install(page).unwrap_err().contains("not rolled back"));
+    assert!(install_apply(page, trace)
+        .unwrap_err()
+        .contains("not rolled back"));
     assert_eq!(OATH_FAULTS.load(Ordering::SeqCst), 0);
-    assert_eq!(stage(), Some(Stage::PrefixMaybe));
-    assert_ne!(prefix(page), OATH_PREFIX_PAD);
-    assert_eq!(entry(page), OATH_ENTRY_HEAD, "entry never touched");
+    let ledger = apply_ledger().unwrap();
+    assert_eq!(ledger.reach(), Reach::Never);
+    assert_eq!(ledger.binding(), Binding::Held);
+    assert_ne!(prefix_of(page), OATH_PREFIX_PAD);
+    assert_eq!(entry_of(page), OATH_ENTRY_HEAD, "entry never touched");
     assert!(!OATH_TRACE_PTR.load(Ordering::SeqCst).is_null());
     assert!(
-        install(page).is_err(),
+        install_apply(page, trace).is_err(),
         "unresolved install blocks a second writer"
     );
-    assert_eq!(uninstall(), Ok(true));
+    assert_eq!(uninstall_now(), Ok(true));
     assert_eq!(page_bytes(page), snapshot);
-    assert_eq!(page_protection_of(page), Some(PAGE_EXECUTE_READ));
-    assert!(idle());
-    install(page).unwrap();
-    assert_eq!(uninstall(), Ok(true));
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ));
+    assert!(hooks_idle(), "a Never receipt is released once confirmed");
+    install_apply(page, trace).unwrap();
+    assert_eq!(uninstall_now(), Ok(true));
+    assert!(apply_ledger().unwrap().frozen());
+}
 
-    // Someone else owns the entry: their bytes stay, our prefix stays resident.
-    let page = fresh();
+/// A foreign writer owns the entry: its bytes stay, our prefix stays resident
+/// and the binding is frozen.
+#[test]
+fn race_child() {
+    if !in_child() {
+        return;
+    }
+    let trace = leaked_trace();
+    let page = fresh_rx_page();
     arm(&[SITE_ENTRY_RACE]);
-    assert!(install(page).unwrap_err().contains("changed"));
-    assert_eq!(stage(), Some(Stage::PrefixPublished));
-    assert_eq!(&entry(page)[..2], &[0x90, 0x90]);
-    let published = prefix(page);
-    assert_ne!(published, OATH_PREFIX_PAD);
-    assert!(install(page).is_err());
-    assert_eq!(uninstall(), Ok(true));
+    assert!(install_apply(page, trace).unwrap_err().contains("changed"));
+    let ledger = apply_ledger().unwrap();
     assert_eq!(
-        (&entry(page)[..2], prefix(page)),
+        (ledger.reach(), ledger.binding()),
+        (Reach::Possibly, Binding::Frozen)
+    );
+    assert_eq!(&entry_of(page)[..2], &[0x90, 0x90]);
+    let published = prefix_of(page);
+    assert_ne!(published, OATH_PREFIX_PAD);
+    assert!(install_apply(page, trace).is_err());
+    assert_eq!(uninstall_now(), Ok(true));
+    assert_eq!(
+        (&entry_of(page)[..2], prefix_of(page)),
         (&[0x90u8, 0x90][..], published)
     );
-    assert!(idle());
-
-    // Entry exchanged but protection or flush unverified: the entry is ours and
-    // uninstall restores it, including the page protection.
-    for site in [SITE_ENTRY_RESTORE, SITE_ENTRY_FLUSH] {
-        let page = fresh();
-        arm(&[site]);
-        assert!(install(page).unwrap_err().contains("unverified"));
-        assert_eq!(OATH_FAULTS.load(Ordering::SeqCst), 0);
-        assert_eq!(stage(), Some(Stage::EntryPublished));
-        assert_eq!(&entry(page)[..2], &PROPERTY_SHORT_JUMP);
-        let open = site == SITE_ENTRY_RESTORE;
-        assert_eq!(
-            page_protection_of(page) == Some(PAGE_EXECUTE_READWRITE),
-            open
-        );
-        assert_eq!(uninstall(), Ok(true));
-        assert_eq!(entry(page), OATH_ENTRY_HEAD);
-        assert_eq!(page_protection_of(page), Some(PAGE_EXECUTE_READ));
-        assert!(idle());
-    }
-
-    // Uninstall failures keep the receipt until the entry is verified.
-    let page = fresh();
-    install(page).unwrap();
-    arm(&[SITE_UNINSTALL_ENABLE]);
-    assert!(uninstall().is_err());
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ));
     assert_eq!(
-        &entry(page)[..2],
-        &PROPERTY_SHORT_JUMP,
-        "nothing was written"
+        uninstall_now(),
+        Ok(false),
+        "a settled tombstone reports once"
     );
-    assert!(!idle());
-    assert_eq!(uninstall(), Ok(true));
-    assert_eq!(entry(page), OATH_ENTRY_HEAD);
-    for site in [SITE_UNINSTALL_RESTORE, SITE_UNINSTALL_FLUSH] {
-        let page = fresh();
-        install(page).unwrap();
-        arm(&[site]);
-        assert!(uninstall().is_err());
-        assert_eq!(OATH_FAULTS.load(Ordering::SeqCst), 0);
-        assert_eq!(entry(page), OATH_ENTRY_HEAD, "exchange itself completed");
-        assert_eq!(stage(), Some(Stage::EntryMaybe));
-        assert_eq!(uninstall(), Ok(true));
-        assert_eq!(page_protection_of(page), Some(PAGE_EXECUTE_READ));
-        assert!(idle());
+    assert!(!hooks_idle() && apply_ledger().unwrap().frozen());
+}
+
+/// Entry exchanged but protection or flush unverified: the entry is ours and
+/// uninstall restores it with the protection.
+#[test]
+fn unverified_entry_child() {
+    if !in_child() {
+        return;
     }
+    let trace = leaked_trace();
+    let page = fresh_rx_page();
+    let restore = case() == "restore";
+    arm(&[if restore {
+        SITE_ENTRY_RESTORE
+    } else {
+        SITE_ENTRY_FLUSH
+    }]);
+    assert!(install_apply(page, trace)
+        .unwrap_err()
+        .contains("unverified"));
+    assert_eq!(OATH_FAULTS.load(Ordering::SeqCst), 0);
+    let ledger = apply_ledger().unwrap();
+    assert_eq!((ledger.entry.bytes, ledger.frozen()), (Bytes::Ours, true));
+    assert!(!ledger.entry.confirm.complete());
+    assert_eq!(&entry_of(page)[..2], &PROPERTY_SHORT_JUMP);
+    assert_eq!(protection(page) == Some(PAGE_EXECUTE_READWRITE), restore);
+    assert_eq!(uninstall_now(), Ok(true));
+    assert_eq!(entry_of(page), OATH_ENTRY_HEAD);
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ));
+    assert_eq!(uninstall_now(), Ok(false));
+    assert!(install_apply(page, trace).unwrap_err().contains("frozen"));
+}
+
+/// Uninstall failures keep the receipt until the entry is verified.
+#[test]
+fn uninstall_failure_child() {
+    if !in_child() {
+        return;
+    }
+    let trace = leaked_trace();
+    let page = fresh_rx_page();
+    install_apply(page, trace).unwrap();
+    let site = match case().as_str() {
+        "enable" => SITE_UNINSTALL_ENABLE,
+        "restore" => SITE_UNINSTALL_RESTORE,
+        _ => SITE_UNINSTALL_FLUSH,
+    };
+    arm(&[site]);
+    let first = uninstall_now();
+    assert_eq!(OATH_FAULTS.load(Ordering::SeqCst), 0);
+    // Without a writable page nothing can be restored; after a completed
+    // exchange the same call re-verifies protection and flush by itself.
+    assert_eq!(first.is_err(), case() == "enable");
+    if case() == "enable" {
+        assert_eq!(
+            &entry_of(page)[..2],
+            &PROPERTY_SHORT_JUMP,
+            "nothing was written"
+        );
+    } else {
+        // The exchange completed; protection or flush is still owed. A repair
+        // inside the same call may already have paid it off.
+        assert_eq!(entry_of(page), OATH_ENTRY_HEAD);
+    }
+    assert!(uninstall_now().is_ok());
+    assert_eq!(entry_of(page), OATH_ENTRY_HEAD);
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ));
+    assert!(apply_ledger().unwrap().frozen());
+}
+
+/// M1: a receipt outlives every unconfirmed byte, protection or flush.
+#[test]
+fn rollback_retention_child() {
+    if !in_child() {
+        return;
+    }
+    let trace = leaked_trace();
+    // The padding cannot be restored: uninstall fails and keeps the receipt.
+    let page = fresh_rx_page();
+    let snapshot = page_bytes(page);
+    arm(&[SITE_PREFIX_FLUSH]);
+    arm_persistent(&[SITE_ROLLBACK_ENABLE]);
+    assert!(install_apply(page, trace).is_err());
+    assert!(uninstall_now().is_err(), "padding still our jump");
+    assert!(!hooks_idle());
+    assert_ne!(prefix_of(page), OATH_PREFIX_PAD);
+    arm_persistent(&[]);
+    assert_eq!(uninstall_now(), Ok(true));
+    assert_eq!(page_bytes(page), snapshot);
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ));
+    assert!(hooks_idle());
+
+    // The padding is back but the page is still writable: restoring the
+    // protection failed on the write, on the rollback and on every repair.
+    let page = fresh_rx_page();
+    let persistent = [
+        SITE_PREFIX_RESTORE,
+        SITE_ROLLBACK_RESTORE,
+        SITE_REPAIR_PREFIX_RESTORE,
+        SITE_REPAIR_ENTRY_RESTORE,
+    ];
+    arm_persistent(&persistent);
+    assert!(install_apply(page, trace)
+        .unwrap_err()
+        .contains("not rolled back"));
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READWRITE));
+    assert_eq!(prefix_of(page), OATH_PREFIX_PAD, "bytes are back");
+    assert!(!hooks_idle(), "bytes alone do not free the receipt");
+    assert!(!apply_ledger().unwrap().may_release());
+    assert!(uninstall_now().is_err());
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READWRITE));
+    arm_persistent(&[]);
+    assert_eq!(uninstall_now(), Ok(true));
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ), "RX confirmed");
+    assert!(hooks_idle());
+    install_apply(page, trace).unwrap();
+    assert_eq!(uninstall_now(), Ok(true));
+}
+
+/// M1: a lost entry race whose protection cannot be restored keeps the
+/// receipt until a repair is confirmed.
+#[test]
+fn lost_race_retention_child() {
+    if !in_child() {
+        return;
+    }
+    let trace = leaked_trace();
+    let page = fresh_rx_page();
+    arm(&[SITE_ENTRY_RACE]);
+    arm_persistent(&[SITE_ENTRY_RESTORE, SITE_REPAIR_ENTRY_RESTORE]);
+    assert!(install_apply(page, trace).is_err());
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READWRITE));
+    assert!(uninstall_now().is_err(), "protection is still unconfirmed");
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READWRITE));
+    arm_persistent(&[]);
+    assert_eq!(uninstall_now(), Ok(true));
+    assert_eq!(protection(page), Some(PAGE_EXECUTE_READ));
+}
+
+/// M2: a foreign entry that could reach the prefix latches it for good, even
+/// if the entry later shows the original bytes again (ABA).
+#[test]
+fn reachability_latch_child() {
+    if !in_child() {
+        return;
+    }
+    let trace = leaked_trace();
+    let page = fresh_rx_page();
+    let entry = unsafe { page.add(0x20) };
+    arm(&[SITE_ENTRY_RACE]);
+    assert!(install_apply(page, trace).is_err());
+    let jump = prefix_of(page);
+    assert_ne!(jump, OATH_PREFIX_PAD);
+    let poke = |bytes: [u8; 2]| {
+        let mut old = 0u32;
+        unsafe {
+            VirtualProtect(entry.cast(), 2, PAGE_EXECUTE_READWRITE, &mut old);
+            ptr::write(entry.cast::<[u8; 2]>(), bytes);
+            VirtualProtect(entry.cast(), 2, old, &mut old);
+        }
+    };
+    // The foreign writer branches into our prefix, then puts the original back.
+    poke(PROPERTY_SHORT_JUMP);
+    let mut block = Block::new(0x1000, 0x66);
+    let address = block.address();
+    assert_eq!(plain_call(entry)(address, 0, 1, 0), 0x66);
+    assert_eq!(
+        (block.0[1], trace.records().unwrap().len()),
+        (1, 1),
+        "reachable prefix works"
+    );
+    poke([0x40, 0x53]);
+    assert_eq!(entry_head(entry), OATH_ENTRY_HEAD);
+    let _ = uninstall_now();
+    assert_eq!(
+        prefix_of(page),
+        jump,
+        "a once reachable prefix is never recycled"
+    );
+    let ledger = apply_ledger().unwrap();
+    assert_eq!(
+        (ledger.reach(), ledger.binding()),
+        (Reach::Possibly, Binding::Frozen)
+    );
+    assert!(install_apply(page, trace).is_err());
+}
+
+/// M3: after the old relay could run, the call keeps its target forever.
+#[test]
+fn binding_freeze_child() {
+    if !in_child() {
+        return;
+    }
+    let trace = leaked_trace();
+    let first = fresh_rx_page();
+    let second = unsafe { build_page(oath_original_other) };
+    make_rx(second);
+    install_apply(first, trace).unwrap();
+    let relay = OATH_HOOKS.lock().unwrap()[0].as_ref().unwrap().code;
+    assert_eq!(uninstall_now(), Ok(true));
+    assert!(
+        install_apply(second, trace).is_err(),
+        "another target is refused"
+    );
+    assert_eq!(entry_head(unsafe { second.add(0x20) }), OATH_ENTRY_HEAD);
+    assert!(OATH_APPLY_TRAMPOLINE.load(Ordering::SeqCst) as usize != 0);
+    // A late caller still inside the old relay reaches only the old original.
+    let mut block = Block::new(0x1000, 0x66);
+    let address = block.address();
+    assert_eq!(plain_call(relay)(address, 0, 1, 0), 0x66);
+    assert_eq!(
+        (block.0[1], block.0[33]),
+        (1, 0),
+        "old original ran, new one did not"
+    );
 }

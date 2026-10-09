@@ -12,6 +12,7 @@
 //! Win64 ABI, SEH and global_asm stay in Rust because the gateway frames and
 //! the trampoline unwind data must match the native unwinder exactly.
 
+pub mod oath_install_state;
 pub mod oath_record;
 
 #[cfg(windows)]

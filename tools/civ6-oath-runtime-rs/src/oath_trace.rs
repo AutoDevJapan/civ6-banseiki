@@ -400,22 +400,10 @@ unsafe extern "system" {
 
 // ---- install state machine -------------------------------------------------
 
-/// What is known about the bytes after each step. A stage is recorded before
-/// the step that can change it, so an unverified outcome is never forgotten.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Stage {
-    /// Code, unwind tables and reservations exist; no game byte was written.
-    Reserved,
-    /// Prefix write attempted; it holds either the padding or our jump.
-    PrefixMaybe,
-    /// Prefix verified as our jump; the entry still holds the original bytes.
-    PrefixPublished,
-    /// Entry exchange attempted; outcome not known.
-    EntryMaybe,
-    /// Entry verified as our short jump.
-    EntryPublished,
-}
+use crate::oath_install_state::{Bytes, Cas, Confirm, Ledger, Region, Write};
 
+/// Pointers of one installed call type plus the portable ledger. The ledger
+/// (see oath_install_state) alone decides what may be undone or released.
 pub(super) struct Receipt {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(super) code: *mut u8,
@@ -428,7 +416,9 @@ pub(super) struct Receipt {
     page_protection: u32,
     claimed_trace: bool,
     prior_trampoline: *mut u8,
-    pub(super) stage: Stage,
+    pub(super) ledger: Ledger,
+    /// A frozen, settled receipt stays as a tombstone; this reports it once.
+    reported: bool,
 }
 unsafe impl Send for Receipt {}
 
@@ -459,13 +449,22 @@ const SITE_ROLLBACK_FLUSH: u32 = 12;
 const SITE_UNINSTALL_ENABLE: u32 = 13;
 const SITE_UNINSTALL_RESTORE: u32 = 14;
 const SITE_UNINSTALL_FLUSH: u32 = 15;
+const SITE_REPAIR_PREFIX_RESTORE: u32 = 16;
+const SITE_REPAIR_PREFIX_FLUSH: u32 = 17;
+const SITE_REPAIR_ENTRY_RESTORE: u32 = 18;
+const SITE_REPAIR_ENTRY_FLUSH: u32 = 19;
 
 #[cfg(test)]
 pub(super) static OATH_FAULTS: AtomicU64 = AtomicU64::new(0);
+/// Sites that keep failing until the test clears the mask.
+#[cfg(test)]
+pub(super) static OATH_FAULTS_PERSIST: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 fn fault(site: u32) -> bool {
     let bit = 1u64 << site;
-    site != SITE_NONE && OATH_FAULTS.fetch_and(!bit, Ordering::SeqCst) & bit != 0
+    site != SITE_NONE
+        && (OATH_FAULTS_PERSIST.load(Ordering::SeqCst) & bit != 0
+            || OATH_FAULTS.fetch_and(!bit, Ordering::SeqCst) & bit != 0)
 }
 #[cfg(not(test))]
 fn fault(_site: u32) -> bool {
@@ -490,84 +489,78 @@ fn page_protection_of(address: *mut u8) -> Option<u32> {
     (unsafe { VirtualQuery(address.cast(), &mut info, size) } == size).then_some(info.Protect)
 }
 
-enum Write {
-    /// Nothing changed (protection change refused, or bytes were not as expected).
-    Untouched,
-    /// Bytes untouched, but the protection could not be put back.
-    ProtectionUnverified,
-    Written {
-        restored: bool,
-        flushed: bool,
-        verified: bool,
-    },
+/// Puts the page protection back and proves it by asking the OS afterwards.
+unsafe fn protect_back(site: u32, address: *mut u8, len: usize, restore_to: u32) -> bool {
+    unsafe { protect(site, address, len, restore_to) }.is_some()
+        && page_protection_of(address) == Some(restore_to)
 }
-impl Write {
-    fn clean(&self) -> bool {
-        matches!(
-            self,
-            Write::Written {
-                restored: true,
-                flushed: true,
-                verified: true
-            }
-        )
+
+/// Re-verifies a region's protection (repairing it if needed) and flushes it.
+unsafe fn confirm_region(
+    sites: [u32; 2],
+    address: *mut u8,
+    len: usize,
+    restore_to: u32,
+) -> Confirm {
+    Confirm {
+        protection: page_protection_of(address) == Some(restore_to)
+            || unsafe { protect_back(sites[0], address, len, restore_to) },
+        flush: unsafe { flush(sites[1], address, len) },
     }
 }
 
-/// Replaces `expected` by `new` only if the bytes are still the expected ones.
-unsafe fn write_guarded<const N: usize>(
+/// Replaces the five prefix bytes only if they are still the expected ones.
+/// The ledger records the attempt before and the outcome after.
+unsafe fn write_prefix(
+    ledger: &mut Ledger,
     sites: [u32; 3],
     restore_to: u32,
     at: *mut u8,
-    expected: [u8; N],
-    new: [u8; N],
+    expected: [u8; 5],
+    new: [u8; 5],
+    target: Bytes,
 ) -> Write {
-    if unsafe { protect(sites[0], at, N, PAGE_EXECUTE_READWRITE) }.is_none() {
-        return Write::Untouched;
-    }
-    if unsafe { ptr::read(at.cast::<[u8; N]>()) } != expected {
-        return if unsafe { protect(sites[1], at, N, restore_to) }.is_some() {
-            Write::Untouched
-        } else {
-            Write::ProtectionUnverified
-        };
-    }
-    unsafe { ptr::copy_nonoverlapping(new.as_ptr(), at, N) };
-    let restored = unsafe { protect(sites[1], at, N, restore_to) }.is_some();
-    let flushed = unsafe { flush(sites[2], at, N) };
-    let verified = unsafe { ptr::read(at.cast::<[u8; N]>()) } == new;
-    Write::Written {
-        restored,
-        flushed,
-        verified,
-    }
+    let previous = ledger.prefix_begin();
+    let result = if unsafe { protect(sites[0], at, 5, PAGE_EXECUTE_READWRITE) }.is_none() {
+        Write::Refused
+    } else if unsafe { ptr::read(at.cast::<[u8; 5]>()) } != expected {
+        let restored = unsafe { protect_back(sites[1], at, 5, restore_to) };
+        Write::Mismatch { restored }
+    } else {
+        unsafe { ptr::copy_nonoverlapping(new.as_ptr(), at, 5) };
+        let restored = unsafe { protect_back(sites[1], at, 5, restore_to) };
+        let flushed = unsafe { flush(sites[2], at, 5) };
+        let verified = unsafe { ptr::read(at.cast::<[u8; 5]>()) } == new;
+        Write::Written {
+            restored,
+            flushed,
+            verified,
+        }
+    };
+    ledger.prefix_end(previous, target, result);
+    result
 }
 
-enum Exchange {
-    Untouched,
-    /// Someone else's bytes were in the entry; ours were not written.
-    Lost,
-    Done {
-        restored: bool,
-        flushed: bool,
-    },
-}
-
+/// Two byte compare-exchange on the entry. The ledger learns that the entry
+/// may reach the prefix before the exchange runs, never after.
 unsafe fn exchange_entry2(
+    ledger: &mut Ledger,
     sites: [u32; 4],
     restore_to: u32,
-    target: *mut u8,
+    entry: *mut u8,
     expected: [u8; 2],
     replacement: [u8; 2],
-) -> Exchange {
-    if unsafe { protect(sites[0], target, 2, PAGE_EXECUTE_READWRITE) }.is_none() {
-        return Exchange::Untouched;
+    target: Bytes,
+) -> Cas {
+    if unsafe { protect(sites[0], entry, 2, PAGE_EXECUTE_READWRITE) }.is_none() {
+        return Cas::Untouched;
     }
+    let previous = ledger.entry_begin();
     #[cfg(test)]
     if fault(sites[1]) {
-        unsafe { ptr::write(target.cast::<[u8; 2]>(), [0x90, 0x90]) };
+        unsafe { ptr::write(entry.cast::<[u8; 2]>(), [0x90, 0x90]) };
     }
-    let exchanged = unsafe { &*target.cast::<AtomicU16>() }
+    let exchanged = unsafe { &*entry.cast::<AtomicU16>() }
         .compare_exchange(
             u16::from_le_bytes(expected),
             u16::from_le_bytes(replacement),
@@ -575,14 +568,20 @@ unsafe fn exchange_entry2(
             Ordering::SeqCst,
         )
         .is_ok();
-    let restored = unsafe { protect(sites[2], target, 2, restore_to) }.is_some();
-    if !exchanged {
-        return Exchange::Lost;
-    }
-    Exchange::Done {
-        restored,
-        flushed: unsafe { flush(sites[3], target, 2) },
-    }
+    let restored = unsafe { protect_back(sites[2], entry, 2, restore_to) };
+    let result = if exchanged {
+        let flushed = unsafe { flush(sites[3], entry, 2) };
+        let verified = unsafe { ptr::read(entry.cast::<[u8; 2]>()) } == replacement;
+        Cas::Done {
+            restored,
+            flushed,
+            verified,
+        }
+    } else {
+        Cas::Lost { restored }
+    };
+    ledger.entry_end(previous, target, result);
+    result
 }
 
 // Relay, trampoline and their unwind data share one resident page.
@@ -674,38 +673,105 @@ fn release_reservation(hooks: &mut [Option<Receipt>; 2], index: usize) {
     }
 }
 
-/// Puts the padding back, but only while the entry is provably untouched and
-/// the prefix is still our own jump (or already the padding). Returns whether
-/// the padding is verified. Foreign bytes are never overwritten.
-unsafe fn rollback_prefix(receipt: &Receipt) -> bool {
-    let current = unsafe { ptr::read(receipt.slot.cast::<[u8; OATH_PREFIX_PAD.len()]>()) };
-    if current == OATH_PREFIX_PAD {
-        return true;
+/// Returns the reservations only when the ledger proves nothing could have
+/// reached the prefix and every byte, protection and flush is original.
+fn conclude(hooks: &mut [Option<Receipt>; 2], index: usize) -> bool {
+    let released = hooks[index].as_mut().is_some_and(|r| r.ledger.release());
+    if released {
+        release_reservation(hooks, index);
     }
-    if current != receipt.prefix_jump
-        || unsafe { ptr::read(receipt.target.cast::<[u8; 8]>()) } != receipt.original
-    {
-        return false;
+    released
+}
+
+/// Reads both regions and tells the ledger what is really there.
+unsafe fn observe(receipt: &mut Receipt) {
+    let prefix = match unsafe { ptr::read(receipt.slot.cast::<[u8; 5]>()) } {
+        bytes if bytes == OATH_PREFIX_PAD => Bytes::Original,
+        bytes if bytes == receipt.prefix_jump => Bytes::Ours,
+        _ => Bytes::Foreign,
+    };
+    let entry = match unsafe { ptr::read(receipt.target.cast::<[u8; 8]>()) } {
+        bytes if bytes == receipt.original => Bytes::Original,
+        bytes if bytes == receipt.entry_patched => Bytes::Ours,
+        _ => Bytes::Foreign,
+    };
+    receipt.ledger.observe(prefix, entry);
+}
+
+/// The single recovery routine for install failures and uninstall: observe,
+/// restore our entry, put the padding back while the ledger allows it, then
+/// re-verify protection and flush of both regions. Each step asks the ledger.
+unsafe fn settle(receipt: &mut Receipt) {
+    unsafe { observe(receipt) };
+    if receipt.ledger.may_restore_entry() {
+        let first: [u8; OATH_RELOCATED_LEN] = receipt.original[..OATH_RELOCATED_LEN]
+            .try_into()
+            .unwrap_or_default();
+        unsafe {
+            exchange_entry2(
+                &mut receipt.ledger,
+                [
+                    SITE_UNINSTALL_ENABLE,
+                    SITE_NONE,
+                    SITE_UNINSTALL_RESTORE,
+                    SITE_UNINSTALL_FLUSH,
+                ],
+                receipt.page_protection,
+                receipt.target,
+                PROPERTY_SHORT_JUMP,
+                first,
+                Bytes::Original,
+            );
+            observe(receipt);
+        }
     }
-    unsafe {
-        write_guarded(
-            [
-                SITE_ROLLBACK_ENABLE,
-                SITE_ROLLBACK_RESTORE,
-                SITE_ROLLBACK_FLUSH,
-            ],
-            receipt.page_protection,
-            receipt.slot,
-            receipt.prefix_jump,
-            OATH_PREFIX_PAD,
-        )
+    if receipt.ledger.may_rollback_prefix() {
+        unsafe {
+            write_prefix(
+                &mut receipt.ledger,
+                [
+                    SITE_ROLLBACK_ENABLE,
+                    SITE_ROLLBACK_RESTORE,
+                    SITE_ROLLBACK_FLUSH,
+                ],
+                receipt.page_protection,
+                receipt.slot,
+                receipt.prefix_jump,
+                OATH_PREFIX_PAD,
+                Bytes::Original,
+            );
+            observe(receipt);
+        }
     }
-    .clean()
+    if !receipt.ledger.prefix.confirm.complete() {
+        let confirm = unsafe {
+            confirm_region(
+                [SITE_REPAIR_PREFIX_RESTORE, SITE_REPAIR_PREFIX_FLUSH],
+                receipt.slot,
+                OATH_PREFIX_PAD.len(),
+                receipt.page_protection,
+            )
+        };
+        receipt.ledger.prefix_repaired(confirm);
+    }
+    if !receipt.ledger.entry.confirm.complete() {
+        let confirm = unsafe {
+            confirm_region(
+                [SITE_REPAIR_ENTRY_RESTORE, SITE_REPAIR_ENTRY_FLUSH],
+                receipt.target,
+                OATH_RELOCATED_LEN,
+                receipt.page_protection,
+            )
+        };
+        receipt.ledger.entry_repaired(confirm);
+    }
 }
 
 /// Synthetic-target installer; not reachable from any BridgeMode. Nothing is
-/// written to game memory until the receipt is stored, and every failure
-/// either returns to the starting bytes or keeps everything resident.
+/// written to game memory until the receipt (and its ledger) is stored. While
+/// the ledger says nothing could have reached the prefix, every failure
+/// returns to the starting bytes, protection and flush and frees the
+/// reservations; once it says otherwise everything stays for the process.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) unsafe fn install_oath_at(
     target: *mut u8,
@@ -724,8 +790,12 @@ pub(crate) unsafe fn install_oath_at(
     }
     let mut hooks = OATH_HOOKS.lock().map_err(|_| "bridge lock poisoned")?;
     let index = call as usize - 1;
-    if hooks[index].is_some() {
-        return Err("oath wrapper already installed or unresolved");
+    if let Some(existing) = hooks[index].as_ref() {
+        return Err(if existing.ledger.frozen() {
+            "oath wrapper is frozen to its first target; restart the process"
+        } else {
+            "oath wrapper already installed or unresolved"
+        });
     }
     let trace_ptr = trace as *const OathTrace as *mut OathTrace;
     let current = OATH_TRACE_PTR.load(Ordering::Acquire);
@@ -778,63 +848,62 @@ pub(crate) unsafe fn install_oath_at(
         unsafe { VirtualFree(code.cast(), 0, MEM_RELEASE) };
         return Err("cannot register oath unwind tables");
     }
-    // From here the page and its table stay for the process lifetime.
+    // The page and its table stay for the process lifetime from here on; the
+    // reservations below are returned only by a verified Never release.
     let claimed_trace = OATH_TRACE_PTR
         .compare_exchange(null_mut(), trace_ptr, Ordering::AcqRel, Ordering::Acquire)
         .is_ok();
     let prior_trampoline = trampoline_cell(index).swap(trampoline, Ordering::AcqRel);
+    let mut ledger = Ledger::new();
+    ledger.bind();
+    let mut patched = original;
+    patched[..OATH_RELOCATED_LEN].copy_from_slice(&PROPERTY_SHORT_JUMP);
     hooks[index] = Some(Receipt {
         code,
         target,
         slot,
         original,
-        entry_patched: {
-            let mut patched = original;
-            patched[..OATH_RELOCATED_LEN].copy_from_slice(&PROPERTY_SHORT_JUMP);
-            patched
-        },
+        entry_patched: patched,
         prefix_jump,
         page_protection,
         claimed_trace,
         prior_trampoline,
-        stage: Stage::Reserved,
+        ledger,
+        reported: false,
     });
 
     // The padding is never executed on a valid path, so it goes first.
-    hooks[index].as_mut().unwrap().stage = Stage::PrefixMaybe;
-    let written = unsafe {
-        write_guarded(
-            [SITE_PREFIX_ENABLE, SITE_PREFIX_RESTORE, SITE_PREFIX_FLUSH],
-            page_protection,
-            slot,
-            OATH_PREFIX_PAD,
-            prefix_jump,
-        )
-    };
-    match written {
-        Write::Untouched => {
-            release_reservation(&mut hooks, index);
-            return Err("oath prefix write refused; no byte changed");
+    {
+        let receipt = hooks[index].as_mut().unwrap();
+        unsafe {
+            write_prefix(
+                &mut receipt.ledger,
+                [SITE_PREFIX_ENABLE, SITE_PREFIX_RESTORE, SITE_PREFIX_FLUSH],
+                page_protection,
+                slot,
+                OATH_PREFIX_PAD,
+                prefix_jump,
+                Bytes::Ours,
+            )
+        };
+        let published = Region {
+            bytes: Bytes::Ours,
+            confirm: Confirm::OK,
+        };
+        if receipt.ledger.prefix != published {
+            unsafe { settle(receipt) };
+            return Err(if conclude(&mut hooks, index) {
+                "oath prefix publication failed; rolled back"
+            } else {
+                "critical: oath prefix publication failed; not rolled back"
+            });
         }
-        Write::ProtectionUnverified => {
-            release_reservation(&mut hooks, index);
-            return Err("critical: oath prefix protection unverified; bytes unchanged");
-        }
-        ref outcome if !outcome.clean() => {
-            // Unreachable until the entry switches, so the padding can return.
-            if unsafe { rollback_prefix(hooks[index].as_ref().unwrap()) } {
-                release_reservation(&mut hooks, index);
-                return Err("oath prefix publication unverified; rolled back");
-            }
-            return Err("critical: oath prefix publication unverified and not rolled back");
-        }
-        _ => {}
     }
-    hooks[index].as_mut().unwrap().stage = Stage::PrefixPublished;
 
-    hooks[index].as_mut().unwrap().stage = Stage::EntryMaybe;
-    let exchange = unsafe {
+    let receipt = hooks[index].as_mut().unwrap();
+    let result = unsafe {
         exchange_entry2(
+            &mut receipt.ledger,
             [
                 SITE_ENTRY_ENABLE,
                 SITE_ENTRY_RACE,
@@ -845,91 +914,67 @@ pub(crate) unsafe fn install_oath_at(
             target,
             first,
             PROPERTY_SHORT_JUMP,
+            Bytes::Ours,
         )
     };
-    match exchange {
-        Exchange::Untouched => {
-            hooks[index].as_mut().unwrap().stage = Stage::PrefixPublished;
-            if unsafe { rollback_prefix(hooks[index].as_ref().unwrap()) } {
-                release_reservation(&mut hooks, index);
-                return Err("oath entry write refused; rolled back");
-            }
-            Err("critical: oath entry write refused and prefix not rolled back")
+    match result {
+        Cas::Untouched => {
+            unsafe { settle(receipt) };
+            Err(if conclude(&mut hooks, index) {
+                "oath entry write refused; rolled back"
+            } else {
+                "critical: oath entry write refused; not rolled back"
+            })
         }
-        Exchange::Lost => {
-            // Foreign bytes in the entry may already branch to the prefix.
-            hooks[index].as_mut().unwrap().stage = Stage::PrefixPublished;
-            Err("critical: oath entry changed after prefix publication")
-        }
-        Exchange::Done { restored, flushed } => {
-            hooks[index].as_mut().unwrap().stage = Stage::EntryPublished;
-            let patched = hooks[index].as_ref().unwrap().entry_patched;
-            if !restored || !flushed || unsafe { ptr::read(target.cast::<[u8; 8]>()) } != patched {
-                return Err("critical: oath entry publication unverified");
+        // A foreign entry may already branch to the prefix: keep everything.
+        Cas::Lost { .. } => Err("critical: oath entry changed after prefix publication"),
+        Cas::Done { .. } => {
+            let published = Region {
+                bytes: Bytes::Ours,
+                confirm: Confirm::OK,
+            };
+            if receipt.ledger.entry == published {
+                Ok(())
+            } else {
+                Err("critical: oath entry publication unverified")
             }
-            Ok(())
         }
     }
 }
 
-/// Restores what can be restored. The prefix jump, relay, trampolines,
-/// gateways and the trace stay resident once the entry was ever published: a
-/// thread may have fetched the short jump already. A receipt is dropped only
-/// when the entry is verified as the original or as someone else's bytes.
+/// Settles every receipt. A Never-reach install is undone completely and its
+/// reservations returned; a reachable one is restored (entry) and kept as a
+/// frozen tombstone, so its target, trampoline and trace never change. A
+/// receipt with any byte, protection or flush unconfirmed is kept and the
+/// call fails.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) unsafe fn uninstall_oath() -> Result<bool, &'static str> {
     let mut hooks = OATH_HOOKS.lock().map_err(|_| "bridge lock poisoned")?;
-    let mut restored_any = false;
+    let mut changed = false;
     let mut failure = None;
     for index in 0..2 {
         let Some(receipt) = hooks[index].as_mut() else {
             continue;
         };
-        let entry = unsafe { ptr::read(receipt.target.cast::<[u8; 8]>()) };
-        if entry == receipt.entry_patched {
-            let first: [u8; OATH_RELOCATED_LEN] = receipt.original[..OATH_RELOCATED_LEN]
-                .try_into()
-                .map_err(|_| "oath entry width")?;
-            let outcome = unsafe {
-                exchange_entry2(
-                    [
-                        SITE_UNINSTALL_ENABLE,
-                        SITE_NONE,
-                        SITE_UNINSTALL_RESTORE,
-                        SITE_UNINSTALL_FLUSH,
-                    ],
-                    receipt.page_protection,
-                    receipt.target,
-                    PROPERTY_SHORT_JUMP,
-                    first,
-                )
-            };
-            let verified = matches!(
-                outcome,
-                Exchange::Done {
-                    restored: true,
-                    flushed: true
-                }
-            ) && unsafe { ptr::read(receipt.target.cast::<[u8; 8]>()) }
-                == receipt.original;
-            if !verified {
-                receipt.stage = Stage::EntryMaybe;
-                failure = Some("oath entry was not restored and verified");
-                continue;
-            }
-        } else if entry == receipt.original {
-            if matches!(receipt.stage, Stage::PrefixMaybe | Stage::PrefixPublished) {
-                let _ = unsafe { rollback_prefix(receipt) };
-            } else {
-                // A restore whose protection step failed earlier: put it back.
-                let _ = unsafe { protect(SITE_NONE, receipt.target, 2, receipt.page_protection) };
-            }
+        unsafe { settle(receipt) };
+        if conclude(&mut hooks, index) {
+            changed = true;
+            continue;
         }
-        // Any other bytes belong to another writer and are left alone.
-        hooks[index] = None;
-        restored_any = true;
+        let receipt = hooks[index].as_mut().unwrap();
+        if receipt.ledger.frozen()
+            && receipt.ledger.settled()
+            && receipt.ledger.prefix.confirm.complete()
+        {
+            if !receipt.reported {
+                receipt.reported = true;
+                changed = true;
+            }
+        } else {
+            failure = Some("oath install is not settled; receipt kept");
+        }
     }
-    failure.map_or(Ok(restored_any), Err)
+    failure.map_or(Ok(changed), Err)
 }
 
 #[cfg(test)]
