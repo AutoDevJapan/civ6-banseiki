@@ -71,7 +71,7 @@ mod policy {
     pub const RVAS: [u64; 4] = [0x713E3D, 0x713E42, 0x70AF4A, 0x115357];
     pub const RF: u32 = 1 << 16;
     pub const GETTER_LIMIT: u32 = 32;
-    pub const CANDIDATE_LIMIT: u32 = 16;
+    pub const CANDIDATE_LIMIT: u32 = 8;
 
     #[derive(Default, Serialize)]
     pub struct AttachBreak {
