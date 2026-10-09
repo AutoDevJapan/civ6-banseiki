@@ -213,15 +213,20 @@ local r=assert(ExposedMembers.JAC_Absorption.GetState().Recoveries[e.Token]);loc
 assert(m.Phase=='BORROWED' or m.Phase=='READY',
  'native MOVE observation unavailable: load advanced to '..tostring(m.Phase)..' before event hook; driver pre-publication hook required')
 assert(not m.Claimed and e.Borrowed.Phase=='BORROWED','loaded checkpoint was already dispatched')
-local events={}
+local events={};local diagnostics={}
+ExposedMembers.JAC996MoveEventDiagnostics=diagnostics
 local expectedType=assert(GameInfo.GreatWorks[e.Original.GreatWorkType]).Index
 local targetBuilding=assert(m.Loans[2]).Building
 local function moved(fromOwner,fromCity,toOwner,toCity,building,greatWorkType)
+ local row={fromOwner,fromCity,toOwner,toCity,building,greatWorkType}
+ if #diagnostics<32 then
+  diagnostics[#diagnostics+1]=row
+  print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT_RAW] args='..ExposedMembers.JAC_Absorption.Canonical(row))
+ end
  -- GreatWorksOverview.lua:1045 defines these six parameters. City ownership
  -- notifications and unrelated works must not count as this native MOVE.
  if fromOwner~=2 or fromCity~=e.Source.ID or toOwner~=2 or toCity~=e.Borrowed.ID
   or building~=targetBuilding or greatWorkType~=expectedType then return end
- local row={fromOwner,fromCity,toOwner,toCity,building,greatWorkType}
  events[#events+1]={Turn=Game.GetCurrentGameTurn(),Arguments=row}
  print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT] count='..#events..' args='..ExposedMembers.JAC_Absorption.Canonical(row))
 end
@@ -570,6 +575,7 @@ assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996',Pha
           assert(#ExposedMembers.JAC996MoveEvents==0)
           MOVE_HANDLER(2,11,2,22,7,9)
           assert(#ExposedMembers.JAC996MoveEvents==1)
+          assert(#ExposedMembers.JAC996MoveEventDiagnostics==6)
           JAC996StopMoves()
         "#,
         )
