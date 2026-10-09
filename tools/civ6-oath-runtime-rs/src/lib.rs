@@ -20,6 +20,8 @@ pub mod preflight;
 mod native;
 #[cfg(windows)]
 mod oath_trace;
+#[cfg(windows)]
+pub mod runtime;
 
 #[cfg(windows)]
 pub use oath_trace::OathTrace;

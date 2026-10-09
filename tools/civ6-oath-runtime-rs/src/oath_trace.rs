@@ -30,7 +30,8 @@ use windows_sys::Win32::System::Diagnostics::Debug::{RtlAddFunctionTable, RtlLoo
 
 pub const OATH_MAGIC: u32 = 0x4a41_434f; // JACO
 /// 2: rows carry the caller's raw RBP and RDI (stack arguments 7 and 8).
-pub const OATH_VERSION: u32 = 2;
+/// 3: image base for the family filter and the filtered counter.
+pub const OATH_VERSION: u32 = 3;
 const COUNTED: u64 = 1 << 63;
 const SLOT_MASK: u64 = 0xffff_ffff;
 const CALL_SHIFT: u32 = 48;
@@ -66,8 +67,14 @@ pub struct OathTrace {
     dropped: AtomicU32,
     in_flight: AtomicU32,
     completed: AtomicU32,
+    /// 0 recording, 1 installed but not started, 2 stopped for good.
     stopped: AtomicU32,
     reserved: u32,
+    /// 0 disables the family filter (synthetic tests); else the image base.
+    image_base: AtomicU64,
+    /// Calls of other City effects, counted and not recorded.
+    filtered: AtomicU32,
+    filtered_pad: u32,
     rows: [OathRow; OATH_CAPACITY],
 }
 
@@ -92,6 +99,9 @@ impl OathTrace {
             ptr::addr_of_mut!((*target).completed).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*target).stopped).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*target).reserved).write(0);
+            ptr::addr_of_mut!((*target).image_base).write(AtomicU64::new(0));
+            ptr::addr_of_mut!((*target).filtered).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*target).filtered_pad).write(0);
             let rows = ptr::addr_of_mut!((*target).rows).cast::<OathRow>();
             for n in 0..OATH_CAPACITY {
                 rows.add(n).write(OathRow::default());
@@ -102,7 +112,37 @@ impl OathTrace {
     /// Stops recording. Gateways, relay, trampoline and this buffer stay
     /// resident; later calls only run the original.
     pub fn stop(&self) {
-        self.stopped.store(1, Ordering::Release);
+        self.stopped.store(2, Ordering::Release);
+    }
+    /// A trace that records nothing until `start_once`.
+    pub fn boxed_inactive() -> Box<Self> {
+        let trace = Self::boxed();
+        trace.stopped.store(1, Ordering::Release);
+        trace
+    }
+    /// Starts recording once. A stopped (or started) trace never restarts.
+    pub fn start_once(&self) -> bool {
+        self.stopped
+            .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+    /// Fixes the image base for the family filter; only the first value counts.
+    pub fn set_image_base_once(&self, base: u64) -> bool {
+        self.image_base
+            .compare_exchange(0, base, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+    /// Calls of other City effects that the family filter did not record.
+    pub fn filtered(&self) -> u32 {
+        self.filtered.load(Ordering::Acquire)
+    }
+    /// Rows reserved, rows that returned, and calls that found the buffer full.
+    pub fn counters(&self) -> (u32, u32, u32) {
+        (
+            self.next.load(Ordering::Acquire).min(OATH_CAPACITY as u32),
+            self.completed.load(Ordering::Acquire),
+            self.dropped.load(Ordering::Acquire),
+        )
     }
     pub fn is_stopped(&self) -> bool {
         self.stopped.load(Ordering::Acquire) != 0
@@ -204,6 +244,19 @@ unsafe extern "system-unwind" fn oath_begin(
     // or unwinds; only a call racing the stop itself is transient.
     if trace.stopped.load(Ordering::Acquire) != 0 {
         return;
+    }
+    // Family filter, before any claim: another City effect is only counted.
+    // An unreadable vtable is not filtered; it becomes a row with a copy failure.
+    let base = trace.image_base.load(Ordering::Acquire);
+    if base != 0 {
+        if let Some(vtable) = copy_current::<8>(effect).map(u64::from_le_bytes) {
+            if OathEffectFamily::from_vtable_rva(vtable.wrapping_sub(base)).is_none() {
+                let _ = trace
+                    .filtered
+                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1));
+                return;
+            }
+        }
     }
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
     let claim = COUNTED | (call << CALL_SHIFT);
