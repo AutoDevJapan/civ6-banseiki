@@ -1459,8 +1459,13 @@ fn filter_race(by_deadline: bool) {
         0,
         "nothing is filtered outside a settled claim"
     );
-    OATH_PAUSE_RELEASE.store(1, Ordering::SeqCst);
-    assert_eq!(caller.join().unwrap(), 0x31);
+    // The real parked gateway finishes between the reader's first sample
+    // and its counter copy. It must not pair stale counters with flight 0.
+    let snapshot = trace.observation_counts_after(|| {
+        OATH_PAUSE_RELEASE.store(1, Ordering::SeqCst);
+        assert_eq!(caller.join().unwrap(), 0x31);
+    });
+    assert_eq!(snapshot, (1, 0, 0, 0, 1));
     assert_eq!(block.0[1], 1, "the original ran exactly once");
     assert_eq!(trace.in_flight(), 0);
     assert_eq!(

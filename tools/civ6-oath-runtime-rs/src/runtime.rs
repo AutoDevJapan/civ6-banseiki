@@ -381,15 +381,15 @@ pub fn read_receipt() -> Result<OathReceipt, OathStatus> {
         ..OathReceipt::default()
     };
     if let Some(trace) = runtime.trace {
-        let (rows, completed, dropped) = trace.counters();
+        receipt.expired = u32::from(trace.poll_deadline());
+        let (in_flight, rows, completed, dropped, filtered) = trace.observation_counts();
         receipt.trace_address = trace as *const OathTrace as u64;
         receipt.trace_size = std::mem::size_of::<OathTrace>() as u32;
         receipt.rows = rows;
         receipt.completed = completed;
         receipt.dropped = dropped;
-        receipt.filtered = trace.filtered();
-        receipt.in_flight = trace.in_flight();
-        receipt.expired = u32::from(trace.poll_deadline());
+        receipt.filtered = filtered;
+        receipt.in_flight = in_flight;
     }
     Ok(receipt)
 }

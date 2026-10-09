@@ -223,6 +223,20 @@ impl OathTrace {
     pub fn in_flight(&self) -> u32 {
         self.in_flight.load(Ordering::Acquire)
     }
+
+    /// Read the quiet-point authority before counters. After Stop, an
+    /// acquired zero makes the following counters final; a nonzero remains
+    /// conservative even if that last call finishes during the copy.
+    pub(crate) fn observation_counts(&self) -> (u32, u32, u32, u32, u32) {
+        self.observation_counts_after(|| {})
+    }
+
+    fn observation_counts_after(&self, after_flight: impl FnOnce()) -> (u32, u32, u32, u32, u32) {
+        let in_flight = self.in_flight();
+        after_flight();
+        let (rows, completed, dropped) = self.counters();
+        (in_flight, rows, completed, dropped, self.filtered())
+    }
     /// Calls that found the buffer full. They ran the original unobserved.
     pub fn dropped(&self) -> u32 {
         self.dropped.load(Ordering::Acquire)

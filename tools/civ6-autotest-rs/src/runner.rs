@@ -424,7 +424,9 @@ impl Backend for SystemBackend {
     }
     fn release_startup_lock(&mut self) {
         self.startup_lease = None;
-        self.startup_pin = None;
+        // Recovery's lease ends here, but the retry's process identity is
+        // still needed by later diagnostics. A subsequent launch replaces
+        // the pin; dropping the backend releases it.
     }
     fn check_startup_process(&mut self, game: crate::startup::GameProcess) -> Result<()> {
         let pin = self
