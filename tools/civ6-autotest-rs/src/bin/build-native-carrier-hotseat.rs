@@ -208,16 +208,20 @@ const ARM_MOVE: &str = r#"assert(JAC996BorrowObserver==nil,'transient borrow wra
 assert(type(JAC_ObserveNativeCarrierMP)=='function','unmodified product observer absent after load')
 local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local r=assert(ExposedMembers.JAC_Absorption.GetState().Recoveries[e.Token]);local m=assert(r.NativeCarrier.MP)
--- The driver currently returns after LoadScreenClose. Refuse an unobserved
--- MOVE if automatic publications won the race; a driver pre-publication
--- event hook would be needed in that case, not a substituted executor.
+-- The load-step hook runs before Begin Game publishes LoadScreenClose or
+-- accepts the HotseatStartTurn. Keep the phase guard as a real-engine check.
 assert(m.Phase=='BORROWED' or m.Phase=='READY',
  'native MOVE observation unavailable: load advanced to '..tostring(m.Phase)..' before event hook; driver pre-publication hook required')
 assert(not m.Claimed and e.Borrowed.Phase=='BORROWED','loaded checkpoint was already dispatched')
 local events={}
-local function moved(...)
- local args={...};local row={}
- for i=1,select('#',...) do local v=args[i];row[i]=type(v)=='number' and v or tostring(v) end
+local expectedType=assert(GameInfo.GreatWorks[e.Original.GreatWorkType]).Index
+local targetBuilding=assert(m.Loans[2]).Building
+local function moved(fromOwner,fromCity,toOwner,toCity,building,greatWorkType)
+ -- GreatWorksOverview.lua:1045 defines these six parameters. City ownership
+ -- notifications and unrelated works must not count as this native MOVE.
+ if fromOwner~=2 or fromCity~=e.Source.ID or toOwner~=2 or toCity~=e.Borrowed.ID
+  or building~=targetBuilding or greatWorkType~=expectedType then return end
+ local row={fromOwner,fromCity,toOwner,toCity,building,greatWorkType}
  events[#events+1]={Turn=Game.GetCurrentGameTurn(),Arguments=row}
  print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT] count='..#events..' args='..ExposedMembers.JAC_Absorption.Canonical(row))
 end
@@ -225,7 +229,7 @@ assert(Events.GreatWorkMoved and Events.GreatWorkMoved.Add,'native GreatWorkMove
 Events.GreatWorkMoved.Add(moved)
 ExposedMembers.JAC996MoveEvents=events
 JAC996StopMoves=function() Events.GreatWorkMoved.Remove(moved) end
-return 'observing real native move events; product executor resumes without fixture wrapper'"#;
+return true"#;
 
 const RETURNED: &str = r#"local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local r=A.GetState().Recoveries[e.Token];local c=r and r.NativeCarrier;local m=c and c.MP
@@ -393,8 +397,9 @@ fn generate() -> Value {
     steps.extend([
         json!({"action":"save","name":"JAC-native-hotseat-996-borrowed","timeout":90}),
         json!({"action":"exit_to_menu","timeout":90}),
-        json!({"action":"load","name":"JAC-native-hotseat-996-borrowed","timeout":600}),
-        ui(HERO_UI, ARM_MOVE), wait("InGame", RETURNED, 120), ui("JAC_Absorption_Entry", FINALIZE),
+        json!({"action":"load","name":"JAC-native-hotseat-996-borrowed","timeout":600,
+          "before_begin_lua":{"state_name":HERO_UI,"code":ARM_MOVE}}),
+        wait("InGame", RETURNED, 120), ui("JAC_Absorption_Entry", FINALIZE),
         ui(HERO_UI, "assert(JAC996StopMoves)();JAC996StopMoves=nil;return 'removed fixture native event observer'"),
         ui("InGame", VERIFY),
     ]);
@@ -543,6 +548,36 @@ assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996',Pha
     }
 
     #[test]
+    fn pre_begin_event_observer_filters_exact_native_source_target_and_type() {
+        let lua = verifier_world();
+        lua.load(r#"
+          M.Phase='BORROWED';M.Claimed=nil;M.Loans[2].Building=7
+          E.Source.ID=11;E.Borrowed.Phase='BORROWED';E.Borrowed.ID=22
+          E.Original.GreatWorkType='WORK_RELIC'
+          GameInfo={GreatWorks={WORK_RELIC={Index=9}}}
+          Game.GetCurrentGameTurn=function() return 1 end
+          JAC_ObserveNativeCarrierMP=function() return true end
+          Events={GreatWorkMoved={Add=function(fn) MOVE_HANDLER=fn end,Remove=function(fn) assert(fn==MOVE_HANDLER) end}}
+        "#).exec().unwrap();
+        assert!(lua.load(ARM_MOVE).eval::<bool>().unwrap());
+        lua.load(
+            r#"
+          MOVE_HANDLER(2,11,0,22,7,9) -- city return/ownership event
+          MOVE_HANDLER(2,12,2,22,7,9) -- another source
+          MOVE_HANDLER(2,11,2,23,7,9) -- another target
+          MOVE_HANDLER(2,11,2,22,8,9) -- another building
+          MOVE_HANDLER(2,11,2,22,7,10) -- another work type
+          assert(#ExposedMembers.JAC996MoveEvents==0)
+          MOVE_HANDLER(2,11,2,22,7,9)
+          assert(#ExposedMembers.JAC996MoveEvents==1)
+          JAC996StopMoves()
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
     fn post_load_observation_race_is_explicitly_rejected() {
         let lua = verifier_world();
         lua.load("JAC_ObserveNativeCarrierMP=function() return true end;HOOKS=0;Events={GreatWorkMoved={Add=function() HOOKS=HOOKS+1 end}}")
@@ -563,6 +598,7 @@ assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996',Pha
             if let Some(code) = step
                 .get("code")
                 .or_else(|| step["condition"].get("code"))
+                .or_else(|| step["before_begin_lua"].get("code"))
                 .and_then(Value::as_str)
             {
                 lua.load(code).into_function().unwrap();
