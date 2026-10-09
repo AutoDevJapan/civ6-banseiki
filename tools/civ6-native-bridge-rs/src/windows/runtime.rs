@@ -37,6 +37,8 @@ static EPOCH: AtomicJoinedWord = AtomicJoinedWord::new();
 static STATE: [AtomicJoinedWord; PRODUCTION_OWNER_LIMIT] =
     [const { AtomicJoinedWord::new() }; PRODUCTION_OWNER_LIMIT];
 pub(super) static INSTALL_LOCK: Mutex<()> = Mutex::new(());
+#[cfg(test)]
+pub(super) static RESTORE_HOOK_REACHED: AtomicBool = AtomicBool::new(false);
 const BIND_MASK: u128 = (1u128 << 58) - 1;
 const TICKET_MASK: u128 = (1u128 << 31) - 1;
 
@@ -500,10 +502,7 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
     ) {
         return BridgeStatus::InvalidInput as u32;
     }
-    std::panic::catch_unwind(|| {
-        let Ok(_guard) = INSTALL_LOCK.lock() else {
-            return BridgeStatus::Panic as u32;
-        };
+    guard_runtime_install(|| {
         let mut config = unsafe { ptr::read(input.cast::<BridgeConfig>()) };
         if owned()
             || config.version != RUNTIME_CONFIG_VERSION
@@ -609,11 +608,22 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         }
         BridgeStatus::Ok as u32
     })
-    .unwrap_or_else(|_| {
+}
+
+/// Retain exclusion across both the install unwind and its cleanup. Dropping
+/// this guard inside catch_unwind would poison the recovery exports' mutex.
+fn guard_runtime_install(action: impl FnOnce() -> u32 + std::panic::UnwindSafe) -> u32 {
+    let Ok(_guard) = INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    std::panic::catch_unwind(action).unwrap_or_else(|_| {
+        // Never let a partially published installation authorize Rebuild.
+        // OWNED, trace storage and failed restoration handles stay retained.
+        INSTALLED.store(false, Ordering::Release);
         product_deactivate();
-        match unsafe { uninstall() } {
-            Err(reason) if reason != "bridge not installed" => BridgeStatus::Critical as u32,
-            _ => BridgeStatus::Panic as u32,
+        match std::panic::catch_unwind(|| unsafe { uninstall() }) {
+            Ok(Ok(())) | Ok(Err("bridge not installed")) => BridgeStatus::Panic as u32,
+            _ => BridgeStatus::Critical as u32,
         }
     })
 }
@@ -669,6 +679,211 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn install_panic_keeps_recovery_lock_usable_and_rebuild_closed() {
+        const CHILD: &str = "JAC_RUNTIME_INSTALL_PANIC_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::io::Read;
+            use std::os::windows::process::CommandExt;
+            struct OwnedChild(std::process::Child);
+            impl Drop for OwnedChild {
+                fn drop(&mut self) {
+                    if self.0.try_wait().ok().flatten().is_none() {
+                        let _ = self.0.kill();
+                    }
+                    let _ = self.0.wait();
+                }
+            }
+            let mut child = OwnedChild(std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000)
+                .env(CHILD, "1")
+                .args([
+                    "--exact",
+                    "windows::runtime::tests::install_panic_keeps_recovery_lock_usable_and_rebuild_closed",
+                    "--nocapture",
+                ])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap());
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let (status, timed_out) = loop {
+                if let Some(status) = child.0.try_wait().unwrap() {
+                    break (status, false);
+                }
+                if std::time::Instant::now() >= deadline {
+                    child.0.kill().unwrap();
+                    break (child.0.wait().unwrap(), true);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            };
+            // The finite fixture writes only its two panic diagnostics. Drain
+            // both pipes after exit/reap before deciding the parent result.
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            child
+                .0
+                .stdout
+                .take()
+                .unwrap()
+                .read_to_end(&mut stdout)
+                .unwrap();
+            child
+                .0
+                .stderr
+                .take()
+                .unwrap()
+                .read_to_end(&mut stderr)
+                .unwrap();
+            assert!(
+                !timed_out && status.success(),
+                "timeout={timed_out}: {} {}",
+                String::from_utf8_lossy(&stdout),
+                String::from_utf8_lossy(&stderr)
+            );
+            return;
+        }
+        // Process-local fixture state: no game, allocation or native patch.
+        // Exercise the same exclusion and panic boundary as the public export.
+        static HELD: AtomicBool = AtomicBool::new(false);
+        INSTALLED.store(true, Ordering::Release);
+        assert!(product_activate());
+        assert_eq!(
+            guard_runtime_install(|| {
+                HELD.store(
+                    matches!(
+                        INSTALL_LOCK.try_lock(),
+                        Err(std::sync::TryLockError::WouldBlock)
+                    ),
+                    Ordering::Release,
+                );
+                panic!("runtime install panic regression")
+            }),
+            BridgeStatus::Panic as u32
+        );
+        assert!(HELD.load(Ordering::Acquire));
+        drop(
+            INSTALL_LOCK
+                .try_lock()
+                .expect("recovery lock must not be poisoned"),
+        );
+        assert!(!INSTALLED.load(Ordering::Acquire));
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert_eq!(
+            BridgeRuntimeClose(null_mut()),
+            BridgeStatus::InvalidInput as u32
+        );
+        assert_eq!(
+            BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::InvalidInput as u32
+        );
+        let before = EPOCH.load();
+        assert_eq!(guard_runtime_install(|| 77), 77);
+        assert_eq!(EPOCH.load(), before);
+
+        // Two owned synthetic entry pages exercise the real restoration path.
+        // Neither page is ever called. The first compare/exchange is made to
+        // fail; the later entry must still be restored, retaining only failure.
+        let page = || unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            )
+            .cast::<u8>()
+        };
+        let failed = page();
+        let restored = page();
+        assert!(!failed.is_null() && !restored.is_null());
+        let original = [0x90; 8];
+        let patched = [0xcc; 8];
+        let changed = [0x11; 8];
+        unsafe {
+            ptr::write(failed.cast::<[u8; 8]>(), changed);
+            ptr::write(restored.cast::<[u8; 8]>(), patched);
+        }
+        let hook = |target| Hook {
+            target,
+            original,
+            patched,
+            prefix: None,
+            _code: null_mut(), // no relay is published or executed by this fixture
+        };
+        *composite::ASSIGNMENT_HOOK.lock().unwrap() = Some(hook(failed));
+        let mut blocked_restore = HOOK.lock().unwrap();
+        *blocked_restore = Some(hook(restored));
+        OWNED.store(true, Ordering::Release);
+        INSTALLED.store(true, Ordering::Release);
+        assert!(product_activate());
+        RESTORE_HOOK_REACHED.store(false, Ordering::Release);
+        let (send, receive) = std::sync::mpsc::channel();
+        let cleanup = std::thread::spawn(move || {
+            guard_runtime_install(|| {
+                send.send(()).unwrap();
+                panic!("partial publication panic regression")
+            })
+        });
+        receive
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while (INSTALLED.load(Ordering::Acquire)
+            || PRODUCT_ACTIVE.load(Ordering::Acquire)
+            || !RESTORE_HOOK_REACHED.load(Ordering::Acquire))
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::yield_now();
+        }
+        let exclusion = matches!(
+            INSTALL_LOCK.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        );
+        let closed = !INSTALLED.load(Ordering::Acquire)
+            && !PRODUCT_ACTIVE.load(Ordering::Acquire)
+            && RESTORE_HOOK_REACHED.load(Ordering::Acquire);
+        // Release before assertions/join, including when a regression occurred.
+        drop(blocked_restore);
+        assert_eq!(cleanup.join().unwrap(), BridgeStatus::Critical as u32);
+        assert!(exclusion, "cleanup must retain the installation exclusion");
+        assert!(
+            closed,
+            "permission and Rebuild close before restoration can block"
+        );
+        assert!(OWNED.load(Ordering::Acquire));
+        assert_eq!(
+            composite::ASSIGNMENT_HOOK
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .target,
+            failed
+        );
+        assert!(
+            HOOK.lock().unwrap().is_none(),
+            "later restoration must still run"
+        );
+        assert_eq!(unsafe { ptr::read(failed.cast::<[u8; 8]>()) }, changed);
+        assert_eq!(unsafe { ptr::read(restored.cast::<[u8; 8]>()) }, original);
+        drop(
+            INSTALL_LOCK
+                .try_lock()
+                .expect("failed restoration must not poison recovery"),
+        );
+        assert_eq!(
+            BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::InvalidInput as u32
+        );
+        // Restore the fixture's expected operand and use the retained handle.
+        unsafe { ptr::write(failed.cast::<[u8; 8]>(), patched) };
+        assert_eq!(unsafe { uninstall() }, Ok(()));
+        assert!(composite::ASSIGNMENT_HOOK.lock().unwrap().is_none());
+        assert_eq!(unsafe { ptr::read(failed.cast::<[u8; 8]>()) }, original);
+        assert_ne!(unsafe { VirtualFree(failed.cast(), 0, MEM_RELEASE) }, 0);
+        assert_ne!(unsafe { VirtualFree(restored.cast(), 0, MEM_RELEASE) }, 0);
+    }
 
     #[test]
     fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {

@@ -1040,3 +1040,12 @@ PR134/135を含むmain`25cea705`を取り込む際、`judge_parity.rs`の旧目�
 さらに直接分岐候補をLLVMの命令境界で確認すると、`63E2E0`の23バイトは`4AFC0`の正常復帰後に別の`186E60`を呼び、`7BBE0`へtail-jumpする。呼出し元の`35FA5`から46バイトは、`35FAD`でこのwrapperを呼び、正常復帰後`35FB2`でRBX+288のbyteを読む。ゼロなら`35FCD`のepilogueからreturnし、非ゼロなら共有ポインターを再取得し、`35FC8`から同じwrapperへtail-jumpする。RBX保存を守る正常復帰の条件では、`4AFC0`が戻っても上位の呼出し元がRBX由来の受け手を読む局所経路が残る。RBXの出典・型・寿命、caller入口からこの区間への到達、calleeの意味や実際の退出は未確立である。`4AFC0`の退出だけを呼出し全体の終了権限にせず、再読込後に共有ポインターを再取得する上位経路も未確立項目へ加えた。根拠は同`manager-dispatch-wrapper35f70-194050-20261009.txt`であり、46/23バイトを固定監査し、上位分岐と継続先を変える変異検査も追加した。
 
 最初のLuna差分レビューはMust0・Suggestion0で、テストコメントの変異先をRDXへ直した。上位経路を追加した最終差分も同セッションの追審で全指摘0である。追加後の対象1件成功・旧5件選択対象外、限定Clippy・release・実primaryも終了0で、証跡は同`manager-v6-higher-{test,clippy,build,primary}-194050-20261009.*`に保持する。レビューはジョブ`20261009-195811-todo880-manager-v6-delta-review`と`20261009-200322-todo880-manager-v6-higher-review`の原結果に分けた。無変更だった以前の全workspace検査を再実行せず、f87のCI成功をこの新差分へ付け替えない。
+
+## ToDo880：通常runtime設置のpanic後の閉鎖
+
+通常の `BridgeRuntimeInstall` でも、設置用mutexのguardが `catch_unwind` の内側にあり、panic後に回復用のCloseがmutexのpoisonで失敗する。同じpanic境界を用いる独立Windows子検査で、この失敗を修正前に再現した。
+
+guardをcatchの外側に置き、設置中のpanicと復元処理を同じ排他の中で扱う。panic後はINSTALLEDをfalseにして製品許可を閉じ、全復元を試す。復元の失敗やpanicはCriticalとして返し、OWNED・記録領域・復元未完了の所有物を保持する。成功を返した設置と通常の引数拒否の契約は維持する。再インストールを許可する修正ではない。
+
+子検査は設置済みの印と製品許可を持つプロセス内fixtureでpanicを起こし、排他が保持されること、mutexがpoisonしないこと、印と許可の閉鎖、CloseとRebuildの拒否、次の排他取得を確認する。ゲーム・本体hook・AI producerは起動しない。この修正はAI候補の停止境界や旧callerの全排出を確立しない。元の7製品条件と実機4回上限を保持する。
+追加の同じ子検査は、呼び出さない二つの専用ページを復元対象として持つ。一方のatomic比較を失敗させ、Criticalとその所有物の保持を確認し、後の対象が復元されることも実際の復元処理で確認する。復元mutexを一時的に保持した間も設置用排他が維持され、許可と設置済みの印は先に閉じる。最後に失敗した比較をfixture内で戻し、保持された復元経路が成功してから両ページを解放する。本体のnative hookを実行した証拠ではない。

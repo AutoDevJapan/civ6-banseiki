@@ -2691,6 +2691,10 @@ unsafe fn install_property_at(
 }
 
 unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> {
+    #[cfg(test)]
+    if std::ptr::eq(slot, &HOOK) {
+        runtime::RESTORE_HOOK_REACHED.store(true, Ordering::Release);
+    }
     let mut guard = slot.lock().map_err(|_| "bridge lock poisoned")?;
     let Some(hook) = guard.as_ref() else {
         return Ok(false);
