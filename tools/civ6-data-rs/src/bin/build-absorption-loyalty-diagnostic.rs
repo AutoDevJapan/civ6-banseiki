@@ -121,6 +121,15 @@ end
 assert(target,'human noncapital missing')
 local d={Owner=actor,ID=target:GetID(),X=target:GetX(),Y=target:GetY(),Turn=Game.GetCurrentGameTurn(),Events=0,Publications=0}
 ExposedMembers.JAC_LoyaltyNativeProbe=d
+d.ReadCurrent=function(label)
+ local c=assert(CityManager.GetCityAt(d.X,d.Y),'native getter city missing')
+ assert(c:GetOwner()==d.Owner and c:GetID()==d.ID,'native getter city replaced')
+ assert(Game.GetCurrentGameTurn()==d.Turn,'native getter turn changed')
+ print('JAC_LOYALTY_NATIVE_GETTER_CALL label='..label..' owner='..d.Owner..' city='..d.ID)
+ local current=c:GetCulturalIdentity():GetLoyalty()
+ print('JAC_LOYALTY_NATIVE_GETTER_RETURN label='..label..' current='..tostring(current))
+ return current
+end
 Events.CityLoyaltyChanged.Add(function(owner,id)
  if owner==d.Owner and id==d.ID then d.Events=d.Events+1 end
 end)
@@ -130,7 +139,7 @@ d.Before=identity:GetLoyalty()
 assert(type(d.Before)=='number' and d.Before>=0 and d.Before<=100,'invalid native probe baseline')
 print('JAC_LOYALTY_NATIVE_EVENT_HASH '..tostring(DB.MakeHash('CityLoyaltyChanged')))
 print('JAC_LOYALTY_NATIVE_ARMED owner='..d.Owner..' city='..d.ID..' x='..d.X..' y='..d.Y..' turn='..d.Turn..' before='..d.Before)
-return 'single setter probe armed; native observer attaches during pause'
+return 'single setter probe armed; waiting for verified native observer'
 "#;
 
 const NATIVE_CORE: &str = r#"
@@ -143,25 +152,27 @@ GameEvents.JAC_LoyaltyNativeProbe_Operation.Add(function(actor,params)
  assert(Game.GetCurrentGameTurn()==d.Turn,'native probe turn changed')
  local c=assert(CityManager.GetCityAt(d.X,d.Y),'native probe city missing')
  assert(c:GetOwner()==d.Owner and c:GetID()==d.ID,'native probe city replaced')
+ d.ImmediateBefore=d.ReadCurrent('before-setter')
  d.MutationIssued=true
  print('JAC_LOYALTY_NATIVE_CALL owner='..d.Owner..' city='..d.ID..' x='..d.X..' y='..d.Y)
  c:ChangeLoyalty(-5)
  d.Issued=true
  print('JAC_LOYALTY_NATIVE_RETURN')
+ d.ImmediateAfter=d.ReadCurrent('after-setter')
 end)
 d.HandlerRegistered=true
 return 'one synchronized setter registered; mutation not issued yet'
 "#;
 
-fn native_probe_steps() -> Vec<Value> {
+fn native_probe_steps(handoff: &std::path::Path) -> Vec<Value> {
     vec![
         ui("InGame", NATIVE_UI),
         ui("JAC_Absorption_Entry", NATIVE_CORE),
-        json!({"action":"wait_for","timeout":240,"condition":{"type":"lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_LoyaltyNativeProbe;return d and d.ObserverReady==true"}}),
+        json!({"action":"native_observer_ready","timeout":240,"handoff":handoff}),
         ui("InGame", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);d.Publications=0;UI.RequestPlayerOperation(d.Owner,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyNativeProbe_Operation',Tag='native-probe'});return 'one native setter requested'"),
         json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_LoyaltyNativeProbe;return d and d.Issued and d.Publications>=2"}}),
         ui("InGame", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);assert(Game.GetCurrentGameTurn()==d.Turn,'native probe turn changed');local c=assert(CityManager.GetCityAt(d.X,d.Y));assert(c:GetOwner()==d.Owner and c:GetID()==d.ID,'native probe city replaced');d.After=c:GetCulturalIdentity():GetLoyalty();print('JAC_LOYALTY_NATIVE_RESULT owner='..d.Owner..' city='..d.ID..' before='..d.Before..' after='..d.After..' cityEvents='..d.Events..' publications='..d.Publications);return 'raw comparison recorded, not a product acceptance'"),
-        json!({"action":"pause","seconds":10,"timeout":30}),
+        json!({"action":"native_observer_finish","handoff":handoff,"timeout":120}),
     ]
 }
 
@@ -173,9 +184,18 @@ fn run() -> Result<()> {
         .as_deref()
         .is_some_and(|v| v == "--operation-context");
     let native_mode = option.as_deref().is_some_and(|v| v == "--native-observer");
+    let handoff = if native_mode {
+        Some(PathBuf::from(
+            args.next()
+                .context("absolute native observer handoff path required")?,
+        ))
+    } else {
+        None
+    };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode) && args.next().is_none(),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer]"
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode) && args.next().is_none()
+            && handoff.as_ref().is_none_or(|p| p.is_absolute()),
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>]"
     );
     ensure!(
         !output.exists(),
@@ -190,7 +210,7 @@ fn run() -> Result<()> {
     ensure!(setup.len() >= 8, "base scene setup is incomplete");
     let mut steps = setup[..8].to_vec();
     if native_mode {
-        steps.extend(native_probe_steps());
+        steps.extend(native_probe_steps(handoff.as_ref().unwrap()));
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -257,7 +277,9 @@ local city={GetOwner=function() return 3 end,GetID=function() return 8 end,
  ChangeLoyalty=function(_,amount) assert(amount==-5);Calls=Calls+1 end}
 Calls=0
 AddCount=0
-ExposedMembers={JAC_LoyaltyNativeProbe={Owner=3,ID=8,X=5,Y=6,Turn=1}}
+Reads=0
+ExposedMembers={JAC_LoyaltyNativeProbe={Owner=3,ID=8,X=5,Y=6,Turn=1,
+ ReadCurrent=function(label) Reads=Reads+1;return 100 end}}
 Players={[3]={IsTurnActive=function() return true end}}
 Game={GetCurrentGameTurn=function() return 1 end}
 CityManager={GetCityAt=function(x,y) assert(x==5 and y==6);return city end}
@@ -273,15 +295,21 @@ Replace=function() city.GetID=function() return 9 end end
             .exec()?;
         // Use a fresh binding for the successful once-only case.
         lua.load("CityManager.GetCityAt=function() return {GetOwner=function() return 3 end,GetID=function() return 8 end,ChangeLoyalty=function(_,v) assert(v==-5);Calls=Calls+1 end} end").exec()?;
-        lua.load("Invoke();assert(Calls==1 and ExposedMembers.JAC_LoyaltyNativeProbe.Issued);assert(not pcall(Invoke));assert(Calls==1)").exec()?;
+        lua.load("Invoke();assert(Calls==1 and Reads==2 and ExposedMembers.JAC_LoyaltyNativeProbe.Issued);assert(not pcall(Invoke));assert(Calls==1 and Reads==2)").exec()?;
         Ok(())
     }
 
     #[test]
     fn native_probe_has_no_modifier_or_turn_advance_and_compiles_every_lua_chunk() -> Result<()> {
         let lua = mlua::Lua::new();
-        let steps = native_probe_steps();
+        let handoff = std::env::temp_dir().join("native-probe-handoff.json");
+        let steps = native_probe_steps(&handoff);
         assert_eq!(steps.len(), 7);
+        assert_eq!(steps[2]["action"], "native_observer_ready");
+        assert_eq!(steps[2]["handoff"], json!(handoff));
+        assert_eq!(steps[2]["timeout"], 240);
+        assert_eq!(steps[6]["action"], "native_observer_finish");
+        assert_eq!(steps[6]["handoff"], json!(handoff));
         for step in &steps {
             assert_ne!(step["action"], "end_turn");
             assert_ne!(step["action"], "autoplay");

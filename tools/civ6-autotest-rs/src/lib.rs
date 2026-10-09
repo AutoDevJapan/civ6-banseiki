@@ -11,6 +11,7 @@ pub mod hotseat_bridge;
 pub mod judge;
 pub mod metrics;
 mod native_inventory;
+pub mod native_observer_finish;
 pub mod reliability;
 pub mod restart;
 pub mod runner;
