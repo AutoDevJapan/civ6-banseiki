@@ -115,6 +115,22 @@ const PRODUCTION_FUNCTIONS: [(usize, usize); 4] = [
     (0x895460, 0x895677),
 ];
 
+// Instance+0x1b8 owns the effect through shared_ptr. Its +0x28/+0x30
+// adapters resolve the subject's current City and tail-call +0x60/+0x68.
+// These are fixed-DLL static layout facts, not proof that a published subject has been
+// applied: subject+0x40 is changed BEFORE the effect call.
+// Both 0x58-byte ranges include the successful tail jmp and the null-return
+// branch. Neither range contains a PE base relocation.
+const CITY_ADAPTERS: [(usize, usize); 2] = [(0x8a75e0, 0x8a7638), (0x8a8440, 0x8a8498)];
+const LEGACY_DISPATCH: [(usize, usize, usize); 2] = [
+    (0xa76a30, 0x817810, 0x8188a0),
+    (0xa9e0f0, 0x8d8d60, 0x8d9790),
+];
+const PRODUCTION_DISPATCH: [(usize, usize, usize); 2] = [
+    (0xa6cdb8, 0x7e8560, 0x7e8db0),
+    (0xa90328, 0x8947a0, 0x895460),
+];
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Scope {
     Legacy,
@@ -140,6 +156,100 @@ impl Scope {
             Self::Legacy => &FUNCTIONS,
             Self::NavalBuildingsV1 => &PRODUCTION_FUNCTIONS,
         }
+    }
+    fn dispatch(self) -> &'static [(usize, usize, usize)] {
+        match self {
+            Self::Legacy => &LEGACY_DISPATCH,
+            Self::NavalBuildingsV1 => &PRODUCTION_DISPATCH,
+        }
+    }
+}
+
+/// Compare the four relocated dispatch slots per family. Unknown, truncated,
+/// or redirected slots cannot authorize the audited memory-only patch.
+/// This says nothing about lock coverage, effect completion or quantities.
+pub fn validate_dispatch_snapshot(scope: Scope, base: u64, slots: &[Vec<u8>]) -> Result<()> {
+    if slots.len() != scope.dispatch().len() * 4 {
+        return Err(Error::input("incomplete audited effect dispatch snapshot"));
+    }
+    let mut index = 0;
+    for &(_, apply, remove) in scope.dispatch() {
+        for rva in [CITY_ADAPTERS[0].0, CITY_ADAPTERS[1].0, apply, remove] {
+            let expected = base
+                .checked_add(rva as u64)
+                .ok_or_else(|| Error::input("effect dispatch address overflow"))?;
+            if slots[index].as_slice() != expected.to_le_bytes() {
+                return Err(Error::input("unknown audited effect dispatch target"));
+            }
+            index += 1;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::*;
+
+    fn snapshot(scope: Scope, base: u64) -> Vec<Vec<u8>> {
+        // The two families share City adapters, but must retain their own
+        // concrete Apply/Remove pair; a different family's valid code is wrong.
+        let targets: &[u64] = match scope {
+            Scope::Legacy => &[
+                0x8a75e0, 0x8a8440, 0x817810, 0x8188a0, 0x8a75e0, 0x8a8440, 0x8d8d60, 0x8d9790,
+            ],
+            Scope::NavalBuildingsV1 => &[
+                0x8a75e0, 0x8a8440, 0x7e8560, 0x7e8db0, 0x8a75e0, 0x8a8440, 0x8947a0, 0x895460,
+            ],
+        };
+        targets
+            .iter()
+            .map(|rva| (base + rva).to_le_bytes().to_vec())
+            .collect()
+    }
+
+    #[test]
+    fn relocated_families_match_their_own_adapters_and_effects() {
+        for scope in [Scope::Legacy, Scope::NavalBuildingsV1] {
+            for base in [0x180000000, 0x7ffb12340000] {
+                validate_dispatch_snapshot(scope, base, &snapshot(scope, base)).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn every_redirected_slot_is_rejected() {
+        for scope in [Scope::Legacy, Scope::NavalBuildingsV1] {
+            let original = snapshot(scope, 0x180000000);
+            for index in 0..original.len() {
+                let mut changed = original.clone();
+                changed[index][0] ^= 1;
+                assert!(validate_dispatch_snapshot(scope, 0x180000000, &changed).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn swapped_apply_remove_and_other_valid_family_are_rejected() {
+        let mut slots = snapshot(Scope::Legacy, 0x180000000);
+        slots.swap(2, 3);
+        assert!(validate_dispatch_snapshot(Scope::Legacy, 0x180000000, &slots).is_err());
+        slots = snapshot(Scope::NavalBuildingsV1, 0x180000000);
+        assert!(validate_dispatch_snapshot(Scope::Legacy, 0x180000000, &slots).is_err());
+    }
+
+    #[test]
+    fn missing_extra_truncated_and_wrong_base_snapshots_are_rejected() {
+        let original = snapshot(Scope::Legacy, 0x180000000);
+        assert!(validate_dispatch_snapshot(Scope::Legacy, 0x180000000, &original[..7]).is_err());
+        let mut slots = original.clone();
+        slots.push(slots[0].clone());
+        assert!(validate_dispatch_snapshot(Scope::Legacy, 0x180000000, &slots).is_err());
+        slots = original.clone();
+        slots[4].truncate(7);
+        assert!(validate_dispatch_snapshot(Scope::Legacy, 0x180000000, &slots).is_err());
+        assert!(validate_dispatch_snapshot(Scope::Legacy, 0x180010000, &original).is_err());
+        assert!(validate_dispatch_snapshot(Scope::Legacy, u64::MAX, &original).is_err());
     }
 }
 

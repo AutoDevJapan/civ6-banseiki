@@ -625,6 +625,19 @@ impl Backend for Native {
                 return Err(Error::input("unknown bytes inside audited effect function"));
             }
         }
+        for (start, end) in CITY_ADAPTERS {
+            deadline(self.until)?;
+            if self.read(start, end - start)? != disk_range(&self.dll, start, end - start)? {
+                return Err(Error::input("unknown audited City subject adapter"));
+            }
+        }
+        let mut dispatch = Vec::new();
+        for &(vtable, _, _) in self.scope.dispatch() {
+            for offset in [0x28, 0x30, 0x60, 0x68] {
+                dispatch.push(self.read(vtable + offset, 8)?);
+            }
+        }
+        validate_dispatch_snapshot(self.scope, self.module.base as u64, &dispatch)?;
         for (rva, constant) in CONSTANTS {
             if disk_range(&self.dll, rva, constant.len())? != constant
                 || self.read(rva, constant.len())? != constant
