@@ -222,6 +222,24 @@ fn ordinary_window(title: &str, buttons: &[String]) -> bool {
         })
 }
 
+fn updating_client(title: &str, body: &str, buttons: &[String]) -> bool {
+    // live94 captured Steam's registered updater, not a save conflict. Waiting
+    // does not invoke Cancel/Close or choose any copy of the user's files. The
+    // caller's existing launch deadline still bounds this wait.
+    if title != "steam"
+        || !matches!(
+            body,
+            "updating steam... updating steam... verifying installation... system system"
+                | "updating steam... verifying installation..."
+        )
+    {
+        return false;
+    }
+    let mut labels = buttons.iter().map(|b| normalize(b)).collect::<Vec<_>>();
+    labels.sort();
+    labels == ["cancel", "close", "minimize"]
+}
+
 fn safe_button(kind: Kind, label: &str) -> bool {
     match kind {
         Kind::UnableToSync | Kind::Offline => {
@@ -268,6 +286,9 @@ pub fn decide(title: &str, body: &str, buttons: &[String], console_proves_civ6: 
     let body = normalize(body);
     if !steam_title(&title) {
         return Action::None;
+    }
+    if updating_client(&title, &body, buttons) {
+        return Action::Wait;
     }
     let explicit = game_title(&title);
     if !explicit && ordinary_window(&title, buttons) && !warning_like(&title, &body, buttons) {
@@ -696,6 +717,44 @@ mod tests {
             ),
             Action::None
         );
+    }
+
+    #[test]
+    fn measured_client_update_waits_without_game_proof_or_button_selection() {
+        // Independently transcribed from live94 steam-warnings.jsonl.
+        let body =
+            "Updating Steam...\nUpdating Steam...\nVerifying installation...\nSystem\nSystem\n";
+        for proof in [false, true] {
+            assert_eq!(
+                decide(
+                    "Steam",
+                    body,
+                    &buttons(&["Cancel", "Minimize", "Close"]),
+                    proof
+                ),
+                Action::Wait
+            );
+            for extra in ["\nCloud conflict", "\nDownload your saves", "\nDota 2"] {
+                stopped(decide(
+                    "Steam",
+                    &format!("{body}{extra}"),
+                    &buttons(&["Cancel", "Minimize", "Close"]),
+                    proof,
+                ));
+            }
+            stopped(decide(
+                "Steam",
+                body,
+                &buttons(&["Cancel", "Minimize", "Close", "Play anyway"]),
+                proof,
+            ));
+            stopped(decide(
+                "Steam - Dota 2",
+                body,
+                &buttons(&["Cancel", "Minimize", "Close"]),
+                proof,
+            ));
+        }
     }
 
     #[test]
