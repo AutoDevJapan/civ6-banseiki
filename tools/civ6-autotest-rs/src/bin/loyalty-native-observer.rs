@@ -260,12 +260,16 @@ mod policy {
         pub slot: usize,
         pub owned_b_bits: u64,
         pub app_dr6: u64,
+        // Future single-step setting, not evidence of a current BS trap.
         pub app_tf: bool,
     }
 
     impl ProbeSource {
-        fn has_app_source(self) -> bool {
-            self.app_dr6 != 0 || self.app_tf
+        fn has_current_foreign_source(self) -> bool {
+            // Intel SDM Vol. 3B 18.3.1.1/18.3.1.4: an execution
+            // breakpoint is a fault BEFORE the instruction; BS identifies the
+            // AFTER-instruction TF trap. TF alone is the next-step setting.
+            self.app_dr6 != 0
         }
     }
 
@@ -291,6 +295,7 @@ mod policy {
     pub enum ExceptionDecision {
         AttachBreak,
         Probe(ProbeSource),
+        ProbeAndStopForAppTF(ProbeSource),
         ForwardComposite(ProbeSource),
         RestoreAndForward,
         ForwardFirstChance { record: bool },
@@ -299,21 +304,27 @@ mod policy {
 
     impl ExceptionDecision {
         pub fn handled(self) -> bool {
-            matches!(self, Self::AttachBreak | Self::Probe(_))
+            matches!(
+                self,
+                Self::AttachBreak | Self::Probe(_) | Self::ProbeAndStopForAppTF(_)
+            )
         }
 
         pub fn stop_observing(self) -> bool {
             matches!(
                 self,
-                Self::ForwardComposite(_) | Self::RestoreAndForward | Self::ForwardSecondChance
+                Self::ProbeAndStopForAppTF(_)
+                    | Self::ForwardComposite(_)
+                    | Self::RestoreAndForward
+                    | Self::ForwardSecondChance
             )
         }
 
         pub fn resume_debug_flags(self, dr6: u64, flags: u32) -> Option<(u64, u32)> {
             match self {
-                Self::Probe(source) | Self::ForwardComposite(source) => {
-                    Some((dr6 & !source.owned_b_bits, flags | RF))
-                }
+                Self::Probe(source)
+                | Self::ProbeAndStopForAppTF(source)
+                | Self::ForwardComposite(source) => Some((dr6 & !source.owned_b_bits, flags | RF)),
                 _ => None,
             }
         }
@@ -363,9 +374,12 @@ mod policy {
                             .registers
                             .own_hit(addresses, enabled, snapshot.rip, snapshot.flags)
                     {
-                        if source.has_app_source() {
+                        if source.has_current_foreign_source() {
                             self.record_first_chance();
                             return ExceptionDecision::ForwardComposite(source);
+                        }
+                        if source.app_tf {
+                            return ExceptionDecision::ProbeAndStopForAppTF(source);
                         }
                         return ExceptionDecision::Probe(source);
                     }
@@ -444,7 +458,10 @@ mod policy {
         }
         match record["event"].as_str() {
             Some("probe_install") => 0,
-            Some("probe_resume" | "debug_continue" | "target_exit_wait" | "probe_restore") => 2,
+            Some(
+                "probe_resume" | "debug_continue" | "target_exit_wait" | "probe_restore"
+                | "thread_resume",
+            ) => 2,
             _ => 1,
         }
     }
@@ -1863,6 +1880,7 @@ mod platform {
         armed: bool,
         enabled: u64,
         suspended: bool,
+        suspend_previous_count: Option<u32>,
         cleanup_snapshot: Option<ProbeSnapshot>,
     }
 
@@ -1871,6 +1889,7 @@ mod platform {
         status: i32,
         restore_before_continue: bool,
         exception_routed: bool,
+        decision: Option<ExceptionDecision>,
     }
 
     struct Session {
@@ -1887,6 +1906,7 @@ mod platform {
         exceptions: ExceptionPolicy,
         owns_probes: bool,
         forwarded_probe_context: bool,
+        probe_resume_error: Option<String>,
         cleanup_exception_records: Vec<Value>,
         debug_trace: Vec<Value>,
         debug_trace_omitted: u64,
@@ -1928,6 +1948,7 @@ mod platform {
                 exceptions,
                 owns_probes: false,
                 forwarded_probe_context: false,
+                probe_resume_error: None,
                 cleanup_exception_records: Vec::new(),
                 debug_trace: Vec::new(),
                 debug_trace_omitted: 0,
@@ -1966,15 +1987,16 @@ mod platform {
             value: CONTEXT,
             phase: &str,
         ) -> Result<()> {
-            self.resume_probe_with_readback(raw, decision, value, phase, context)
+            self.resume_probe_with_context_io(raw, decision, value, phase, set_context, context)
         }
 
-        fn resume_probe_with_readback(
+        fn resume_probe_with_context_io(
             &mut self,
             raw: RawException,
             decision: ExceptionDecision,
             mut value: CONTEXT,
             phase: &str,
+            set: fn(&Handle, CONTEXT) -> Result<()>,
             readback: fn(&Handle, u32) -> Result<CONTEXT>,
         ) -> Result<()> {
             let before = json!({"rip":value.Rip,"dr6":value.Dr6,
@@ -1991,7 +2013,7 @@ mod platform {
                 .map(|thread| &thread.handle)
                 .or_else(|| self.event_threads.get(&raw.tid))
                 .ok_or("owned probe has no thread handle")?;
-            let updated = set_context(handle, value);
+            let updated = set(handle, value);
             // Read actual OS state, rather than reporting the requested RF as
             // proof it survived SetThreadContext. Do not repair RIP/game data.
             let actual_context = readback(handle, value.ContextFlags);
@@ -2024,11 +2046,17 @@ mod platform {
                 "actual":raw_read(actual),"continue_status":self.pending.as_ref().map(|p|p.status)}));
             let result = updated.and(readback_check);
             if result.is_err() {
-                self.forwarded_probe_context = true;
+                if self.probe_resume_error.is_none() {
+                    self.probe_resume_error = result.as_ref().err().cloned();
+                }
+                self.forwarded_probe_context |= !decision.handled();
                 // No continuation after a failed resume until centralized
                 // cleanup has attempted every owned register restoration.
                 if let Some(pending) = &mut self.pending {
-                    pending.status = DBG_EXCEPTION_NOT_HANDLED;
+                    // Set/Get failure ends observation, not ownership of the
+                    // fault already classified from a verified stopped context.
+                    // Keep its original status; restore all probes before the
+                    // ONE continuation. Never leak a known own fault to VEH.
                     pending.restore_before_continue = true;
                 }
             }
@@ -2158,6 +2186,7 @@ mod platform {
                     armed: false,
                     enabled: 0x45,
                     suspended: false,
+                    suspend_previous_count: None,
                     cleanup_snapshot: None,
                 },
             );
@@ -2277,6 +2306,7 @@ mod platform {
                     event,
                     restore_before_continue: false,
                     exception_routed: false,
+                    decision: None,
                     status: if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
                         DBG_EXCEPTION_NOT_HANDLED
                     } else {
@@ -2389,6 +2419,7 @@ mod platform {
             if let Some(pending) = &mut self.pending {
                 pending.restore_before_continue = decision.stop_observing();
                 pending.exception_routed = true;
+                pending.decision = Some(decision);
                 pending.status = if decision.handled() {
                     DBG_CONTINUE
                 } else {
@@ -2544,6 +2575,14 @@ mod platform {
                 None => return Err("owned probe context unavailable".into()),
             };
             self.resume_probe(raw, decision, value, "observe")?;
+            if let ExceptionDecision::ProbeAndStopForAppTF(source) = decision {
+                write_json(
+                    output,
+                    &json!({"event":"owned_fault_before_app_tf",
+                    "raw":raw,"source":source,"continuation":"handled_after_restore"}),
+                )?;
+                return Ok(Some("app_tf_pending_after_owned_fault"));
+            }
             if let ExceptionDecision::ForwardComposite(source) = decision {
                 write_json(
                     output,
@@ -2644,7 +2683,8 @@ mod platform {
                 }
                 // SAFETY: same owned target thread handle. Retain exactly one
                 // suspend count across restore, event drainage, and detach.
-                if unsafe { SuspendThread(thread.handle.0) } == u32::MAX {
+                let previous_count = unsafe { SuspendThread(thread.handle.0) };
+                if previous_count == u32::MAX {
                     errors.push(format!(
                         "freeze thread {tid}: {}",
                         win_error("SuspendThread")
@@ -2652,6 +2692,7 @@ mod platform {
                     continue;
                 }
                 thread.suspended = true;
+                thread.suspend_previous_count = Some(previous_count);
                 match context(
                     &thread.handle,
                     CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
@@ -2692,6 +2733,17 @@ mod platform {
         }
 
         fn restore(&mut self, tid: u32) -> Result<RestoreOutcome> {
+            let known_owned_bits = self
+                .pending
+                .as_ref()
+                .filter(|p| p.event.dwThreadId == tid)
+                .and_then(|p| p.decision)
+                .and_then(|d| match d {
+                    ExceptionDecision::Probe(source)
+                    | ExceptionDecision::ProbeAndStopForAppTF(source) => Some(source.owned_b_bits),
+                    _ => None,
+                })
+                .unwrap_or(0);
             let thread = self.threads.get_mut(&tid).ok_or("missing cleanup thread")?;
             if !thread.handle.alive()? {
                 thread.armed = false;
@@ -2700,7 +2752,8 @@ mod platform {
             if !thread.suspended {
                 // SAFETY: retry the reversible freeze on this same target
                 // handle; a failed freeze must not lead to setting a running context.
-                if unsafe { SuspendThread(thread.handle.0) } == u32::MAX {
+                let previous_count = unsafe { SuspendThread(thread.handle.0) };
+                if previous_count == u32::MAX {
                     let error = win_error("SuspendThread(restore)");
                     if !thread.handle.alive()? {
                         return Ok(RestoreOutcome::ThreadExited);
@@ -2708,31 +2761,59 @@ mod platform {
                     return Err(error);
                 }
                 thread.suspended = true;
+                thread.suspend_previous_count = Some(previous_count);
             }
-            let mut value = context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?;
+            let mut value = context(
+                &thread.handle,
+                CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+            )?;
             // Restore the addresses/control we own, retaining the application's
             // status. Confirmed probe bits were removed by the common resume
             // policy; uncertain/second-chance bits must not be guessed away.
             let expected = DebugRegisters {
-                dr6: (thread.original.dr6 & !0xE00F) | (value.Dr6 & 0xE00F),
+                dr6: (thread.original.dr6 & !0xE00F) | (value.Dr6 & 0xE00F & !known_owned_bits),
                 ..thread.original
             };
             replace_registers(&mut value, expected);
+            let requested = ProbeSnapshot {
+                armed: false,
+                registers: expected,
+                rip: value.Rip,
+                flags: value.EFlags,
+            };
+            value.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
             let updated = set_context(&thread.handle, value);
-            let actual =
-                context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64).map(|v| registers(&v));
-            let verified = actual.as_ref().is_ok_and(|actual| *actual == expected);
+            let actual_context = context(
+                &thread.handle,
+                CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+            );
+            let verified = validate_resume_readback(
+                requested,
+                actual_context
+                    .as_ref()
+                    .map(|v| ProbeSnapshot {
+                        armed: false,
+                        registers: registers(v),
+                        rip: v.Rip,
+                        flags: v.EFlags,
+                    })
+                    .map_err(Clone::clone),
+            );
+            let actual = actual_context.map(|v| {
+                json!({"address":registers(&v).address,
+                "dr6":v.Dr6,"dr7":v.Dr7,"rip":v.Rip,"eflags":v.EFlags})
+            });
             let record = json!({"event":"probe_restore","tid":tid,"requested":expected,
                 "actual":raw_read(actual),"original":thread.original,
-                "set_context_ok":updated.is_ok(),"readback_ok":verified});
-            if updated.is_ok() && verified {
+                "control_before":{"rip":requested.rip,"eflags":requested.flags},
+                "known_owned_bits_removed":known_owned_bits,
+                "set_context_ok":updated.is_ok(),"readback_ok":verified.is_ok(),"readback_error":verified.as_ref().err()});
+            if updated.is_ok() && verified.is_ok() {
                 thread.armed = false;
             }
             self.trace(record);
             updated?;
-            if !verified {
-                return Err("original debug-register readback mismatch".into());
-            }
+            verified.map_err(|e| format!("original debug-register readback mismatch: {e}"))?;
             Ok(RestoreOutcome::Restored)
         }
 
@@ -2860,6 +2941,7 @@ mod platform {
                     event,
                     restore_before_continue: false,
                     exception_routed: false,
+                    decision: None,
                     status: if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
                         DBG_EXCEPTION_NOT_HANDLED
                     } else {
@@ -2981,20 +3063,36 @@ mod platform {
 
         fn resume(&mut self) -> Vec<String> {
             let mut errors = Vec::new();
+            let mut records = Vec::new();
             for (&tid, thread) in &mut self.threads {
                 if !thread.suspended {
                     continue;
                 }
                 // SAFETY: remove exactly the suspend count owned by cleanup,
                 // after detach has released the debugger's separate event stop.
-                if unsafe { ResumeThread(thread.handle.0) } == u32::MAX {
+                let previous_count = unsafe { ResumeThread(thread.handle.0) };
+                let expected_count = thread.suspend_previous_count.and_then(|n| n.checked_add(1));
+                let released_expected_count = Some(previous_count) == expected_count;
+                records.push(json!({"event":"thread_resume","tid":tid,"previous_count":previous_count,
+                    "expected_count":expected_count,"ok":released_expected_count && previous_count != u32::MAX,
+                    "runnable":previous_count == 1}));
+                if previous_count == u32::MAX {
                     let error = win_error("ResumeThread");
                     if thread.handle.alive() != Ok(false) {
                         errors.push(format!("resume thread {tid}: {error}"));
                     }
                 } else {
                     thread.suspended = false;
+                    if !released_expected_count {
+                        errors.push(format!("resume thread {tid}: suspend count {previous_count}, expected {expected_count:?}"));
+                    }
+                    // Counts above one preserve an application's preexisting
+                    // suspension. Releasing our one count does not imply that
+                    // such a thread became runnable; never resume it again.
                 }
+            }
+            for record in records {
+                self.trace(record);
             }
             errors
         }
@@ -3086,6 +3184,7 @@ mod platform {
             "elapsed_ms":started.elapsed().as_millis(), "cleanup_complete":complete,
             "debugger_api_cleanup_complete":api_complete,
             "forwarded_probe_context_delivery_unverified":delivery_unverified,
+            "probe_resume_error":session.as_ref().and_then(|s| s.probe_resume_error.as_ref()),
             "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
             "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
             "exceptions":session.as_ref().map(|s| &s.exceptions),
@@ -3127,26 +3226,66 @@ mod platform {
         static APP_FLAGS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         static APP_RIP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         static APP_DR7: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        static APP_CODE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        static APP_ADDRESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        static APP_TF_HANDLED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        static APP_EVENTS: std::sync::Mutex<Vec<Value>> = std::sync::Mutex::new(Vec::new());
         static APP_UNHANDLED: AtomicBool = AtomicBool::new(false);
+        static APP_EXPECT_NEXT_TF: AtomicBool = AtomicBool::new(false);
+        fn app_report(normal_result: Option<u64>) -> Value {
+            json!({"app_steps":APP_STEPS.load(Ordering::Relaxed),
+                "first_code":APP_CODE.load(Ordering::Relaxed),"first_address":APP_ADDRESS.load(Ordering::Relaxed),
+                "first_dr6":APP_DR6.load(Ordering::Relaxed),"first_eflags":APP_FLAGS.load(Ordering::Relaxed),
+                "first_dr7":APP_DR7.load(Ordering::Relaxed),"first_rip":APP_RIP.load(Ordering::Relaxed),
+                "app_tf_handled":APP_TF_HANDLED.load(Ordering::Relaxed),"normal_result":normal_result,
+                "events":*APP_EVENTS.lock().unwrap()})
+        }
         unsafe extern "system" fn app_exception(info: *mut EXCEPTION_POINTERS) -> i32 {
             // SAFETY: Windows supplies these exception structures during VEH.
             if unsafe { (*(*info).ExceptionRecord).ExceptionCode } == EXCEPTION_SINGLE_STEP {
-                if APP_UNHANDLED.load(Ordering::Relaxed) {
-                    return 0;
-                }
+                let value = unsafe { &mut *(*info).ContextRecord };
+                let exception = unsafe { &*(*info).ExceptionRecord };
                 if APP_STEPS.fetch_add(1, Ordering::Relaxed) == 0 {
-                    let value = unsafe { &mut *(*info).ContextRecord };
                     APP_DR6.store(value.Dr6, Ordering::Relaxed);
                     APP_FLAGS.store(value.EFlags, Ordering::Relaxed);
                     APP_RIP.store(value.Rip, Ordering::Relaxed);
                     APP_DR7.store(value.Dr7, Ordering::Relaxed);
-                    // The owned fixture APPLICATION handles its own TF source.
-                    // The observer must deliver it unchanged to this callback.
+                    APP_CODE.store(exception.ExceptionCode as u32, Ordering::Relaxed);
+                    APP_ADDRESS.store(exception.ExceptionAddress as u64, Ordering::Relaxed);
+                }
+                let before_flags = value.EFlags;
+                let leaked_owned_fault = value.Dr6 & 0xF != 0;
+                // With DR7 restored to zero Windows delivers DR6=0, including
+                // BS, in VEH on this OS. Verify the actual after-instruction
+                // boundary of the child's fixed four-byte LEA instead. No
+                // synthetic DR6 bits are returned or added to the report.
+                let next_tf_boundary = APP_EXPECT_NEXT_TF.load(Ordering::Relaxed)
+                    && value.Rip == native_getter as *const () as u64 + 4
+                    && exception.ExceptionAddress as u64 == value.Rip
+                    && value.Dr7 & !0x400 == 0
+                    && value.Dr6 & 0xE00F == 0;
+                let handles_tf =
+                    !leaked_owned_fault && (value.Dr6 & 0x4000 != 0 || next_tf_boundary);
+                if handles_tf {
+                    // Only the application's GENUINE BS trap is handled here.
+                    // Never clear B bits/DR7 or set RF to hide an owned leak.
                     value.EFlags &= !0x100;
-                    // The child's own cleanup happens AFTER recording the
-                    // context Windows delivered. Never a production repair.
-                    value.EFlags |= RF;
-                    value.Dr7 = 0;
+                    APP_TF_HANDLED.fetch_add(1, Ordering::Relaxed);
+                }
+                APP_EVENTS.lock().unwrap().push(json!({"code":exception.ExceptionCode as u32,
+                    "address":exception.ExceptionAddress as u64,"rip":value.Rip,
+                    "dr6":value.Dr6,"dr7":value.Dr7,"eflags_before":before_flags,
+                    "eflags_after":value.EFlags,"handled_tf":handles_tf,"next_tf_instruction_boundary":next_tf_boundary,
+                    "leaked_owned_fault":leaked_owned_fault}));
+                // Record even the rejected leak before Windows terminates the
+                // child, so an exit is never mistaken for a safe continuation.
+                if let Some(path) = std::env::var_os("LOYALTY_OWNED_CHILD_REPORT") {
+                    if let Ok(mut file) = OpenOptions::new().write(true).truncate(true).open(path) {
+                        let _ = write_json(&mut file, &app_report(None));
+                    }
+                }
+                if leaked_owned_fault || APP_UNHANDLED.load(Ordering::Relaxed) {
+                    return 0;
                 }
                 -1 // EXCEPTION_CONTINUE_EXECUTION: application handled its own exception
             } else {
@@ -3170,7 +3309,18 @@ mod platform {
         }
         #[inline(never)]
         extern "C" fn getter(n: u64) -> u64 {
-            std::hint::black_box(n.wrapping_add(11))
+            unsafe { native_getter(n) }
+        }
+
+        std::arch::global_asm!(
+            ".globl loyalty_owned_getter",
+            "loyalty_owned_getter:",
+            ".byte 0x48, 0x8d, 0x41, 0x0b",
+            "ret"
+        );
+        unsafe extern "C" {
+            #[link_name = "loyalty_owned_getter"]
+            fn native_getter(n: u64) -> u64;
         }
 
         fn hidden_getter_worker() {
@@ -3205,7 +3355,7 @@ mod platform {
             let addresses = [
                 setter as *const () as u64,
                 returned as *const () as u64,
-                getter as *const () as u64,
+                native_getter as *const () as u64,
                 candidate as *const () as u64,
             ];
             let mut file = OpenOptions::new()
@@ -3235,6 +3385,10 @@ mod platform {
                     std::env::var_os("LOYALTY_OWNED_UNHANDLED").is_some(),
                     Ordering::Relaxed,
                 );
+                APP_EXPECT_NEXT_TF.store(
+                    std::env::var_os("LOYALTY_OWNED_EXPECT_NEXT_TF").is_some(),
+                    Ordering::Relaxed,
+                );
                 // SAFETY: callback remains loaded until explicitly removed.
                 let handler = unsafe { AddVectoredExceptionHandler(1, Some(app_exception)) };
                 assert!(!handler.is_null());
@@ -3248,6 +3402,7 @@ mod platform {
                 // SAFETY: local fixture calls, valid cache allocation, Win64
                 // shadow space/alignment and saved RBX. Production setter /
                 // return matching and raw memory reads use actual trap context.
+                let getter_result: u64;
                 unsafe {
                     std::arch::asm!(
                         "push rbx", "sub rsp, 0x28", "mov rbx, rcx",
@@ -3259,8 +3414,23 @@ mod platform {
                         "add rsp, 0x28", "pop rbx",
                         setter = sym setter, candidate = sym candidate,
                         returned = sym returned, getter = sym getter,
-                        in("rcx") base, clobber_abi("C"),
+                        in("rcx") base, lateout("rax") getter_result, clobber_abi("C"),
                     );
+                }
+                assert_eq!(getter_result, 16);
+                if std::env::var_os("LOYALTY_OWNED_BS_ONLY").is_some() {
+                    // A real after-instruction TF trap, with no execution
+                    // breakpoint at this local instruction. The application
+                    // callback must receive BS; TF setting alone is not proof.
+                    unsafe {
+                        std::arch::asm!(
+                            "pushfq",
+                            "or qword ptr [rsp], 0x100",
+                            "popfq",
+                            "nop",
+                            "nop"
+                        );
+                    }
                 }
                 // A new nontrigger thread, created after 0x55 was enabled on
                 // its parent, must receive 0x45 rather than inherit slot 2.
@@ -3274,11 +3444,7 @@ mod platform {
                     RaiseException(EXCEPTION_SINGLE_STEP as u32, 0, 0, std::ptr::null());
                 }
                 let extra = std::env::var_os("LOYALTY_OWNED_EXTRA_STEP").is_some();
-                let report = json!({"app_steps":APP_STEPS.load(Ordering::Relaxed),
-                    "first_dr6":APP_DR6.load(Ordering::Relaxed),
-                    "first_eflags":APP_FLAGS.load(Ordering::Relaxed),
-                    "first_dr7":APP_DR7.load(Ordering::Relaxed),
-                    "first_rip":APP_RIP.load(Ordering::Relaxed)});
+                let report = app_report(Some(getter_result));
                 let mut file = OpenOptions::new()
                     .write(true)
                     .truncate(true)
@@ -3327,22 +3493,53 @@ mod platform {
         enum OwnedMode {
             Exit,
             Restore,
-            CompositeObserve,
-            CompositeCleanup,
+            AppTfObserve,
+            AppTfCleanup,
             UncertainDr7,
             ReadbackMismatch,
             ReadbackError,
+            AppTfReadbackError,
+            AppTfReadbackMismatch,
+            SetContextError,
             SecondChance,
+            BsOnly,
+        }
+
+        impl OwnedMode {
+            fn tf_pending(self) -> bool {
+                matches!(
+                    self,
+                    Self::AppTfObserve
+                        | Self::AppTfCleanup
+                        | Self::AppTfReadbackError
+                        | Self::AppTfReadbackMismatch
+                )
+            }
+
+            fn context_error(self) -> bool {
+                matches!(
+                    self,
+                    Self::ReadbackError
+                        | Self::ReadbackMismatch
+                        | Self::SetContextError
+                        | Self::AppTfReadbackError
+                        | Self::AppTfReadbackMismatch
+                )
+            }
+
+            fn rf_mismatch(self) -> bool {
+                matches!(self, Self::ReadbackMismatch | Self::AppTfReadbackMismatch)
+            }
         }
 
         #[test]
-        fn windows_composite_observe_preserves_app_source_under_trace_pressure() {
-            run_owned_hardware(OwnedMode::CompositeObserve);
+        fn windows_owned_fault_with_tf_observe_delivers_next_tf_trap_under_trace_pressure() {
+            run_owned_hardware(OwnedMode::AppTfObserve);
         }
 
         #[test]
-        fn windows_composite_cleanup_preserves_app_source() {
-            run_owned_hardware(OwnedMode::CompositeCleanup);
+        fn windows_owned_fault_with_tf_cleanup_delivers_next_tf_trap() {
+            run_owned_hardware(OwnedMode::AppTfCleanup);
         }
 
         #[test]
@@ -3358,6 +3555,26 @@ mod platform {
         #[test]
         fn windows_resume_readback_error_stops_and_restores() {
             run_owned_hardware(OwnedMode::ReadbackError);
+        }
+
+        #[test]
+        fn windows_tf_readback_error_keeps_owned_fault_handled_and_next_tf() {
+            run_owned_hardware(OwnedMode::AppTfReadbackError);
+        }
+
+        #[test]
+        fn windows_tf_readback_mismatch_keeps_owned_fault_handled_and_next_tf() {
+            run_owned_hardware(OwnedMode::AppTfReadbackMismatch);
+        }
+
+        #[test]
+        fn windows_set_context_error_keeps_owned_fault_handled_and_restores() {
+            run_owned_hardware(OwnedMode::SetContextError);
+        }
+
+        #[test]
+        fn windows_genuine_bs_only_first_chance_reaches_application() {
+            run_owned_hardware(OwnedMode::BsOnly);
         }
 
         #[test]
@@ -3377,6 +3594,11 @@ mod platform {
         fn failed_os_readback(_: &Handle, flags: u32) -> Result<CONTEXT> {
             let invalid = std::mem::ManuallyDrop::new(Handle(std::ptr::null_mut()));
             context(&invalid, flags) // genuine GetThreadContext failure, test only
+        }
+
+        fn failed_os_set(_: &Handle, value: CONTEXT) -> Result<()> {
+            let invalid = std::mem::ManuallyDrop::new(Handle(std::ptr::null_mut()));
+            set_context(&invalid, value)
         }
 
         #[test]
@@ -3437,11 +3659,12 @@ mod platform {
         }
 
         fn run_owned_hardware(mode: OwnedMode) {
-            let restore_while_alive = mode != OwnedMode::Exit;
-            let extra_step = !matches!(
+            let restore_while_alive = !matches!(mode, OwnedMode::Exit | OwnedMode::BsOnly);
+            let stop_at_third = !matches!(
                 mode,
-                OwnedMode::Exit | OwnedMode::Restore | OwnedMode::SecondChance
+                OwnedMode::Exit | OwnedMode::Restore | OwnedMode::SecondChance | OwnedMode::BsOnly
             );
+            let extra_step = mode.tf_pending() || mode == OwnedMode::BsOnly;
             let handshake = tempfile::NamedTempFile::new().unwrap();
             let app_report = tempfile::NamedTempFile::new().unwrap();
             let child_diagnostics = tempfile::NamedTempFile::new().unwrap();
@@ -3455,11 +3678,13 @@ mod platform {
             if extra_step {
                 command.env("LOYALTY_OWNED_EXTRA_STEP", "1");
             }
-            if matches!(
-                mode,
-                OwnedMode::CompositeObserve | OwnedMode::CompositeCleanup
-            ) {}
-            if mode == OwnedMode::CompositeObserve {
+            if mode.tf_pending() {
+                command.env("LOYALTY_OWNED_EXPECT_NEXT_TF", "1");
+            }
+            if mode == OwnedMode::BsOnly {
+                command.env("LOYALTY_OWNED_BS_ONLY", "1");
+            }
+            if mode == OwnedMode::AppTfObserve {
                 command.env("LOYALTY_OWNED_TRACE_PRESSURE", "1");
             }
             if mode == OwnedMode::SecondChance {
@@ -3558,6 +3783,7 @@ mod platform {
                 exceptions,
                 owns_probes: false,
                 forwarded_probe_context: false,
+                probe_resume_error: None,
                 cleanup_exception_records: Vec::new(),
                 debug_trace: Vec::new(),
                 debug_trace_omitted: 0,
@@ -3596,6 +3822,7 @@ mod platform {
                     event,
                     restore_before_continue: false,
                     exception_routed: false,
+                    decision: None,
                     status: if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
                         DBG_EXCEPTION_NOT_HANDLED
                     } else {
@@ -3631,7 +3858,7 @@ mod platform {
                             && info.ExceptionRecord.ExceptionAddress as u64 == addresses[2]
                         {
                             getter_traps += 1;
-                            if getter_traps == 3 && extra_step {
+                            if getter_traps == 3 && stop_at_third {
                                 let thread = session.threads.get(&event.dwThreadId).unwrap();
                                 let mut value = context(
                                     &thread.handle,
@@ -3640,12 +3867,9 @@ mod platform {
                                         | CONTEXT_INTEGER_AMD64,
                                 )
                                 .unwrap();
-                                if matches!(
-                                    mode,
-                                    OwnedMode::CompositeObserve | OwnedMode::CompositeCleanup
-                                ) {
+                                if mode.tf_pending() {
                                     println!(
-                                        "OWNED_COMPOSITE_CONTEXT_BEFORE_TF={}",
+                                        "OWNED_FAULT_CONTEXT_BEFORE_TF_SETTING={}",
                                         json!({"dr6":value.Dr6,"eflags":value.EFlags,"rip":value.Rip})
                                     );
                                     value.ContextFlags = CONTEXT_CONTROL_AMD64;
@@ -3658,13 +3882,15 @@ mod platform {
                                     .unwrap();
                                     assert_eq!(actual.Dr6 & 0xF, 4);
                                     assert_ne!(actual.EFlags & 0x100, 0);
-                                    if mode == OwnedMode::CompositeCleanup {
+                                    value = actual;
+                                    if mode == OwnedMode::AppTfCleanup {
                                         break;
                                     }
-                                } else if mode == OwnedMode::UncertainDr7 {
+                                }
+                                if mode == OwnedMode::UncertainDr7 {
                                     value.Dr7 &= !0x10;
                                     set_context(&thread.handle, value).unwrap();
-                                } else {
+                                } else if mode.context_error() {
                                     let raw = RawException {
                                         tid: event.dwThreadId,
                                         code: EXCEPTION_SINGLE_STEP as u32,
@@ -3682,23 +3908,32 @@ mod platform {
                                             }),
                                         )
                                         .unwrap();
-                                    let readback = if mode == OwnedMode::ReadbackMismatch {
+                                    let readback = if mode.rf_mismatch() {
                                         changed_rf_readback
+                                    } else if mode == OwnedMode::SetContextError {
+                                        context
                                     } else {
                                         failed_os_readback
                                     };
                                     let failure = session
-                                        .resume_probe_with_readback(
+                                        .resume_probe_with_context_io(
                                             raw,
                                             decision,
                                             value,
                                             "test_readback_fault",
+                                            if mode == OwnedMode::SetContextError {
+                                                failed_os_set
+                                            } else {
+                                                set_context
+                                            },
                                             readback,
                                         )
                                         .unwrap_err();
                                     assert!(
-                                        failure.contains(if mode == OwnedMode::ReadbackMismatch {
+                                        failure.contains(if mode.rf_mismatch() {
                                             "mismatch: RF"
+                                        } else if mode == OwnedMode::SetContextError {
+                                            "SetThreadContext"
                                         } else {
                                             "readback failed"
                                         }),
@@ -3708,6 +3943,14 @@ mod platform {
                                         .continue_pending()
                                         .unwrap_err()
                                         .contains("centralized probe restoration"));
+                                    assert_eq!(
+                                        session.pending.as_ref().unwrap().status,
+                                        DBG_CONTINUE
+                                    );
+                                    assert_eq!(
+                                        session.probe_resume_error.as_deref(),
+                                        Some(failure.as_str())
+                                    );
                                     break;
                                 }
                             }
@@ -3731,7 +3974,7 @@ mod platform {
                         assert_eq!(
                             reason,
                             Some(match mode {
-                                OwnedMode::CompositeObserve => "composite_single_step",
+                                OwnedMode::AppTfObserve => "app_tf_pending_after_owned_fault",
                                 OwnedMode::UncertainDr7 => "owned_probe_identity_uncertain",
                                 OwnedMode::SecondChance => "second_chance_exception",
                                 _ => panic!("unexpected terminal event: {mode:?} {reason:?}"),
@@ -3752,9 +3995,23 @@ mod platform {
                 }
             }
             let report = session.finish();
-            assert!(report.complete(), "{report:?}");
-            if mode == OwnedMode::SecondChance {
-                assert_eq!(terminal_reason, Some("second_chance_exception"));
+            if mode == OwnedMode::UncertainDr7 {
+                // The current event has no trustworthy ownership proof. Keep
+                // its original NOT_HANDLED continuation. API restoration alone
+                // cannot prove the application's exception-context delivery.
+                assert!(session.forwarded_probe_context);
+            } else {
+                assert!(report.complete(), "{report:?}");
+            }
+            if matches!(mode, OwnedMode::SecondChance | OwnedMode::UncertainDr7) {
+                assert_eq!(
+                    terminal_reason,
+                    Some(if mode == OwnedMode::SecondChance {
+                        "second_chance_exception"
+                    } else {
+                        "owned_probe_identity_uncertain"
+                    })
+                );
                 assert_eq!(
                     unsafe { WaitForSingleObject(session.process.handle.0, 3000) },
                     WAIT_OBJECT_0
@@ -3769,7 +4026,10 @@ mod platform {
                         .map(|c| c as u32),
                     Some(0x80000004)
                 );
-                assert_eq!(session.exceptions.second_chance_count, 1);
+                assert_eq!(
+                    session.exceptions.second_chance_count,
+                    u64::from(mode == OwnedMode::SecondChance)
+                );
             } else if restore_while_alive {
                 assert_eq!(process_exit, None);
                 assert!(!report.process_exited);
@@ -3815,15 +4075,13 @@ mod platform {
                 assert!(report.process_exited);
                 assert_eq!(session.process.handle.alive(), Ok(false));
             }
-            let app: Value = if mode == OwnedMode::SecondChance {
-                Value::Null
-            } else {
-                serde_json::from_slice(&std::fs::read(app_report.path()).unwrap()).unwrap()
-            };
+            let app: Value =
+                serde_json::from_slice(&std::fs::read(app_report.path()).unwrap()).unwrap();
             let trace = json!({"identity":session.process.pinned,"process_exit":process_exit,
                 "mode":format!("{mode:?}"),"app":app,"child_exit_confirmed":true,
                 "forwarded_probe_context_delivery_unverified":session.forwarded_probe_context,
-                "fixture_nontrigger_getter_calls":if mode == OwnedMode::CompositeObserve { 144 } else { 4 },
+                "probe_resume_error":session.probe_resume_error,
+                "fixture_nontrigger_getter_calls":if mode == OwnedMode::AppTfObserve { 144 } else { 4 },
                 "fixture_hidden_getter_calls":2,
                 "thread_exit_events":exits,"cleanup":report,"trace":session.debug_trace,
                 "trace_omitted":session.debug_trace_omitted,
@@ -3832,22 +4090,33 @@ mod platform {
             let mut counts = [0; 4];
             for record in &session.debug_trace {
                 if record["event"] == "probe_resume" {
-                    if let Some(slot) = record["decision"]["Probe"]["slot"].as_u64() {
+                    if let Some(slot) = record["decision"]["Probe"]["slot"]
+                        .as_u64()
+                        .or_else(|| record["decision"]["ProbeAndStopForAppTF"]["slot"].as_u64())
+                    {
                         counts[slot as usize] += 1;
                     }
-                    assert_eq!(record["set_context_ok"], true);
                     if record["phase"] == "test_readback_fault" {
+                        assert_eq!(record["continue_status"], DBG_CONTINUE);
+                        assert_eq!(record["set_context_ok"], mode != OwnedMode::SetContextError);
                         assert_eq!(record["readback_ok"], false);
-                        if mode == OwnedMode::ReadbackMismatch {
+                        if mode.rf_mismatch() {
                             assert_eq!(
                                 record["actual"]["eflags"].as_u64().unwrap() & u64::from(RF),
                                 0
                             );
+                        } else if mode == OwnedMode::SetContextError {
+                            assert!(record["set_context_error"]
+                                .as_str()
+                                .unwrap()
+                                .contains("SetThreadContext"));
+                            assert_eq!(record["actual"]["dr6"].as_u64().unwrap() & 0xF, 4);
                         } else {
                             assert!(record["actual"]["read_error"].is_string());
                         }
                         continue;
                     }
+                    assert_eq!(record["set_context_ok"], true);
                     assert_eq!(record["readback_ok"], true);
                     assert!(record["actual"]["eflags"].as_u64().is_some(), "{record}");
                     assert_ne!(
@@ -3858,7 +4127,9 @@ mod platform {
                     assert_eq!(record["actual"]["rip"], record["before"]["rip"]);
                     assert_eq!(
                         record["continue_status"],
-                        if record["decision"]["Probe"].is_object() {
+                        if record["decision"]["Probe"].is_object()
+                            || record["decision"]["ProbeAndStopForAppTF"].is_object()
+                        {
                             DBG_CONTINUE
                         } else {
                             DBG_EXCEPTION_NOT_HANDLED
@@ -3866,18 +4137,19 @@ mod platform {
                     );
                 } else if record["event"] == "debug_continue" {
                     assert_eq!(record["ok"], true);
+                } else if record["event"] == "thread_resume" {
+                    assert_eq!(record["ok"], true);
+                    assert_eq!(record["previous_count"], 1);
+                    assert_eq!(record["runnable"], true);
                 }
             }
-            let lost_getter = matches!(
-                mode,
-                OwnedMode::CompositeObserve | OwnedMode::CompositeCleanup | OwnedMode::UncertainDr7
-            );
+            let lost_getter = mode == OwnedMode::UncertainDr7;
             assert_eq!(counts, [1, 1, if lost_getter { 2 } else { 3 }, 1]);
             let trigger = session.observation.trigger.unwrap();
             assert!(trigger.returned);
             assert_eq!(
                 session.observation.getters_recorded,
-                if extra_step { 2 } else { 3 }
+                if stop_at_third { 2 } else { 3 }
             );
             let installs: Vec<_> = session
                 .debug_trace
@@ -3930,13 +4202,13 @@ mod platform {
                     .iter()
                     .filter(|r| r["event"] == "getter_raw")
                     .count(),
-                if extra_step { 2 } else { 3 }
+                if stop_at_third { 2 } else { 3 }
             );
             for sample in samples.iter().filter(|r| r["event"] == "getter_raw") {
                 assert_eq!(sample["tid"], trigger.tid);
                 assert_eq!(sample["city_identity_verified"], false);
             }
-            if mode == OwnedMode::CompositeObserve {
+            if mode == OwnedMode::AppTfObserve {
                 assert_eq!(session.debug_trace.len(), 128);
                 assert!(session.installed_total > 140);
                 assert!(session.debug_trace_omitted_by_kind["probe_install/capacity"] > 0);
@@ -3947,35 +4219,81 @@ mod platform {
             } else {
                 assert_eq!(session.debug_trace_omitted, 0);
             }
-            if matches!(
-                mode,
-                OwnedMode::CompositeObserve | OwnedMode::CompositeCleanup
-            ) {
+            if mode.tf_pending() {
                 assert_eq!(app["app_steps"], 2);
                 assert_eq!(
                     app["first_dr6"].as_u64().unwrap() & 0xE00F,
                     0,
-                    "Windows delivered pre-update owned B bits to the application: {app}"
+                    "following TF trap must contain no owned B/BD/BT bits: {app}"
                 );
-                assert_ne!(app["first_eflags"].as_u64().unwrap() & 0x100, 0);
-                assert_eq!(app["first_rip"], addresses[2]);
+                assert_eq!(app["first_dr7"].as_u64().unwrap() & !0x400, 0);
+                assert_eq!(app["first_code"], EXCEPTION_SINGLE_STEP as u32);
+                assert_eq!(app["first_address"], app["first_rip"]);
+                assert_eq!(app["first_rip"], addresses[2] + 4);
+                assert_eq!(app["events"][0]["next_tf_instruction_boundary"], true);
+                assert_eq!(app["app_tf_handled"], 1);
+                assert_eq!(app["normal_result"], 16);
                 let resumed = session
                     .debug_trace
                     .iter()
-                    .find(|r| r["decision"]["ForwardComposite"].is_object())
+                    .find(|r| r["decision"]["ProbeAndStopForAppTF"].is_object())
                     .unwrap();
                 assert_eq!(
                     resumed["phase"],
-                    if mode == OwnedMode::CompositeCleanup {
+                    if mode == OwnedMode::AppTfCleanup {
                         "cleanup"
+                    } else if mode.context_error() {
+                        "test_readback_fault"
                     } else {
                         "observe"
                     }
                 );
-                assert_eq!(resumed["actual"]["dr6"].as_u64().unwrap() & 0xE00F, 0);
-                assert_ne!(resumed["actual"]["eflags"].as_u64().unwrap() & 0x100, 0);
+                if mode != OwnedMode::AppTfReadbackError {
+                    assert_eq!(resumed["actual"]["dr6"].as_u64().unwrap() & 0xE00F, 0);
+                    assert_ne!(resumed["actual"]["eflags"].as_u64().unwrap() & 0x100, 0);
+                } else {
+                    assert!(resumed["actual"]["read_error"].is_string());
+                }
+                assert_eq!(resumed["continue_status"], DBG_CONTINUE);
+                let tf_resume_index = session
+                    .debug_trace
+                    .iter()
+                    .position(|r| r["decision"]["ProbeAndStopForAppTF"].is_object())
+                    .unwrap();
+                let owned_continue = session
+                    .debug_trace
+                    .iter()
+                    .enumerate()
+                    .skip(tf_resume_index + 1)
+                    .find(|(_, r)| {
+                        r["event"] == "debug_continue"
+                            && r["raw"]["exception_address"] == addresses[2]
+                    })
+                    .map(|(i, r)| {
+                        assert_eq!(r["continue_status"], DBG_CONTINUE);
+                        i
+                    })
+                    .unwrap();
+                let restores: Vec<_> = session
+                    .debug_trace
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| r["event"] == "probe_restore")
+                    .collect();
+                assert_eq!(restores.len(), report.threads_restored as usize);
+                assert!(restores
+                    .iter()
+                    .all(|(index, r)| *index < owned_continue && r["readback_ok"] == true));
+                for (_, restored) in restores {
+                    assert_eq!(restored["actual"]["dr7"].as_u64().unwrap() & !0x400, 0);
+                    if restored["tid"] == resumed["raw"]["tid"] {
+                        assert_ne!(restored["actual"]["eflags"].as_u64().unwrap() & 0x100, 0);
+                        assert_eq!(restored["actual"]["rip"], resumed["before"]["rip"]);
+                    }
+                }
+                assert!(!session.forwarded_probe_context);
             } else if mode == OwnedMode::UncertainDr7 {
-                assert_eq!(app["app_steps"], 2);
+                assert_eq!(app["app_steps"], 1);
                 assert_eq!(app["first_dr6"].as_u64().unwrap() & 0xF, 4);
                 let last_restore = session
                     .debug_trace
@@ -3992,20 +4310,97 @@ mod platform {
                     .unwrap();
                 assert!(last_restore < forwarded);
             }
-            let forwarded = session
-                .debug_trace
-                .iter()
-                .find(|record| {
-                    record["event"] == "debug_continue"
-                        && record["continue_status"] == DBG_EXCEPTION_NOT_HANDLED
-                })
-                .unwrap();
-            assert_eq!(forwarded["raw"]["code"], EXCEPTION_SINGLE_STEP as u32);
-            assert_eq!(forwarded["raw"]["first_chance"], 1);
+            if mode.context_error() {
+                assert!(session.probe_resume_error.is_some());
+                assert!(!session.forwarded_probe_context);
+                assert_eq!(app["app_steps"], if mode.tf_pending() { 2 } else { 1 });
+                assert_eq!(app["first_dr6"].as_u64().unwrap() & 0xE00F, 0);
+                assert_eq!(app["first_dr7"].as_u64().unwrap() & !0x400, 0);
+                assert_ne!(app["first_rip"], addresses[2]);
+                assert_eq!(app["normal_result"], 16);
+                let fault = session
+                    .debug_trace
+                    .iter()
+                    .find(|r| r["phase"] == "test_readback_fault")
+                    .unwrap();
+                let continuations: Vec<_> = session
+                    .debug_trace
+                    .iter()
+                    .filter(|r| {
+                        r["event"] == "debug_continue"
+                            && r["raw"]["exception_address"] == addresses[2]
+                    })
+                    .collect();
+                assert_eq!(continuations.len(), 3);
+                assert!(continuations
+                    .iter()
+                    .all(|r| r["continue_status"] == DBG_CONTINUE));
+                assert_eq!(fault["continue_status"], DBG_CONTINUE);
+                let fault_index = session
+                    .debug_trace
+                    .iter()
+                    .position(|r| r["phase"] == "test_readback_fault")
+                    .unwrap();
+                let after_fault: Vec<_> = session
+                    .debug_trace
+                    .iter()
+                    .enumerate()
+                    .skip(fault_index + 1)
+                    .filter(|(_, r)| {
+                        r["event"] == "debug_continue"
+                            && r["raw"]["exception_address"] == addresses[2]
+                    })
+                    .collect();
+                assert_eq!(after_fault.len(), 1);
+                let restored: Vec<_> = session
+                    .debug_trace
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| r["event"] == "probe_restore")
+                    .collect();
+                assert_eq!(restored.len(), report.threads_restored as usize);
+                assert!(restored.iter().all(|(i, r)| *i > fault_index
+                    && *i < after_fault[0].0
+                    && r["readback_ok"] == true));
+                assert_eq!(
+                    fault["set_context_error"]
+                        .as_str()
+                        .or(fault["readback_error"].as_str()),
+                    session.probe_resume_error.as_deref()
+                );
+            }
+            if mode != OwnedMode::UncertainDr7 && mode != OwnedMode::SecondChance {
+                assert!(
+                    app["events"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .all(|e| e["leaked_owned_fault"] == false),
+                    "{app}"
+                );
+            }
+            if mode == OwnedMode::BsOnly {
+                assert_eq!(app["app_steps"], 2);
+                assert_eq!(app["first_dr6"].as_u64().unwrap() & 0xE00F, 0x4000);
+                assert_eq!(app["app_tf_handled"], 1);
+            }
+            let forwarded = session.debug_trace.iter().find(|record| {
+                record["event"] == "debug_continue"
+                    && record["continue_status"] == DBG_EXCEPTION_NOT_HANDLED
+            });
+            if mode.context_error() || mode.tf_pending() {
+                assert!(forwarded.is_none()); // the handled fault is the final debugger event
+            } else {
+                let forwarded = forwarded.unwrap();
+                assert_eq!(forwarded["raw"]["code"], EXCEPTION_SINGLE_STEP as u32);
+                assert_eq!(forwarded["raw"]["first_chance"], 1);
+            }
             assert_eq!(
                 session.exceptions.unknown_first_chance_count,
-                if matches!(mode, OwnedMode::ReadbackMismatch | OwnedMode::ReadbackError) {
+                if mode.context_error() || mode.tf_pending() {
                     0
+                } else if mode == OwnedMode::BsOnly {
+                    2
                 } else {
                     1
                 }
@@ -4347,7 +4742,11 @@ mod tests {
                             app_tf: flags & 0x100 != 0,
                             ..probe_source(slot, 1 << slot)
                         };
-                        if source.app_dr6 == 0 && !source.app_tf {
+                        if source.app_dr6 == 0 && source.app_tf {
+                            assert_eq!(decision, ExceptionDecision::ProbeAndStopForAppTF(source));
+                            assert!(decision.handled());
+                            assert!(decision.stop_observing());
+                        } else if source.app_dr6 == 0 {
                             assert_eq!(decision, ExceptionDecision::Probe(source));
                         } else {
                             assert_eq!(decision, ExceptionDecision::ForwardComposite(source));
@@ -4373,6 +4772,80 @@ mod tests {
                 // even an enabled address into evidence of an owned exception.
                 assert_eq!(
                     ExceptionPolicy::default().decide(exception, None, addresses, enabled),
+                    ExceptionDecision::RestoreAndForward
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn tf_setting_is_not_a_current_bs_source_and_ownership_stays_exact() {
+        let addresses = [11, 22, 33, 44];
+        let mut policy = ExceptionPolicy::default();
+        for enabled in [0x45, 0x55] {
+            for slot in 0..4 {
+                if enabled & (1 << (slot * 2)) == 0 {
+                    continue;
+                }
+                let exception = RawException {
+                    tid: 9,
+                    code: 0x80000004,
+                    first_chance: 1,
+                    exception_address: addresses[slot],
+                };
+                let source = ProbeSource {
+                    app_tf: true,
+                    ..probe_source(slot, 1 << slot)
+                };
+                let snapshot = ProbeSnapshot {
+                    armed: true,
+                    flags: 0x302,
+                    rip: addresses[slot],
+                    registers: DebugRegisters {
+                        dr6: (1 << slot) | 0xFFFF0FF0,
+                        ..DebugRegisters::default().installed(addresses, enabled)
+                    },
+                };
+                let decision = policy.decide(exception, Some(snapshot), addresses, enabled);
+                assert_eq!(decision, ExceptionDecision::ProbeAndStopForAppTF(source));
+                assert!(decision.handled());
+                assert!(decision.stop_observing());
+                assert_eq!(
+                    decision.resume_debug_flags(snapshot.registers.dr6, snapshot.flags),
+                    Some((0xFFFF0FF0, 0x10302))
+                );
+                for app_source in [0x2000, 0x4000, 0x8000] {
+                    let true_mixed = ProbeSnapshot {
+                        registers: DebugRegisters {
+                            dr6: snapshot.registers.dr6 | app_source,
+                            ..snapshot.registers
+                        },
+                        ..snapshot
+                    };
+                    let decision = policy.decide(exception, Some(true_mixed), addresses, enabled);
+                    assert_eq!(
+                        decision,
+                        ExceptionDecision::ForwardComposite(ProbeSource {
+                            app_dr6: app_source,
+                            ..source
+                        })
+                    );
+                    assert!(!decision.handled());
+                    assert_eq!(
+                        decision.resume_debug_flags(true_mixed.registers.dr6, true_mixed.flags),
+                        Some((0xFFFF0FF0 | app_source, 0x10302))
+                    );
+                }
+                assert_eq!(
+                    policy.decide(
+                        RawException {
+                            exception_address: 99,
+                            ..exception
+                        },
+                        Some(snapshot),
+                        addresses,
+                        enabled
+                    ),
                     ExceptionDecision::RestoreAndForward
                 );
             }
