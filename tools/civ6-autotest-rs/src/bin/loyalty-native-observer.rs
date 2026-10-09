@@ -1698,6 +1698,8 @@ mod platform {
         exceptions: ExceptionPolicy,
         owns_probes: bool,
         cleanup_exception_records: Vec<Value>,
+        debug_trace: Vec<Value>,
+        debug_trace_omitted: u64,
         module_event_seen: bool,
         ready: bool,
         pending: Option<Pending>,
@@ -1735,6 +1737,8 @@ mod platform {
                 exceptions,
                 owns_probes: false,
                 cleanup_exception_records: Vec::new(),
+                debug_trace: Vec::new(),
+                debug_trace_omitted: 0,
                 module_event_seen: false,
                 ready: false,
                 pending: None,
@@ -1748,6 +1752,50 @@ mod platform {
         fn finish(&mut self) -> CleanupReport {
             self.cleaned = true;
             cleanup(self)
+        }
+
+        fn trace(&mut self, record: Value) {
+            if self.debug_trace.len() < 128 {
+                self.debug_trace.push(record);
+            } else {
+                self.debug_trace_omitted = self.debug_trace_omitted.saturating_add(1);
+            }
+        }
+
+        fn resume_probe(
+            &mut self,
+            raw: RawException,
+            decision: ExceptionDecision,
+            mut value: CONTEXT,
+            phase: &str,
+        ) -> Result<()> {
+            let before = json!({"rip":value.Rip,"dr6":value.Dr6,
+                "dr7":value.Dr7,"eflags":value.EFlags});
+            value.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64;
+            let (dr6, flags) = decision
+                .resume_debug_flags(value.Dr6, value.EFlags)
+                .ok_or("exception policy did not authorize probe resume")?;
+            value.Dr6 = dr6;
+            value.EFlags = flags;
+            let handle = self
+                .threads
+                .get(&raw.tid)
+                .map(|thread| &thread.handle)
+                .or_else(|| self.event_threads.get(&raw.tid))
+                .ok_or("owned probe has no thread handle")?;
+            let updated = set_context(handle, value);
+            // Read actual OS state, rather than reporting the requested RF as
+            // proof it survived SetThreadContext. Do not repair RIP/game data.
+            let actual = context(handle, value.ContextFlags).map(|actual| {
+                json!({"rip":actual.Rip,"dr6":actual.Dr6,"dr7":actual.Dr7,
+                    "eflags":actual.EFlags})
+            });
+            self.trace(json!({"event":"probe_resume","phase":phase,"raw":raw,
+                "decision":decision,"before":before,
+                "requested":{"rip":value.Rip,"dr6":value.Dr6,"dr7":value.Dr7,"eflags":value.EFlags},
+                "set_context_ok":updated.is_ok(),"set_context_error":updated.as_ref().err(),
+                "actual":raw_read(actual),"continue_status":self.pending.as_ref().map(|p|p.status)}));
+            updated
         }
 
         fn register_os_start(
@@ -2154,7 +2202,7 @@ mod platform {
                     "raw_context":snapshot, "context_error":context_error,
                     "continuation":"handled_remove_our_probes"})
             });
-            let mut value = match context_result.and_then(std::result::Result::ok) {
+            let value = match context_result.and_then(std::result::Result::ok) {
                 Some(value) => value,
                 None => {
                     if let Some(mismatch) = &mismatch {
@@ -2163,20 +2211,7 @@ mod platform {
                     return Ok(Some("owned_probe_context_unavailable"));
                 }
             };
-            value.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64;
-            let (dr6, flags) = decision
-                .resume_debug_flags(value.Dr6, value.EFlags)
-                .ok_or("exception policy did not authorize probe resume")?;
-            value.Dr6 = dr6;
-            value.EFlags = flags;
-            set_context(
-                &self
-                    .threads
-                    .get(&event.dwThreadId)
-                    .ok_or("thread disappeared")?
-                    .handle,
-                value,
-            )?;
+            self.resume_probe(raw, decision, value, "observe")?;
             // RF and all four B bits are updated before any mismatch-log I/O
             // can fail. A logging error still continues an owned trap safely.
             if let Some(mismatch) = &mismatch {
@@ -2217,16 +2252,14 @@ mod platform {
                 ),
                 3 if self.observation.candidate(value.Rbx, event.dwThreadId) => {
                     let record = self.process.read::<8>(value.Rdx);
-                    let header = self.process.read::<8>(value.Rcx);
                     Some(
                         json!({"event":"candidate_call_raw", "ordinal":self.observation.candidates_recorded,
-                        "raw_rbx_receiver":value.Rbx, "raw_rdx_pointer":value.Rdx, "raw_rcx_pointer":value.Rcx,
-                        "raw_record_bytes":raw_read(record.clone()), "raw_header_bytes":raw_read(header.clone()),
+                        "raw_rbx_receiver":value.Rbx, "raw_rdx_pointer":value.Rdx, "raw_rcx_value":value.Rcx,
+                        "rcx_interpretation":"unverified_value_not_a_header_pointer",
+                        "raw_record_bytes":raw_read(record.clone()),
                         "raw_record_0_u16":raw_read(record.clone().map(|r| u16::from_le_bytes([r[0], r[1]]))),
                         "raw_record_2_u16":raw_read(record.clone().map(|r| u16::from_le_bytes([r[2], r[3]]))),
                         "raw_record_4_u32":raw_read(record.map(|r| u32::from_le_bytes([r[4], r[5], r[6], r[7]]))),
-                        "raw_header_0_u32":raw_read(header.clone().map(|h| u32::from_le_bytes([h[0], h[1], h[2], h[3]]))),
-                        "raw_header_4_u32":raw_read(header.map(|h| u32::from_le_bytes([h[4], h[5], h[6], h[7]]))),
                         "raw_receiver_plus_90_pointer":raw_read(self.process.u64_at(value.Rbx, 0x90))}),
                     )
                 }
@@ -2254,6 +2287,16 @@ mod platform {
     impl CleanupBackend for Session {
         fn freeze(&mut self) -> Vec<String> {
             let mut errors = Vec::new();
+            // Exit events cannot execute another instruction. Release Windows'
+            // event stop before checking the held process/thread wait states;
+            // do not attempt SuspendThread on a terminating target.
+            if self.pending.as_ref().is_some_and(|pending| {
+                matches!(pending.event.dwDebugEventCode, EXIT_PROCESS_DEBUG_EVENT)
+            }) {
+                if let Err(error) = self.continue_pending() {
+                    errors.push(error);
+                }
+            }
             for (&tid, thread) in &mut self.threads {
                 if !thread.armed {
                     continue;
@@ -2342,10 +2385,34 @@ mod platform {
             let event = pending.event;
             // SAFETY: exactly the event returned to this attaching thread;
             // status was defaulted conservatively before any fallible handler.
-            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, pending.status) }
-                == 0
+            let status = pending.status;
+            let ok =
+                unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } != 0;
+            let error = (!ok).then(|| win_error("ContinueDebugEvent"));
+            // DLL-load chatter must not exhaust the finite trap trace before
+            // the first real probe. Keep exceptions, exits, and API failures.
+            if !ok
+                || matches!(
+                    event.dwDebugEventCode,
+                    EXCEPTION_DEBUG_EVENT | EXIT_PROCESS_DEBUG_EVENT
+                )
             {
-                return Err(win_error("ContinueDebugEvent"));
+                let raw = (event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT).then(|| {
+                    // SAFETY: the event code selects this union arm.
+                    let info = unsafe { event.u.Exception };
+                    RawException {
+                        tid: event.dwThreadId,
+                        code: info.ExceptionRecord.ExceptionCode as u32,
+                        first_chance: info.dwFirstChance,
+                        exception_address: info.ExceptionRecord.ExceptionAddress as u64,
+                    }
+                });
+                self.trace(json!({"event":"debug_continue","pid":event.dwProcessId,
+                    "tid":event.dwThreadId,"debug_event_code":event.dwDebugEventCode,"raw":raw,
+                    "continue_status":status,"ok":ok,"error":error}));
+            }
+            if let Some(error) = error {
+                return Err(error);
             }
             self.pending = None;
             if matches!(
@@ -2363,6 +2430,20 @@ mod platform {
                 if let Some(process) = self.debug_process.take() {
                     process.closed_by_continue();
                 }
+                // EXIT_PROCESS is delivered before the held process handle is
+                // necessarily signalled. An immediate zero-time check can
+                // falsely report a dead target as successfully restored alive.
+                // SAFETY: same independent process handle retained since open.
+                let wait = unsafe { WaitForSingleObject(self.process.handle.0, 3000) };
+                self.trace(json!({"event":"target_exit_wait","wait_result":wait,
+                    "process_exited":wait == WAIT_OBJECT_0}));
+                if wait != WAIT_OBJECT_0 {
+                    return Err(if wait == WAIT_TIMEOUT {
+                        "target exit was not signalled within 3 seconds".into()
+                    } else {
+                        win_error("WaitForSingleObject(target exit)")
+                    });
+                }
             }
             Ok(())
         }
@@ -2370,6 +2451,9 @@ mod platform {
         fn drain_events(&mut self) -> Result<()> {
             if self.pending.is_some() {
                 return Err("cannot drain events after a failed ContinueDebugEvent".into());
+            }
+            if !self.process.handle.alive()? {
+                return Ok(());
             }
             let deadline = Instant::now() + Duration::from_secs(3);
             let mut errors = Vec::new();
@@ -2479,16 +2563,11 @@ mod platform {
                                 // Our DR addresses are already restored. Only
                                 // clear B0..B3 and add RF to the current context;
                                 // never put the captured installed DRs back.
-                                let mut value = context(
+                                let value = context(
                                     handle,
                                     CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
                                 )?;
-                                let (dr6, flags) = decision
-                                    .resume_debug_flags(value.Dr6, value.EFlags)
-                                    .ok_or("cleanup policy did not authorize RF")?;
-                                value.Dr6 = dr6;
-                                value.EFlags = flags;
-                                set_context(handle, value)?;
+                                self.resume_probe(raw, decision, value, "cleanup")?;
                             }
                         }
                         _ => {}
@@ -2584,6 +2663,376 @@ mod platform {
         }
     }
 
+    #[cfg(test)]
+    mod live_tests {
+        use super::*;
+        use std::os::windows::process::CommandExt;
+        use std::process::{Child, Command, Stdio};
+        use windows_sys::Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS};
+        use windows_sys::Win32::System::Diagnostics::Debug::{
+            AddVectoredExceptionHandler, RaiseException, RemoveVectoredExceptionHandler,
+            EXCEPTION_POINTERS,
+        };
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, CREATE_NO_WINDOW};
+
+        static APP_STEPS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        unsafe extern "system" fn app_exception(info: *mut EXCEPTION_POINTERS) -> i32 {
+            // SAFETY: Windows supplies these exception structures during VEH.
+            if unsafe { (*(*info).ExceptionRecord).ExceptionCode } == EXCEPTION_SINGLE_STEP {
+                APP_STEPS.fetch_add(1, Ordering::Relaxed);
+                -1 // EXCEPTION_CONTINUE_EXECUTION: application handled its own exception
+            } else {
+                0
+            }
+        }
+
+        // Distinct bodies prevent linker folding. Real execution breakpoints,
+        // no int3 patches, injected DLLs, remote calls, or game processes.
+        #[inline(never)]
+        extern "C" fn setter(n: u64) -> u64 {
+            std::hint::black_box(n.wrapping_add(1))
+        }
+        #[inline(never)]
+        extern "C" fn candidate(n: u64) -> u64 {
+            std::hint::black_box(n.wrapping_add(3))
+        }
+        #[inline(never)]
+        extern "C" fn returned(n: u64) -> u64 {
+            std::hint::black_box(n.wrapping_add(7))
+        }
+        #[inline(never)]
+        extern "C" fn getter(n: u64) -> u64 {
+            std::hint::black_box(n.wrapping_add(11))
+        }
+
+        #[test]
+        #[ignore = "only launched by the owned Windows hardware test"]
+        fn owned_hardware_child() {
+            let Some(path) = std::env::var_os("LOYALTY_OWNED_CHILD_HANDSHAKE") else {
+                return;
+            };
+            // SAFETY: borrowed pseudo-handle, queried only and never closed.
+            let own = identity(unsafe { GetCurrentProcess() }).unwrap();
+            let addresses = [
+                setter as *const () as u64,
+                returned as *const () as u64,
+                getter as *const () as u64,
+                candidate as *const () as u64,
+            ];
+            let mut file = OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(path)
+                .unwrap();
+            write_json(&mut file, &json!({"identity":own,"addresses":addresses})).unwrap();
+            let mut go = String::new();
+            std::io::stdin().read_line(&mut go).unwrap();
+            assert_eq!(go.trim(), "go");
+            std::thread::spawn(|| {
+                // SAFETY: callback remains loaded until explicitly removed.
+                let handler = unsafe { AddVectoredExceptionHandler(1, Some(app_exception)) };
+                assert!(!handler.is_null());
+                for _ in 0..3 {
+                    let n = std::hint::black_box(5);
+                    assert_eq!(getter(returned(candidate(setter(n)))), 27);
+                }
+                // A genuine application-origin SINGLE_STEP at an unowned
+                // address must reach VEH, rather than being swallowed.
+                unsafe {
+                    RaiseException(EXCEPTION_SINGLE_STEP as u32, 0, 0, std::ptr::null());
+                }
+                assert_eq!(APP_STEPS.load(Ordering::Relaxed), 1);
+                assert_ne!(unsafe { RemoveVectoredExceptionHandler(handler) }, 0);
+                if std::env::var_os("LOYALTY_OWNED_CHILD_RESTORE").is_some() {
+                    let mut finish = String::new();
+                    std::io::stdin().read_line(&mut finish).unwrap();
+                    assert_eq!(finish.trim(), "finish");
+                }
+            })
+            .join()
+            .unwrap();
+            // No child processes are created. Let libtest retire its worker
+            // thread, then the process, through real debugger exit events.
+        }
+
+        struct OwnedChild(Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                if self.0.try_wait().ok().flatten().is_none() {
+                    let _ = self.0.kill();
+                }
+                // SAFETY: the very process handle retained from spawn, not a
+                // PID reopen. Bound error/unwind cleanup as well as success.
+                let wait = unsafe { WaitForSingleObject(self.0.as_raw_handle(), 3000) };
+                assert_eq!(wait, WAIT_OBJECT_0, "owned synthetic child did not exit");
+                let _ = self.0.try_wait();
+            }
+        }
+
+        #[test]
+        fn windows_hardware_probe_resume_and_thread_exit() {
+            run_owned_hardware(false);
+        }
+
+        #[test]
+        fn windows_hardware_probe_restore_while_alive() {
+            run_owned_hardware(true);
+        }
+
+        fn run_owned_hardware(restore_while_alive: bool) {
+            let handshake = tempfile::NamedTempFile::new().unwrap();
+            let exe = std::env::current_exe().unwrap();
+            let mut command = Command::new(&exe);
+            if restore_while_alive {
+                command.env("LOYALTY_OWNED_CHILD_RESTORE", "1");
+            }
+            let mut child = OwnedChild(
+                command
+                    .args([
+                        "--exact",
+                        "platform::live_tests::owned_hardware_child",
+                        "--ignored",
+                        "--nocapture",
+                    ])
+                    .env("LOYALTY_OWNED_CHILD_HANDSHAKE", handshake.path())
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .unwrap(),
+            );
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let message: Value = loop {
+                if let Ok(message) =
+                    serde_json::from_slice(&std::fs::read(handshake.path()).unwrap())
+                {
+                    break message;
+                }
+                assert!(Instant::now() < deadline, "child handshake deadline");
+                assert!(
+                    child.0.try_wait().unwrap().is_none(),
+                    "child exited before handshake"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            };
+            let mut raw_handle = std::ptr::null_mut();
+            // SAFETY: duplicate the original spawn handle to the same kernel
+            // object. No PID reopen and no unrelated process can be selected.
+            assert_ne!(
+                unsafe {
+                    DuplicateHandle(
+                        GetCurrentProcess(),
+                        child.0.as_raw_handle(),
+                        GetCurrentProcess(),
+                        &mut raw_handle,
+                        0,
+                        0,
+                        DUPLICATE_SAME_ACCESS,
+                    )
+                },
+                0
+            );
+            let handle = Handle::new(raw_handle, "duplicate owned spawn handle").unwrap();
+            let pinned = identity(handle.0).unwrap();
+            assert_eq!(pinned.pid, child.0.id());
+            assert_eq!(
+                pinned.created,
+                message["identity"]["created"].as_u64().unwrap()
+            );
+            assert_eq!(
+                pinned.image_path,
+                path_key(&canonical(&exe).unwrap()).unwrap()
+            );
+            assert_eq!(handle.alive(), Ok(true));
+            let process = Process { handle, pinned };
+            let addresses: [u64; 4] = serde_json::from_value(message["addresses"].clone()).unwrap();
+            assert_eq!(addresses.iter().copied().collect::<BTreeSet<_>>().len(), 4);
+            let ntdll = PinnedNtdll::open(&process).unwrap();
+            let preexisting_threads = preflight_threads(&process).unwrap();
+            let mut exceptions = ExceptionPolicy::default();
+            exceptions.attach.bind(ntdll.verify(&process).unwrap());
+            process.verify().unwrap();
+            // SAFETY: own synthetic process, creation/image verified on held
+            // spawn handle immediately above; no game/recorded live PID used.
+            assert_ne!(unsafe { DebugActiveProcess(process.pinned.pid) }, 0);
+            let mut session = Session {
+                process,
+                module: PinnedModule {
+                    identity: ModuleIdentity {
+                        path: String::new(),
+                        base: 0,
+                        size: 1,
+                    },
+                    _file: File::open(&exe).unwrap(),
+                    addresses,
+                },
+                ntdll,
+                preexisting_threads,
+                attach_query_error_count: 0,
+                attach_query_errors: Vec::new(),
+                breakin_query_handles: BTreeMap::new(),
+                threads: BTreeMap::new(),
+                event_threads: BTreeMap::new(),
+                debug_process: None,
+                exceptions,
+                owns_probes: false,
+                cleanup_exception_records: Vec::new(),
+                debug_trace: Vec::new(),
+                debug_trace_omitted: 0,
+                module_event_seen: false,
+                ready: false,
+                pending: None,
+                cleaned: false,
+                // Suppress Civ6-only field reads/receiver matching. Hardware
+                // routing, resume, actual context and continuation stay real.
+                observation: Observation {
+                    trigger: Some(Trigger {
+                        cache_city: u64::MAX,
+                        receiver: u64::MAX,
+                        tid: 0,
+                        rsp: 0,
+                        returned: false,
+                    }),
+                    ..Default::default()
+                },
+                installed_total: 0,
+                detach_error: None,
+            };
+            // SAFETY: this test is the attaching thread.
+            assert_ne!(unsafe { DebugSetProcessKillOnExit(0) }, 0);
+            let output = tempfile::NamedTempFile::new().unwrap();
+            let mut output_file = output.reopen().unwrap();
+            let args = Args {
+                pid: session.process.pinned.pid,
+                created: session.process.pinned.created,
+                output: output.path().to_owned(),
+                seconds: 20,
+            };
+            let mut exits = 0;
+            let mut process_exit = None;
+            for _ in 0..256 {
+                assert!(Instant::now() < deadline, "real hardware event deadline");
+                let mut event = DEBUG_EVENT::default();
+                // SAFETY: bounded wait on the attaching thread.
+                if unsafe { WaitForDebugEvent(&mut event, 100) } == 0 {
+                    assert_eq!(unsafe { GetLastError() }, ERROR_SEM_TIMEOUT);
+                    continue;
+                }
+                session.pending = Some(Pending {
+                    event,
+                    status: if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
+                        DBG_EXCEPTION_NOT_HANDLED
+                    } else {
+                        DBG_CONTINUE
+                    },
+                });
+                if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT && !session.ready {
+                    // Exercise production attach identity/routing/installation;
+                    // only Civ6 DLL verification and ready-file publication
+                    // are excluded for this executable fixture.
+                    let info = unsafe { event.u.Exception };
+                    let raw = RawException {
+                        tid: event.dwThreadId,
+                        code: info.ExceptionRecord.ExceptionCode as u32,
+                        first_chance: info.dwFirstChance,
+                        exception_address: info.ExceptionRecord.ExceptionAddress as u64,
+                    };
+                    assert_eq!(
+                        session.route_exception(raw, None).unwrap(),
+                        ExceptionDecision::AttachBreak
+                    );
+                    let tids: Vec<_> = session.threads.keys().copied().collect();
+                    for tid in tids {
+                        session.install(tid).unwrap();
+                    }
+                    session.ready = true;
+                    child.0.stdin.as_mut().unwrap().write_all(b"go\n").unwrap();
+                } else {
+                    let reason = session.event(&args, &mut output_file, &event).unwrap();
+                    if event.dwDebugEventCode == EXIT_THREAD_DEBUG_EVENT {
+                        exits += 1;
+                    }
+                    if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
+                        process_exit = Some(unsafe { event.u.ExitProcess.dwExitCode });
+                        assert_eq!(reason, Some("process_exited"));
+                        break; // finish must retire this pending exit before freezing
+                    }
+                    assert_eq!(reason, None);
+                }
+                session.continue_pending().unwrap();
+                if restore_while_alive && session.exceptions.unknown_first_chance_count == 1 {
+                    break;
+                }
+                if event.dwDebugEventCode == EXIT_THREAD_DEBUG_EVENT {
+                    assert!(!session.threads.contains_key(&event.dwThreadId));
+                    assert!(!session.event_threads.contains_key(&event.dwThreadId));
+                }
+            }
+            let report = session.finish();
+            let trace = json!({"identity":session.process.pinned,"process_exit":process_exit,
+                "restore_while_alive":restore_while_alive,
+                "thread_exit_events":exits,"cleanup":report,"trace":session.debug_trace,
+                "trace_omitted":session.debug_trace_omitted});
+            println!("LIVE_HARDWARE_TRACE={trace}");
+            assert!(report.complete(), "{report:?}");
+            if restore_while_alive {
+                assert_eq!(process_exit, None);
+                assert!(!report.process_exited);
+                assert!(report.threads_restored >= 2, "{report:?}");
+                assert_eq!(session.process.handle.alive(), Ok(true));
+                child
+                    .0
+                    .stdin
+                    .as_mut()
+                    .unwrap()
+                    .write_all(b"finish\n")
+                    .unwrap();
+                assert_eq!(
+                    unsafe { WaitForSingleObject(session.process.handle.0, 3000) },
+                    WAIT_OBJECT_0
+                );
+                assert!(child.0.try_wait().unwrap().unwrap().success());
+            } else {
+                assert_eq!(process_exit, Some(0));
+                assert!(exits >= 2);
+                assert!(report.process_exited);
+                assert_eq!(session.process.handle.alive(), Ok(false));
+            }
+            let mut counts = [0; 4];
+            for record in &session.debug_trace {
+                if record["event"] == "probe_resume" {
+                    counts[record["decision"]["Probe"].as_u64().unwrap() as usize] += 1;
+                    assert_eq!(record["set_context_ok"], true);
+                    assert!(record["actual"]["eflags"].as_u64().is_some(), "{record}");
+                    assert_ne!(
+                        record["actual"]["eflags"].as_u64().unwrap() & u64::from(RF),
+                        0
+                    );
+                    assert_eq!(record["actual"]["dr6"].as_u64().unwrap() & 0xF, 0);
+                    assert_eq!(record["actual"]["rip"], record["before"]["rip"]);
+                    assert_eq!(record["continue_status"], DBG_CONTINUE);
+                } else if record["event"] == "debug_continue" {
+                    assert_eq!(record["ok"], true);
+                }
+            }
+            assert_eq!(counts, [3; 4]);
+            assert_eq!(session.debug_trace_omitted, 0);
+            let app = session
+                .debug_trace
+                .iter()
+                .find(|record| {
+                    record["event"] == "debug_continue"
+                        && record["continue_status"] == DBG_EXCEPTION_NOT_HANDLED
+                })
+                .unwrap();
+            assert_eq!(app["raw"]["code"], EXCEPTION_SINGLE_STEP as u32);
+            assert_eq!(app["raw"]["first_chance"], 1);
+            assert_eq!(session.exceptions.unknown_first_chance_count, 1);
+            assert_eq!(session.exceptions.second_chance_count, 0);
+        }
+    }
+
     fn write_json(writer: &mut impl Write, value: &Value) -> Result<()> {
         serde_json::to_writer(&mut *writer, value).map_err(|e| format!("write JSON: {e}"))?;
         writer
@@ -2652,6 +3101,10 @@ mod platform {
             "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
             "exceptions":session.as_ref().map(|s| &s.exceptions),
             "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
+            "debug_trace":session.as_ref().map(|s| &s.debug_trace),
+            "debug_trace_omitted":session.as_ref().map_or(0, |s| s.debug_trace_omitted),
+            "held_process_alive":session.as_ref().map(|s| raw_read(s.process.handle.alive())),
+            "live_target_restoration_complete":cleanup_report.as_ref().is_some_and(|r| r.complete() && !r.process_exited),
             "ntdll_identity":session.as_ref().map(|s| s.ntdll.report()),
             "attach_query_error_count":session.as_ref().map_or(0, |s| s.attach_query_error_count),
             "attach_query_errors":session.as_ref().map(|s| &s.attach_query_errors),
