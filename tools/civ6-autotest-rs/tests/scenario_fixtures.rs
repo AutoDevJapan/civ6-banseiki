@@ -67,6 +67,20 @@ fn japan_staging_assignment_live_scenario_validates_and_compiles() {
 }
 
 #[test]
+fn japan_staging_diagnostic_captures_screen_before_probe() {
+    let data = scenario("multiplayer-japan-staging-diagnostic.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(data["session_type"], "hotseat");
+    let run = steps(&data);
+    assert_eq!(run.len(), 6);
+    assert!(action(&run[3], "wait_for"));
+    assert_eq!(run[3]["condition"]["type"], "state");
+    assert!(action(&run[4], "screenshot"));
+    assert!(action(&run[5], "ui_lua"));
+    compile_lua(&Lua::new(), code(&run[5]));
+}
+
+#[test]
 fn ui_lua_comparison_requires_a_recorded_value() {
     let mut data = json!({
         "name": "snapshot comparison",

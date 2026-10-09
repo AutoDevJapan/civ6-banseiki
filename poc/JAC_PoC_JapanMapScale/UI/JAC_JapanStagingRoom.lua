@@ -53,6 +53,7 @@ if Controls then
   local SUBJECT = "JAC_MP_SUBJECT"
   local TEAM = "JAC_MP_TEAM"
   local PRIOR_NO_TEAMS = "JAC_MP_PRIOR_NO_TEAMS"
+  local RESTORE_DONE = "JAC_MP_RESTORE_DONE"
   local JAPAN = "JAPAN"
   local DIFFERENT = "DIFFERENT"
   local choices = {
@@ -77,7 +78,21 @@ if Controls then
   local pulldownManagers = {}
   local syncing = false
   local departing = {}
+  local pendingRejoin = {}
   local configDirty = false
+  local configAttempts = {}
+  local teamAttempts = {}
+  local function resetAttempts()
+    local pendingRoster = configAttempts[ROSTER]
+    configAttempts = {}
+    if pendingRoster and type(pendingRoster.value) == "string" then
+      local saved = GameConfiguration.GetValue(ROSTER)
+      if saved ~= pendingRoster.value then
+        configAttempts[ROSTER] = { value = pendingRoster.value }
+      end
+    end
+    teamAttempts = {}
+  end
   local lastError = nil
   local guardedReadyCheck = false
   local stockOnShow = OnShow
@@ -92,17 +107,45 @@ if Controls then
     local value = GameConfiguration.GetValue(key)
     return value
   end
-  local function write(key, value)
-    if read(key) ~= value then
-      GameConfiguration.SetValue(key, value)
-      configDirty = true
+  local function sameValue(actual, wanted)
+    if actual == wanted then return true end
+    if type(wanted) == "number" and type(actual) == "string" then
+      return tonumber(actual) == wanted
     end
+    if type(wanted) == "string" and type(actual) == "number" then
+      return wanted == tostring(actual)
+    end
+    if type(wanted) == "boolean" then
+      local encoded = wanted and "1" or "0"
+      return actual == tonumber(encoded) or actual == encoded
+        or actual == tostring(wanted)
+    end
+    return false
+  end
+  local function fingerprint(value)
+    return type(value) .. ":" .. tostring(value)
+  end
+  local function write(key, value)
+    local current = read(key)
+    if sameValue(current, value) then
+      configAttempts[key] = nil
+      return
+    end
+    local target = fingerprint(value)
+    local observed = fingerprint(current)
+    local previous = configAttempts[key]
+    if previous and previous.target == target
+      and previous.observed == observed then return end
+    configAttempts[key] = { target = target, observed = observed, value = value }
+    GameConfiguration.SetValue(key, value)
+    configDirty = true
   end
   local function mode()
     return read(MODE) == JAPAN and JAPAN or DIFFERENT
   end
   local function assignmentKey(id) return "JAC_MP_AREA_" .. tostring(id) end
   local function priorTeamKey(id) return "JAC_MP_PRIOR_TEAM_" .. tostring(id) end
+  local function retiringKey(id) return "JAC_MP_RETIRING_" .. tostring(id) end
   local function scoped()
     return GameConfiguration.GetValue("RULESET") == "RULESET_JAC_BANSEIKI"
       and japanMaps[MapConfiguration.GetValue("MAP_SCRIPT")] == true
@@ -132,6 +175,9 @@ if Controls then
   local function rosterIds()
     local ids = {}
     local saved = read(ROSTER)
+    if type(saved) ~= "string" and configAttempts[ROSTER] then
+      saved = configAttempts[ROSTER].value
+    end
     if type(saved) == "string" then
       for part in string.gmatch(saved, "%d+") do
         local id = tonumber(part)
@@ -158,6 +204,23 @@ if Controls then
   local function valid(ids)
     if mode() ~= JAPAN then return true, nil end
     if #ids < 2 then return false, "LOC_JAC_MP_NEED_PLAYERS" end
+    if read(ROSTER) ~= rosterValue(ids) then
+      return false, "LOC_JAC_MP_TEAM_PENDING"
+    end
+    if read(PRIOR_NO_TEAMS) == nil then
+      return false, "LOC_JAC_MP_TEAM_PENDING"
+    end
+    if read(RESTORE_DONE) ~= nil then
+      return false, "LOC_JAC_MP_TEAM_PENDING"
+    end
+    if canEdit() and next(pendingRejoin) then
+      return false, "LOC_JAC_MP_TEAM_PENDING"
+    end
+    for id = 0, 21 do
+      if read(retiringKey(id)) ~= nil then
+        return false, "LOC_JAC_MP_TEAM_PENDING"
+      end
+    end
     local set = humanSet(ids)
     if not set[tonumber(read(SUBJECT))] then
       return false, "LOC_JAC_MP_NEED_SUBJECT"
@@ -172,18 +235,27 @@ if Controls then
       end
     end
     local team = tonumber(read(TEAM))
-    if not team or read("NO_TEAMS") == true or read("NO_TEAMS") == 1 then
+    if not team or not sameValue(read("NO_TEAMS"), false) then
       return false, "LOC_JAC_MP_TEAM_PENDING"
     end
     for _, id in ipairs(ids) do
+      if read(priorTeamKey(id)) == nil then
+        return false, "LOC_JAC_MP_TEAM_PENDING"
+      end
       if PlayerConfigurations[id]:GetTeam() ~= team then
         return false, "LOC_JAC_MP_TEAM_PENDING"
       end
     end
     return true, nil
   end
+  local function assignmentBlocked(ids)
+    if read(ROSTER) ~= nil and (not scoped() or mode() ~= JAPAN) then
+      return true
+    end
+    return scoped() and mode() == JAPAN and not valid(ids or humans())
+  end
   local function stopInvalidLaunch()
-    if scoped() and mode() == JAPAN and not valid(humans()) then
+    if assignmentBlocked(humans()) then
       if IsLaunchCountdownActive() then StopCountdown() end
       return true
     end
@@ -212,69 +284,154 @@ if Controls then
     end
     return nil
   end
+  local function applyTeam(id, wanted)
+    local player = PlayerConfigurations[id]
+    if not player or wanted == nil then return false end
+    local current = player:GetTeam()
+    if current == wanted then
+      teamAttempts[id] = nil
+      return true
+    end
+    local previous = teamAttempts[id]
+    if previous and previous.target == wanted
+      and previous.observed == current then return false end
+    teamAttempts[id] = { target = wanted, observed = current }
+    player:SetTeam(wanted)
+    if player:GetTeam() == wanted then
+      Network.BroadcastPlayerInfo(id)
+      return true
+    end
+    return false
+  end
+  local function restoreTeam(id)
+    local player = PlayerConfigurations[id]
+    if not player then return true end
+    return applyTeam(id, tonumber(read(priorTeamKey(id))))
+  end
+  local function retirePlayer(id)
+    local key = retiringKey(id)
+    if not sameValue(read(key), true) then return false end
+    local current = rosterIds()
+    local kept = {}
+    local wasTracked = false
+    for _, old in ipairs(current) do
+      if old == id then wasTracked = true
+      else kept[#kept + 1] = old end
+    end
+    if wasTracked then
+      if not restoreTeam(id) then return false end
+      write(ROSTER, rosterValue(kept))
+      if read(ROSTER) ~= rosterValue(kept) then return false end
+    end
+    write(assignmentKey(id), nil)
+    write(priorTeamKey(id), nil)
+    if read(assignmentKey(id)) ~= nil or read(priorTeamKey(id)) ~= nil then
+      return false
+    end
+    write(key, nil)
+    return read(key) == nil
+  end
   local function restoreTeams()
-    for _, id in ipairs(rosterIds()) do
-      local old = tonumber(read(priorTeamKey(id)))
-      local player = PlayerConfigurations[id]
-      if player and old and player:GetTeam() ~= old then
-        player:SetTeam(old)
-        Network.BroadcastPlayerInfo(id)
+    local ids = rosterIds()
+    if not sameValue(read(RESTORE_DONE), true) then
+      for _, id in ipairs(ids) do
+        if not restoreTeam(id) then return false end
       end
+      local prior = read(PRIOR_NO_TEAMS)
+      if prior ~= "TRUE" and prior ~= "FALSE" and prior ~= "NIL" then
+        return false
+      end
+      local wanted = nil
+      if prior == "TRUE" then wanted = true
+      elseif prior == "FALSE" then wanted = false end
+      write("NO_TEAMS", wanted)
+      if not sameValue(read("NO_TEAMS"), wanted) then return false end
+      write(RESTORE_DONE, true)
+      if not sameValue(read(RESTORE_DONE), true) then return false end
+    end
+    for _, id in ipairs(ids) do
       write(priorTeamKey(id), nil)
       write(assignmentKey(id), nil)
-    end
-    local prior = read(PRIOR_NO_TEAMS)
-    if prior == "TRUE" then write("NO_TEAMS", true)
-    elseif prior == "FALSE" then write("NO_TEAMS", false)
-    elseif prior == "NIL" then write("NO_TEAMS", nil)
-    end
-    write(PRIOR_NO_TEAMS, nil)
-    write(ROSTER, nil)
-    write(TEAM, nil)
-    write(SUBJECT, nil)
-  end
-  local function reconcileJapan(ids)
-    local prior = rosterIds()
-    local oldSet = humanSet(prior)
-    local currentSet = humanSet(ids)
-    for _, id in ipairs(prior) do
-      if not currentSet[id] then
-        local player = PlayerConfigurations[id]
-        local oldTeam = tonumber(read(priorTeamKey(id)))
-        if player and oldTeam and player:GetTeam() ~= oldTeam then
-          player:SetTeam(oldTeam)
-          Network.BroadcastPlayerInfo(id)
-        end
-        write(assignmentKey(id), nil)
-        write(priorTeamKey(id), nil)
+      if read(priorTeamKey(id)) ~= nil or read(assignmentKey(id)) ~= nil then
+        return false
       end
     end
+    write(PRIOR_NO_TEAMS, nil)
+    write(TEAM, nil)
+    write(SUBJECT, nil)
+    if read(PRIOR_NO_TEAMS) ~= nil or read(TEAM) ~= nil
+      or read(SUBJECT) ~= nil then return false end
+    for id = 0, 21 do
+      write(retiringKey(id), nil)
+      if read(retiringKey(id)) ~= nil then return false end
+    end
+    write(ROSTER, nil)
+    if read(ROSTER) ~= nil then return false end
+    write(RESTORE_DONE, nil)
+    return true
+  end
+  local function reconcileJapan(ids)
+    if read(RESTORE_DONE) ~= nil then
+      if read(ROSTER) ~= nil then restoreTeams()
+      else write(RESTORE_DONE, nil) end
+      if read(RESTORE_DONE) ~= nil then return end
+    end
+    local currentSet = humanSet(ids)
+    for id in pairs(pendingRejoin) do
+      write(retiringKey(id), true)
+      if not sameValue(read(retiringKey(id)), true) then
+        -- If this key is rejected, remove the slot from the saved roster
+        -- before the context can reload and forget the connection event.
+        local kept = {}
+        for _, old in ipairs(rosterIds()) do
+          if old ~= id then kept[#kept + 1] = old end
+        end
+        write(ROSTER, rosterValue(kept))
+        if read(ROSTER) ~= rosterValue(kept) then return end
+      end
+      pendingRejoin[id] = nil
+    end
+    for _, id in ipairs(rosterIds()) do
+      if not currentSet[id] then
+        write(retiringKey(id), true)
+        if not sameValue(read(retiringKey(id)), true) then return end
+      end
+    end
+    for id = 0, 21 do
+      if read(retiringKey(id)) ~= nil and not retirePlayer(id) then return end
+    end
+    local oldSet = humanSet(rosterIds())
     for _, id in ipairs(ids) do
       if not oldSet[id] then
         write(assignmentKey(id), nil)
+        if read(assignmentKey(id)) ~= nil then return end
         write(priorTeamKey(id), PlayerConfigurations[id]:GetTeam())
+        if not sameValue(read(priorTeamKey(id)),
+          PlayerConfigurations[id]:GetTeam()) then return end
       end
       if read(assignmentKey(id)) and not chosen(id) then
         write(assignmentKey(id), nil)
       end
     end
-    write(ROSTER, rosterValue(ids))
     if not currentSet[tonumber(read(SUBJECT))] then write(SUBJECT, nil) end
     if read(PRIOR_NO_TEAMS) == nil then
       local current = read("NO_TEAMS")
       write(PRIOR_NO_TEAMS,
-        current == nil and "NIL" or (current == true or current == 1) and "TRUE" or "FALSE")
+        current == nil and "NIL" or sameValue(current, true) and "TRUE" or "FALSE")
     end
+    if read(PRIOR_NO_TEAMS) == nil then return end
+    for _, id in ipairs(ids) do
+      if read(priorTeamKey(id)) == nil then return end
+    end
+    write(ROSTER, rosterValue(ids))
+    if read(ROSTER) ~= rosterValue(ids) then return end
     write("NO_TEAMS", false)
     local team = chooseTeam(ids)
     write(TEAM, team)
-    if team then
+    if team and sameValue(read("NO_TEAMS"), false)
+      and sameValue(read(TEAM), team) then
       for _, id in ipairs(ids) do
-        local player = PlayerConfigurations[id]
-        if player:GetTeam() ~= team then
-          player:SetTeam(team)
-          Network.BroadcastPlayerInfo(id)
-        end
+        applyTeam(id, team)
       end
     end
   end
@@ -356,7 +513,7 @@ if Controls then
   end
 
   local function syncState()
-    if syncing then return end
+    if syncing or ContextPtr:IsHidden() then return end
     syncing = true
     lastError = nil
     local active = scoped()
@@ -365,19 +522,17 @@ if Controls then
       if active and mode() == JAPAN then
         reconcileJapan(ids)
       elseif read(ROSTER) ~= nil then
-        restoreTeams()
-        if not active then write(MODE, nil) end
+        if restoreTeams() and not active then write(MODE, nil) end
       end
     end
     render(ids)
     local changed = configDirty
     configDirty = false
     if changed then Network.BroadcastGameConfig() end
-    if active and mode() == JAPAN and canEdit() then
-      local ok = valid(ids)
-      if not ok and IsLaunchCountdownActive() then StopCountdown() end
+    if canEdit() and assignmentBlocked(ids) then
+      if IsLaunchCountdownActive() then StopCountdown() end
       local localPlayer = PlayerConfigurations[Network.GetLocalPlayerID()]
-      if (changed or not ok) and localPlayer and localPlayer:GetReady() then
+      if localPlayer and localPlayer:GetReady() then
         SetLocalReady(false)
       end
     end
@@ -386,6 +541,7 @@ if Controls then
   local function onMode(nextMode)
     if not scoped() or not canEdit() or mode() == nextMode then return end
     lastError = nil
+    resetAttempts()
     write(MODE, nextMode)
     syncState()
   end
@@ -407,6 +563,7 @@ if Controls then
       end
     end
     lastError = nil
+    resetAttempts()
     write(assignmentKey(id), code)
     syncState()
   end
@@ -414,29 +571,21 @@ if Controls then
     if not scoped() or not canEdit() or mode() ~= JAPAN then return end
     if id and not humanSet(humans())[id] then return end
     lastError = nil
+    resetAttempts()
     write(SUBJECT, id)
     syncState()
   end
   local function onPreDisconnect(id)
-    if scoped() and canEdit() and mode() == JAPAN then
+    if not ContextPtr:IsHidden() and scoped() and canEdit()
+      and mode() == JAPAN then
       lastError = nil
       departing[id] = true
+      resetAttempts()
       local wasSyncing = syncing
       syncing = true
-      local player = PlayerConfigurations[id]
-      local oldTeam = tonumber(read(priorTeamKey(id)))
-      if player and oldTeam and player:GetTeam() ~= oldTeam then
-        player:SetTeam(oldTeam)
-        Network.BroadcastPlayerInfo(id)
-      end
-      write(assignmentKey(id), nil)
+      write(retiringKey(id), true)
+      if sameValue(read(retiringKey(id)), true) then retirePlayer(id) end
       if tonumber(read(SUBJECT)) == id then write(SUBJECT, nil) end
-      local current = {}
-      for _, old in ipairs(rosterIds()) do
-        if old ~= id then current[#current + 1] = old end
-      end
-      write(ROSTER, rosterValue(current))
-      write(priorTeamKey(id), nil)
       local changed = configDirty
       configDirty = false
       if changed then Network.BroadcastGameConfig() end
@@ -447,6 +596,12 @@ if Controls then
   end
   local function onConnected(id)
     departing[id] = nil
+    resetAttempts()
+    if canEdit() and mode() == JAPAN then
+      for _, old in ipairs(rosterIds()) do
+        if old == id then pendingRejoin[id] = true end
+      end
+    end
     syncState()
   end
 
@@ -472,7 +627,7 @@ if Controls then
   end
   function UpdateReadyButton()
     stockUpdateReadyButton()
-    if scoped() and mode() == JAPAN and not valid(humans()) then
+    if assignmentBlocked(humans()) then
       Controls.ReadyButton:SetDisabled(true)
       Controls.ReadyCheck:SetDisabled(true)
       guardedReadyCheck = true
@@ -497,13 +652,17 @@ if Controls then
   Controls.GameSummaryStack:SortChildren(function(a, b) return order[a] < order[b] end)
   ContextPtr:SetShowHandler(function()
     stockOnShow()
+    resetAttempts()
     syncState()
   end)
   Events.GameConfigChanged.Add(syncState)
   Events.PlayerInfoChanged.Add(syncState)
   Events.MultiplayerPlayerConnected.Add(onConnected)
   Events.MultiplayerPrePlayerDisconnected.Add(onPreDisconnect)
-  Events.MultiplayerHostMigrated.Add(syncState)
+  Events.MultiplayerHostMigrated.Add(function()
+    resetAttempts()
+    syncState()
+  end)
   Events.SteamFriendsStatusUpdated.Add(syncState)
   Events.SteamFriendsPresenceUpdated.Add(syncState)
 end
