@@ -23,6 +23,7 @@ pub struct Trace {
     pub presses: Vec<(u16, f64)>,
     pub captures: Vec<(PathBuf, f64)>,
     pub clicks: Vec<(f64, f64)>,
+    pub window_clicks: Vec<(f64, f64)>,
     pub disconnects: usize,
     pub require_processes: usize,
     pub process_queries: usize,
@@ -189,6 +190,11 @@ impl Backend for SafetyBackend {
         } else {
             Ok(((x * 1000.0) as i32, (y * 1000.0) as i32))
         }
+    }
+    fn click_window(&mut self, x: f64, y: f64) -> Result<(i32, i32)> {
+        self.event("window_click");
+        self.trace.lock().unwrap().window_clicks.push((x, y));
+        Ok(((x * 1000.0) as i32, (y * 1000.0) as i32))
     }
     fn capture(&mut self, path: &Path, crop: Option<[f64; 4]>, deadline: f64) -> Result<()> {
         self.event("capture");

@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 18] = [
+pub const ACTIONS: [&str; 19] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -18,6 +18,7 @@ pub const ACTIONS: [&str; 18] = [
     "carrier_exchange",
     "screenshot",
     "click",
+    "window_click",
     "save",
     "exit_to_menu",
     "load",
@@ -318,7 +319,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
-            "click" => {
+            "click" | "window_click" => {
                 for coordinate in ["x", "y"] {
                     if !step[coordinate]
                         .as_f64()

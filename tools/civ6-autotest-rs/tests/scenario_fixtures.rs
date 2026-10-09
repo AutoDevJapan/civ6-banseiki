@@ -85,7 +85,7 @@ fn japan_staging_diagnostic_captures_transition_and_area_menu_without_tuner() {
         assert!(action(&run[index], "pause"));
         assert_eq!(run[index]["seconds"], 10);
     }
-    assert!(action(&run[11], "click"));
+    assert!(action(&run[11], "window_click"));
     assert_eq!(run[11]["x"], 0.435);
     assert_eq!(run[11]["y"], 0.837);
     assert!(action(&run[12], "pause"));

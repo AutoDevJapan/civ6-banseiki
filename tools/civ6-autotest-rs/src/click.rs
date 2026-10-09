@@ -8,6 +8,9 @@ pub const CIV_EXECUTABLES: [&str; 2] = ["civilizationvi.exe", "civilizationvi_dx
 pub const WM_CLOSE: u32 = 0x10;
 pub const WM_KEYDOWN: u32 = 0x100;
 pub const WM_KEYUP: u32 = 0x101;
+pub const WM_MOUSEMOVE: u32 = 0x200;
+pub const WM_LBUTTONDOWN: u32 = 0x201;
+pub const WM_LBUTTONUP: u32 = 0x202;
 pub const LEFT_DOWN: u32 = 2;
 pub const LEFT_UP: u32 = 4;
 
@@ -26,6 +29,7 @@ pub trait InputBackend {
     fn restore(&mut self, hwnd: isize);
     fn activate(&mut self, hwnd: isize) -> bool;
     fn rect(&mut self, hwnd: isize) -> Result<(i32, i32, i32, i32)>;
+    fn screen_to_client(&mut self, hwnd: isize, x: i32, y: i32) -> Result<(i32, i32)>;
     fn cursor(&mut self, x: i32, y: i32) -> bool;
     fn mouse(&mut self, flag: u32);
     fn scan(&mut self, vk: u16) -> u32;
@@ -137,6 +141,49 @@ pub fn click_fraction_with<B: InputBackend>(
     let check = foreground(backend, hwnd);
     backend.mouse(LEFT_UP);
     check?;
+    Ok((x, y))
+}
+
+pub fn click_window_fraction_with<B: InputBackend>(
+    backend: &mut B,
+    fx: f64,
+    fy: f64,
+) -> Result<(i32, i32)> {
+    if !fx.is_finite()
+        || !fy.is_finite()
+        || !(0.0..=1.0).contains(&fx)
+        || !(0.0..=1.0).contains(&fy)
+    {
+        return Err(Error::input("fractions must be within 0..1"));
+    }
+    let hwnd = find_civ_window_with(backend)?;
+    let (left, top, right, bottom) = backend.rect(hwnd)?;
+    if right <= left || bottom <= top {
+        return Err(Error::input("Civ VI window has no visible area"));
+    }
+    let x = left + ((right - left) as f64 * fx) as i32;
+    let y = top + ((bottom - top) as f64 * fy) as i32;
+    let (client_x, client_y) = backend.screen_to_client(hwnd, x, y)?;
+    if !(0..=32767).contains(&client_x) || !(0..=32767).contains(&client_y) {
+        return Err(Error::input(
+            "Click point is outside Civ VI client coordinates",
+        ));
+    }
+    let point = (((client_y as u32) << 16) | client_x as u32) as isize;
+    if find_civ_window_with(backend)? != hwnd {
+        return Err(Error::input("Civ VI window changed before mouse input"));
+    }
+    if !backend.post(hwnd, WM_MOUSEMOVE, 0, point) || !backend.post(hwnd, WM_LBUTTONDOWN, 1, point)
+    {
+        return Err(Error::input("Could not post Civ VI mouse down"));
+    }
+    let released =
+        backend.post(hwnd, WM_LBUTTONUP, 0, point) || backend.post(hwnd, WM_LBUTTONUP, 0, point);
+    if !released {
+        return Err(Error::input(
+            "Civ VI mouse down was posted but mouse up was not",
+        ));
+    }
     Ok((x, y))
 }
 
@@ -285,6 +332,7 @@ mod win {
         fn GetWindowRect(h: Handle, rect: *mut Rect) -> i32;
         fn GetClientRect(h: Handle, rect: *mut Rect) -> i32;
         fn ClientToScreen(h: Handle, point: *mut Point) -> i32;
+        fn ScreenToClient(h: Handle, point: *mut Point) -> i32;
         fn WindowFromPoint(point: Point) -> Handle;
         fn GetAncestor(h: Handle, flags: u32) -> Handle;
         fn SetCursorPos(x: i32, y: i32) -> i32;
@@ -465,6 +513,15 @@ mod win {
             }
             Ok((r.l, r.t, r.r, r.b))
         }
+        fn screen_to_client(&mut self, h: isize, x: i32, y: i32) -> Result<(i32, i32)> {
+            let mut point = Point { x, y };
+            if unsafe { ScreenToClient(h, &mut point) } == 0 {
+                return Err(Error::input(
+                    "Cannot map Civ VI click to client coordinates",
+                ));
+            }
+            Ok((point.x, point.y))
+        }
         fn cursor(&mut self, x: i32, y: i32) -> bool {
             unsafe { SetCursorPos(x, y) != 0 }
         }
@@ -506,6 +563,9 @@ mod win {
     }
     pub fn click_fraction(fx: f64, fy: f64) -> Result<(i32, i32)> {
         click_fraction_with(&mut WindowsBackend::new(), fx, fy)
+    }
+    pub fn click_window_fraction(fx: f64, fy: f64) -> Result<(i32, i32)> {
+        click_window_fraction_with(&mut WindowsBackend::new(), fx, fy)
     }
     pub fn press_key(vk: u16, end: Option<f64>) -> Result<()> {
         press_key_with(&mut WindowsBackend::new(), vk, end, KeyDelivery::Window)
@@ -551,7 +611,7 @@ mod win {
 }
 #[cfg(windows)]
 pub use win::{
-    click_fraction, find_civ_window, press_key, process_ids, process_name,
+    click_fraction, click_window_fraction, find_civ_window, press_key, process_ids, process_name,
     request_civ_window_close, require_single_civ_process,
 };
 #[cfg(windows)]
@@ -574,6 +634,10 @@ pub fn find_civ_window() -> Result<isize> {
 }
 #[cfg(not(windows))]
 pub fn click_fraction(_: f64, _: f64) -> Result<(i32, i32)> {
+    unsupported()
+}
+#[cfg(not(windows))]
+pub fn click_window_fraction(_: f64, _: f64) -> Result<(i32, i32)> {
     unsupported()
 }
 #[cfg(not(windows))]

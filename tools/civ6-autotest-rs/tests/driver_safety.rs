@@ -670,6 +670,25 @@ fn completed_click_is_not_retried_when_its_reply_passes_the_deadline() {
 }
 
 #[test]
+fn window_click_targets_verified_game_without_tuner_or_foreground_input() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Err(Error::tuner("unexpected tuner query")));
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner
+        .run_step(&json!({"action":"window_click","x":0.435,"y":0.837}))
+        .unwrap();
+    let trace = f.trace();
+    assert_eq!(trace.require_processes, 1);
+    assert_eq!(trace.window_clicks, vec![(0.435, 0.837)]);
+    assert!(trace.clicks.is_empty() && trace.lua.is_empty());
+    validate_scenario(&scenario(json!({
+        "action":"window_click","x":0.435,"y":0.837
+    })))
+    .unwrap();
+}
+
+#[test]
 fn test_nonfinite_timeouts_are_rejected() {
     for value in [json!(true), json!(0), json!(-1), json!("2"), Value::Null] {
         error_has(

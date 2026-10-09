@@ -20,6 +20,8 @@ struct MockInput {
     changed_window_after: Option<usize>,
     windows_calls: usize,
     post: Vec<(isize, u32, usize, isize)>,
+    fail_mouse_up_once: bool,
+    fail_mouse_up_always: bool,
     send: Vec<bool>,
     mouse: Vec<u32>,
     cursor: Vec<(i32, i32)>,
@@ -43,6 +45,8 @@ impl Default for MockInput {
             changed_window_after: None,
             windows_calls: 0,
             post: Vec::new(),
+            fail_mouse_up_once: false,
+            fail_mouse_up_always: false,
             send: Vec::new(),
             mouse: Vec::new(),
             cursor: Vec::new(),
@@ -85,6 +89,9 @@ impl InputBackend for MockInput {
     fn rect(&mut self, _: isize) -> Result<(i32, i32, i32, i32)> {
         Ok((10, 20, 210, 120))
     }
+    fn screen_to_client(&mut self, _: isize, x: i32, y: i32) -> Result<(i32, i32)> {
+        Ok((x - 10, y - 20))
+    }
     fn cursor(&mut self, x: i32, y: i32) -> bool {
         self.cursor.push((x, y));
         true
@@ -101,6 +108,15 @@ impl InputBackend for MockInput {
     }
     fn post(&mut self, h: isize, m: u32, vk: usize, p: isize) -> bool {
         self.post.push((h, m, vk, p));
+        if m == click::WM_LBUTTONUP {
+            if self.fail_mouse_up_always {
+                return false;
+            }
+            if self.fail_mouse_up_once {
+                self.fail_mouse_up_once = false;
+                return false;
+            }
+        }
         true
     }
     fn send(&mut self, _: u16, up: bool) -> bool {
@@ -296,6 +312,78 @@ fn already_foreground_game_can_be_clicked_if_activation_reports_false() {
         (110, 70)
     );
     assert_eq!(b.mouse, vec![click::LEFT_DOWN, click::LEFT_UP]);
+}
+
+#[test]
+fn window_mouse_posts_only_to_verified_game_without_foreground() {
+    let mut b = MockInput {
+        foreground: 999,
+        ..Default::default()
+    };
+    assert_eq!(
+        click::click_window_fraction_with(&mut b, 0.5, 0.5).unwrap(),
+        (110, 70)
+    );
+    let point = ((50u32 << 16) | 100u32) as isize;
+    assert_eq!(
+        b.post,
+        vec![
+            (100, click::WM_MOUSEMOVE, 0, point),
+            (100, click::WM_LBUTTONDOWN, 1, point),
+            (100, click::WM_LBUTTONUP, 0, point),
+        ]
+    );
+    assert!(b.mouse.is_empty() && b.cursor.is_empty());
+}
+
+#[test]
+fn background_mouse_retries_release_without_repeating_down() {
+    let mut b = MockInput {
+        fail_mouse_up_once: true,
+        ..Default::default()
+    };
+    click::click_window_fraction_with(&mut b, 0.5, 0.5).unwrap();
+    assert_eq!(
+        b.post
+            .iter()
+            .filter(|(_, message, _, _)| *message == click::WM_LBUTTONDOWN)
+            .count(),
+        1
+    );
+    assert_eq!(
+        b.post
+            .iter()
+            .filter(|(_, message, _, _)| *message == click::WM_LBUTTONUP)
+            .count(),
+        2
+    );
+
+    let mut never = MockInput {
+        fail_mouse_up_always: true,
+        ..Default::default()
+    };
+    assert!(click::click_window_fraction_with(&mut never, 0.5, 0.5)
+        .unwrap_err()
+        .message
+        .contains("mouse up was not"));
+    assert_eq!(
+        never
+            .post
+            .iter()
+            .filter(|(_, message, _, _)| *message == click::WM_LBUTTONUP)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn changed_game_window_rejects_background_mouse_before_down() {
+    let mut b = MockInput {
+        changed_window_after: Some(2),
+        ..Default::default()
+    };
+    assert!(click::click_window_fraction_with(&mut b, 0.5, 0.5).is_err());
+    assert!(b.post.is_empty());
 }
 
 #[test]

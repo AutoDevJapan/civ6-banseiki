@@ -185,7 +185,7 @@
       "capture_only": true
     },
     {
-      "action": "click",
+      "action": "window_click",
       "x": 0.435,
       "y": 0.837
     },
