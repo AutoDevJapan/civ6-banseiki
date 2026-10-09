@@ -41,6 +41,26 @@ fn embedded_lua(step: &Value) -> Option<&str> {
 }
 
 #[test]
+fn japan_staging_assignment_live_scenario_validates_and_compiles() {
+    let data = scenario("multiplayer-japan-staging-assignment.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(data["strict_lua_errors"], true);
+    assert_eq!(data["session_type"], "hotseat");
+    let run = steps(&data);
+    assert!(action(&run[0], "enable_mods"));
+    assert!(action(&run[1], "configure"));
+    assert_eq!(run[1]["players"].as_array().unwrap().len(), 22);
+    assert!(action(&run[2], "ui_lua"));
+    assert!(action(&run[3], "ui_lua"));
+    assert!(action(&run[4], "ui_lua"));
+    assert!(action(&run[5], "screenshot"));
+    let lua = Lua::new();
+    for step in &run[2..5] {
+        compile_lua(&lua, code(step));
+    }
+}
+
+#[test]
 fn ui_lua_comparison_requires_a_recorded_value() {
     let mut data = json!({
         "name": "snapshot comparison",

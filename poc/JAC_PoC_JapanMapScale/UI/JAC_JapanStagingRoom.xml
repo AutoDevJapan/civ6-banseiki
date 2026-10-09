@@ -1,4 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ContextDefaults Name="StagingRoom" ColorSet="BodyTextCool" Style="FontNormal22" FontStyle="Glow">
   <Include File="StagingRoom"/>
+  <!-- Reparented into the stock game summary, beneath the player list. -->
+  <Container ID="JAC_AssignmentPanel" Size="420,auto" Hidden="1">
+    <Stack ID="JAC_AssignmentContent" Size="420,auto" StackGrowth="Bottom" Padding="6">
+      <Grid Size="420,26" Texture="Shell_SectionHeader" SliceCorner="154,10" SliceTextureSize="308,21" Color="20,144,140,100">
+        <Label Anchor="C,C" Style="ShellOptionText" String="LOC_JAC_MP_ASSIGNMENT"/>
+      </Grid>
+      <Stack Size="420,32" StackGrowth="Right" Padding="6">
+        <GridButton ID="JAC_AllJapanButton" Style="ShellButton" Size="205,28" String="LOC_JAC_MP_ALL_JAPAN"/>
+        <GridButton ID="JAC_DifferentButton" Style="ShellButton" Size="205,28" String="LOC_JAC_MP_DIFFERENT"/>
+      </Stack>
+      <Label ID="JAC_ModeDescription" Size="410,auto" WrapWidth="410" Style="FontNormal14"/>
+      <Stack ID="JAC_JapanOptions" Size="420,auto" StackGrowth="Bottom" Padding="5">
+        <Grid Size="420,24" Texture="Shell_SectionHeader" SliceCorner="154,10" SliceTextureSize="308,21" Color="20,144,140,100">
+          <Label Anchor="L,C" Offset="8,0" Style="ShellOptionText" String="LOC_JAC_MP_PLAYER"/>
+          <Label Anchor="L,C" Offset="150,0" Style="ShellOptionText" String="LOC_JAC_MP_AREA"/>
+        </Grid>
+        <Stack ID="JAC_AssignmentRows" Size="420,auto" StackGrowth="Bottom" Padding="2"/>
+        <Stack Size="420,30" StackGrowth="Right" Padding="6">
+          <Label Size="140,28" Style="FontNormal14" String="LOC_JAC_MP_SUBJECT"/>
+          <PullDown ID="JAC_SubjectPullDown" Style="PullDownBlue" Size="265,27" ScrollThreshold="240" AutoSizePopUp="1" SpaceForScroll="1" AutoFlip="1">
+            <InstanceData Name="InstanceOne">
+              <GridButton ID="Button" Style="ButtonControl" Size="250,28" ColorSet="BlueGlow"/>
+            </InstanceData>
+          </PullDown>
+        </Stack>
+        <Label ID="JAC_SubjectIs" Size="410,auto" WrapWidth="410" Style="FontNormal14"/>
+        <Label ID="JAC_AssignmentStatus" Size="410,auto" WrapWidth="410" Style="FontNormal14"/>
+      </Stack>
+    </Stack>
+  </Container>
+  <Instance Name="JAC_AssignmentRow">
+    <Container ID="Root" Size="420,30">
+      <Label ID="PlayerName" Anchor="L,C" Offset="6,0" Size="140,28" WrapWidth="138" Style="FontNormal14"/>
+      <PullDown ID="AreaPullDown" Anchor="L,C" Offset="150,0" Style="PullDownBlue" Size="265,27" ScrollThreshold="260" AutoSizePopUp="1" SpaceForScroll="1" AutoFlip="1">
+        <InstanceData Name="InstanceOne">
+          <GridButton ID="Button" Style="ButtonControl" Size="250,28" ColorSet="BlueGlow"/>
+        </InstanceData>
+      </PullDown>
+    </Container>
+  </Instance>
 </ContextDefaults>
