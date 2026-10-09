@@ -38,6 +38,7 @@ struct State {
     generation: u64,
     phase: Phase,
     callers: HashMap<ThreadId, usize>,
+    dispatched: usize,
     pending: usize,
     published: usize,
     unresolved: bool,
@@ -60,6 +61,7 @@ impl WorldFlights {
                 generation,
                 phase: Phase::Open,
                 callers: HashMap::new(),
+                dispatched: 0,
                 pending: 0,
                 published: 0,
                 unresolved: false,
@@ -72,29 +74,23 @@ impl WorldFlights {
         self.state.lock().map_err(|_| Error::Poisoned)
     }
 
-    /// `issued_generation` belongs to the outer dispatch at issuance, not a
-    /// fresh snapshot at a later inner producer entry. The native adapter must
-    /// propagate it with deferred work. Scalar agreement alone is not proof.
-    pub fn enter(&self, issued_generation: u64) -> Result<Caller<'_>, Error> {
+    /// Reserve at the original dispatch, BEFORE handing work to native code.
+    /// A delayed outer entry consumes this value, never a fresh generation
+    /// snapshot. The native adapter must carry it with the actual work; this
+    /// module does not discover native job identity or its lifetime.
+    pub fn dispatch(&self) -> Result<Dispatched<'_>, Error> {
         let mut s = self.lock()?;
         if s.unresolved {
             return Err(Error::Unresolved);
         }
-        if s.generation != issued_generation {
-            return Err(Error::Stale);
-        }
         if s.phase != Phase::Open {
             return Err(Error::Closed);
         }
-        let tid = thread::current().id();
-        let count = s.callers.entry(tid).or_default();
-        *count = count.checked_add(1).ok_or(Error::Exhausted)?;
-        Ok(Caller {
+        s.dispatched = s.dispatched.checked_add(1).ok_or(Error::Exhausted)?;
+        Ok(Dispatched {
             world: self,
-            generation: issued_generation,
-            thread: tid,
-            // A native stack frame may not migrate to another OS thread.
-            _thread_bound: PhantomData,
+            generation: s.generation,
+            settled: false,
         })
     }
 
@@ -132,7 +128,11 @@ impl WorldFlights {
         if s.unresolved {
             return Err(Error::Unresolved);
         }
-        if s.phase != Phase::Drained || !s.callers.is_empty() || s.pending != 0 || s.published != 0
+        if s.phase != Phase::Drained
+            || !s.callers.is_empty()
+            || s.dispatched != 0
+            || s.pending != 0
+            || s.published != 0
         {
             return Err(Error::Busy);
         }
@@ -140,6 +140,68 @@ impl WorldFlights {
         s.generation = next;
         s.phase = Phase::Open;
         Ok(next)
+    }
+}
+
+/// A not-yet-entered outer dispatch. It may move to the native worker's thread
+/// and still counts in every gap before that worker's first entry. Not Clone:
+/// no scalar/current-generation value can replace its reservation.
+pub struct Dispatched<'a> {
+    world: &'a WorldFlights,
+    generation: u64,
+    settled: bool,
+}
+
+impl<'a> Dispatched<'a> {
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// A dispatch delayed past the seal keeps its original generation and
+    /// normal native execution. It must finish before old-world destruction.
+    pub fn enter(mut self) -> Result<Caller<'a>, Error> {
+        let mut s = self.world.lock()?;
+        if s.generation != self.generation {
+            return Err(Error::Stale);
+        }
+        if s.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let tid = thread::current().id();
+        let count = s.callers.entry(tid).or_default();
+        *count = count.checked_add(1).ok_or(Error::Exhausted)?;
+        s.dispatched -= 1;
+        self.settled = true;
+        Ok(Caller {
+            world: self.world,
+            generation: self.generation,
+            thread: tid,
+            // A native stack frame may not migrate to another OS thread.
+            _thread_bound: PhantomData,
+        })
+    }
+
+    /// Only a dispatch proven never handed to native code may be cancelled.
+    /// An already queued native frame is not cancelled by dropping its token.
+    pub fn cancel_before_dispatch(mut self) -> Result<(), Error> {
+        let mut s = self.world.lock()?;
+        if s.generation != self.generation {
+            return Err(Error::Stale);
+        }
+        s.dispatched -= 1;
+        self.settled = true;
+        self.world.changed.notify_all();
+        Ok(())
+    }
+}
+
+impl Drop for Dispatched<'_> {
+    fn drop(&mut self) {
+        if !self.settled {
+            let mut s = self.world.state.lock().unwrap_or_else(|e| e.into_inner());
+            s.unresolved = true;
+            self.world.changed.notify_all();
+        }
     }
 }
 
@@ -321,7 +383,7 @@ impl<'a> Closing<'a> {
             if s.callers.contains_key(&thread::current().id()) {
                 return Err(Error::Reentrant);
             }
-            if s.callers.is_empty() && s.pending == 0 && s.published == 0 {
+            if s.callers.is_empty() && s.dispatched == 0 && s.pending == 0 && s.published == 0 {
                 s.phase = Phase::Drained;
                 return Ok(Drained {
                     world: self.world,

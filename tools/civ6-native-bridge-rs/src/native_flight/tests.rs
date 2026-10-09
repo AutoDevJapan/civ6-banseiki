@@ -10,13 +10,52 @@ fn pending_now(closing: Closing<'_>) {
 }
 
 #[test]
-fn idle_generation_can_close_and_advance_but_old_issued_entry_cannot_borrow_new_world() {
+fn idle_generation_can_close_and_advance_without_a_scalar_entry_permit() {
     let world = WorldFlights::new(17).unwrap();
     let drained = world.close().unwrap().wait(deadline()).unwrap();
     assert_eq!(world.rebuild(drained), Ok(18));
-    assert!(matches!(world.enter(17), Err(Error::Stale)));
-    let current = world.enter(18).unwrap();
+    let current = world.dispatch().unwrap().enter().unwrap();
     assert_eq!(current.generation(), 18);
+}
+
+#[test]
+fn dispatched_frame_delayed_across_close_cannot_become_a_new_world_entry() {
+    let world = WorldFlights::new(17).unwrap();
+    let dispatch = world.dispatch().unwrap();
+    assert_eq!(dispatch.generation(), 17);
+    pending_now(world.close().unwrap());
+    assert!(matches!(world.dispatch(), Err(Error::Closed)));
+    let caller = dispatch.enter().unwrap();
+    assert_eq!(caller.generation(), 17);
+    let job = caller.issue().unwrap().publish().unwrap();
+    drop(caller);
+    pending_now(world.close().unwrap());
+    job.complete_after_native_join().unwrap();
+    assert_eq!(
+        world.rebuild(world.close().unwrap().wait(deadline()).unwrap()),
+        Ok(18)
+    );
+    let fresh = world.dispatch().unwrap().enter().unwrap();
+    assert_eq!(fresh.generation(), 18);
+}
+
+#[test]
+fn losing_dispatched_frame_is_not_a_native_cancellation() {
+    let world = WorldFlights::new(1).unwrap();
+    let dispatch = world.dispatch().unwrap();
+    let closing = world.close().unwrap();
+    drop(dispatch);
+    assert!(matches!(closing.wait(deadline()), Err(Error::Unresolved)));
+}
+
+#[test]
+fn unsubmitted_dispatch_can_cancel_without_opening_admission() {
+    let world = WorldFlights::new(1).unwrap();
+    let dispatch = world.dispatch().unwrap();
+    let closing = world.close().unwrap();
+    dispatch.cancel_before_dispatch().unwrap();
+    closing.wait(deadline()).unwrap();
+    assert!(matches!(world.dispatch(), Err(Error::Closed)));
 }
 
 #[test]
@@ -27,7 +66,7 @@ fn inner_job_completion_does_not_drain_its_outer_native_caller() {
         let (leave_tx, leave_rx) = mpsc::channel();
         let world_ref = &world;
         let worker = scope.spawn(move || {
-            let caller = world_ref.enter(1).unwrap();
+            let caller = world_ref.dispatch().unwrap().enter().unwrap();
             caller
                 .issue()
                 .unwrap()
@@ -43,7 +82,7 @@ fn inner_job_completion_does_not_drain_its_outer_native_caller() {
         });
         ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let closing = world.close().unwrap();
-        let late_rejected = matches!(world.enter(1), Err(Error::Closed));
+        let late_rejected = matches!(world.dispatch(), Err(Error::Closed));
         let result = closing.wait(Instant::now());
         leave_tx.send(()).unwrap();
         worker.join().unwrap();
@@ -57,7 +96,7 @@ fn inner_job_completion_does_not_drain_its_outer_native_caller() {
 #[test]
 fn pending_publication_survives_caller_exit_and_close() {
     let world = WorldFlights::new(5).unwrap();
-    let caller = world.enter(5).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
     let pending = caller.issue().unwrap();
     drop(caller);
     pending_now(world.close().unwrap());
@@ -73,9 +112,9 @@ fn pending_publication_survives_caller_exit_and_close() {
 #[test]
 fn admitted_outer_caller_can_reenter_after_seal_without_changing_generation() {
     let world = WorldFlights::new(9).unwrap();
-    let caller = world.enter(9).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
     assert!(matches!(world.close(), Err(Error::Reentrant)));
-    assert!(matches!(world.enter(9), Err(Error::Closed)));
+    assert!(matches!(world.dispatch(), Err(Error::Closed)));
     // Native continuation is preserved: admitted caller finishes its own
     // second callback. Closure does not skip a native call or adopt epoch10.
     let repeated = caller.issue().unwrap();
@@ -90,7 +129,7 @@ fn admitted_outer_caller_can_reenter_after_seal_without_changing_generation() {
 #[test]
 fn unpublished_and_published_jobs_are_both_required_to_settle() {
     let world = WorldFlights::new(1).unwrap();
-    let caller = world.enter(1).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
     let pending = caller.issue().unwrap();
     let published = caller.issue().unwrap().publish().unwrap();
     drop(caller);
@@ -105,19 +144,19 @@ fn unpublished_and_published_jobs_are_both_required_to_settle() {
 #[test]
 fn losing_unpublished_work_is_unresolved_instead_of_false_zero() {
     let world = WorldFlights::new(1).unwrap();
-    let caller = world.enter(1).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
     let pending = caller.issue().unwrap();
     drop(caller);
     let closing = world.close().unwrap();
     drop(pending);
     assert!(matches!(closing.wait(deadline()), Err(Error::Unresolved)));
-    assert!(matches!(world.enter(1), Err(Error::Unresolved)));
+    assert!(matches!(world.dispatch(), Err(Error::Unresolved)));
 }
 
 #[test]
 fn losing_published_work_does_not_substitute_rust_drop_for_native_wait() {
     let world = WorldFlights::new(1).unwrap();
-    let caller = world.enter(1).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
     let published = caller.issue().unwrap().publish().unwrap();
     drop(caller);
     let closing = world.close().unwrap();
@@ -128,8 +167,8 @@ fn losing_published_work_does_not_substitute_rust_drop_for_native_wait() {
 #[test]
 fn all_outer_frames_on_one_thread_must_exit() {
     let world = WorldFlights::new(1).unwrap();
-    let outer = world.enter(1).unwrap();
-    let nested = world.enter(1).unwrap();
+    let outer = world.dispatch().unwrap().enter().unwrap();
+    let nested = world.dispatch().unwrap().enter().unwrap();
     assert!(matches!(world.close(), Err(Error::Reentrant)));
     drop(nested);
     assert!(matches!(world.close(), Err(Error::Reentrant)));
@@ -140,7 +179,7 @@ fn all_outer_frames_on_one_thread_must_exit() {
 #[test]
 fn blocking_drain_wakes_when_old_world_work_finishes() {
     let world = WorldFlights::new(1).unwrap();
-    let caller = world.enter(1).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
     let job = caller.issue().unwrap().publish().unwrap();
     drop(caller);
     let closing = world.close().unwrap();
@@ -183,14 +222,14 @@ fn generation_exhaustion_leaves_admission_closed() {
     let world = WorldFlights::new(u64::MAX).unwrap();
     let drain = world.close().unwrap().wait(deadline()).unwrap();
     assert_eq!(world.rebuild(drain), Err(Error::Exhausted));
-    assert!(matches!(world.enter(u64::MAX), Err(Error::Closed)));
+    assert!(matches!(world.dispatch(), Err(Error::Closed)));
 }
 
 #[test]
 fn rust_unwind_settles_the_complete_caller_scope() {
     let world = WorldFlights::new(1).unwrap();
     assert!(std::panic::catch_unwind(|| {
-        let _caller = world.enter(1).unwrap();
+        let _caller = world.dispatch().unwrap().enter().unwrap();
         panic!("finite fixture unwind; not a native SEH execution");
     })
     .is_err());
