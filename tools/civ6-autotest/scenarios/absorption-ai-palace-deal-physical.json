@@ -53,8 +53,7 @@
     {
       "action": "save",
       "timeout": 90,
-      "name": "JAC-ai-palace-creator-deal-probe-20261009",
-      "exact_name": true
+      "name": "JAC-ai-palace-creator-deal-probe-20261009"
     },
     {
       "action": "exit_to_menu"
@@ -62,8 +61,7 @@
     {
       "action": "load",
       "name": "JAC-ai-palace-creator-deal-probe-20261009",
-      "timeout": 600,
-      "exact_name": true
+      "timeout": 600
     },
     {
       "action": "wait_for",
@@ -119,8 +117,7 @@
     {
       "action": "save",
       "timeout": 90,
-      "name": "JAC-ai-palace-acquired-deal-probe-20261009",
-      "exact_name": true
+      "name": "JAC-ai-palace-acquired-deal-probe-20261009"
     },
     {
       "action": "exit_to_menu"
@@ -128,8 +125,7 @@
     {
       "action": "load",
       "name": "JAC-ai-palace-acquired-deal-probe-20261009",
-      "timeout": 600,
-      "exact_name": true
+      "timeout": 600
     },
     {
       "action": "wait_for",
@@ -146,5 +142,5 @@
       "state_name": "JAC_Absorption_Entry"
     }
   ],
-  "name": "One-shot official AI Palace deals with full physical and save/load proof"
+  "name": "Diagnose one-shot AI Palace deals and verify physical location and save/load"
 }
