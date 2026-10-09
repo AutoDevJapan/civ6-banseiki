@@ -68,6 +68,7 @@ local function Observe(c)
   local m=c and c.MP
   if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
   if m.WaitingFor=='MP_ABORT_LIMIT' then return false end
+  if m.Phase=='ABORT_DONE' and m.OriginalUnresolved then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
   if m.Phase=='SELECT' or m.Phase=='PREPARE' then
@@ -102,11 +103,18 @@ local function Observe(c)
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
     local api=assert(ExposedMembers.JAC_Absorption)
-    local sourceOk,source=pcall(function() return api.ReadNativeCarrier(
-      assert(CityManager.GetCityAt(c.MoveSource.X,c.MoveSource.Y)),c.MP.Loans[1]) end)
-    local targetOk,target=pcall(function() return api.ReadNativeCarrier(
-      assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
-    if not sourceOk or source.Work~=c.Index or not targetOk or target.Work~=-1 then
+    local sourceOk,source=pcall(function()
+      local current=assert(CityManager.GetCityAt(c.MoveSource.X,c.MoveSource.Y))
+      assert(current:GetOwner()==owner and current:GetID()==c.MoveSource.City)
+      return api.ReadNativeCarrier(current,c.MP.Loans[1])
+    end)
+    local targetOk,target=pcall(function()
+      local current=assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y))
+      assert(current:GetOwner()==owner and current:GetID()==c.MoveTarget.City)
+      return api.ReadNativeCarrier(current,c.MP.Loans[2])
+    end)
+    if not sourceOk or type(source)~='table' or source.Work~=c.Index
+      or not targetOk or type(target)~='table' or target.Work~=-1 then
       sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false
     end
     sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
@@ -115,21 +123,39 @@ local function Observe(c)
     return false -- reconcile at a later native publication, not the send call
   end
   local api=assert(ExposedMembers.JAC_Absorption)
-  local o={Cities={},Locations=api.ReadNativeLocations(c.Index)}
-  for _,l in ipairs(m.Loans or {}) do
-    local current=assert(CityManager.GetCityAt(l.X,l.Y))
-    o.Cities[#o.Cities+1]=api.ReadNativeCarrier(current,l)
+  local unresolved=(m.Phase=='DISPATCH' and (m.DispatchStatus=='NOT_SENT'
+    or status[c.MoveToken]=='NOT_SENT')) or (m.Phase=='ABORT_RESTORED' and m.OriginalUnresolved)
+  local o={Cities={}}
+  local function locations(index)
+    local ok,result=pcall(api.ReadNativeLocations,index)
+    if ok then return result end
+    assert(unresolved,result)
+    o.LocationsUnavailable=true;return {}
+  end
+  o.Locations=locations(c.Index)
+  for i,l in ipairs(m.Loans or {}) do
+    if i==1 and unresolved then
+      local ok,observed=pcall(function()
+        return api.ReadNativeCarrier(assert(CityManager.GetCityAt(l.X,l.Y)),l)
+      end)
+      o.Cities[i]=ok and observed or {Missing=true}
+    else
+      local current=assert(CityManager.GetCityAt(l.X,l.Y))
+      o.Cities[i]=api.ReadNativeCarrier(current,l)
+    end
   end
   if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
     o.ArtifactWorks={[c.Index]=o.Locations}
-    for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+    for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=locations(index) end
     for _,observed in ipairs(o.Cities) do
-      if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
-        o.ArtifactWorks[observed.Work]=api.ReadNativeLocations(observed.Work)
-      end
-      for _,asset in pairs(observed.State.Assets) do
-        for _,index in pairs(asset.Works or {}) do
-          if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+      if not observed.Missing then
+        if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
+          o.ArtifactWorks[observed.Work]=locations(observed.Work)
+        end
+        for _,asset in pairs(observed.State.Assets) do
+          for _,index in pairs(asset.Works or {}) do
+            if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=locations(index) end
+          end
         end
       end
     end

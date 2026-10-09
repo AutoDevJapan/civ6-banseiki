@@ -91,7 +91,11 @@ local function moveOwner(c)
   assert((m.MoveOwner or m.Actor)==owner,'MP MOVE city owner changed')
   if c.Source.BuildingType=='BUILDING_PALACE' then
     local player=assert(Players[owner],'MP Palace source owner missing')
-    assert(player:IsAlive() and player:IsMajor(),'MP Palace source owner unavailable')
+    -- The source owner can be eliminated after an unsent MOVE and the safe
+    -- return of its last, temporarily borrowed city. No MOVE follows this.
+    local closing=m.OriginalUnresolved and (m.Phase=='ABORT_RETURN'
+      or m.Phase=='ABORT_RESTORED' or m.Phase=='ABORT_DONE')
+    assert(player:IsMajor() and (player:IsAlive() or closing),'MP Palace source owner unavailable')
     if player:IsHuman() then
       assert(m.Actor==owner,'MP human Palace owner must send its own MOVE')
     else
@@ -161,9 +165,16 @@ local function restoreProperties(current,l)
 end
 local function returnLoans(state,c)
   local m=c.MP;local owner=moveOwner(c);local failures={}
-  for _,l in ipairs(m.Loans) do
+  for i,l in ipairs(m.Loans) do
     local ok,err=pcall(function()
-    local current=city(l)
+    local current=CityManager.GetCityAt(l.X,l.Y)
+    -- A source city can disappear while an unsent MOVE is being reconciled.
+    -- Never restore or transfer a replacement city at the same coordinates.
+    if i==1 and m.OriginalUnresolved and (not current or current:GetOwner()~=owner
+      or current:GetID()~=(l.BorrowedID or l.ID)) then
+      l.SourceUnavailable=true;save(state);return
+    end
+    current=assert(current,'MP loan city missing')
     -- Save current authoritative values before a transfer can clear them.
     -- Refresh only while still borrowed; a completed transfer must not replace
     -- its saved pre-return values with the cleared post-transfer properties.
@@ -275,6 +286,12 @@ function MP.Advance(state,c,preferred)
   assert(sourceBuildingMatches(c.Source),'MP MOVE source building type changed')
   local owner=moveOwner(c)
   if not active(m.Actor) then m.WaitingFor='MP_ACTOR_TURN';save(state);return false end
+  if m.Phase=='ABORT_DONE' and m.OriginalUnresolved then
+    if m.WaitingFor~='MP_ORIGINAL_UNRESOLVED' then
+      m.WaitingFor='MP_ORIGINAL_UNRESOLVED';save(state)
+    end
+    return false -- the original's location needs a separate reconciliation
+  end
   m.WaitingFor=nil
   if m.Phase=='DONE' and m.ObservationTurn~=Game.GetCurrentGameTurn() then
     phase(state,c,'RECHECK');return false
@@ -459,6 +476,52 @@ local function validateObservation(c,o,placement)
   assert(o.Cities[i].Work==c.Index and o.Cities[3-i].Work==-1,'MP reported source/target mismatch')
   return artifactOriginals(c,o,placement)
 end
+local function validateUnresolvedTarget(c,o,restored)
+  -- NOT_SENT is saved by Gameplay before this path is allowed. Only the
+  -- borrowed destination is being released; the original is not proved.
+  local m=c.MP;local l=assert(m.Loans[2]);local seen=o and o.Cities and o.Cities[2]
+  assert(type(o)=='table' and type(o.Cities)=='table' and #o.Cities==2
+    and type(o.Locations)=='table' and type(seen)=='table','MP unresolved observation shape')
+  local current=city(l);local core=A.ReadNativeCarrierCore(current,l)
+  local expectedOwner=restored and l.Owner or moveOwner(c)
+  local expectedID=restored and l.FinalID or l.BorrowedID
+  assert(expectedID and current:GetOwner()==expectedOwner and current:GetID()==expectedID
+    and seen.Owner==expectedOwner and seen.ID==expectedID
+    and seen.X==l.X and seen.Y==l.Y,'MP unresolved target identity changed')
+  assert(core.HasBuilding and type(seen.Slots)=='number' and l.Slot>=0 and l.Slot<seen.Slots
+    and seen.Work==-1 and (core.Work==nil or core.Work==-1)
+    and (core.Slots==nil or seen.Slots==core.Slots),'MP unresolved target is occupied')
+  assert(Equal(seen.PropertyKeys,core.PropertyKeys) and Equal(seen.Properties,core.Properties)
+    and type(seen.State)=='table' and seen.State.Name==core.Name
+    and seen.State.Population==core.Population
+    and Equal(seen.State.UnitsOnCenter,core.UnitsOnCenter)
+    and (restored or l.Owner==expectedOwner or #core.UnitsOnCenter==0),
+    'MP unresolved target differs from Core')
+  assert(Equal(seen.State.Faith,current:GetProperty(R.CITY_FAITH_KEY))
+    and Equal(seen.State.Governance,current:GetProperty(R.GOVERNANCE_KEY)),
+    'MP unresolved target governance changed')
+  if core.Loyalty~=nil then assert(seen.State.Loyalty==core.Loyalty,'MP unresolved target loyalty changed') end
+  if core.Religion~=nil then assert(Equal(seen.State.Religion,core.Religion),'MP unresolved target religion changed') end
+  local before=assert(l.ActorBefore and l.ActorBefore.State,'MP unresolved target baseline missing')
+  assert(type(seen.State.Assets)=='table','MP unresolved target assets missing')
+  for name,asset in pairs(before.Assets) do
+    local now=assert(seen.State.Assets[name],'MP unresolved target building removed')
+    for slot,index in pairs(asset.Works or {}) do
+      assert(now.Works and now.Works[slot]==index,'MP unresolved target original work changed')
+    end
+  end
+  for name,asset in pairs(seen.State.Assets) do
+    local old=before.Assets[name]
+    for slot,index in pairs(asset.Works or {}) do
+      assert(index==-1 or (old and old.Works and old.Works[slot]==index),
+        'MP unresolved target gained another work')
+    end
+  end
+  for _,location in ipairs(o.Locations) do
+    assert(location.X~=l.X or location.Y~=l.Y,'MP unresolved original is in the borrowed city')
+  end
+  if restored then assert(l.RestoredCore,'MP unresolved target restoration incomplete') end
+end
 local function reserved(state,c,l)
   local function busy(other)
     local m=other and other.MP
@@ -547,7 +610,7 @@ local function receive(actor,p)
   if p.Command=='ABORT' and (m.Phase=='BORROWED' or m.Phase=='READY') then
     abort(state,c,'actor canceled before dispatch claim');return true
   end
-  if m.Phase=='DISPATCH' and p.Session==m.DispatchSession and p.DispatchStatus=='NOT_SENT'
+  if m.Phase=='DISPATCH' and p.Command=='OBSERVE' and p.Session==m.DispatchSession and p.DispatchStatus=='NOT_SENT'
     and m.DispatchStatus~='NOT_SENT' then
     m.DispatchStatus='NOT_SENT';m.WaitingFor='NOT_SENT_TARGET_RECONCILIATION';save(state)
   end
@@ -562,7 +625,18 @@ local function receive(actor,p)
   if m.Phase=='DISPATCH' then
     placement=o.Cities and o.Cities[2] and o.Cities[2].Work==c.Index and 'TARGET' or 'SOURCE'
   end
-  local valid,err=pcall(validateObservation,c,o,placement)
+  local unresolvedSource=m.Phase=='DISPATCH' and m.DispatchStatus=='NOT_SENT'
+    and type(o)=='table' and type(o.Cities)=='table'
+    and type(o.Cities[1])=='table' and type(o.Cities[2])=='table'
+    and o.Cities[2].Work==-1
+    and (o.Cities[1].Missing==true or o.Cities[1].Work~=c.Index)
+  local unresolvedAbort=m.Phase=='ABORT_RESTORED' and m.OriginalUnresolved~=nil
+  local valid,err
+  if unresolvedSource or unresolvedAbort then
+    valid,err=pcall(validateUnresolvedTarget,c,o,unresolvedAbort)
+  else
+    valid,err=pcall(validateObservation,c,o,placement)
+  end
   if not valid then
     if m.Phase=='DISPATCH' then
       local reason=tostring(err)
@@ -620,11 +694,17 @@ local function receive(actor,p)
     phase(state,c,'DISPATCH')
   elseif m.Phase=='DISPATCH' then
     assert(p.Command=='OBSERVE','MP dispatch observation')
-    if placement=='TARGET' then
+    if unresolvedSource then
+      m.OriginalUnresolved={Locations=R.Copy(o.Locations),Source=R.Copy(o.Cities[1]),
+        LocationReadFailed=o.LocationsUnavailable==true}
+      abort(state,c,'native MOVE not sent; original location unresolved');return true
+    elseif placement=='TARGET' then
       m.ReportedMovedObservation=R.Copy(o);c.Phase='RETURN';c.ReturnToken=c.Token..':mp:return'
       phase(state,c,'RETURN');MP.Advance(state,c)
-    elseif p.Session==m.DispatchSession and (p.DispatchStatus=='REJECTED' or p.DispatchStatus=='NOT_SENT') then
-      m.DispatchStatus=p.DispatchStatus;abort(state,c,'native MOVE rejected or not sent after safe source reconciliation');return true
+    elseif m.DispatchStatus=='NOT_SENT'
+      or (p.Session==m.DispatchSession and (p.DispatchStatus=='REJECTED' or p.DispatchStatus=='NOT_SENT')) then
+      if m.DispatchStatus~='NOT_SENT' then m.DispatchStatus=p.DispatchStatus end
+      abort(state,c,'native MOVE rejected or not sent after safe source reconciliation');return true
     else
       -- An original-slot observation alone does not drain an engine queue.
       -- Session loss / unknown result preserves the loan; never retry MOVE or
@@ -634,6 +714,7 @@ local function receive(actor,p)
   elseif m.Phase=='ABORT_RESTORED' then
     assert(p.Command=='OBSERVE','MP abort publication')
     m.RollbackActorObservation=R.Copy(o)
+    if m.OriginalUnresolved then m.WaitingFor='MP_ORIGINAL_UNRESOLVED' end
     phase(state,c,'ABORT_DONE')
   else
     assert((m.Phase=='RESTORED' or m.Phase=='RECHECK') and p.Command=='OBSERVE','MP publication phase')
@@ -669,6 +750,7 @@ local function Observe(c)
   local m=c and c.MP
   if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
   if m.WaitingFor=='MP_ABORT_LIMIT' then return false end
+  if m.Phase=='ABORT_DONE' and m.OriginalUnresolved then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
   if m.Phase=='SELECT' or m.Phase=='PREPARE' then
@@ -703,11 +785,18 @@ local function Observe(c)
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
     local api=assert(ExposedMembers.JAC_Absorption)
-    local sourceOk,source=pcall(function() return api.ReadNativeCarrier(
-      assert(CityManager.GetCityAt(c.MoveSource.X,c.MoveSource.Y)),c.MP.Loans[1]) end)
-    local targetOk,target=pcall(function() return api.ReadNativeCarrier(
-      assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
-    if not sourceOk or source.Work~=c.Index or not targetOk or target.Work~=-1 then
+    local sourceOk,source=pcall(function()
+      local current=assert(CityManager.GetCityAt(c.MoveSource.X,c.MoveSource.Y))
+      assert(current:GetOwner()==owner and current:GetID()==c.MoveSource.City)
+      return api.ReadNativeCarrier(current,c.MP.Loans[1])
+    end)
+    local targetOk,target=pcall(function()
+      local current=assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y))
+      assert(current:GetOwner()==owner and current:GetID()==c.MoveTarget.City)
+      return api.ReadNativeCarrier(current,c.MP.Loans[2])
+    end)
+    if not sourceOk or type(source)~='table' or source.Work~=c.Index
+      or not targetOk or type(target)~='table' or target.Work~=-1 then
       sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false
     end
     sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
@@ -716,21 +805,39 @@ local function Observe(c)
     return false -- reconcile at a later native publication, not the send call
   end
   local api=assert(ExposedMembers.JAC_Absorption)
-  local o={Cities={},Locations=api.ReadNativeLocations(c.Index)}
-  for _,l in ipairs(m.Loans or {}) do
-    local current=assert(CityManager.GetCityAt(l.X,l.Y))
-    o.Cities[#o.Cities+1]=api.ReadNativeCarrier(current,l)
+  local unresolved=(m.Phase=='DISPATCH' and (m.DispatchStatus=='NOT_SENT'
+    or status[c.MoveToken]=='NOT_SENT')) or (m.Phase=='ABORT_RESTORED' and m.OriginalUnresolved)
+  local o={Cities={}}
+  local function locations(index)
+    local ok,result=pcall(api.ReadNativeLocations,index)
+    if ok then return result end
+    assert(unresolved,result)
+    o.LocationsUnavailable=true;return {}
+  end
+  o.Locations=locations(c.Index)
+  for i,l in ipairs(m.Loans or {}) do
+    if i==1 and unresolved then
+      local ok,observed=pcall(function()
+        return api.ReadNativeCarrier(assert(CityManager.GetCityAt(l.X,l.Y)),l)
+      end)
+      o.Cities[i]=ok and observed or {Missing=true}
+    else
+      local current=assert(CityManager.GetCityAt(l.X,l.Y))
+      o.Cities[i]=api.ReadNativeCarrier(current,l)
+    end
   end
   if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
     o.ArtifactWorks={[c.Index]=o.Locations}
-    for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+    for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=locations(index) end
     for _,observed in ipairs(o.Cities) do
-      if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
-        o.ArtifactWorks[observed.Work]=api.ReadNativeLocations(observed.Work)
-      end
-      for _,asset in pairs(observed.State.Assets) do
-        for _,index in pairs(asset.Works or {}) do
-          if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+      if not observed.Missing then
+        if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
+          o.ArtifactWorks[observed.Work]=locations(observed.Work)
+        end
+        for _,asset in pairs(observed.State.Assets) do
+          for _,index in pairs(asset.Works or {}) do
+            if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=locations(index) end
+          end
         end
       end
     end
