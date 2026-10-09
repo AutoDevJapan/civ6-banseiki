@@ -61,7 +61,9 @@ impl Args {
 // without attaching, launching, or inspecting any real process.
 #[cfg(any(all(windows, target_arch = "x86_64"), test))]
 mod policy {
+    use super::attach_image::VerifiedAttachExports;
     use super::*;
+    use std::collections::BTreeMap;
 
     pub const MODULE_NAME: &str = "GameCore_XP2_FinalRelease.dll";
     pub const MODULE_SHA256: &str =
@@ -73,17 +75,64 @@ mod policy {
 
     #[derive(Default, Serialize)]
     pub struct AttachBreak {
-        pub initial_tid: Option<u32>,
+        image: Option<VerifiedAttachExports>,
+        pub breakin_threads: BTreeMap<u32, u64>,
         consumed: bool,
+        registration_failed: bool,
     }
 
     impl AttachBreak {
-        pub fn consume(&mut self, code: u32, first_chance: u32, tid: u32) -> bool {
-            if !self.consumed
-                && code == 0x80000003
-                && first_chance != 0
-                && self.initial_tid == Some(tid)
+        pub fn bind(&mut self, image: VerifiedAttachExports) {
+            self.image = Some(image);
+        }
+
+        pub fn register(
+            &mut self,
+            tid: u32,
+            event_start: Option<u64>,
+            os_start: Result<u64>,
+            existed_before_attach: bool,
+        ) -> Result<bool> {
+            let start = os_start?;
+            let Some(image) = &self.image else {
+                return Ok(false);
+            };
+            if self.consumed
+                || self.registration_failed
+                || existed_before_attach
+                || start != image.breakin_address()
+                || event_start.is_some_and(|event| event != start)
             {
+                return Ok(false);
+            }
+            if tid == 0
+                || (!self.breakin_threads.is_empty() && !self.breakin_threads.contains_key(&tid))
+            {
+                self.registration_failed = true;
+                self.breakin_threads.clear();
+                return Err("ambiguous debugger break-in thread registration".into());
+            }
+            self.breakin_threads.insert(tid, start);
+            Ok(true)
+        }
+
+        pub fn retire(&mut self, tid: u32) {
+            self.breakin_threads.remove(&tid);
+        }
+
+        pub fn matches(&self, exception: RawException) -> bool {
+            self.image.as_ref().is_some_and(|image| {
+                !self.consumed
+                    && !self.registration_failed
+                    && exception.code == 0x80000003
+                    && exception.first_chance != 0
+                    && exception.exception_address == image.breakpoint_address()
+                    && self.breakin_threads.get(&exception.tid) == Some(&image.breakin_address())
+            })
+        }
+
+        pub fn consume(&mut self, exception: RawException) -> bool {
+            if !self.consumed && self.matches(exception) {
                 self.consumed = true;
                 true
             } else {
@@ -245,10 +294,7 @@ mod policy {
             addresses: [u64; 4],
             owns_probes: bool,
         ) -> ExceptionDecision {
-            if self
-                .attach
-                .consume(exception.code, exception.first_chance, exception.tid)
-            {
+            if self.attach.consume(exception) {
                 return ExceptionDecision::AttachBreak;
             }
             if exception.code == 0x80000004 && owns_probes {
@@ -286,6 +332,13 @@ mod policy {
                 self.second_chance_count = self.second_chance_count.saturating_add(1);
                 ExceptionDecision::ForwardSecondChance
             }
+        }
+    }
+
+    pub fn require_ready(outcome: Result<&'static str>, ready: bool) -> Result<&'static str> {
+        match outcome {
+            Ok(reason) if !ready => Err(format!("observation ended before ready: {reason}")),
+            other => other,
         }
     }
 
@@ -449,13 +502,389 @@ mod policy {
     }
 }
 
+// Parse the trusted on-disk system DLL, then compare only specified small
+// metadata fields and export prefixes in its loaded image. No remote PE scan.
+#[cfg(any(all(windows, target_arch = "x86_64"), test))]
+mod attach_image {
+    use super::*;
+
+    pub const EXPORT_NAMES: [&str; 3] = [
+        "DbgBreakPoint",
+        "DbgUiRemoteBreakin",
+        "NtQueryInformationThread",
+    ];
+    pub const MAX_FILE_BYTES: usize = 16 * 1024 * 1024;
+
+    pub trait ShortImageReader {
+        fn read_field(&self, address: u64, length: usize) -> Result<Vec<u8>>;
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct ImageField {
+        pub rva: u32,
+        pub bytes: Vec<u8>,
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct Export {
+        pub name: String,
+        pub rva: u32,
+        pub prefix: [u8; 8],
+    }
+
+    #[derive(Debug, Serialize)]
+    pub struct PeImage {
+        pub size: u32,
+        pub fields: Vec<ImageField>,
+        pub exports: Vec<Export>,
+    }
+
+    #[derive(Clone, Debug, Serialize)]
+    pub struct VerifiedAttachExports {
+        breakpoint_address: u64,
+        breakin_address: u64,
+    }
+
+    impl VerifiedAttachExports {
+        pub fn breakpoint_address(&self) -> u64 {
+            self.breakpoint_address
+        }
+        pub fn breakin_address(&self) -> u64 {
+            self.breakin_address
+        }
+    }
+
+    #[derive(Debug)]
+    struct Section {
+        va: u32,
+        virtual_size: u32,
+        raw: u32,
+        raw_size: u32,
+        flags: u32,
+    }
+
+    fn bytes_at(bytes: &[u8], offset: usize, length: usize) -> Result<&[u8]> {
+        bytes
+            .get(offset..offset.checked_add(length).ok_or("PE field overflow")?)
+            .ok_or_else(|| "PE field outside bounded file".into())
+    }
+    fn u16_at(bytes: &[u8], offset: usize) -> Result<u16> {
+        Ok(u16::from_le_bytes(
+            bytes_at(bytes, offset, 2)?
+                .try_into()
+                .map_err(|_| "PE u16 size")?,
+        ))
+    }
+    fn u32_at(bytes: &[u8], offset: usize) -> Result<u32> {
+        Ok(u32::from_le_bytes(
+            bytes_at(bytes, offset, 4)?
+                .try_into()
+                .map_err(|_| "PE u32 size")?,
+        ))
+    }
+
+    fn mapped_offset(sections: &[Section], headers: u32, rva: u32, length: usize) -> Result<usize> {
+        let end = u64::from(rva)
+            .checked_add(length as u64)
+            .ok_or("PE RVA overflow")?;
+        if end <= u64::from(headers) {
+            return Ok(rva as usize);
+        }
+        let matches: Vec<_> = sections
+            .iter()
+            .filter(|section| {
+                rva >= section.va
+                    && end
+                        <= u64::from(section.va)
+                            + u64::from(section.virtual_size.max(section.raw_size))
+            })
+            .collect();
+        if matches.len() != 1 {
+            return Err("PE RVA has no unique mapped section".into());
+        }
+        let section = matches[0];
+        let delta = rva - section.va;
+        if u64::from(delta) + length as u64 > u64::from(section.raw_size) {
+            return Err("PE RVA is not backed by file bytes".into());
+        }
+        (section.raw as usize)
+            .checked_add(delta as usize)
+            .ok_or_else(|| "PE file offset overflow".into())
+    }
+
+    fn add_field(
+        fields: &mut Vec<ImageField>,
+        bytes: &[u8],
+        rva: u32,
+        offset: usize,
+        length: usize,
+    ) -> Result<()> {
+        let value = bytes_at(bytes, offset, length)?;
+        for (index, chunk) in value.chunks(8).enumerate() {
+            fields.push(ImageField {
+                rva: rva
+                    .checked_add((index * 8) as u32)
+                    .ok_or("PE field RVA overflow")?,
+                bytes: chunk.to_vec(),
+            });
+        }
+        Ok(())
+    }
+
+    impl PeImage {
+        pub fn parse(bytes: &[u8]) -> Result<Self> {
+            if bytes.len() > MAX_FILE_BYTES || u16_at(bytes, 0)? != 0x5A4D {
+                return Err("unsupported DOS header/file size".into());
+            }
+            let pe = u32_at(bytes, 0x3C)? as usize;
+            if !(64..=65536).contains(&pe)
+                || u32_at(bytes, pe)? != 0x4550
+                || u16_at(bytes, pe + 4)? != 0x8664
+            {
+                return Err("not a native AMD64 PE image".into());
+            }
+            let count = u16_at(bytes, pe + 6)? as usize;
+            let opt_size = u16_at(bytes, pe + 20)? as usize;
+            let opt = pe + 24;
+            if !(1..=96).contains(&count)
+                || !(240..=512).contains(&opt_size)
+                || u16_at(bytes, pe + 22)? & 0x2000 == 0
+                || u16_at(bytes, opt)? != 0x20B
+            {
+                return Err("unsupported PE64 DLL/section header".into());
+            }
+            bytes_at(bytes, opt, opt_size)?;
+            let size = u32_at(bytes, opt + 56)?;
+            let headers = u32_at(bytes, opt + 60)?;
+            let table = opt + opt_size;
+            if size == 0
+                || size > 64 * 1024 * 1024
+                || headers as usize > bytes.len()
+                || table + count * 40 > headers as usize
+                || u32_at(bytes, opt + 108)? == 0
+            {
+                return Err("invalid PE image/header/data-directory bounds".into());
+            }
+            let export_rva = u32_at(bytes, opt + 112)?;
+            let export_size = u32_at(bytes, opt + 116)?;
+            if export_rva == 0
+                || export_size < 40
+                || u64::from(export_rva) + u64::from(export_size) > u64::from(size)
+            {
+                return Err("invalid PE export directory".into());
+            }
+            let mut sections = Vec::new();
+            let mut fields = Vec::new();
+            for (offset, length) in [
+                (0, 2),
+                (0x3C, 4),
+                (pe, 4),
+                (pe + 4, 2),
+                (pe + 6, 2),
+                (pe + 8, 4),
+                (pe + 20, 2),
+                (pe + 22, 2),
+                (opt, 2),
+                (opt + 56, 4),
+                (opt + 60, 4),
+                (opt + 64, 4),
+                (opt + 108, 4),
+                (opt + 112, 8),
+            ] {
+                add_field(&mut fields, bytes, offset as u32, offset, length)?;
+            }
+            for index in 0..count {
+                let offset = table + index * 40;
+                let section = Section {
+                    virtual_size: u32_at(bytes, offset + 8)?,
+                    va: u32_at(bytes, offset + 12)?,
+                    raw_size: u32_at(bytes, offset + 16)?,
+                    raw: u32_at(bytes, offset + 20)?,
+                    flags: u32_at(bytes, offset + 36)?,
+                };
+                if u64::from(section.va) + u64::from(section.virtual_size.max(section.raw_size))
+                    > u64::from(size)
+                {
+                    return Err("PE section exceeds image".into());
+                }
+                bytes_at(bytes, section.raw as usize, section.raw_size as usize)?;
+                for field in [8, 12, 16, 20, 36] {
+                    add_field(
+                        &mut fields,
+                        bytes,
+                        (offset + field) as u32,
+                        offset + field,
+                        4,
+                    )?;
+                }
+                sections.push(section);
+            }
+            let exp = mapped_offset(&sections, headers, export_rva, 40)?;
+            add_field(&mut fields, bytes, export_rva, exp, 40)?;
+            let functions_count = u32_at(bytes, exp + 20)?;
+            let names_count = u32_at(bytes, exp + 24)?;
+            if functions_count == 0 || functions_count > 65536 || names_count > 65536 {
+                return Err("PE export tables exceed finite bounds".into());
+            }
+            let functions_rva = u32_at(bytes, exp + 28)?;
+            let names_rva = u32_at(bytes, exp + 32)?;
+            let ordinals_rva = u32_at(bytes, exp + 36)?;
+            let functions = mapped_offset(
+                &sections,
+                headers,
+                functions_rva,
+                functions_count as usize * 4,
+            )?;
+            let names = mapped_offset(&sections, headers, names_rva, names_count as usize * 4)?;
+            let ordinals =
+                mapped_offset(&sections, headers, ordinals_rva, names_count as usize * 2)?;
+            bytes_at(bytes, functions, functions_count as usize * 4)?;
+            bytes_at(bytes, names, names_count as usize * 4)?;
+            bytes_at(bytes, ordinals, names_count as usize * 2)?;
+            let mut exports = Vec::new();
+            for index in 0..names_count as usize {
+                let name_rva = u32_at(bytes, names + index * 4)?;
+                let mut name = Vec::new();
+                let mut terminated = false;
+                for delta in 0..=127 {
+                    let rva = name_rva
+                        .checked_add(delta)
+                        .ok_or("export name RVA overflow")?;
+                    let offset = mapped_offset(&sections, headers, rva, 1)?;
+                    let byte = bytes_at(bytes, offset, 1)?[0];
+                    if byte == 0 {
+                        terminated = true;
+                        break;
+                    }
+                    name.push(byte);
+                }
+                if !terminated {
+                    return Err("export name exceeds bounded length".into());
+                }
+                let Some(wanted) = EXPORT_NAMES.iter().find(|wanted| wanted.as_bytes() == name)
+                else {
+                    continue;
+                };
+                if exports.iter().any(|export: &Export| export.name == *wanted) {
+                    return Err("duplicate named export".into());
+                }
+                let ordinal = u16_at(bytes, ordinals + index * 2)? as usize;
+                if ordinal >= functions_count as usize {
+                    return Err("export ordinal exceeds function table".into());
+                }
+                let rva = u32_at(bytes, functions + ordinal * 4)?;
+                if u64::from(rva) >= u64::from(export_rva)
+                    && u64::from(rva) < u64::from(export_rva) + u64::from(export_size)
+                {
+                    return Err("forwarded export is not an attach entry".into());
+                }
+                let offset = mapped_offset(&sections, headers, rva, 8)?;
+                if !sections.iter().any(|section| {
+                    section.flags & 0x20000000 != 0
+                        && rva >= section.va
+                        && u64::from(rva) + 8
+                            <= u64::from(section.va) + u64::from(section.virtual_size)
+                }) {
+                    return Err("attach export is outside executable section".into());
+                }
+                let prefix: [u8; 8] = bytes_at(bytes, offset, 8)?
+                    .try_into()
+                    .map_err(|_| "export prefix size")?;
+                if *wanted == "DbgBreakPoint" && prefix[..2] != [0xCC, 0xC3] {
+                    return Err("DbgBreakPoint is not the expected INT3/RET stub".into());
+                }
+                for (field_rva, field_offset, length) in [
+                    (
+                        functions_rva + ordinal as u32 * 4,
+                        functions + ordinal * 4,
+                        4,
+                    ),
+                    (names_rva + index as u32 * 4, names + index * 4, 4),
+                    (ordinals_rva + index as u32 * 2, ordinals + index * 2, 2),
+                ] {
+                    add_field(&mut fields, bytes, field_rva, field_offset, length)?;
+                }
+                let name_offset = mapped_offset(&sections, headers, name_rva, name.len() + 1)?;
+                add_field(&mut fields, bytes, name_rva, name_offset, name.len() + 1)?;
+                exports.push(Export {
+                    name: (*wanted).into(),
+                    rva,
+                    prefix,
+                });
+            }
+            if exports.len() != EXPORT_NAMES.len() {
+                return Err("required direct ntdll export is missing".into());
+            }
+            Ok(Self {
+                size,
+                fields,
+                exports,
+            })
+        }
+
+        pub fn export(&self, name: &str) -> Result<&Export> {
+            self.exports
+                .iter()
+                .find(|export| export.name == name)
+                .ok_or_else(|| "missing audited export".into())
+        }
+
+        pub fn verify_loaded(
+            &self,
+            reader: &impl ShortImageReader,
+            base: u64,
+            size: u32,
+        ) -> Result<VerifiedAttachExports> {
+            if base == 0 || size != self.size {
+                return Err("loaded ntdll ASLR base/image size mismatch".into());
+            }
+            for field in &self.fields {
+                if field.bytes.is_empty()
+                    || field.bytes.len() > 8
+                    || u64::from(field.rva) + field.bytes.len() as u64 > u64::from(size)
+                {
+                    return Err("invalid short PE identity field".into());
+                }
+                let address = base
+                    .checked_add(u64::from(field.rva))
+                    .ok_or("loaded PE address overflow")?;
+                if reader.read_field(address, field.bytes.len())? != field.bytes {
+                    return Err(format!(
+                        "loaded ntdll PE/export field mismatch at RVA {:#x}",
+                        field.rva
+                    ));
+                }
+            }
+            for export in &self.exports {
+                let address = base
+                    .checked_add(u64::from(export.rva))
+                    .ok_or("loaded export address overflow")?;
+                if reader.read_field(address, 8)? != export.prefix {
+                    return Err(format!(
+                        "loaded ntdll export prefix mismatch: {}",
+                        export.name
+                    ));
+                }
+            }
+            Ok(VerifiedAttachExports {
+                breakpoint_address: base
+                    .checked_add(u64::from(self.export("DbgBreakPoint")?.rva))
+                    .ok_or("breakpoint address overflow")?,
+                breakin_address: base
+                    .checked_add(u64::from(self.export("DbgUiRemoteBreakin")?.rva))
+                    .ok_or("break-in address overflow")?,
+            })
+        }
+    }
+}
+
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod platform {
-    use super::{policy::*, *};
+    use super::{attach_image::*, policy::*, *};
     use serde_json::{json, Value};
     use sha2::{Digest, Sha256};
     use std::{
-        collections::BTreeMap,
+        collections::{BTreeMap, BTreeSet},
         ffi::{c_void, OsString},
         fs::{File, OpenOptions},
         io::{Read, Write},
@@ -470,9 +899,9 @@ mod platform {
     };
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, GetLastError, DBG_CONTINUE, DBG_EXCEPTION_NOT_HANDLED,
+            CloseHandle, FreeLibrary, GetLastError, DBG_CONTINUE, DBG_EXCEPTION_NOT_HANDLED,
             ERROR_NO_MORE_FILES, ERROR_SEM_TIMEOUT, EXCEPTION_SINGLE_STEP, FILETIME, HANDLE,
-            INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+            HMODULE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
         },
         Storage::FileSystem::{GetFinalPathNameByHandleW, FILE_SHARE_READ},
         System::{
@@ -492,12 +921,18 @@ mod platform {
                     THREADENTRY32,
                 },
             },
+            LibraryLoader::{
+                GetModuleFileNameW, GetModuleHandleExW, GetModuleHandleW, GetProcAddress,
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            },
+            SystemInformation::GetSystemDirectoryW,
             Threading::{
                 GetProcessId, GetProcessIdOfThread, GetProcessTimes, IsWow64Process, OpenProcess,
                 OpenThread, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
                 WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-                PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_LIMITED_INFORMATION,
-                THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_SYNCHRONIZE,
+                PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
+                THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
+                THREAD_SYNCHRONIZE,
             },
         },
     };
@@ -656,29 +1091,38 @@ mod platform {
         }
 
         fn read<const N: usize>(&self, address: u64) -> Result<[u8; N]> {
-            if !(1..=8).contains(&N) || address == 0 || address.checked_add(N as u64).is_none() {
+            self.read_short(address, N)?
+                .try_into()
+                .map_err(|_| "short fixed field size mismatch".into())
+        }
+
+        fn read_short(&self, address: u64, length: usize) -> Result<Vec<u8>> {
+            if !(1..=8).contains(&length)
+                || address == 0
+                || address.checked_add(length as u64).is_none()
+            {
                 return Err("invalid bounded field read".into());
             }
-            let mut bytes = [0; N];
+            let mut bytes = [0; 8];
             let mut received = 0;
             // SAFETY: Windows validates the remote address; local destination
-            // is exactly N bytes. This boundary accepts only fields <= 8 bytes.
+            // is at least length bytes. This boundary accepts only fields <= 8 bytes.
             if unsafe {
                 ReadProcessMemory(
                     self.handle.0,
                     address as *const c_void,
                     bytes.as_mut_ptr().cast(),
-                    N,
+                    length,
                     &mut received,
                 )
             } == 0
             {
                 return Err(win_error("ReadProcessMemory(field <= 8 bytes)"));
             }
-            if received != N {
+            if received != length {
                 return Err("short remote field read".into());
             }
-            Ok(bytes)
+            Ok(bytes[..length].to_vec())
         }
 
         fn at(base: u64, offset: u64) -> Result<u64> {
@@ -722,6 +1166,12 @@ mod platform {
                 "raw_receiver_plus_a8_i32": raw_read(self.i32_at(trigger.receiver, 0xA8)),
                 "raw_pointee_fields": pointee,
             })
+        }
+    }
+
+    impl ShortImageReader for Process {
+        fn read_field(&self, address: u64, length: usize) -> Result<Vec<u8>> {
+            self.read_short(address, length)
         }
     }
 
@@ -785,6 +1235,239 @@ mod platform {
         }
         process.verify()?;
         found.ok_or_else(|| "specified XP2 module is not loaded".into())
+    }
+
+    fn system_ntdll_path() -> Result<String> {
+        let mut buffer = vec![0u16; 32768];
+        // SAFETY: bounded writable UTF-16 buffer; native x64 system directory.
+        let length = unsafe { GetSystemDirectoryW(buffer.as_mut_ptr(), buffer.len() as u32) };
+        if length == 0 {
+            return Err(win_error("GetSystemDirectoryW"));
+        }
+        if length as usize >= buffer.len() {
+            return Err("system directory path exceeds buffer".into());
+        }
+        path_key(&canonical(
+            &PathBuf::from(OsString::from_wide(&buffer[..length as usize])).join("ntdll.dll"),
+        )?)
+    }
+
+    fn find_ntdll(process: &Process, expected_path: &str) -> Result<ModuleIdentity> {
+        process.verify()?;
+        // SAFETY: metadata snapshot only for the already pinned PID.
+        let snapshot = Handle::new(
+            unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, process.pinned.pid) },
+            "ntdll module snapshot",
+        )?;
+        let mut entry = MODULEENTRY32W {
+            dwSize: size_of::<MODULEENTRY32W>() as u32,
+            ..Default::default()
+        };
+        // SAFETY: valid snapshot and sized metadata destination.
+        if unsafe { Module32FirstW(snapshot.0, &mut entry) } == 0 {
+            return Err(win_error("Module32FirstW(ntdll)"));
+        }
+        let mut found = None;
+        loop {
+            if wide_path(&entry.szModule)?
+                .to_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case("ntdll.dll"))
+            {
+                let image = ModuleIdentity {
+                    path: path_key(&canonical(&wide_path(&entry.szExePath)?)?)?,
+                    base: entry.modBaseAddr as u64,
+                    size: entry.modBaseSize,
+                };
+                if found.is_some()
+                    || image.path != expected_path
+                    || entry.th32ProcessID != process.pinned.pid
+                {
+                    return Err("ntdll path/PID/unique-image mismatch".into());
+                }
+                found = Some(image);
+            }
+            // SAFETY: same snapshot and destination.
+            if unsafe { Module32NextW(snapshot.0, &mut entry) } == 0 {
+                // SAFETY: inspect the enumeration status immediately.
+                if unsafe { GetLastError() } != ERROR_NO_MORE_FILES {
+                    return Err(win_error("Module32NextW(ntdll)"));
+                }
+                break;
+            }
+        }
+        process.verify()?;
+        found.ok_or_else(|| "native system ntdll is not loaded in the pinned process".into())
+    }
+
+    type NtQueryThread = unsafe extern "system" fn(HANDLE, i32, *mut c_void, u32, *mut u32) -> i32;
+
+    struct LocalThreadQuery {
+        module: HMODULE,
+        function: NtQueryThread,
+    }
+
+    impl LocalThreadQuery {
+        fn bind(expected_path: &str, image: &PeImage) -> Result<Self> {
+            let name: Vec<u16> = "ntdll.dll\0".encode_utf16().collect();
+            // SAFETY: borrow already loaded local ntdll, never load a target DLL.
+            let local = unsafe { GetModuleHandleW(name.as_ptr()) };
+            if local.is_null() {
+                return Err(win_error("GetModuleHandleW(ntdll)"));
+            }
+            // SAFETY: local module and constant nul-terminated export name.
+            let function =
+                unsafe { GetProcAddress(local, c"NtQueryInformationThread".as_ptr().cast()) }
+                    .ok_or("local NtQueryInformationThread export unavailable")?;
+            let address = function as usize as u64;
+            let expected = (local as u64)
+                .checked_add(u64::from(image.export("NtQueryInformationThread")?.rva))
+                .ok_or("local NtQuery RVA overflow")?;
+            if address != expected {
+                return Err("local NtQueryInformationThread was forwarded or moved".into());
+            }
+            let mut owner = std::ptr::null_mut();
+            // SAFETY: FROM_ADDRESS uses the address rather than dereferencing a
+            // string; take one reference to the actual owning local image.
+            if unsafe {
+                GetModuleHandleExW(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                    address as *const u16,
+                    &mut owner,
+                )
+            } == 0
+            {
+                return Err(win_error("GetModuleHandleExW(NtQuery owner)"));
+            }
+            struct Library(HMODULE);
+            impl Drop for Library {
+                fn drop(&mut self) {
+                    /* SAFETY: owned local library reference. */
+                    unsafe {
+                        FreeLibrary(self.0);
+                    }
+                }
+            }
+            let owner = Library(owner);
+            if owner.0 != local {
+                return Err("NtQueryInformationThread belongs to another local image".into());
+            }
+            let mut path = vec![0u16; 32768];
+            // SAFETY: held library reference and bounded filename destination.
+            let length =
+                unsafe { GetModuleFileNameW(owner.0, path.as_mut_ptr(), path.len() as u32) };
+            if length == 0 {
+                return Err(win_error("GetModuleFileNameW(NtQuery owner)"));
+            }
+            if length as usize >= path.len() {
+                return Err("local ntdll path exceeds buffer".into());
+            }
+            if path_key(&canonical(&PathBuf::from(OsString::from_wide(
+                &path[..length as usize],
+            )))?)?
+                != expected_path
+            {
+                return Err("local/remote ntdll file path mismatch".into());
+            }
+            // SAFETY: direct named export in its held system ntdll image. ABI
+            // follows NtQueryInformationThread. NEVER used as a remote address.
+            let function = unsafe {
+                std::mem::transmute::<unsafe extern "system" fn() -> isize, NtQueryThread>(function)
+            };
+            let module = owner.0;
+            std::mem::forget(owner);
+            Ok(Self { module, function })
+        }
+
+        fn start_address(&self, handle: &Handle) -> Result<u64> {
+            let mut start: usize = 0;
+            let mut length = 0;
+            // SAFETY: owned target thread with QUERY_INFORMATION, documented
+            // class 9, exact pointer-sized output; query only, no context write.
+            let status = unsafe {
+                (self.function)(
+                    handle.0,
+                    9,
+                    (&mut start as *mut usize).cast(),
+                    size_of::<usize>() as u32,
+                    &mut length,
+                )
+            };
+            if status < 0 {
+                return Err(format!(
+                    "NtQueryInformationThread(start): NTSTATUS {:#x}",
+                    status as u32
+                ));
+            }
+            if length != size_of::<usize>() as u32 || start == 0 {
+                return Err("OS thread start query returned invalid length/address".into());
+            }
+            Ok(start as u64)
+        }
+    }
+
+    impl Drop for LocalThreadQuery {
+        fn drop(&mut self) {
+            /* SAFETY: owned local module reference; query calls have finished. */
+            unsafe {
+                FreeLibrary(self.module);
+            }
+        }
+    }
+
+    struct PinnedNtdll {
+        identity: ModuleIdentity,
+        image: PeImage,
+        sha256: String,
+        query: LocalThreadQuery,
+        _file: File,
+    }
+
+    impl PinnedNtdll {
+        fn open(process: &Process) -> Result<Self> {
+            let path = system_ntdll_path()?;
+            let identity = find_ntdll(process, &path)?;
+            let mut file = OpenOptions::new()
+                .read(true)
+                .share_mode(FILE_SHARE_READ)
+                .open(&path)
+                .map_err(|error| format!("open read-only system ntdll: {error}"))?;
+            if path_key(&file_path(file.as_raw_handle())?)? != path {
+                return Err("ntdll file-handle identity mismatch".into());
+            }
+            let mut bytes = Vec::new();
+            (&mut file)
+                .take((MAX_FILE_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)
+                .map_err(|error| format!("read bounded ntdll file: {error}"))?;
+            if bytes.len() > MAX_FILE_BYTES {
+                return Err("ntdll file exceeds finite size limit".into());
+            }
+            let sha256 = format!("{:X}", Sha256::digest(&bytes));
+            let image = PeImage::parse(&bytes)?;
+            image.verify_loaded(process, identity.base, identity.size)?;
+            let query = LocalThreadQuery::bind(&path, &image)?;
+            Ok(Self {
+                identity,
+                image,
+                sha256,
+                query,
+                _file: file,
+            })
+        }
+
+        fn verify(&self, process: &Process) -> Result<VerifiedAttachExports> {
+            if find_ntdll(process, &self.identity.path)? != self.identity {
+                return Err("pinned ntdll module identity changed".into());
+            }
+            self.image
+                .verify_loaded(process, self.identity.base, self.identity.size)
+        }
+
+        fn report(&self) -> Value {
+            json!({"module":self.identity,"file_sha256":self.sha256,
+            "exports":self.image.exports,"checked_remote_fields":self.image.fields.len(),
+            "scope":"PE_metadata_and_eight_byte_export_prefixes"})
+        }
     }
 
     struct PinnedModule {
@@ -921,7 +1604,7 @@ mod platform {
         }
     }
 
-    fn preflight_threads(process: &Process) -> Result<()> {
+    fn preflight_threads(process: &Process) -> Result<BTreeSet<u32>> {
         // SAFETY: thread metadata only; filter ownership before opening handles.
         let snapshot = Handle::new(
             unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) },
@@ -936,6 +1619,7 @@ mod platform {
             return Err(win_error("Thread32First"));
         }
         let mut count = 0;
+        let mut tids = BTreeSet::new();
         loop {
             if entry.th32OwnerProcessID == process.pinned.pid {
                 // SAFETY: only a thread reported as owned by the pinned PID.
@@ -969,6 +1653,7 @@ mod platform {
                     ));
                 }
                 count += 1;
+                tids.insert(entry.th32ThreadID);
             }
             // SAFETY: same snapshot and sized entry.
             if unsafe { Thread32Next(snapshot.0, &mut entry) } == 0 {
@@ -982,7 +1667,8 @@ mod platform {
         if count == 0 {
             return Err("pinned process has no accessible threads".into());
         }
-        process.verify()
+        process.verify()?;
+        Ok(tids)
     }
 
     struct Thread {
@@ -1001,6 +1687,11 @@ mod platform {
     struct Session {
         process: Process,
         module: PinnedModule,
+        ntdll: PinnedNtdll,
+        preexisting_threads: BTreeSet<u32>,
+        attach_query_error_count: u64,
+        attach_query_errors: Vec<Value>,
+        breakin_query_handles: BTreeMap<u32, Handle>,
         threads: BTreeMap<u32, Thread>,
         event_threads: BTreeMap<u32, Handle>,
         debug_process: Option<Handle>,
@@ -1017,9 +1708,11 @@ mod platform {
     }
 
     impl Session {
-        fn attach(process: Process, module: PinnedModule) -> Result<Self> {
-            preflight_threads(&process)?;
+        fn attach(process: Process, module: PinnedModule, ntdll: PinnedNtdll) -> Result<Self> {
+            let preexisting_threads = preflight_threads(&process)?;
             module.verify(&process)?;
+            let mut exceptions = ExceptionPolicy::default();
+            exceptions.attach.bind(ntdll.verify(&process)?);
             process.verify()?;
             // SAFETY: only the PID whose creation/path/module were checked
             // against the still-owned process handle immediately above.
@@ -1031,10 +1724,15 @@ mod platform {
             Ok(Self {
                 process,
                 module,
+                ntdll,
+                preexisting_threads,
+                attach_query_error_count: 0,
+                attach_query_errors: Vec::new(),
+                breakin_query_handles: BTreeMap::new(),
                 threads: BTreeMap::new(),
                 event_threads: BTreeMap::new(),
                 debug_process: None,
-                exceptions: ExceptionPolicy::default(),
+                exceptions,
                 owns_probes: false,
                 cleanup_exception_records: Vec::new(),
                 module_event_seen: false,
@@ -1052,7 +1750,51 @@ mod platform {
             cleanup(self)
         }
 
-        fn add_thread(&mut self, tid: u32, raw: HANDLE) -> Result<()> {
+        fn register_os_start(
+            &mut self,
+            tid: u32,
+            event_start: Option<u64>,
+            start: Result<u64>,
+        ) -> Result<bool> {
+            if let Err(error) = &start {
+                self.attach_query_error_count = self.attach_query_error_count.saturating_add(1);
+                if self.attach_query_errors.len() < 16 {
+                    self.attach_query_errors.push(json!({"tid":tid,
+                    "raw_event_start":event_start,"query_error":error}));
+                }
+                return Ok(false);
+            }
+            self.exceptions.attach.register(
+                tid,
+                event_start,
+                start,
+                self.preexisting_threads.contains(&tid),
+            )
+        }
+
+        fn register_cleanup_thread(&mut self, tid: u32, event_start: Option<u64>) -> Result<()> {
+            if self.ready {
+                return Ok(());
+            }
+            // SAFETY: event TID from the pinned PID; query only, owner verified
+            // before using the handle. Keep a successful candidate's handle.
+            let handle = Handle::new(
+                unsafe { OpenThread(THREAD_QUERY_INFORMATION | THREAD_SYNCHRONIZE, 0, tid) },
+                "OpenThread(cleanup attach identity)",
+            )?;
+            // SAFETY: query ownership on that same handle; never touch its context.
+            if unsafe { GetProcessIdOfThread(handle.0) } != self.process.pinned.pid {
+                return Err("cleanup attach thread owner mismatch".into());
+            }
+            self.process.verify()?;
+            let start = self.ntdll.query.start_address(&handle);
+            if self.register_os_start(tid, event_start, start)? {
+                self.breakin_query_handles.insert(tid, handle);
+            }
+            Ok(())
+        }
+
+        fn add_thread(&mut self, tid: u32, raw: HANDLE, event_start: Option<u64>) -> Result<()> {
             let event_handle = Handle::new(raw, "debug event thread handle")?;
             if self.event_threads.contains_key(&tid) {
                 return Err("duplicate live debug thread ID".into());
@@ -1068,6 +1810,7 @@ mod platform {
                             | THREAD_SET_CONTEXT
                             | THREAD_SUSPEND_RESUME
                             | THREAD_QUERY_LIMITED_INFORMATION
+                            | THREAD_QUERY_INFORMATION
                             | THREAD_SYNCHRONIZE,
                         0,
                         tid,
@@ -1097,6 +1840,10 @@ mod platform {
                 return Err(format!(
                     "pre-existing debug registers on attached/new thread {tid}"
                 ));
+            }
+            if !self.ready {
+                let start = self.ntdll.query.start_address(&thread.handle);
+                self.register_os_start(tid, event_start, start)?;
             }
             if self.ready && !self.cleaned {
                 self.install(tid)?;
@@ -1199,8 +1946,11 @@ mod platform {
                         Some(Handle::new(info.hFile, "debug image file")?)
                     };
                     self.debug_process = Some(Handle::new(info.hProcess, "debug process")?);
-                    self.exceptions.attach.initial_tid = Some(event.dwThreadId);
-                    let thread_result = self.add_thread(event.dwThreadId, info.hThread);
+                    let thread_result = self.add_thread(
+                        event.dwThreadId,
+                        info.hThread,
+                        info.lpStartAddress.map(|start| start as usize as u64),
+                    );
                     let actual = identity(
                         self.debug_process
                             .as_ref()
@@ -1220,7 +1970,12 @@ mod platform {
                 }
                 CREATE_THREAD_DEBUG_EVENT => {
                     // SAFETY: arm selected by event code. All threads are stopped.
-                    self.add_thread(event.dwThreadId, unsafe { event.u.CreateThread.hThread })?;
+                    let info = unsafe { event.u.CreateThread };
+                    self.add_thread(
+                        event.dwThreadId,
+                        info.hThread,
+                        info.lpStartAddress.map(|start| start as usize as u64),
+                    )?;
                 }
                 LOAD_DLL_DEBUG_EVENT => {
                     // SAFETY: arm selected by event code; close every hFile,
@@ -1274,6 +2029,34 @@ mod platform {
             }
         }
 
+        fn route_exception(
+            &mut self,
+            raw: RawException,
+            snapshot: Option<ProbeSnapshot>,
+        ) -> Result<ExceptionDecision> {
+            if self.exceptions.attach.matches(raw) {
+                // Recheck the pinned image and the same event-thread handle at
+                // the actual break, rather than relying on a stale registration.
+                self.ntdll.verify(&self.process)?;
+                let handle = self
+                    .threads
+                    .get(&raw.tid)
+                    .map(|thread| &thread.handle)
+                    .or_else(|| self.breakin_query_handles.get(&raw.tid))
+                    .ok_or("registered attach thread handle missing")?;
+                let start = self.ntdll.query.start_address(handle)?;
+                if self.exceptions.attach.breakin_threads.get(&raw.tid) != Some(&start) {
+                    self.exceptions.attach.retire(raw.tid);
+                    return Err("registered break-in thread OS start changed".into());
+                }
+            }
+            let decision =
+                self.exceptions
+                    .decide(raw, snapshot, self.module.addresses, self.owns_probes);
+            self.apply_decision(decision);
+            Ok(decision)
+        }
+
         fn exception(
             &mut self,
             args: &Args,
@@ -1314,12 +2097,9 @@ mod platform {
                     rip: value.Rip,
                     flags: value.EFlags,
                 });
-            let decision =
-                self.exceptions
-                    .decide(raw, snapshot, self.module.addresses, self.owns_probes);
+            let decision = self.route_exception(raw, snapshot)?;
             // Set continuation BEFORE logging, raw reads, or context updates.
             // The same policy is used when draining queued events in cleanup.
-            self.apply_decision(decision);
             if decision == ExceptionDecision::AttachBreak {
                 // Attach's synthetic break is the only software exception we handle.
                 if !self.module_event_seen {
@@ -1339,6 +2119,7 @@ mod platform {
                     "image_path":self.process.pinned.image_path, "module":self.module.identity,
                     "module_file_sha256":MODULE_SHA256, "probe_rvas":RVAS,
                     "threads_installed":self.installed_total, "ready_path":args.ready_path(),
+                    "attach_break":self.exceptions.attach, "ntdll_identity":self.ntdll.report(),
                     "semantics":"raw_fields_only"});
                 let mut marker = OpenOptions::new()
                     .write(true)
@@ -1575,6 +2356,8 @@ mod platform {
                     handle.closed_by_continue();
                 }
                 self.threads.remove(&event.dwThreadId);
+                self.exceptions.attach.retire(event.dwThreadId);
+                self.breakin_query_handles.remove(&event.dwThreadId);
             }
             if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
                 if let Some(process) = self.debug_process.take() {
@@ -1634,18 +2417,23 @@ mod platform {
                                 event.dwThreadId,
                                 Handle::new(info.hThread, "cleanup initial thread")?,
                             );
-                            self.exceptions.attach.initial_tid = Some(event.dwThreadId);
+                            self.register_cleanup_thread(
+                                event.dwThreadId,
+                                info.lpStartAddress.map(|start| start as usize as u64),
+                            )?;
                         }
                         CREATE_THREAD_DEBUG_EVENT => {
                             // SAFETY: event code selects this union arm. Never
                             // install probes while cleaning up a queued new thread.
+                            let info = unsafe { event.u.CreateThread };
                             self.event_threads.insert(
                                 event.dwThreadId,
-                                Handle::new(
-                                    unsafe { event.u.CreateThread.hThread },
-                                    "cleanup new thread",
-                                )?,
+                                Handle::new(info.hThread, "cleanup new thread")?,
                             );
+                            self.register_cleanup_thread(
+                                event.dwThreadId,
+                                info.lpStartAddress.map(|start| start as usize as u64),
+                            )?;
                         }
                         LOAD_DLL_DEBUG_EVENT => {
                             // SAFETY: file handle from this union arm is ours.
@@ -1668,13 +2456,7 @@ mod platform {
                                 .threads
                                 .get(&event.dwThreadId)
                                 .and_then(|thread| thread.cleanup_snapshot);
-                            let decision = self.exceptions.decide(
-                                raw,
-                                snapshot,
-                                self.module.addresses,
-                                self.owns_probes,
-                            );
-                            self.apply_decision(decision);
+                            let decision = self.route_exception(raw, snapshot)?;
                             if matches!(
                                 decision,
                                 ExceptionDecision::ForwardFirstChance { record: true }
@@ -1847,13 +2629,18 @@ mod platform {
             .map_err(|e| format!("install cancellation handler: {e}"))?;
             let process = Process::open(args)?;
             let module = PinnedModule::open(&process)?;
-            session = Some(Session::attach(process, module)?);
+            let ntdll = PinnedNtdll::open(&process)?;
+            session = Some(Session::attach(process, module, ntdll)?);
             session
                 .as_mut()
                 .ok_or("missing debug session")?
                 .observe(args, &mut output, &cancelled)
         }))
         .unwrap_or_else(|_| Err("observer panicked; running centralized cleanup".into()));
+        let outcome = require_ready(
+            outcome,
+            session.as_ref().is_some_and(|session| session.ready),
+        );
         // The only orderly cleanup path, before any completion output can fail.
         let cleanup_report = session.as_mut().map(Session::finish);
         let complete = cleanup_report.as_ref().is_none_or(CleanupReport::complete);
@@ -1865,6 +2652,9 @@ mod platform {
             "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
             "exceptions":session.as_ref().map(|s| &s.exceptions),
             "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
+            "ntdll_identity":session.as_ref().map(|s| s.ntdll.report()),
+            "attach_query_error_count":session.as_ref().map_or(0, |s| s.attach_query_error_count),
+            "attach_query_errors":session.as_ref().map(|s| &s.attach_query_errors),
             "semantics":"raw_fields_only", "product_acceptance":false});
         let file_result = write_json(&mut output, &exit);
         let stdout_result = write_json(&mut std::io::stdout().lock(), &exit);
@@ -1895,7 +2685,116 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::attach_image::*;
     use super::{policy::*, *};
+    use std::cell::RefCell;
+
+    fn pe_fixture() -> Vec<u8> {
+        let mut bytes = vec![0; 0xA00];
+        fn put16(bytes: &mut [u8], offset: usize, value: u16) {
+            bytes[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+        }
+        fn put32(bytes: &mut [u8], offset: usize, value: u32) {
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        put16(&mut bytes, 0, 0x5A4D);
+        put32(&mut bytes, 0x3C, 0x80);
+        put32(&mut bytes, 0x80, 0x4550);
+        put16(&mut bytes, 0x84, 0x8664);
+        put16(&mut bytes, 0x86, 2);
+        put16(&mut bytes, 0x94, 240);
+        put16(&mut bytes, 0x96, 0x2022);
+        let opt = 0x98;
+        put16(&mut bytes, opt, 0x20B);
+        put32(&mut bytes, opt + 56, 0x5000);
+        put32(&mut bytes, opt + 60, 0x200);
+        put32(&mut bytes, opt + 108, 16);
+        put32(&mut bytes, opt + 112, 0x3000);
+        put32(&mut bytes, opt + 116, 0x200);
+        for (index, va, raw, flags) in [
+            (0, 0x1000, 0x200, 0x60000020),
+            (1, 0x3000, 0x600, 0x40000040),
+        ] {
+            let section = 0x188 + index * 40;
+            put32(&mut bytes, section + 8, 0x400);
+            put32(&mut bytes, section + 12, va);
+            put32(&mut bytes, section + 16, 0x400);
+            put32(&mut bytes, section + 20, raw);
+            put32(&mut bytes, section + 36, flags);
+        }
+        put32(&mut bytes, 0x600 + 20, 3);
+        put32(&mut bytes, 0x600 + 24, 3);
+        put32(&mut bytes, 0x600 + 28, 0x3040);
+        put32(&mut bytes, 0x600 + 32, 0x3060);
+        put32(&mut bytes, 0x600 + 36, 0x3080);
+        let mut string_offset = 0x6A0;
+        for (index, name) in EXPORT_NAMES.iter().enumerate() {
+            put32(&mut bytes, 0x640 + index * 4, 0x1010 + index as u32 * 0x20);
+            put32(
+                &mut bytes,
+                0x660 + index * 4,
+                0x3000 + (string_offset - 0x600) as u32,
+            );
+            put16(&mut bytes, 0x680 + index * 2, index as u16);
+            bytes[string_offset..string_offset + name.len()].copy_from_slice(name.as_bytes());
+            string_offset += name.len() + 1;
+        }
+        bytes[0x210..0x218].copy_from_slice(&[0xCC, 0xC3, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90]);
+        bytes[0x230..0x238].copy_from_slice(&[0x48, 0x83, 0xEC, 0x38, 0x48, 0x8B, 0x05, 0x01]);
+        bytes[0x250..0x258].copy_from_slice(&[0x4C, 0x8B, 0xD1, 0xB8, 0x25, 0, 0, 0]);
+        bytes
+    }
+
+    struct FixtureReader {
+        base: u64,
+        bytes: Vec<u8>,
+        calls: RefCell<Vec<(u64, usize)>>,
+    }
+    impl FixtureReader {
+        fn new(file: &[u8], base: u64) -> Self {
+            let mut bytes = vec![0; 0x5000];
+            bytes[..0x200].copy_from_slice(&file[..0x200]);
+            bytes[0x1000..0x1400].copy_from_slice(&file[0x200..0x600]);
+            bytes[0x3000..0x3400].copy_from_slice(&file[0x600..0xA00]);
+            Self {
+                base,
+                bytes,
+                calls: RefCell::new(Vec::new()),
+            }
+        }
+    }
+    impl ShortImageReader for FixtureReader {
+        fn read_field(&self, address: u64, length: usize) -> Result<Vec<u8>> {
+            assert!(
+                (1..=8).contains(&length),
+                "must never turn identity checks into a dump"
+            );
+            self.calls.borrow_mut().push((address, length));
+            let offset = address
+                .checked_sub(self.base)
+                .ok_or("mock wrong image base")? as usize;
+            self.bytes
+                .get(offset..offset.checked_add(length).ok_or("mock field overflow")?)
+                .map(|bytes| bytes.to_vec())
+                .ok_or_else(|| "mock inaccessible PE field".into())
+        }
+    }
+
+    fn verified_fixture() -> VerifiedAttachExports {
+        let file = pe_fixture();
+        let image = PeImage::parse(&file).unwrap();
+        let reader = FixtureReader::new(&file, 0x7FFF00000000);
+        image.verify_loaded(&reader, reader.base, 0x5000).unwrap()
+    }
+
+    fn breakpoint(tid: u32, address: u64) -> RawException {
+        RawException {
+            tid,
+            code: 0x80000003,
+            first_chance: 1,
+            exception_address: address,
+        }
+    }
 
     fn identity() -> Identity {
         Identity {
@@ -2253,19 +3152,223 @@ mod tests {
     }
 
     #[test]
-    fn attach_break_is_only_consumed_once_on_the_initial_thread() {
-        let mut policy = AttachBreak::default();
-        assert!(!policy.consume(0x80000003, 1, 9));
-        policy.initial_tid = Some(9);
-        assert!(!policy.consume(0x80000003, 0, 9));
-        assert!(!policy.consume(0x80000003, 1, 10));
-        assert!(!policy.consume(0xc0000005, 1, 9));
-        assert!(!policy.consume(0x80000004, 1, 9));
-        assert!(policy.consume(0x80000003, 1, 9));
-        // Failed setup before ready must not turn a later breakpoint into
-        // another handled attach break during cleanup.
-        assert!(!policy.consume(0x80000003, 1, 9));
-        assert!(!policy.consume(0x80000004, 1, 9));
+    fn attach_break_accepts_verified_breakin_thread_different_from_process_event_thread_once() {
+        let image = verified_fixture();
+        let main_tid = 51932;
+        let breakin_tid = 45400;
+        let mut policy = ExceptionPolicy::default();
+        policy.attach.bind(image.clone());
+        assert!(!policy
+            .attach
+            .register(main_tid, None, Ok(image.breakin_address()), true)
+            .unwrap());
+        assert!(policy
+            .attach
+            .register(breakin_tid, None, Ok(image.breakin_address()), false)
+            .unwrap());
+        let event = breakpoint(breakin_tid, image.breakpoint_address());
+        assert_eq!(
+            policy.decide(event, None, [11, 22, 33, 44], false),
+            ExceptionDecision::AttachBreak
+        );
+        assert_eq!(
+            policy.decide(event, None, [11, 22, 33, 44], false),
+            ExceptionDecision::ForwardFirstChance { record: true }
+        );
+    }
+
+    #[test]
+    fn attach_break_rejects_same_address_on_app_threads_other_start_or_unverified_image() {
+        let image = verified_fixture();
+        for (event_start, os_start, preexisting, bind) in [
+            (None, Ok(image.breakin_address() + 1), false, true),
+            (
+                Some(image.breakin_address() + 1),
+                Ok(image.breakin_address()),
+                false,
+                true,
+            ),
+            (None, Ok(image.breakin_address()), true, true),
+            (None, Ok(image.breakin_address()), false, false),
+            (None, Err("OS query unavailable".into()), false, true),
+        ] {
+            let mut policy = ExceptionPolicy::default();
+            if bind {
+                policy.attach.bind(image.clone());
+            }
+            assert!(!policy
+                .attach
+                .register(7, event_start, os_start, preexisting)
+                .unwrap_or(false));
+            let decision = policy.decide(
+                breakpoint(7, image.breakpoint_address()),
+                None,
+                [11, 22, 33, 44],
+                false,
+            );
+            assert_eq!(
+                decision,
+                ExceptionDecision::ForwardFirstChance { record: true }
+            );
+            assert!(!decision.handled());
+        }
+    }
+
+    #[test]
+    fn attach_break_os_query_identifies_null_event_start_and_rejects_second_chance() {
+        let image = verified_fixture();
+        let mut policy = ExceptionPolicy::default();
+        policy.attach.bind(image.clone());
+        assert!(policy
+            .attach
+            .register(7, None, Ok(image.breakin_address()), false)
+            .unwrap());
+        let second = RawException {
+            first_chance: 0,
+            ..breakpoint(7, image.breakpoint_address())
+        };
+        assert_eq!(
+            policy.decide(second, None, [11, 22, 33, 44], false),
+            ExceptionDecision::ForwardSecondChance
+        );
+        assert!(!policy
+            .attach
+            .consume(breakpoint(8, image.breakpoint_address())));
+        assert!(!policy
+            .attach
+            .consume(breakpoint(7, image.breakpoint_address() + 1)));
+        assert!(policy
+            .attach
+            .consume(breakpoint(7, image.breakpoint_address())));
+        policy.attach.retire(7);
+        assert!(!policy
+            .attach
+            .consume(breakpoint(7, image.breakpoint_address())));
+    }
+
+    #[test]
+    fn attach_pe_direct_exports_and_short_remote_reads_follow_aslr_and_section_mapping() {
+        let file = pe_fixture();
+        let image = PeImage::parse(&file).unwrap();
+        for base in [0x180000000, 0x7FFF12340000] {
+            let reader = FixtureReader::new(&file, base);
+            let verified = image.verify_loaded(&reader, base, 0x5000).unwrap();
+            assert_eq!(verified.breakpoint_address(), base + 0x1010);
+            assert_eq!(verified.breakin_address(), base + 0x1030);
+            assert_eq!(
+                image.export("DbgBreakPoint").unwrap().prefix[..2],
+                [0xCC, 0xC3]
+            );
+            assert!(reader.calls.borrow().len() < 128);
+            assert!(reader.calls.borrow().iter().all(|(_, size)| *size <= 8));
+        }
+    }
+
+    #[test]
+    fn attach_pe_rejects_file_header_export_forwarder_ordinal_and_prefix_mismatch() {
+        for (offset, replacement) in [
+            (0, vec![0, 0]),
+            (0x84, vec![0x4C, 0x01]),
+            (0x98, vec![0x0B, 0x01]),
+            (0x640, 0x3100u32.to_le_bytes().to_vec()),
+            (0x680, 3u16.to_le_bytes().to_vec()),
+            (0x210, vec![0x90, 0xC3]),
+            (0x98 + 56, 1u32.to_le_bytes().to_vec()),
+        ] {
+            let mut bytes = pe_fixture();
+            bytes[offset..offset + replacement.len()].copy_from_slice(&replacement);
+            assert!(
+                PeImage::parse(&bytes).is_err(),
+                "accepted mismatch at {offset:#x}"
+            );
+        }
+        let file = pe_fixture();
+        for length in [0, 64, 0x90, 0x1A0, 0x601, 0xA00 - 1] {
+            assert!(PeImage::parse(&file[..length]).is_err());
+        }
+    }
+
+    #[test]
+    fn attach_pe_rejects_loaded_header_export_bytes_and_wrong_image_base() {
+        let file = pe_fixture();
+        let image = PeImage::parse(&file).unwrap();
+        for rva in [
+            0x80,
+            0x98 + 56,
+            0x3040,
+            0x3060,
+            0x3080,
+            0x30A0,
+            0x1010,
+            0x1030,
+            0x1050,
+        ] {
+            let mut reader = FixtureReader::new(&file, 0x7FFF00000000);
+            reader.bytes[rva] ^= 1;
+            assert!(
+                image.verify_loaded(&reader, reader.base, 0x5000).is_err(),
+                "accepted changed loaded field {rva:#x}"
+            );
+        }
+        let reader = FixtureReader::new(&file, 0x7FFF00000000);
+        assert!(image
+            .verify_loaded(&reader, reader.base + 1, 0x5000)
+            .is_err());
+        assert!(image.verify_loaded(&reader, reader.base, 0x6000).is_err());
+        assert!(image.verify_loaded(&reader, u64::MAX - 1, 0x5000).is_err());
+    }
+
+    #[test]
+    fn attach_registration_then_error_keeps_cleanup_finite_and_never_accepts_ambiguous_thread() {
+        let image = verified_fixture();
+        let mut policy = ExceptionPolicy::default();
+        policy.attach.bind(image.clone());
+        assert!(policy
+            .attach
+            .register(7, None, Ok(image.breakin_address()), false)
+            .unwrap());
+        assert!(policy
+            .attach
+            .register(8, None, Ok(image.breakin_address()), false)
+            .is_err());
+        let decision = policy.decide(
+            breakpoint(7, image.breakpoint_address()),
+            None,
+            [11, 22, 33, 44],
+            false,
+        );
+        assert_eq!(
+            decision,
+            ExceptionDecision::ForwardFirstChance { record: true }
+        );
+        let mut backend = MockCleanup::default();
+        let report = cleanup(&mut backend);
+        assert_eq!(
+            backend.calls,
+            [
+                "freeze",
+                "restore:10",
+                "restore:20",
+                "restore:30",
+                "continue",
+                "drain",
+                "detach",
+                "resume"
+            ]
+        );
+        assert!(report.complete());
+    }
+
+    #[test]
+    fn attach_no_ready_deadline_or_exit_never_reports_a_successful_diagnostic() {
+        for reason in ["deadline", "cancelled", "process_exited"] {
+            assert!(require_ready(Ok(reason), false).is_err());
+        }
+        assert_eq!(require_ready(Ok("deadline"), true).unwrap(), "deadline");
+        assert_eq!(
+            require_ready(Err("setup error".into()), false).unwrap_err(),
+            "setup error"
+        );
     }
 
     #[test]
