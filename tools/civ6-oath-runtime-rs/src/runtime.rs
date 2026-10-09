@@ -13,7 +13,6 @@
 use crate::native::*;
 use crate::oath_record::{OathCall, OATH_ENTRY_HEAD};
 use crate::oath_trace::{install_oath_at, uninstall_oath, OathTrace};
-use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
@@ -144,7 +143,7 @@ pub fn validate(config: &OathRuntimeConfig) -> Result<(), OathStatus> {
 
 /// What the identity preflight proved, as addresses inside the verified image.
 #[derive(Clone, Copy, Debug)]
-pub struct Verified {
+pub(crate) struct Verified {
     pub image_base: usize,
     /// An address inside the verified GameCore module, to be pinned.
     pub core_module: usize,
@@ -152,12 +151,14 @@ pub struct Verified {
     pub remove_entry: usize,
 }
 
-/// Port for the deep identity checks. It must not write anything.
-pub trait Gate {
+/// Port for the deep identity checks. It must not write anything. Sealed to
+/// the crate: no export takes a caller-provided gate, so nothing outside can
+/// skip the checks; only tests inject one.
+pub(crate) trait Gate {
     fn verify(&self, config: &OathRuntimeConfig) -> Result<Verified, OathStatus>;
 }
 
-pub fn current_created_filetime() -> Option<u64> {
+pub(crate) fn current_created_filetime() -> Option<u64> {
     let zero = FILETIME {
         dwLowDateTime: 0,
         dwHighDateTime: 0,
@@ -176,7 +177,7 @@ pub fn current_created_filetime() -> Option<u64> {
 }
 
 /// The checks that need no file: this is the process the caller named.
-pub fn own_process(config: &OathRuntimeConfig) -> Result<(), OathStatus> {
+pub(crate) fn own_process(config: &OathRuntimeConfig) -> Result<(), OathStatus> {
     if unsafe { GetCurrentProcessId() } != config.game_pid
         || current_created_filetime() != Some(config.created_filetime)
     {
@@ -185,45 +186,49 @@ pub fn own_process(config: &OathRuntimeConfig) -> Result<(), OathStatus> {
     Ok(())
 }
 
-/// Own-process checks, then `NotWired` until the preflight is connected.
-pub struct DefaultGate;
+/// Placeholder until the current-game gate is connected: it verifies nothing
+/// and refuses. [`current_gate`] is the one place that changes.
+pub(crate) struct DefaultGate;
 impl Gate for DefaultGate {
-    fn verify(&self, config: &OathRuntimeConfig) -> Result<Verified, OathStatus> {
-        own_process(config)?;
+    fn verify(&self, _: &OathRuntimeConfig) -> Result<Verified, OathStatus> {
         Err(OathStatus::NotWired)
     }
+}
+
+/// The gate every export uses. Final wiring replaces only this function.
+fn current_gate() -> &'static dyn Gate {
+    &DefaultGate
 }
 
 struct Runtime {
     lifecycle: Lifecycle,
     trace: Option<&'static OathTrace>,
     max_seconds: u32,
-    started: Option<Instant>,
 }
 
 static RUNTIME: Mutex<Runtime> = Mutex::new(Runtime {
     lifecycle: Lifecycle::new(),
     trace: None,
     max_seconds: 0,
-    started: None,
 });
 
 impl Runtime {
-    /// Past its bounded time a running observation stops itself lazily.
+    /// The trace enforces its own deadline in the begin callback; this only
+    /// brings the lifecycle in line with a trace that has stopped by itself.
     fn apply_deadline(&mut self) {
-        let expired = self
-            .started
-            .is_some_and(|at| at.elapsed() > Duration::from_secs(u64::from(self.max_seconds)));
-        if expired && self.lifecycle.phase() == Phase::Started {
-            let _ = self.lifecycle.stop();
-            if let Some(trace) = self.trace {
+        if self.lifecycle.phase() != Phase::Started {
+            return;
+        }
+        if let Some(trace) = self.trace {
+            if trace.poll_deadline() || trace.is_stopped() {
+                let _ = self.lifecycle.stop();
                 trace.stop();
             }
         }
     }
 }
 
-fn pin_address(address: usize) -> bool {
+pub(crate) fn pin_address(address: usize) -> bool {
     let mut module = null_mut();
     let ok = unsafe {
         GetModuleHandleExW(
@@ -243,12 +248,12 @@ fn hook_status(error: &str) -> OathStatus {
     }
 }
 
-/// Install with an explicit gate (the export uses [`DefaultGate`]).
+/// Install with an explicit gate (the export uses [`current_gate`]).
 ///
 /// Order: validate the block, own state, gate (reads only), pin the game
 /// module and this DLL, allocate an inactive trace, hook Apply then Remove,
 /// and only then write the receipt fields into the caller's block.
-pub fn install_with(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
+pub(crate) fn install_with(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
     if !committed_range(
         input as usize,
         std::mem::size_of::<OathRuntimeConfig>(),
@@ -267,6 +272,10 @@ fn install_locked(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
     };
     let mut config = unsafe { ptr::read(input.cast::<OathRuntimeConfig>()) };
     if let Err(status) = validate(&config) {
+        return status;
+    }
+    // The own-process check is the runtime's, whatever gate follows.
+    if let Err(status) = own_process(&config) {
         return status;
     }
     if !runtime.lifecycle.can_install() {
@@ -310,10 +319,9 @@ pub fn start_observation() -> OathStatus {
         runtime.apply_deadline();
         runtime.lifecycle.start()?;
         let trace = runtime.trace.ok_or(OathStatus::WrongState)?;
-        if !trace.start_once() {
+        if !trace.start_with_deadline(runtime.max_seconds) {
             return Err(OathStatus::Critical);
         }
-        runtime.started = Some(Instant::now());
         Ok(())
     })
 }
@@ -383,17 +391,14 @@ pub fn read_receipt() -> Result<OathReceipt, OathStatus> {
         receipt.dropped = dropped;
         receipt.filtered = trace.filtered();
         receipt.in_flight = trace.in_flight();
-        receipt.expired =
-            u32::from(runtime.started.is_some_and(|at| {
-                at.elapsed() > Duration::from_secs(u64::from(runtime.max_seconds))
-            }));
+        receipt.expired = u32::from(trace.poll_deadline());
     }
     Ok(receipt)
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn OathRuntimeInstall(input: *mut c_void) -> u32 {
-    install_with(&DefaultGate, input) as u32
+    install_with(current_gate(), input) as u32
 }
 
 #[unsafe(no_mangle)]

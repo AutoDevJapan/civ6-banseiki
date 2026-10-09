@@ -4,6 +4,7 @@
 use super::*;
 use crate::oath_record::COPY_ALL;
 use std::os::windows::process::CommandExt;
+use std::time::{Duration, Instant};
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
 };
@@ -457,12 +458,28 @@ fn deadline_child() {
         install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
         OathStatus::Ok
     );
-    assert_eq!(start_observation(), OathStatus::Ok);
+    let trace = unsafe { &*(config.out_trace_address as *const OathTrace) };
     let apply = verified(page).apply_entry;
+    crate::oath_trace::CLOCK_OVERRIDE.store(10_000, Ordering::SeqCst);
+    assert_eq!(start_observation(), OathStatus::Ok);
     assert_eq!(call(apply, SUPPORTED), 0x66);
-    std::thread::sleep(Duration::from_millis(1200));
+    // One tick before the deadline the call is still recorded.
+    crate::oath_trace::CLOCK_OVERRIDE.store(10_999, Ordering::SeqCst);
+    assert_eq!(call(apply, SUPPORTED), 0x66);
+    assert_eq!(trace.counters().0, 2);
+    // At the deadline the begin callback stops the run by itself: no reader
+    // has called anything, the original still runs exactly once (call() asserts
+    // it), and no row is added.
+    crate::oath_trace::CLOCK_OVERRIDE.store(11_000, Ordering::SeqCst);
+    assert_eq!(call(apply, SUPPORTED), 0x66);
+    assert_eq!(call(verified(page).remove_entry, SUPPORTED), 0x66);
+    assert_eq!(trace.counters(), (2, 2, 0));
+    assert!(trace.is_stopped());
+    assert_eq!(trace.in_flight(), 0);
     let late = receipt();
-    assert_eq!((late.phase, late.expired), (Phase::Stopped as u32, 1));
-    assert_eq!(call(apply, SUPPORTED), 0x66);
-    assert_eq!(receipt().rows, 1, "nothing after the bounded time");
+    assert_eq!(
+        (late.phase, late.expired, late.rows),
+        (Phase::Stopped as u32, 1, 2)
+    );
+    assert_eq!(start_observation(), OathStatus::WrongState);
 }

@@ -31,7 +31,9 @@ use windows_sys::Win32::System::Diagnostics::Debug::{RtlAddFunctionTable, RtlLoo
 pub const OATH_MAGIC: u32 = 0x4a41_434f; // JACO
 /// 2: rows carry the caller's raw RBP and RDI (stack arguments 7 and 8).
 /// 3: image base for the family filter and the filtered counter.
-pub const OATH_VERSION: u32 = 3;
+/// 4: a monotonic deadline (GetTickCount64 ms) the begin callback enforces;
+/// the trace grows by 16 bytes (deadline, hit flag, padding) before the rows.
+pub const OATH_VERSION: u32 = 4;
 const COUNTED: u64 = 1 << 63;
 const SLOT_MASK: u64 = 0xffff_ffff;
 const CALL_SHIFT: u32 = 48;
@@ -75,6 +77,10 @@ pub struct OathTrace {
     /// Calls of other City effects, counted and not recorded.
     filtered: AtomicU32,
     filtered_pad: u32,
+    /// 0 = none; else the tick (ms) from which no call is recorded any more.
+    deadline_ms: AtomicU64,
+    deadline_hit: AtomicU32,
+    deadline_pad: u32,
     rows: [OathRow; OATH_CAPACITY],
 }
 
@@ -102,6 +108,9 @@ impl OathTrace {
             ptr::addr_of_mut!((*target).image_base).write(AtomicU64::new(0));
             ptr::addr_of_mut!((*target).filtered).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*target).filtered_pad).write(0);
+            ptr::addr_of_mut!((*target).deadline_ms).write(AtomicU64::new(0));
+            ptr::addr_of_mut!((*target).deadline_hit).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*target).deadline_pad).write(0);
             let rows = ptr::addr_of_mut!((*target).rows).cast::<OathRow>();
             for n in 0..OATH_CAPACITY {
                 rows.add(n).write(OathRow::default());
@@ -125,6 +134,29 @@ impl OathTrace {
         self.stopped
             .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
+    }
+    /// Starts once and bounds the run: from `seconds` on, the begin callback
+    /// itself stops recording, whether or not anyone is still reading.
+    pub fn start_with_deadline(&self, seconds: u32) -> bool {
+        if self.stopped.load(Ordering::Acquire) != 1 {
+            return false;
+        }
+        let deadline = now_ms().saturating_add(u64::from(seconds) * 1000).max(1);
+        self.deadline_ms.store(deadline, Ordering::Release);
+        self.start_once()
+    }
+    fn expire_if_due(&self) -> bool {
+        let deadline = self.deadline_ms.load(Ordering::Acquire);
+        if deadline != 0 && now_ms() >= deadline {
+            self.deadline_hit.store(1, Ordering::Release);
+            self.stopped.store(2, Ordering::Release);
+            return true;
+        }
+        false
+    }
+    /// Applies the deadline for a reader and tells whether it has passed.
+    pub fn poll_deadline(&self) -> bool {
+        self.expire_if_due() || self.deadline_hit.load(Ordering::Acquire) != 0
     }
     /// Fixes the image base for the family filter; only the first value counts.
     pub fn set_image_base_once(&self, base: u64) -> bool {
@@ -223,6 +255,22 @@ fn stage_point(_stage: u32) {
     }
 }
 
+/// Test clock: nonzero replaces GetTickCount64 so deadlines can be crossed
+/// without waiting.
+#[cfg(test)]
+pub(crate) static CLOCK_OVERRIDE: AtomicU64 = AtomicU64::new(0);
+
+fn now_ms() -> u64 {
+    #[cfg(test)]
+    {
+        let overridden = CLOCK_OVERRIDE.load(Ordering::Acquire);
+        if overridden != 0 {
+            return overridden;
+        }
+    }
+    unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() }
+}
+
 /// Takes the in-flight claim and publishes it in the frame slot at once.
 /// Slot value: 0 nothing claimed, else COUNTED | call<<48 | (row+1, 0 if the
 /// buffer was full). An exception from here on is settled by the frame handler.
@@ -242,7 +290,7 @@ unsafe extern "system-unwind" fn oath_begin(
     // A stopped trace costs one load. Otherwise count first and re-check, so
     // a call that passed the check before stop() is counted until it returns
     // or unwinds; only a call racing the stop itself is transient.
-    if trace.stopped.load(Ordering::Acquire) != 0 {
+    if trace.stopped.load(Ordering::Acquire) != 0 || trace.expire_if_due() {
         return;
     }
     // Family filter, before any claim: another City effect is only counted.
