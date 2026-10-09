@@ -15,6 +15,33 @@ mod inventory;
 
 const MOD: &str = "poc/JAC_PoC_Absorption";
 
+#[test]
+fn native_loyalty_loss_uses_official_one_shot_city_effects() {
+    let db = civ6_lua_tests_rs::official::official_db();
+    let original = query_json(&db, "SELECT * FROM Modifiers ORDER BY ModifierId");
+    db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
+        .unwrap();
+    let unchanged = query_json(&db, "SELECT * FROM Modifiers WHERE ModifierId NOT LIKE 'JAC_ABSORPTION_LOYALTY_LOSS_%' ORDER BY ModifierId");
+    assert_eq!(
+        original, unchanged,
+        "native effects must not replace existing game modifiers"
+    );
+    let rows = query_json(&db, "SELECT m.ModifierId, m.RunOnce, m.Permanent, d.CollectionType, d.EffectType, a.Name, CAST(a.Value AS INTEGER) AS Amount FROM Modifiers m JOIN DynamicModifiers d ON d.ModifierType=m.ModifierType JOIN ModifierArguments a ON a.ModifierId=m.ModifierId WHERE m.ModifierId LIKE 'JAC_ABSORPTION_LOYALTY_LOSS_%' ORDER BY Amount");
+    assert_eq!(rows.len(), 4);
+    for (row, amount) in rows.iter().zip([-15, -5, -2, -1]) {
+        assert_eq!(
+            row["ModifierId"],
+            format!("JAC_ABSORPTION_LOYALTY_LOSS_{}", -amount)
+        );
+        assert_eq!(row["RunOnce"], 1);
+        assert_eq!(row["Permanent"], 1);
+        assert_eq!(row["CollectionType"], "COLLECTION_OWNER");
+        assert_eq!(row["EffectType"], "EFFECT_GRANT_CITY_LOYALTY");
+        assert_eq!(row["Name"], "Amount");
+        assert_eq!(row["Amount"], amount);
+    }
+}
+
 fn failure(message: impl Into<String>) -> mlua::Error {
     mlua::Error::RuntimeError(message.into())
 }
@@ -997,7 +1024,10 @@ fn absorption_inventory_preserves_all_120_methods_and_117_embedded_assertions() 
         ])
     );
     assert_eq!(assertions, 117);
-    assert_eq!(registered.len(), 125);
+    assert!(
+        registered.contains("absorption::native_loyalty_loss_uses_official_one_shot_city_effects")
+    );
+    assert_eq!(registered.len(), 126);
 }
 
 #[test]
