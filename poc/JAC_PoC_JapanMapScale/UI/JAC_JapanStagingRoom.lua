@@ -358,6 +358,7 @@ if Controls then
   local function syncState()
     if syncing then return end
     syncing = true
+    lastError = nil
     local active = scoped()
     local ids = active and humans() or nil
     if canEdit() then
@@ -418,6 +419,7 @@ if Controls then
   end
   local function onPreDisconnect(id)
     if scoped() and canEdit() and mode() == JAPAN then
+      lastError = nil
       departing[id] = true
       local wasSyncing = syncing
       syncing = true

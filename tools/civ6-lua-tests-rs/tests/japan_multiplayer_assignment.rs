@@ -209,9 +209,12 @@ Controls.JAC_SubjectPullDown.select(4) -- player 3
 assert(values.JAC_MP_SUBJECT==3)
 launchActive=true
 fireSyncPlayerInfo=true
+JAC_SetPlayerArea(3,'EAST')
+assert(Controls.JAC_AssignmentStatus.text=='LOC_JAC_MP_OVERLAP')
 Events.MultiplayerPrePlayerDisconnected.fire(3)
 assert(values.JAC_MP_AREA_3==nil and values.JAC_MP_SUBJECT==nil)
 assert(PlayerConfigurations[3].team==5 and not launchActive and stoppedLaunches==1)
+assert(Controls.JAC_AssignmentStatus.text=='LOC_JAC_MP_NEED_SUBJECT')
 Events.PlayerInfoChanged.fire(3) -- still marked taken before the slot update
 assert(PlayerConfigurations[3].team==5 and values.JAC_MP_PRIOR_TEAM_3==nil)
 PlayerConfigurations[3].status=SlotStatus.SS_CLOSED

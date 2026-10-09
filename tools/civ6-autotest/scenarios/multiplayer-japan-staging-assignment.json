@@ -153,9 +153,13 @@
       "timeout": 120
     },
     {
-      "action": "ui_lua",
-      "state_name": "JAC_JapanStagingRoom",
-      "code": "if not Controls.JAC_AssignmentPanel or Controls.JAC_AssignmentPanel:IsHidden() then error('assignment panel absent') end; if #Controls.JAC_AssignmentRows:GetChildren()~=2 then error('human assignment rows missing') end; if GameConfiguration.GetValue('JAC_MP_MODE')~='JAPAN' then error('assignment mode missing') end; return 'assignment panel and two human rows visible'"
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_JapanStagingRoom",
+        "code": "return not ContextPtr:IsHidden() and Controls.JAC_AssignmentPanel and not Controls.JAC_AssignmentPanel:IsHidden() and #Controls.JAC_AssignmentRows:GetChildren()==2 and GameConfiguration.GetValue('JAC_MP_MODE')=='JAPAN'"
+      },
+      "timeout": 120
     },
     {
       "action": "ui_lua",
