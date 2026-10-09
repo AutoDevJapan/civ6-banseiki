@@ -20,7 +20,7 @@ pub use steps::{evidence_from_steps, CatalogEntry, Evidence, Matrix};
 // portable; the Windows test checks them against the implementation constants.
 const CAN_EVER_RVA: u64 = 0x2d_ddd0;
 const PROPERTY_RVA: u64 = 0x99_f5c0;
-const CALIBRATION_LIMIT: usize = 1024;
+const CALIBRATION_LIMIT: usize = civ6_bootstrap_rs::protocol::CALIBRATION_CAPACITY;
 const COUNTER_SCOPE: &str = "bounded_prefix_samples_not_complete_call_history";
 
 pub(super) fn require(ok: bool, message: &str) -> Result<()> {
@@ -271,6 +271,11 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         "complete entry restoration and resident prefix required",
     )?;
 
+    let calibration_sample_limit = number(rows.last().unwrap(), "calibration_sample_limit")?;
+    require(
+        calibration_sample_limit == 1024 || calibration_sample_limit == CALIBRATION_LIMIT as u64,
+        "calibration prefix capacity unknown",
+    )?;
     let mut report = Report {
         capture_valid: true, scenario_complete:evidence.scenario_complete, successful_stop_step_verified:evidence.artifact_path.is_some(),
         qualification_positive22: false, product_acceptance: false, payment_authority: false,
@@ -285,7 +290,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         property_subject_metadata_scope:"denial_checked is a denial result, not validity; absent/zero metadata stays unknown except present 0/0 on index0 with unique calibrated owner0 receiver, same-thread prior reset902000 and native positive corroboration; cross-ring chronology unmeasured; no permission authority",
         unrelated_calibration_rows: 0,
         observed_calls: 0, dropped: 0, filtered_calls: 0, getter_calls_seen: 0,
-        calibration_sample_limit: CALIBRATION_LIMIT, property_sample_limit: TRACE_CAPACITY,
+        calibration_sample_limit: calibration_sample_limit as usize, property_sample_limit: TRACE_CAPACITY,
         full_history_authority: false, cross_ring_chronology_measured: false, gameplay_closed484: evidence.gameplay_closed484,
         ui_native_qualification: evidence.ui.clone(), gameplay_projection: evidence.gameplay.clone(),
         missing_positive_sources: Vec::new(), qualification_errors: Vec::new(),
@@ -357,7 +362,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                 report.calibration_rows += 1;
                 require(
                     number(row, "sequence")? == report.calibration_rows as u64
-                        && report.calibration_rows <= CALIBRATION_LIMIT,
+                        && report.calibration_rows <= report.calibration_sample_limit,
                     "calibration prefix is not contiguous from sequence one",
                 )?;
                 let owner = number(row, "player_id")?;
@@ -554,7 +559,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
             && stop["snapshot_stable"] == true
             && stop["quiescence_proven"] == false
             && stop["counter_scope"] == COUNTER_SCOPE
-            && number(stop, "calibration_sample_limit")? == CALIBRATION_LIMIT as u64
+            && number(stop, "calibration_sample_limit")? == report.calibration_sample_limit as u64
             && number(stop, "property_sample_limit")? == TRACE_CAPACITY as u64,
         "missing/partial stop or false full-history assertion",
     )?;
@@ -570,7 +575,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
             && report.observed_calls.checked_add(report.filtered_calls)
                 == Some(report.getter_calls_seen)
             && (report.dropped == 0
-                || report.calibration_rows == CALIBRATION_LIMIT
+                || report.calibration_rows == report.calibration_sample_limit
                 || report.property_rows == TRACE_CAPACITY),
         "raw rows, observed/dropped/filtered counters or saturated prefix disagree",
     )?;

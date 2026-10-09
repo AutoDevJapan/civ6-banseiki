@@ -845,7 +845,7 @@ fn drained_calibration_trace(
     let mut stable = 0u32;
     let mut prior = None;
     while Instant::now() < deadline {
-        let mut snapshot = Box::new(CalibrationTrace::default());
+        let mut snapshot = CalibrationTrace::boxed();
         let bytes = unsafe {
             std::slice::from_raw_parts_mut(
                 (&mut *snapshot as *mut CalibrationTrace).cast::<u8>(),
@@ -1972,7 +1972,7 @@ mod tests {
     #[test]
     fn controller_accepts_current_calibration_layout_and_rejects_old_version() {
         let process = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
-        let mut trace = Box::new(CalibrationTrace::default());
+        let mut trace = CalibrationTrace::boxed();
         let address = (&*trace as *const CalibrationTrace) as usize;
         let snapshot = drained_calibration_trace(&process, address).unwrap();
         assert_eq!(snapshot.version, trace.version);

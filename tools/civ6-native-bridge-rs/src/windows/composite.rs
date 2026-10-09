@@ -22,6 +22,16 @@ pub struct CompositeTrace {
     pub effective_rax: [AtomicU64; assignment::ASSIGN_CAPACITY],
 }
 
+const _: () = {
+    assert!(std::mem::size_of::<CalibrationRow>() == 72);
+    assert!(
+        std::mem::offset_of!(JoinedTrace, property)
+            == civ6_bootstrap_rs::protocol::COMPOSITE_PROPERTY
+    );
+    assert!(std::mem::offset_of!(CompositeTrace, joined) == 0);
+    assert!(std::mem::size_of::<CompositeTrace>() <= 16 * 1024 * 1024);
+};
+
 impl CompositeTrace {
     pub fn boxed() -> Box<Self> {
         let mut value = Box::<Self>::new_uninit();

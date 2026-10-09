@@ -711,7 +711,8 @@ mod platform {
                                     || (mode == BridgeMode::ProductionAdmission
                                         && row["counter_scope"]
                                             == "bounded_prefix_samples_not_complete_call_history"
-                                        && row["calibration_sample_limit"] == 1024
+                                        && row["calibration_sample_limit"].as_u64().is_some_and(|n|
+                                            n == civ6_bootstrap_rs::protocol::CALIBRATION_CAPACITY as u64)
                                         && row["property_sample_limit"] == 4096))
                                 && row["classification"]
                                     == if mode == BridgeMode::CanEver {
@@ -2382,10 +2383,19 @@ mod platform {
             sampled[6]["calibration_sample_limit"] = json!(1024);
             sampled[6]["property_sample_limit"] = json!(4096);
             write(&sampled);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
+            sampled[6]["calibration_sample_limit"] =
+                json!(civ6_bootstrap_rs::protocol::CALIBRATION_CAPACITY);
+            write(&sampled);
             assert_eq!(
                 terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
                 3
             );
+            sampled[6]["calibration_sample_limit"] = json!(2048);
+            write(&sampled);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
+            sampled[6]["calibration_sample_limit"] =
+                json!(civ6_bootstrap_rs::protocol::CALIBRATION_CAPACITY);
             sampled[6]["counter_scope"] = json!("complete_history");
             write(&sampled);
             assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());

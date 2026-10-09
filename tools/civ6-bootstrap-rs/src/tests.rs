@@ -261,7 +261,7 @@ fn native_counts_read_runtime_log_and_never_report_an_empty_prefix() {
     let put = |b: &mut [u8], o: usize, n: u32| b[o..o + 4].copy_from_slice(&n.to_le_bytes());
     let mut composite = vec![0u8; COMPOSITE_PROPERTY + 32];
     put(&mut composite, 0, 0x4a414341);
-    put(&mut composite, 4, 4);
+    put(&mut composite, 4, CALIBRATION_VERSION);
     put(&mut composite, 8, 7);
     put(&mut composite, COMPOSITE_PROPERTY, 0x4a414350);
     put(&mut composite, COMPOSITE_PROPERTY + 4, 3);

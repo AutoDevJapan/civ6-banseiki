@@ -147,23 +147,27 @@ fn record(
     row.sequence.store(seq + 1, Ordering::Release);
 }
 fn native_counts() -> [u64; 4] {
-    // Public D21 CompositeTrace begins with CalibrationTrace v4: a 24-byte
-    // header and 1024 repr(C) 72-byte CalibrationRows, then the PropertyTrace
-    // prefix. The runtime marks that prefix external and writes every property
+    // The calibration version fixes the PropertyTrace prefix offset. The
+    // runtime marks that prefix external and writes every property
     // row to its separate log, so the property counts come from the log.
     // These read-only checkpoints are NOT an authorization/publication fence.
-    use protocol::{COMPOSITE_PROPERTY as PROPERTY, *};
+    use protocol::*;
     let base = TRACE.runtime_trace.load(Ordering::Acquire) as usize;
-    if base == 0 || TRACE.runtime_trace_size.load(Ordering::Acquire) < (PROPERTY + 20) as u64 {
+    if base == 0 || TRACE.runtime_trace_size.load(Ordering::Acquire) < 20 {
+        return [u64::MAX; 4];
+    }
+    let Ok(header) = read(base, 20) else {
+        return [u64::MAX; 4];
+    };
+    let Ok((_, _, property_offset)) = calibration_layout(&header) else {
+        return [u64::MAX; 4];
+    };
+    if TRACE.runtime_trace_size.load(Ordering::Acquire) < (property_offset + 32) as u64 {
         return [u64::MAX; 4];
     }
     let u = |b: &[u8], n: usize| u32::from_le_bytes(b[n..n + 4].try_into().unwrap());
-    let calibration = || -> Option<[u64; 2]> {
-        let b = read(base, 20).ok()?;
-        (u(&b, 0) == 0x4a414341 && u(&b, 4) == 4).then_some([u(&b, 8) as u64, u(&b, 16) as u64])
-    };
     let property = || -> Option<[u64; 2]> {
-        let prefix = read(base.checked_add(PROPERTY)?, 32).ok()?;
+        let prefix = read(base.checked_add(property_offset)?, 32).ok()?;
         if u(&prefix, 0) != 0x4a414350
             || u(&prefix, 4) != PROPERTY_EXTERNAL_VERSION
             || u(&prefix, 28) != PROPERTY_LOG_MAGIC
@@ -176,9 +180,9 @@ fn native_counts() -> [u64; 4] {
         (log != 0 && u(&b, 0) == PROPERTY_LOG_MAGIC && u(&b, 4) == PROPERTY_LOG_VERSION)
             .then(|| [w(PROPERTY_LOG_NEXT), w(PROPERTY_LOG_IN_FLIGHT)])
     };
-    match (calibration(), property()) {
-        (Some(a), Some(b)) => [a[0], a[1], b[0], b[1]],
-        _ => [u64::MAX; 4],
+    match property() {
+        Some(b) => [u(&header, 8) as u64, u(&header, 16) as u64, b[0], b[1]],
+        None => [u64::MAX; 4],
     }
 }
 /// Address of the pinned runtime's `BRIDGE_RUNTIME_PROPERTY_LOG` data export.

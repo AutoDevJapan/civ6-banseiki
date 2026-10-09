@@ -244,6 +244,32 @@ fn saturated_prefix_is_accepted_without_full_history_authority() {
     assert!(!r.full_history_authority);
 }
 #[test]
+fn expanded_prefix_accepts_all_six_matrices_without_claiming_complete_history() {
+    let (mut trace, steps) = model(Path::new("unit-model"));
+    let count = 6 * 22 * 22;
+    for seq in 23..=count {
+        let mut row = trace[3].clone();
+        row["sequence"] = json!(seq);
+        trace.insert(seq + 2, row);
+    }
+    let stop = trace.last_mut().unwrap();
+    stop["calibration_sample_limit"] = json!(8192);
+    stop["rows"] = json!(count + 110);
+    stop["observed_calls"] = json!(count + 110);
+    stop["getter_calls_seen"] = json!(count + 120);
+    let report = check(&trace, &steps).unwrap();
+    assert_eq!(report.calibration_rows, count);
+    assert_eq!(report.calibration_sample_limit, 8192);
+    assert!(report.qualification_positive22);
+    assert!(!report.full_history_authority && !report.product_acceptance);
+    for capacity in [1024, 2048, 8193] {
+        let mut bad = trace.clone();
+        bad.last_mut().unwrap()["calibration_sample_limit"] = json!(capacity);
+        rejected(&bad, &steps);
+    }
+}
+
+#[test]
 fn different_artifact_directory_or_stop_path_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let (trace, steps) = model(dir.path());

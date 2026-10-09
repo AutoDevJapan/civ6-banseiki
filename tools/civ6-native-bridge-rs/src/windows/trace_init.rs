@@ -27,6 +27,13 @@ impl SharedTrace {
     }
 }
 impl CalibrationTrace {
+    pub fn boxed() -> Box<Self> {
+        let mut value = Box::<Self>::new_uninit();
+        unsafe {
+            Self::initialize_at(value.as_mut_ptr());
+            value.assume_init()
+        }
+    }
     pub(super) unsafe fn initialize_at(target: *mut Self) {
         header!(
             target,
@@ -57,6 +64,13 @@ impl PropertyTrace {
     }
 }
 impl JoinedTrace {
+    pub fn boxed() -> Box<Self> {
+        let mut value = Box::<Self>::new_uninit();
+        unsafe {
+            Self::initialize_at(value.as_mut_ptr(), BridgeMode::JoinedAdmission);
+            value.assume_init()
+        }
+    }
     pub(super) unsafe fn initialize_at(target: *mut Self, scope: BridgeMode) {
         unsafe {
             CalibrationTrace::initialize_at(ptr::addr_of_mut!((*target).calibration));

@@ -185,8 +185,28 @@ pub fn trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
         json!({"schema":"todo880-bootstrap-trace-v2","pid":pid,"created_filetime":created,"core":word(b,32)?,"runtime_trace":word(b,40)?,"runtime_trace_size":word(b,48)?,"rows":rows,"frame_valid":true,"boundary_order_proven":false,"product_acceptance":false}),
     )
 }
-/// Offset of the bounded PropertyTrace inside the public CompositeTrace.
-pub const COMPOSITE_PROPERTY: usize = 24 + 1024 * 72;
+/// Version of the expanded, still bounded calibration prefix.
+pub const CALIBRATION_VERSION: u32 = 5;
+/// Six complete 22-owner/22-person matrices need 2,904 samples before
+/// natural engine queries. This bounded prefix leaves room for those calls.
+pub const CALIBRATION_CAPACITY: usize = 8192;
+/// Offset of the PropertyTrace inside the current public CompositeTrace.
+pub const COMPOSITE_PROPERTY: usize = 24 + CALIBRATION_CAPACITY * 72;
+
+/// The version fixes the prefix geometry; never infer it from zero padding.
+/// Legacy D21 captures keep their original 1,024-row layout.
+pub fn calibration_layout(b: &[u8]) -> Result<(u32, usize, usize), String> {
+    if u32_at(b, 0)? != 0x4a414341 {
+        return Err("calibration magic differs".into());
+    }
+    let version = u32_at(b, 4)?;
+    let capacity = match version {
+        4 => 1024,
+        CALIBRATION_VERSION => CALIBRATION_CAPACITY,
+        _ => return Err("calibration version unknown".into()),
+    };
+    Ok((version, capacity, 24 + capacity * 72))
+}
 const PROPERTY_PREFIX_BYTES: usize = 32 + 4096 * 48;
 /// Prefix PropertyTrace version meaning "rows are in the runtime property log".
 /// Version 3 parsers reject it, so an empty prefix never passes alone.
@@ -270,8 +290,9 @@ pub fn runtime_property(
     pid: u32,
     created: u64,
 ) -> Result<PropertyLog, String> {
+    let (_, _, property) = calibration_layout(composite)?;
     let prefix = composite
-        .get(COMPOSITE_PROPERTY..COMPOSITE_PROPERTY + PROPERTY_PREFIX_BYTES)
+        .get(property..property + PROPERTY_PREFIX_BYTES)
         .ok_or("native trace truncated")?;
     if u32_at(prefix, 0)? != 0x4a414350
         || u32_at(prefix, 4)? != PROPERTY_EXTERNAL_VERSION
@@ -290,9 +311,9 @@ pub fn runtime_property(
 /// remain with the existing Mode6 validator; dropped/in-flight rows fail here.
 /// A version 3 prefix keeps its bounded rows; a runtime prefix requires `log`.
 pub fn native_trace(b: &[u8], log: Option<&[u8]>, pid: u32, created: u64) -> Result<(), String> {
-    const PROPERTY: usize = COMPOSITE_PROPERTY;
-    const ASSIGN: usize = PROPERTY + PROPERTY_PREFIX_BYTES;
-    let external = u32_at(b, PROPERTY + 4).ok() == Some(PROPERTY_EXTERNAL_VERSION);
+    let (version, capacity, property) = calibration_layout(b)?;
+    let assign = property + PROPERTY_PREFIX_BYTES;
+    let external = u32_at(b, property + 4).ok() == Some(PROPERTY_EXTERNAL_VERSION);
     if external {
         runtime_property(b, log.ok_or("runtime property log missing")?, pid, created)?;
     } else if log.is_some() {
@@ -300,7 +321,7 @@ pub fn native_trace(b: &[u8], log: Option<&[u8]>, pid: u32, created: u64) -> Res
     }
     let tail = b
         .len()
-        .checked_sub(ASSIGN + 24 + 1024 * 8)
+        .checked_sub(assign + 24 + 1024 * 8)
         .ok_or("native trace truncated")?;
     if !tail.is_multiple_of(1024) {
         return Err("assignment stride differs".into());
@@ -310,11 +331,11 @@ pub fn native_trace(b: &[u8], log: Option<&[u8]>, pid: u32, created: u64) -> Res
         return Err("assignment row layout unknown".into());
     }
     for (offset, magic, version, capacity, header, row_size) in [
-        (0, 0x4a414341u32, 4u32, 1024usize, 24, 72),
-        (PROPERTY, 0x4a414350, 3, 4096, 32, 48),
-        (ASSIGN, 0x4a414353, 2, 1024, 24, stride),
+        (0, 0x4a414341u32, version, capacity, 24, 72),
+        (property, 0x4a414350, 3, 4096, 32, 48),
+        (assign, 0x4a414353, 2, 1024, 24, stride),
     ] {
-        if external && offset == PROPERTY {
+        if external && offset == property {
             continue;
         }
         let u = |p: usize| u32_at(b, p);
@@ -467,12 +488,59 @@ mod tests {
         assert!(native_trace(&b, Some(&[]), 1, 2).is_err());
     }
 
+    #[test]
+    fn full_six_484_matrices_fit_v5_and_loss_or_missing_returns_still_fail() {
+        let capacity = 8192;
+        let count = 6 * 22 * 22;
+        let property = 24 + capacity * 72;
+        let assignment = property + PROPERTY_PREFIX_BYTES;
+        let mut b = vec![0; assignment + 24 + 1024 * 96 + 1024 * 8];
+        let put = |b: &mut [u8], o: usize, n: u32| b[o..o + 4].copy_from_slice(&n.to_le_bytes());
+        for (offset, magic, version) in [
+            (0, 0x4a414341, 5),
+            (property, 0x4a414350, 3),
+            (assignment, 0x4a414353, 2),
+        ] {
+            put(&mut b, offset, magic);
+            put(&mut b, offset + 4, version);
+        }
+        put(&mut b, 8, count as u32);
+        for index in 0..count {
+            put(&mut b, 24 + index * 72, 1);
+        }
+        assert!(native_trace(&b, None, 1, 2).is_ok());
+        for (offset, value) in [(12, 1048), (16, 1), (24 + 1800 * 72, 0), (4, 6), (8, 8193)] {
+            let mut bad = b.clone();
+            put(&mut bad, offset, value);
+            assert!(native_trace(&bad, None, 1, 2).is_err());
+        }
+    }
+
+    #[test]
+    fn legacy_runtime_prefix_keeps_its_geometry_and_dropped_receipt_rejected() {
+        let (current, log) = runtime_pair();
+        let old_property = 24 + 1024 * 72;
+        let mut legacy = vec![0; old_property + current.len() - COMPOSITE_PROPERTY];
+        legacy[..24].copy_from_slice(&current[..24]);
+        legacy[4..8].copy_from_slice(&4u32.to_le_bytes());
+        legacy[old_property..].copy_from_slice(&current[COMPOSITE_PROPERTY..]);
+        assert!(native_trace(&legacy, Some(&log), 1, 2).is_ok());
+        legacy[12..16].copy_from_slice(&1048u32.to_le_bytes());
+        assert!(native_trace(&legacy, Some(&log), 1, 2).is_err());
+        legacy[12..16].copy_from_slice(&0u32.to_le_bytes());
+        legacy[4..8].copy_from_slice(&CALIBRATION_VERSION.to_le_bytes());
+        assert!(
+            native_trace(&legacy, Some(&log), 1, 2).is_err(),
+            "version cannot relabel old bytes"
+        );
+    }
+
     fn runtime_pair() -> (Vec<u8>, Vec<u8>) {
         const ASSIGN: usize = COMPOSITE_PROPERTY + PROPERTY_PREFIX_BYTES;
         let mut b = vec![0; ASSIGN + 24 + 1024 * 96 + 1024 * 8];
         let put = |b: &mut [u8], o: usize, n: u32| b[o..o + 4].copy_from_slice(&n.to_le_bytes());
         for (o, m, v) in [
-            (0, 0x4a414341, 4),
+            (0, 0x4a414341, CALIBRATION_VERSION),
             (COMPOSITE_PROPERTY, 0x4a414350, PROPERTY_EXTERNAL_VERSION),
             (ASSIGN, 0x4a414353, 2),
         ] {

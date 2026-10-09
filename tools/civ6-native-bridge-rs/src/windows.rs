@@ -55,8 +55,8 @@ const TRACE_VERSION: u32 = 2;
 const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
 const PROPERTY_TRACE_VERSION: u32 = 3;
 const CALIBRATION_TRACE_MAGIC: u32 = 0x4a41_4341; // JACA
-const CALIBRATION_TRACE_VERSION: u32 = 4;
-pub const CALIBRATION_CAPACITY: usize = 1024;
+const CALIBRATION_TRACE_VERSION: u32 = civ6_bootstrap_rs::protocol::CALIBRATION_VERSION;
+pub const CALIBRATION_CAPACITY: usize = civ6_bootstrap_rs::protocol::CALIBRATION_CAPACITY;
 pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
 pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
 pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
@@ -3533,7 +3533,7 @@ mod tests {
         let property: extern "system" fn(usize, u32) -> usize =
             unsafe { std::mem::transmute(property_entry) };
         let receiver = owner.0.as_ptr() as usize + 0x528;
-        let mut trace = Box::new(JoinedTrace::default());
+        let mut trace = JoinedTrace::boxed();
         trace.property = PropertyTrace::production_scoped();
         unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
             .unwrap();
@@ -3963,7 +3963,7 @@ mod tests {
         first_player[0xd8..0xdc].copy_from_slice(&0u32.to_le_bytes());
         next_player[0xd8..0xdc].copy_from_slice(&1u32.to_le_bytes());
         governors[14] = first_player.as_ptr() as u64; // +0x70
-        let mut trace = Box::new(CalibrationTrace::default());
+        let mut trace = CalibrationTrace::boxed();
         unsafe { install_calibration_at(target, trace.as_mut(), original) }.unwrap();
         assert_eq!(f(governors.as_ptr() as usize, 4), 0);
         governors[14] = next_player.as_ptr() as u64;
@@ -4362,7 +4362,7 @@ mod tests {
         let can: extern "system" fn(usize, u32) -> u8 = unsafe { std::mem::transmute(can_entry) };
         let property: extern "system" fn(usize, u32) -> usize =
             unsafe { std::mem::transmute(property_entry) };
-        let mut trace = Box::new(JoinedTrace::default());
+        let mut trace = JoinedTrace::boxed();
         unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
             .unwrap();
         unsafe {
@@ -4535,7 +4535,7 @@ mod tests {
         let can: extern "system" fn(usize, u32) -> u8 = unsafe { std::mem::transmute(can_entry) };
         let property: extern "system" fn(usize, u32) -> usize =
             unsafe { std::mem::transmute(property_entry) };
-        let mut trace = Box::new(JoinedTrace::default());
+        let mut trace = JoinedTrace::boxed();
         unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
             .unwrap();
         let _hook_cleanup = HookFixtureGuard;
@@ -4676,7 +4676,7 @@ mod tests {
             ptr::copy_nonoverlapping(PROPERTY_PROLOGUE.as_ptr(), property_entry, 8);
             ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN);
         }
-        let mut trace = Box::new(JoinedTrace::default());
+        let mut trace = JoinedTrace::boxed();
         unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
             .unwrap();
         assert!(unsafe {
