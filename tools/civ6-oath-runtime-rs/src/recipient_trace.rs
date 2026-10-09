@@ -71,8 +71,9 @@ impl RecipientTrace {
     pub fn stop(&self) {
         self.stopped.store(2, Ordering::Release);
     }
-    /// Flight is acquired before reading aggregate counts. Stopped + zero
-    /// flight prevents recording callbacks from changing these counts later.
+    /// Point-in-time snapshot of stop and the observed calls in flight.
+    /// Later calls still update flight without recording new rows. This does
+    /// not prove permanent quiescence or permit retiring the gateways.
     pub fn counts(&self) -> (bool, u32, u32, u32, u32) {
         let stopped = self.stopped.load(Ordering::Acquire) == 2;
         let flight = self.flight.load(Ordering::Acquire);
