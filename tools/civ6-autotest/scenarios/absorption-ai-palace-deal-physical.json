@@ -53,7 +53,8 @@
     {
       "action": "save",
       "timeout": 90,
-      "name": "JAC-ai-palace-creator-deal-probe-20261009"
+      "name": "JAC-ai-palace-creator-deal-probe-20261009",
+      "exact_name": true
     },
     {
       "action": "exit_to_menu"
@@ -118,7 +119,8 @@
     {
       "action": "save",
       "timeout": 90,
-      "name": "JAC-ai-palace-acquired-deal-probe-20261009"
+      "name": "JAC-ai-palace-acquired-deal-probe-20261009",
+      "exact_name": true
     },
     {
       "action": "exit_to_menu"
