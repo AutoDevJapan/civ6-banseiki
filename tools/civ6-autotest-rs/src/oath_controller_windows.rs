@@ -204,7 +204,6 @@ impl LocalDll {
 
 #[derive(Clone)]
 struct Module {
-    name: String,
     path: PathBuf,
     base: usize,
     size: usize,
@@ -428,7 +427,6 @@ impl Target {
                 return Err(Error::input("module enumeration exceeded the finite limit"));
             }
             out.push(Module {
-                name: wide_text(&row.szModule)?,
                 path: PathBuf::from(wide_text(&row.szExePath)?),
                 base: row.modBaseAddr as usize,
                 size: row.modBaseSize as usize,
@@ -484,6 +482,7 @@ pub(crate) fn drain_pending() -> usize {
     pending.len()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn pending_count() -> usize {
     PENDING
         .lock()
@@ -547,11 +546,6 @@ impl Session {
     }
     pub(crate) fn stop(&mut self) -> Result<Value> {
         self.inner.stop()
-    }
-    /// True if some end was never observed and ownership is being retained.
-    #[cfg(test)]
-    fn unresolved(&self) -> bool {
-        self.inner.target.unresolved()
     }
 }
 impl Drop for Session {
@@ -1162,8 +1156,11 @@ mod tests {
         while !target
             .modules()
             .map(|all| {
-                all.iter()
-                    .any(|m| m.name.eq_ignore_ascii_case("kernel32.dll"))
+                all.iter().any(|m| {
+                    m.path
+                        .file_name()
+                        .is_some_and(|n| n.eq_ignore_ascii_case("kernel32.dll"))
+                })
             })
             .unwrap_or(false)
         {

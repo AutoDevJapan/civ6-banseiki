@@ -352,9 +352,6 @@ impl PeImage {
                 .and_then(|offset| usize::try_from(offset).ok())
         })
     }
-    fn file_offset(&self, rva: u32) -> Option<usize> {
-        self.offset_for(rva, 1)
-    }
     /// The bytes at an RVA, only if they lie inside one section's raw data.
     pub fn bytes_at<'a>(&self, file: &'a [u8], rva: u32, len: usize) -> Option<&'a [u8]> {
         let start = self.offset_for(rva, len)?;
