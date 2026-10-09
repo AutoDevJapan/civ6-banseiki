@@ -14,6 +14,7 @@
 
 pub mod oath_install_state;
 pub mod oath_record;
+pub mod preflight;
 
 #[cfg(windows)]
 mod native;

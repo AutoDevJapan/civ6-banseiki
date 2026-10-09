@@ -326,6 +326,7 @@ dependencies = [
 name = "civ6-oath-runtime-rs"
 version = "0.1.0"
 dependencies = [
+ "sha2",
  "windows-sys",
 ]
 
