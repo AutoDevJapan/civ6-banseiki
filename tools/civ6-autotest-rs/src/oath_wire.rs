@@ -23,7 +23,7 @@ pub(crate) const TRACE_SIZE: usize = HEADER_SIZE + CAPACITY * ROW_SIZE;
 /// Upper bound of any raw trace read.
 pub(crate) const MAX_TRACE_READ: usize = 256 * 1024;
 
-// Trace header offsets (repr(C), v4).
+// Trace header offsets (repr(C), shared by v4 and v5).
 const H_NEXT: usize = 8;
 const H_DROPPED: usize = 12;
 const H_IN_FLIGHT: usize = 16;
@@ -286,7 +286,7 @@ fn project_row(index: usize, row: &[u8], stable: bool) -> Value {
 
 /// Projects two raw copies of the trace. Rows must agree byte for byte to be
 /// stable. The result is complete only when the trace is stopped, nothing is
-/// in flight and every row agreed.
+/// in flight, no call was dropped and every row agreed.
 pub(crate) fn project_trace(first: &TraceView, second: &TraceView, receipt: &Receipt) -> Value {
     let rows = second.rows;
     let mut projected = Vec::with_capacity(rows);
@@ -305,8 +305,12 @@ pub(crate) fn project_trace(first: &TraceView, second: &TraceView, receipt: &Rec
     }
     let stopped = second.header(H_STOPPED) == 2;
     let header_agrees = first.bytes[..HEADER_SIZE] == second.bytes[..HEADER_SIZE];
-    let complete =
-        stopped && second.in_flight() == 0 && header_agrees && unstable == 0 && open == 0;
+    let complete = stopped
+        && second.in_flight() == 0
+        && second.header(H_DROPPED) == 0
+        && header_agrees
+        && unstable == 0
+        && open == 0;
     json!({
         "trace_version": TRACE_VERSION,
         "trace_stopped": stopped,
@@ -817,6 +821,24 @@ pub(crate) mod tests {
         assert_eq!(row["caller_rbp"], "0xaaaabbbb");
         assert_eq!(row["caller_rdi"], "0xccccdddd");
         assert_eq!(row["call"], "apply");
+    }
+
+    #[test]
+    fn a_stopped_trace_with_lost_calls_is_not_complete() {
+        let mut bytes = blank_trace(2);
+        set_row(&mut bytes, 0, 2, 1, 1);
+        let clean = TraceView::parse(&bytes).unwrap();
+        assert_eq!(project_trace(&clean, &clean, &receipt())["complete"], true);
+
+        bytes[H_DROPPED..H_DROPPED + 4].copy_from_slice(&1u32.to_le_bytes());
+        let lost = TraceView::parse(&bytes).unwrap();
+        let value = project_trace(&lost, &lost, &receipt());
+        assert_eq!(value["complete"], false);
+        assert_eq!(value["dropped"], 1);
+        assert_eq!(value["row_count"], 1);
+        assert_eq!(value["rows"][0]["state"], "completed");
+        assert_eq!(value["quantity_accepted"], false);
+        assert_eq!(value["accepted"], false);
     }
 
     #[test]
