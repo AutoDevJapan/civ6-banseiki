@@ -1,0 +1,73 @@
+{
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-freecity-carrier-ready-absorb-flow-66-e55121899171",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game and Game.GetCurrentGameTurn and Game.GetCurrentGameTurn()>=0"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal original=A.NativeWorkLocations(2)\nassert(#original==1 and original[1].Owner==2 and original[1].BuildingType=='BUILDING_PALACE'\n  and original[1].ObjectType=='GREATWORKOBJECT_RELIC','acquired AI Palace source changed')\nlocal target=assert(CityManager.GetCityAt(129,35),'recipient Temple city missing')\nlocal recipient=assert(Players[1])\nlocal capital=assert(recipient:GetCities():GetCapitalCity())\nlocal temple=assert(GameInfo.Buildings.BUILDING_TEMPLE)\nassert(recipient:IsHuman() and recipient:GetCities():GetCount()>1\n  and target:GetOwner()==1 and (capital:GetX()~=129 or capital:GetY()~=35)\n  and target:GetBuildings():HasBuilding(temple.Index),\n  'recipient city cannot be borrowed without losing the capital')\nassert(assert(ExposedMembers.JAC_HeroReadAPI).ReadCity(1,target:GetID(),'WORK',temple.Index,0)==-1,\n  'target Temple slot is occupied')\nassert(Game:GetProperty('JAC_AI_PALACE_ALT_PROBE')==nil,'probe already issued in this game')\nGame:SetProperty('JAC_AI_PALACE_ALT_PROBE',{Source=A.Rules.Copy(original[1]),X=129,Y=35,Recipient=1,Borrower=2})\nCityManager.TransferCity(target,2)\nlocal borrowed=assert(CityManager.GetCityAt(129,35))\nassert(borrowed:GetOwner()==2 and borrowed:GetBuildings():HasBuilding(temple.Index),\n  'borrowed city or Temple did not survive')\nprint('[JAC_AI_PALACE_ALT_BORROW] original=2 targetCity='..borrowed:GetID())\nreturn 'borrowed one noncapital Temple into the source owner in a disposable game'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local c=CityManager.GetCityAt(129,35); return c and c:GetOwner()==2"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local source=assert(Players[2]:GetCities():GetCapitalCity())\nlocal target=assert(CityManager.GetCityAt(129,35))\nlocal palace=assert(GameInfo.Buildings.BUILDING_PALACE)\nlocal temple=assert(GameInfo.Buildings.BUILDING_TEMPLE)\nassert(source:GetBuildings():GetGreatWorkInSlot(palace.Index,0)==2\n  and target:GetOwner()==2 and target:GetBuildings():GetGreatWorkInSlot(temple.Index,0)==-1,\n  'source or borrowed target is not ready for MOVE')\nlocal params={}\nparams[PlayerOperations.PARAM_PLAYER_ONE]=2\nparams[PlayerOperations.PARAM_CITY_SRC]=source:GetID()\nparams[PlayerOperations.PARAM_CITY_DEST]=target:GetID()\nparams[PlayerOperations.PARAM_BUILDING_SRC]=palace.Index\nparams[PlayerOperations.PARAM_BUILDING_DEST]=temple.Index\nparams[PlayerOperations.PARAM_GREAT_WORK_INDEX]=2\nparams[PlayerOperations.PARAM_SLOT]=0\nprint('[JAC_AI_PALACE_ALT_REQUEST] human='..tostring(Game.GetLocalPlayer())\n  ..' playerParam=2 source='..source:GetID()..' target='..target:GetID())\nlocal ok,value=pcall(UI.RequestPlayerOperation,2,PlayerOperations.MOVE_GREAT_WORK,params)\nprint('[JAC_AI_PALACE_ALT_RETURN] ok='..tostring(ok)..' value='..tostring(value))\nassert(ok,'MOVE request raised an error')\nreturn 'issued one official MOVE for the AI-owned work in a disposable game'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal proof=assert(Game:GetProperty('JAC_AI_PALACE_ALT_PROBE'))\nlocal works=A.NativeWorkLocations(2)\nlocal positions={}\nfor _,work in ipairs(works) do\n  positions[#positions+1]=tostring(work.Owner)..':'..tostring(work.CityID)..':'\n    ..tostring(work.BuildingType)..':'..tostring(work.Slot)\nend\nprint('[JAC_AI_PALACE_ALT_LOCATION] count='..#works..' positions='..table.concat(positions,';'))\nassert(#works==1,'one-shot official MOVE lost or duplicated the acquired work')\nlocal work=works[1]\nfor _,key in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do\n  assert(work[key]==proof.Source[key],'acquired work provenance changed: '..key)\nend\nassert(A.Rules.Equal(work.Effects,proof.Source.Effects),'acquired work effects changed')\nif work.Owner==2 and work.X==129 and work.Y==35 and work.BuildingType=='BUILDING_TEMPLE' then\n  local target=assert(CityManager.GetCityAt(129,35))\n  Game:SetProperty('JAC_AI_PALACE_ALT_RESULT','MOVED')\n  CityManager.TransferCity(target,1)\n  assert(assert(CityManager.GetCityAt(129,35)):GetOwner()==1,'target city return failed')\n  print('[JAC_AI_PALACE_ALT_RETURN_CITY] returned=true')\n  return 'MOVE arrived in borrowed Temple; returned the disposable city'\nend\nassert(work.Owner==2 and work.X==proof.Source.X and work.Y==proof.Source.Y\n  and work.BuildingType=='BUILDING_PALACE','official MOVE reached an unexpected slot')\nGame:SetProperty('JAC_AI_PALACE_ALT_RESULT','UNOBSERVED')\nprint('[JAC_AI_PALACE_ALT_RETURN_CITY] returned=false pending-or-rejected request; disposable game will exit')\nreturn 'no MOVE observed; left the disposable borrowed city unsaved'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal outcome=assert(Game:GetProperty('JAC_AI_PALACE_ALT_RESULT'))\nlocal work=A.NativeWorkLocations(2)\nassert(#work==1,'acquired work lost or duplicated after observation')\nif outcome=='MOVED' then\n  assert(work[1].Owner==1 and work[1].X==129 and work[1].Y==35\n    and work[1].BuildingType=='BUILDING_TEMPLE',\n    'acquired work did not survive the recipient city return')\nelse\n  assert(outcome=='UNOBSERVED' and work[1].Owner==2\n    and work[1].BuildingType=='BUILDING_PALACE',\n    'pending or rejected MOVE changed after observation')\nend\nprint('[JAC_AI_PALACE_ALT_FINAL] outcome='..outcome..' owner='..work[1].Owner\n  ..' city='..work[1].CityID)\nreturn 'diagnostic outcome '..outcome..' from one official MOVE request'"
+    }
+  ],
+  "name": "Diagnose official AI-owned Palace MOVE through a disposable borrowed city"
+}
