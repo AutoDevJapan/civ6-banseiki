@@ -31,6 +31,7 @@ impl UnixGuard {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&path)
             .map_err(|e| format!("open Unix lock guard {}: {e}", path.display()))?;
         // The current Civ6 queue has few concurrent claimants. Owner checks can
@@ -154,52 +155,212 @@ pub fn competitor_since(
     Ok(first)
 }
 
-/// Exclusive write/delete protection matches the acquisition/reaper protocol.
+/// Short record reads deny concurrent writes/deletion, but permit recovery and
+/// monitor readers. Never retain a write handle across external owner queries.
+pub(crate) fn read_options() -> OpenOptions {
+    let mut opts = OpenOptions::new();
+    opts.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        opts.share_mode(1);
+    }
+    opts
+}
+
+pub(crate) fn write_options() -> OpenOptions {
+    let mut opts = OpenOptions::new();
+    opts.read(true).write(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        opts.share_mode(1);
+    }
+    opts
+}
+
+fn record_bytes(file: &mut File) -> Result<Vec<u8>, String> {
+    file.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    file.take(32769)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() > 32768 {
+        return Err("Civ6 lease record too large".into());
+    }
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+fn file_identity(file: &File) -> Result<[u64; 4], String> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+        return Err(format!(
+            "identify Civ6 lock handle: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok([
+        u64::from(info.dwVolumeSerialNumber),
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+        (u64::from(info.ftCreationTime.dwHighDateTime) << 32)
+            | u64::from(info.ftCreationTime.dwLowDateTime),
+        0,
+    ])
+}
+
+#[cfg(unix)]
+fn file_identity(file: &File) -> Result<[u64; 4], String> {
+    use std::os::unix::fs::MetadataExt;
+    let info = file.metadata().map_err(|e| e.to_string())?;
+    Ok([
+        info.dev(),
+        info.ino(),
+        info.ctime() as u64,
+        info.ctime_nsec() as u64,
+    ])
+}
+
+/// No handles survive the short read: even an attribute-only Windows handle
+/// would keep deletion pending throughout a slow probe. Revalidate file identity,
+/// record bytes and the acquisition token/generation under the mutation handle.
+pub(crate) struct Snapshot {
+    identity: [u64; 4],
+    created_at: Option<f64>,
+    pub(crate) bytes: Vec<u8>,
+}
+impl Snapshot {
+    pub(crate) fn capture(file: &mut File, _path: &Path) -> Result<Self, String> {
+        let identity = file_identity(file)?;
+        let created_at = file
+            .metadata()
+            .ok()
+            .and_then(|m| m.created().ok())
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|t| t.as_secs_f64());
+        let bytes = record_bytes(file)?;
+        Ok(Self {
+            identity,
+            bytes,
+            created_at,
+        })
+    }
+    pub(crate) fn open(path: &Path) -> Result<Option<Self>, String> {
+        match Self::try_open(path) {
+            Ok(snapshot) => Ok(Some(snapshot)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            #[cfg(windows)]
+            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => Ok(None),
+            Err(e) => Err(format!("open Civ6 lock snapshot {}: {e}", path.display())),
+        }
+    }
+    pub(crate) fn try_open(path: &Path) -> std::io::Result<Self> {
+        #[cfg(unix)]
+        let _guard = UnixGuard::acquire(path).map_err(std::io::Error::other)?;
+        let mut file = read_options().open(path)?;
+        Self::capture(&mut file, path).map_err(std::io::Error::other)
+    }
+    pub(crate) fn info(&self) -> Result<Value, String> {
+        serde_json::from_slice(&self.bytes).map_err(|e| format!("parse Civ6 lock snapshot: {e}"))
+    }
+    pub(crate) fn matches(&self, file: &mut File) -> Result<bool, String> {
+        Ok(self.identity == file_identity(file)? && self.bytes == record_bytes(file)?)
+    }
+    pub(crate) fn same_file(&self, other: &Self) -> Result<bool, String> {
+        #[cfg(windows)]
+        {
+            Ok(self.identity == other.identity)
+        }
+        #[cfg(unix)]
+        {
+            Ok(self.identity[..2] == other.identity[..2])
+        }
+    }
+    pub(crate) fn matches_acquisition(&self, file: &mut File, path: &Path) -> Result<bool, String> {
+        let current = Self::capture(file, path)?;
+        Ok(self.same_file(&current)? && same_acquisition(&self.info()?, &current.info()?))
+    }
+}
+
+/// Fairness fields may change under the same owner; these fields identify a
+/// specific acquisition, including process generation and token.
+pub(crate) fn same_acquisition(a: &Value, b: &Value) -> bool {
+    [
+        "job",
+        "owner_job",
+        "pid",
+        "chain_pid",
+        "pid_created_filetime",
+        "live_chain",
+        "lock_token",
+        "acquired_at",
+    ]
+    .iter()
+    .all(|key| a[*key] == b[*key])
+}
+
+/// An optimistic snapshot, not a lifetime write lock. All external probes run
+/// before the short exclusive update, which rechecks both object and contents.
 pub struct Lock {
-    pub file: File,
     pub info: Value,
-    #[cfg(unix)]
-    _guard: UnixGuard,
+    snapshot: Snapshot,
+    path: PathBuf,
 }
 impl Lock {
     pub fn open(p: &Paths) -> Result<Option<Self>, String> {
-        #[cfg(unix)]
-        let guard = UnixGuard::acquire(&p.here.join("civ6.lock"))?;
-        let mut opts = OpenOptions::new();
-        opts.read(true).write(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            opts.share_mode(1);
-        }
-        let mut file = match opts.open(p.here.join("civ6.lock")) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            #[cfg(windows)]
-            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => return Ok(None),
-            Err(e) => return Err(e.to_string()),
+        let path = p.here.join("civ6.lock");
+        let Some(snapshot) = Snapshot::open(&path)? else {
+            return Ok(None);
         };
-        let mut b = vec![];
-        file.read_to_end(&mut b).map_err(|e| e.to_string())?;
-        let info = serde_json::from_slice(&b).map_err(|e| e.to_string())?;
+        let info = snapshot.info()?;
         Ok(Some(Self {
-            file,
             info,
-            #[cfg(unix)]
-            _guard: guard,
+            snapshot,
+            path,
         }))
     }
     pub fn save(&mut self) -> Result<(), String> {
-        self.file
-            .seek(SeekFrom::Start(0))
-            .and_then(|_| self.file.set_len(0))
-            .and_then(|_| self.file.write_all(self.info.to_string().as_bytes()))
-            .and_then(|_| self.file.sync_all())
-            .map_err(|e| e.to_string())
+        #[cfg(unix)]
+        let _guard = UnixGuard::acquire(&self.path)?;
+        let mut file = write_options().open(&self.path).map_err(|e| {
+            format!(
+                "open Civ6 lock for fairness update {}: {e}",
+                self.path.display()
+            )
+        })?;
+        if !self.snapshot.matches(&mut file)? {
+            return Err("Civ6 lock ownership or snapshot changed before fairness update".into());
+        }
+        let bytes = self.info.to_string().into_bytes();
+        file.seek(SeekFrom::Start(0))
+            .and_then(|_| file.set_len(0))
+            .and_then(|_| file.write_all(&bytes))
+            .and_then(|_| file.sync_all())
+            .map_err(|e| {
+                format!(
+                    "write Civ6 lock fairness update {}: {e}",
+                    self.path.display()
+                )
+            })?;
+        self.snapshot = Snapshot::capture(&mut file, &self.path)?;
+        Ok(())
+    }
+    fn verify(&self) -> Result<(), String> {
+        let current =
+            Snapshot::open(&self.path)?.ok_or("Civ6 lock unavailable after fairness probe")?;
+        if !self.snapshot.same_file(&current)? || current.bytes != self.snapshot.bytes {
+            return Err("Civ6 lock ownership or snapshot changed during fairness probe".into());
+        }
+        Ok(())
     }
     pub fn expired(&mut self, r: &mut impl Runner, p: &Paths, todo: &Path) -> Result<bool, String> {
         let now = r.now();
         let competitor = competitor_since(r, p, &self.info, todo, now)?;
+        self.verify()?;
         let Some(since) = competitor else {
             if self
                 .info
@@ -215,17 +376,7 @@ impl Lock {
         // A new holder gets a full lease even if someone was already queued.
         let acquired = self.info["acquired_at"]
             .as_f64()
-            .or_else(|| {
-                self.file
-                    .metadata()
-                    .ok()?
-                    .created()
-                    .ok()?
-                    .duration_since(UNIX_EPOCH)
-                    .ok()
-                    .map(|t| t.as_secs_f64())
-                    .filter(|t| *t <= now)
-            })
+            .or_else(|| self.snapshot.created_at.filter(|t| *t <= now))
             .unwrap_or(0.);
         let since = since.max(acquired);
         let first = self.info["competitor_since"]

@@ -148,36 +148,13 @@ pub fn monitor_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<(), Stri
 pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe, String> {
     let anchor = r.monotonic();
     let now = r.now();
-    #[cfg(unix)]
-    let guard = crate::fairness::UnixGuard::acquire(&limit.paths.here.join("civ6.lock"))?;
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        options.share_mode(1);
-    }
-    // Recovery pins a read-only handle. A monitor must be another reader,
-    // rather than requesting write access and mistaking that pin for failure.
-    let file = match options.open(limit.paths.here.join("civ6.lock")) {
-        Ok(file) => file,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(LeaseProbe::Unavailable),
-        #[cfg(windows)]
-        Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => return Ok(LeaseProbe::Unavailable),
-        Err(e) => return Err(e.to_string()),
+    let path = limit.paths.here.join("civ6.lock");
+    let Some(snapshot) = crate::fairness::Snapshot::open(&path)
+        .map_err(|e| format!("monitor lease initial snapshot: {e}"))?
+    else {
+        return Ok(LeaseProbe::Unavailable);
     };
-    let mut bytes = Vec::new();
-    (&file)
-        .take(32769)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    if bytes.len() > 32768 {
-        return Err("Civ6 lease record too large".into());
-    }
-    let owner: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    drop(file);
-    #[cfg(unix)]
-    drop(guard);
+    let owner = snapshot.info()?;
     if owner["lock_token"].as_str() != Some(limit.token.as_str()) {
         return Err("Civ6 lease ownership changed while child was running".into());
     }
@@ -188,6 +165,18 @@ pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe
         &crate::fairness::todo_path(&limit.paths),
         now,
     )?;
+    // A probe can outlive its original owner. Validate again before publishing
+    // Clear or a deadline; a stale successful probe cannot revive an old lease.
+    let Some(current) = crate::fairness::Snapshot::open(&path)
+        .map_err(|e| format!("monitor lease final snapshot: {e}"))?
+    else {
+        return Ok(LeaseProbe::Unavailable);
+    };
+    if !snapshot.same_file(&current)?
+        || !crate::fairness::same_acquisition(&owner, &current.info()?)
+    {
+        return Err("Civ6 lease ownership changed while child was running".into());
+    }
     let Some(since) = competitor else {
         return Ok(LeaseProbe::Clear);
     };
@@ -604,6 +593,7 @@ impl Runner for RealRunner {
             if let (false, Err(error)) = (call.kill_tree, &status) {
                 return Err(error.clone());
             }
+            #[cfg(windows)]
             drop(tree);
             let bytes = reader
                 .join()
@@ -633,6 +623,7 @@ impl Runner for RealRunner {
         if let (false, Err(error)) = (call.kill_tree, &status) {
             return Err(error.clone());
         }
+        #[cfg(windows)]
         drop(tree);
         let stdout = decode(
             &out.join()
