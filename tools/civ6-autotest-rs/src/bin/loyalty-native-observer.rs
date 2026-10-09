@@ -1167,6 +1167,25 @@ mod platform {
             Ok(u16::from_le_bytes(self.read::<2>(Self::at(base, offset)?)?))
         }
 
+        fn interface_fields(&self, module_base: u64) -> Value {
+            // The pinned DLL's 0x45089 stores an externally supplied interface
+            // at this RVA; 0x72988 calls its vtable+0xB0. Read only those three
+            // fields, without identifying the interface or calling its slot.
+            let pointer = self.u64_at(module_base, 0xB8AA80);
+            let vtable = match &pointer {
+                Ok(pointer) if *pointer != 0 => Some(self.u64_at(*pointer, 0)),
+                _ => None,
+            };
+            let slot = match &vtable {
+                Some(Ok(vtable)) if *vtable != 0 => Some(self.u64_at(*vtable, 0xB0)),
+                _ => None,
+            };
+            json!({"raw_module_plus_b8aa80_pointer":raw_read(pointer),
+                "raw_interface_vtable_pointer":vtable.map(raw_read),
+                "raw_vtable_plus_b0_pointer":slot.map(raw_read),
+                "semantics":"unidentified_external_interface_slot_not_called"})
+        }
+
         fn cache_fields(&self, trigger: Trigger) -> Value {
             let pointer = self.u64_at(trigger.cache_city, 0x16C0);
             let raw_b8 = self.u64_at(trigger.receiver, 0xB8);
@@ -2245,6 +2264,7 @@ mod platform {
                     "threads_installed":self.installed_total, "ready_path":args.ready_path(),
                     "initial_local_enable_mask":0x45,"getter_enable_policy":"first_setter_thread_only",
                     "attach_break":self.exceptions.attach, "ntdll_identity":self.ntdll.report(),
+                    "raw_notification_interface":self.process.interface_fields(self.module.identity.base),
                     "semantics":"raw_fields_only"});
                 let mut marker = OpenOptions::new()
                     .write(true)
