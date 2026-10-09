@@ -1,6 +1,6 @@
 //! Runtime entry tests: pure lifecycle and input rules, own-process refusals
 //! through the real exports, and Win64 flows in owned child processes with a
-//! synthetic gate (the deep preflight is not wired in this crate).
+//! synthetic gate. The real gate must reject this test executable.
 use super::*;
 use crate::oath_record::COPY_ALL;
 use std::os::windows::process::CommandExt;
@@ -154,8 +154,8 @@ fn the_exports_refuse_a_foreign_or_unverified_request_without_writing() {
     let mut config = good_config();
     config.out_trace_address = 0x1000;
     cases.push((config, OathStatus::InvalidInput));
-    // Right process, but no preflight is wired into this crate.
-    cases.push((good_config(), OathStatus::NotWired));
+    // Right PID and creation time, but this is a test executable, not Civ6.
+    cases.push((good_config(), OathStatus::ProcessIdentity));
     for (mut config, expected) in cases {
         let copy = config;
         assert_eq!(install_export(&mut config), expected as u32);

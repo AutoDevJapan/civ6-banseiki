@@ -6,9 +6,9 @@
 //! installer used only by the Win64 tests.
 //!
 //! What is deliberately not here: any link to payment, rates, quantities, Lua
-//! or persona state, and any public Install. The installer is crate-private
-//! and unreachable from the DLL; a public Install needs fixed process,
-//! FILETIME, image SHA-256, module and path preflight first. The low-level
+//! or persona state. The diagnostic export requires fixed process creation,
+//! complete image SHA-256, loaded module and path preflight before publishing
+//! any gateway. Driver ownership/ruleset checks are an additional gate. The low-level
 //! Win64 ABI, SEH and global_asm stay in Rust because the gateway frames and
 //! the trampoline unwind data must match the native unwinder exactly.
 
@@ -16,6 +16,8 @@ pub mod oath_install_state;
 pub mod oath_record;
 pub mod preflight;
 
+#[cfg(windows)]
+mod identity_windows;
 #[cfg(windows)]
 mod native;
 #[cfg(windows)]

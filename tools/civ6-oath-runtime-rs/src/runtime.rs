@@ -6,9 +6,8 @@
 //! until the gate has verified the process, the executable, the GameCore
 //! module and every wrapper byte. The deep identity checks (disk SHA, module
 //! path, MEM_IMAGE ownership, wrapper bytes, function tables) belong to the
-//! preflight and plug in through [`Gate`]; the default gate performs the own
-//! process checks and then reports `NotWired`, so a DLL built from this
-//! crate alone can never install. The mode is diagnostic only and no field
+//! preflight and plug in through the sealed [`Gate`]. The diagnostic export
+//! uses the current-game identity gate. The mode is diagnostic only and no field
 //! here can accept a quantity.
 use crate::native::*;
 use crate::oath_record::{OathCall, OATH_ENTRY_HEAD};
@@ -186,18 +185,9 @@ pub(crate) fn own_process(config: &OathRuntimeConfig) -> Result<(), OathStatus> 
     Ok(())
 }
 
-/// Placeholder until the current-game gate is connected: it verifies nothing
-/// and refuses. [`current_gate`] is the one place that changes.
-pub(crate) struct DefaultGate;
-impl Gate for DefaultGate {
-    fn verify(&self, _: &OathRuntimeConfig) -> Result<Verified, OathStatus> {
-        Err(OathStatus::NotWired)
-    }
-}
-
 /// The gate every export uses. Final wiring replaces only this function.
 fn current_gate() -> &'static dyn Gate {
-    &DefaultGate
+    &crate::identity_windows::CurrentGameGate
 }
 
 struct Runtime {
