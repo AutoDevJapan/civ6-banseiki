@@ -12,6 +12,7 @@ pub mod judge;
 pub mod metrics;
 mod native_inventory;
 pub mod native_observer_finish;
+pub mod native_observer_ready;
 pub mod reliability;
 pub mod restart;
 pub mod runner;

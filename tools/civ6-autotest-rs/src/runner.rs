@@ -21,6 +21,20 @@ pub mod autostart;
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
+    fn native_observer_manifest(&mut self, path: &Path) -> Result<Option<Vec<u8>>> {
+        crate::native_observer_ready::read_manifest(path)
+    }
+    fn pin_native_observer(
+        &mut self,
+        manifest: &crate::native_observer_ready::Manifest,
+    ) -> Result<Box<dyn crate::native_observer_ready::Session>> {
+        crate::native_observer_ready::pin(manifest)
+    }
+    fn require_native_observer_connection(&mut self) -> Result<()> {
+        Err(Error::tuner(
+            "native observer needs an existing FireTuner connection",
+        ))
+    }
     fn begin_steam_observation(&mut self, _journal: &Path) -> Result<()> {
         Ok(())
     }
@@ -353,6 +367,14 @@ impl Backend for SystemBackend {
         }
         Ok(())
     }
+    fn require_native_observer_connection(&mut self) -> Result<()> {
+        if self.client.is_none() {
+            return Err(Error::tuner(
+                "native observer needs an existing FireTuner connection",
+            ));
+        }
+        Ok(())
+    }
     fn disconnect(&mut self) {
         if let Some(mut c) = self.client.take() {
             c.close();
@@ -501,6 +523,7 @@ pub struct Runner {
     pub backend: Box<dyn Backend>,
     pub clock: Arc<dyn Clock>,
     transition_response: Value,
+    native_observer_started: bool,
 }
 impl Runner {
     pub fn new(scenario: Value, output: PathBuf, logs: PathBuf, saves: PathBuf, port: u16) -> Self {
@@ -553,7 +576,56 @@ impl Runner {
             backend,
             clock,
             transition_response: Value::Null,
+            native_observer_started: false,
         }
+    }
+    fn native_observer_ready(&mut self, step: &Value) -> Result<String> {
+        use crate::native_observer_ready::{parse_manifest, validate_step, ACK_LUA};
+        if self.native_observer_started {
+            return Err(Error::input(
+                "native observer action already started in this runner",
+            ));
+        }
+        self.native_observer_started = true;
+        validate_step(step)?;
+        let deadline = self.clock.now() + step["timeout"].as_f64().unwrap_or(240.0);
+        let path = Path::new(text(step, "handoff"));
+        let manifest = loop {
+            self.remaining(deadline)?;
+            if let Some(bytes) = self.backend.native_observer_manifest(path)? {
+                break parse_manifest(path, &bytes)?;
+            }
+            self.sleep_until(deadline, 0.2);
+        };
+        self.remaining(deadline)?;
+        let mut session = self.backend.pin_native_observer(&manifest)?;
+        let game_pid = self
+            .backend
+            .single_process(0.0)?
+            .map(|p| p.0)
+            .ok_or_else(|| Error::input("native observer needs exactly one running game"))?;
+        session.check(&manifest, game_pid)?;
+        self.backend.require_native_observer_connection()?;
+        let budget = self.remaining(deadline)?;
+        let states = self.backend.list_states(budget)?;
+        let index = state_position(states.iter().map(String::as_str), "InGame")
+            .ok_or_else(|| Error::tuner("native observer needs a unique InGame Lua state"))?;
+        let game_pid = self
+            .backend
+            .single_process(0.0)?
+            .map(|p| p.0)
+            .ok_or_else(|| Error::input("native observer game disappeared"))?;
+        // Same retained process handles and pinned lease, after connection preparation.
+        session.check(&manifest, game_pid)?;
+        let budget = self.remaining(deadline)?;
+        // No lua()/states() retry path: never reconnect, disconnect, or resend.
+        let response = self.backend.run_lua(&states[index], ACK_LUA, budget)?;
+        if response != "native observer ready acknowledged" {
+            return Err(Error::lua(
+                "unexpected native observer acknowledgement response",
+            ));
+        }
+        Ok(response)
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
         crate::time::check_interrupt()?;
@@ -2141,6 +2213,7 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "native_observer_ready" => self.native_observer_ready(step),
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
@@ -3233,7 +3306,11 @@ impl Runner {
                 Err(e) => println!("Could not save run log slices: {e}"),
             }
         }
-        self.disconnect();
+        // A native handoff borrows the established transport; leave its lifecycle
+        // to the controller/runner owner, including after a failed acknowledgement.
+        if !self.native_observer_started {
+            self.disconnect();
+        }
         if let Err(e) = self.write_result() {
             println!("Could not save result summary: {e}");
             if self.result_passed {
@@ -3265,6 +3342,7 @@ impl Runner {
     }
     fn run_inner(&mut self) -> Result<i32> {
         let mut frontend_ready = false;
+        let native_handoff_first = self.scenario["steps"][0]["action"] == "native_observer_ready";
         // Installation errors are independent of process freshness. The chain
         // disables automatic restarts, but must still reject missing MODs before
         // spending a shared game slot launching Steam.
@@ -3273,7 +3351,7 @@ impl Runner {
         if !stale.is_empty() {
             return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
         }
-        if self.auto_restart {
+        if self.auto_restart && !native_handoff_first {
             let newest = self.backend.newest_mod(&folders)?;
             let process = self.backend.single_process(30.0)?;
             if let Some(reason) =
@@ -3305,7 +3383,7 @@ impl Runner {
         self.write_baseline()?;
         let steps = self.scenario["steps"].as_array().unwrap().clone();
         let first = &steps[0];
-        if first["action"] != "restart_game" {
+        if first["action"] != "restart_game" && !native_handoff_first {
             if !frontend_ready && self.backend.single_process(30.0)?.is_none() {
                 self.log("launch", "START", "Civ VI is not running")?;
                 let detail = self.restart_game(360.0)?;

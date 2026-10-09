@@ -56,8 +56,18 @@ type States = Box<dyn FnMut() -> Result<Vec<String>> + Send>;
 type Process = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type Window = Box<dyn FnMut(f64) -> Result<isize> + Send>;
 type NewestMod = Box<dyn FnMut() -> Result<Option<(PathBuf, f64)>> + Send>;
+type NativeManifest = Box<dyn FnMut(&Path) -> Result<Option<Vec<u8>>> + Send>;
+type NativeSession = Box<
+    dyn FnMut(
+            &civ6_autotest_rs::native_observer_ready::Manifest,
+        ) -> Result<Box<dyn civ6_autotest_rs::native_observer_ready::Session>>
+        + Send,
+>;
 
 pub struct FakeBackend {
+    pub on_native_manifest: NativeManifest,
+    pub on_native_session: NativeSession,
+    pub on_native_connection: Box<dyn FnMut() -> Result<()> + Send>,
     pub calls: Calls,
     pub timeouts: Arc<Mutex<Vec<f64>>>,
     pub events: Arc<Mutex<Vec<String>>>,
@@ -86,6 +96,9 @@ pub struct FakeBackend {
 impl FakeBackend {
     pub fn new() -> Self {
         Self {
+            on_native_manifest: Box::new(|_| Err(Error::input("no mock native manifest"))),
+            on_native_session: Box::new(|_| Err(Error::input("no mock native session"))),
+            on_native_connection: Box::new(|| Ok(())),
             calls: Arc::new(Mutex::new(Vec::new())),
             timeouts: Arc::new(Mutex::new(Vec::new())),
             events: Arc::new(Mutex::new(Vec::new())),
@@ -141,6 +154,24 @@ impl Default for FakeBackend {
     }
 }
 impl Backend for FakeBackend {
+    fn native_observer_manifest(&mut self, path: &Path) -> Result<Option<Vec<u8>>> {
+        self.events.lock().unwrap().push("manifest".into());
+        (self.on_native_manifest)(path)
+    }
+    fn pin_native_observer(
+        &mut self,
+        m: &civ6_autotest_rs::native_observer_ready::Manifest,
+    ) -> Result<Box<dyn civ6_autotest_rs::native_observer_ready::Session>> {
+        self.events.lock().unwrap().push("pin".into());
+        (self.on_native_session)(m)
+    }
+    fn require_native_observer_connection(&mut self) -> Result<()> {
+        self.events
+            .lock()
+            .unwrap()
+            .push("existing_connection".into());
+        (self.on_native_connection)()
+    }
     fn steam_sync_status(
         &mut self,
         stage: civ6_autotest_rs::steam_sync::Stage,
