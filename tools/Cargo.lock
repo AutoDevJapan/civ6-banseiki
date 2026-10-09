@@ -323,6 +323,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "civ6-oath-runtime-rs"
+version = "0.1.0"
+dependencies = [
+ "windows-sys",
+]
+
+[[package]]
 name = "civ6-reports-rs"
 version = "0.1.0"
 dependencies = [
