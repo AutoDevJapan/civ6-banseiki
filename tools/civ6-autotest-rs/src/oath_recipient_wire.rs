@@ -88,10 +88,10 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     Ok(
         json!({"capture":"callee","trace_version":1,"rows":rows,"row_count":count,
         "completed":u32_at(second,20),"unwound":u32_at(second,28),"in_flight":in_flight,"dropped":dropped,
-        "stopped":stopped,"entry_slots_restored":detached,"complete":complete,"unstable_rows":unstable,"receipt_counters_match":counters_match,
+        "stopped":stopped,"entry_slots_restored":detached,"complete":complete,"snapshot_consistent":complete,"unstable_rows":unstable,"receipt_counters_match":counters_match,
         "image_base":format!("0x{:x}",u64_at(second,32).unwrap()),"deadline_hit":u32_at(second,48)==Some(1),
         "quantity_accepted":false,"accepted":false,
-        "limitations":["point_in_time_counts_do_not_authorize_gateway_retirement","city_identity_and_lifetime_not_established","no_quantity_adjustment"]}),
+        "limitations":["complete_is_point_in_time_snapshot_consistency","point_in_time_counts_do_not_authorize_gateway_retirement","city_identity_and_lifetime_not_established","no_quantity_adjustment"]}),
     )
 }
 

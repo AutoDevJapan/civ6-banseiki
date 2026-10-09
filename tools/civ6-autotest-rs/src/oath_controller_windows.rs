@@ -347,6 +347,21 @@ impl Target {
         }
     }
 
+    /// A completed runtime call can still report unresolved hook writes.
+    /// End this same owned process rather than leave a failed session with
+    /// published entrances, or repeat any remote operation blindly.
+    fn runtime_refusal(&mut self, operation: &str, status: u32) -> Error {
+        let why = format!(
+            "{operation} refused: {} ({status})",
+            wire::status_name(status)
+        );
+        if matches!(status, 6 | 99) {
+            self.kill_report(&why)
+        } else {
+            Error::input(why)
+        }
+    }
+
     /// Observes, without any new termination, whether the pinned process
     /// object has signalled. Only the same handle with the original creation
     /// time counts; anything else leaves the obligation open.
@@ -733,10 +748,9 @@ impl Inner {
         let status = self.call(1)?;
         if status != 0 {
             self.phase = Phase::Failed;
-            return Err(Error::input(format!(
-                "OathRuntimeStartObservation refused: {} ({status})",
-                wire::status_name(status)
-            )));
+            return Err(self
+                .target
+                .runtime_refusal("OathRuntimeStartObservation", status));
         }
         self.phase = Phase::Started;
         Ok(self.status_value("start", status))
@@ -755,10 +769,9 @@ impl Inner {
         let status = self.call(2)?;
         if status != 0 {
             self.phase = Phase::Failed;
-            return Err(Error::input(format!(
-                "OathRuntimeStopObservation refused: {} ({status})",
-                wire::status_name(status)
-            )));
+            return Err(self
+                .target
+                .runtime_refusal("OathRuntimeStopObservation", status));
         }
         self.phase = Phase::Stopped;
         let value = self.status_value("stop", status);
@@ -783,10 +796,10 @@ impl Inner {
         }
         let status = self.call(3)?;
         if status != 0 {
-            return Err(Error::input(format!(
-                "OathRuntimeReadReceipt refused: {} ({status})",
-                wire::status_name(status)
-            )));
+            self.phase = Phase::Failed;
+            return Err(self
+                .target
+                .runtime_refusal("OathRuntimeReadReceipt", status));
         }
         let receipt_bytes = self.target.read(self.receipt_buffer, wire::RECEIPT_SIZE)?;
         if wire::u32_at(&receipt_bytes, 12) != Some(u32::from(self.callee)) {
@@ -1090,10 +1103,7 @@ fn bring_up(
     target.write(config_at, &config)?;
     let status = target.call(exports[0], config_at)?;
     if status != 0 {
-        return Err(Error::input(format!(
-            "OathRuntimeInstall refused: {} ({status})",
-            wire::status_name(status)
-        )));
+        return Err(target.runtime_refusal("OathRuntimeInstall", status));
     }
     let (trace_address, _) =
         wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
@@ -1399,6 +1409,53 @@ mod tests {
         assert!(target.kill(), "second attempt on the same pinned handle");
         assert!(!target.unresolved());
         assert!(child.0.try_wait().unwrap().is_some());
+    }
+
+    #[test]
+    fn critical_runtime_refusals_end_only_the_same_owned_process() {
+        for operation in [
+            "OathRuntimeInstall",
+            "OathRuntimeStartObservation",
+            "OathRuntimeStopObservation",
+            "OathRuntimeReadReceipt",
+        ] {
+            for status in [6, 99] {
+                let mut child = sleeper();
+                let mut other = sleeper();
+                let mut target = target_of(&child, Duration::from_secs(8));
+                let error = target.runtime_refusal(operation, status);
+                assert!(error.to_string().contains("the pinned game was terminated"));
+                assert!(target.poisoned && !target.unresolved());
+                assert!(child.0.try_wait().unwrap().is_some());
+                assert!(other.0.try_wait().unwrap().is_none());
+                assert!(target
+                    .call(kernel32_export(b"GetCurrentProcessId\0"), 0)
+                    .is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn critical_refusal_keeps_ownership_when_termination_is_not_confirmed() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_secs(8));
+        target.fail_terminate = true;
+        let error = target.runtime_refusal("OathRuntimeInstall", 6);
+        assert!(error.to_string().contains("retention=known_pending"));
+        assert!(target.poisoned && target.unresolved());
+        assert!(child.0.try_wait().unwrap().is_none());
+        target.fail_terminate = false;
+        assert!(target.kill());
+    }
+
+    #[test]
+    fn ordinary_runtime_refusal_does_not_terminate_an_unchanged_process() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_secs(8));
+        let error = target.runtime_refusal("OathRuntimeInstall", 5);
+        assert!(error.to_string().contains("OathRuntimeInstall refused"));
+        assert!(!target.poisoned && !target.unresolved());
+        assert!(child.0.try_wait().unwrap().is_none());
     }
 
     #[test]
