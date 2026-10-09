@@ -2,7 +2,9 @@
 //!
 //! Run only against the PID/creation FILETIME supplied by the live_chain owner.
 //! `ready` (stdout and OUTPUT.ready) means that the three setter/candidate probes
-//! are installed. Getter is enabled only on the retained first setter thread.
+//! are installed. By default getter is enabled on the first setter thread.
+//! --connection-city OWNER:CITY instead captures a same-city getter baseline,
+//! then reuses those four slots for exact current-field write watches.
 //! Output contains raw fields only. Even a completed observation is not product
 //! acceptance. Forced termination of this debugger cannot run Rust cleanup;
 //! use its deadline or Ctrl-C for an orderly restore/continue/detach instead.
@@ -18,6 +20,10 @@ use std::path::PathBuf;
 
 type Result<T> = std::result::Result<T, String>;
 
+#[cfg(any(all(windows, target_arch = "x86_64"), test))]
+#[path = "loyalty-native-observer/connection.rs"]
+mod connection;
+
 #[derive(Debug, Parser)]
 #[command(about = "Observe one pinned Civ6 process using bounded hardware execution probes")]
 struct Args {
@@ -31,6 +37,9 @@ struct Args {
     output: PathBuf,
     #[arg(long, default_value_t = 90)]
     seconds: u64,
+    /// Opt in to one-call City/CacheCity tracing, e.g. 3:65536. Four slots only.
+    #[arg(long)]
+    connection_city: Option<String>,
 }
 
 #[cfg(any(all(windows, target_arch = "x86_64"), test))]
@@ -41,6 +50,9 @@ impl Args {
         }
         if !(1..=90).contains(&self.seconds) {
             return Err("--seconds must be in 1..=90".into());
+        }
+        if let Some(target) = &self.connection_city {
+            target.parse::<connection::CityKey>()?;
         }
         if !self.output.is_absolute()
             || self.output.extension().and_then(|s| s.to_str()) != Some("jsonl")
@@ -231,7 +243,22 @@ mod policy {
         ) -> Option<ProbeSource> {
             // B0..B3 are sticky CPU status, not a one-hot event ID. Select the
             // current execution slot from RIP, then check that slot's B bit.
-            let slot = addresses.iter().position(|&address| address == rip)?;
+            let execution_slot = addresses.iter().enumerate().position(|(slot, &address)| {
+                address == rip
+                    && enabled & (1 << (slot * 2)) != 0
+                    && (enabled >> (16 + slot * 4)) & 0xF == 0
+            });
+            let writes = (0..4)
+                .filter(|&slot| {
+                    enabled & (1 << (slot * 2)) != 0
+                        && (enabled >> (16 + slot * 4)) & 0xF == connection::WRITE4
+                        && self.dr6 & (1 << slot) != 0
+                })
+                .collect::<Vec<_>>();
+            // Write breakpoints trap AFTER the instruction; their watched data
+            // address must never be compared to RIP. Multiple current write
+            // sources are left uncertain, rather than selecting a writer.
+            let slot = execution_slot.or_else(|| (writes.len() == 1).then(|| writes[0]))?;
             if enabled & (1 << (slot * 2)) == 0
                 || self.address != Self::default().installed(addresses, enabled).address
                 || self.dr7 & !0x400 != enabled
@@ -245,6 +272,7 @@ mod policy {
                 owned_b_bits,
                 app_dr6: self.dr6 & 0xE00F & !owned_b_bits,
                 app_tf: flags & 0x100 != 0,
+                data_write: execution_slot.is_none(),
             })
         }
     }
@@ -262,6 +290,7 @@ mod policy {
         pub app_dr6: u64,
         // Future single-step setting, not evidence of a current BS trap.
         pub app_tf: bool,
+        pub data_write: bool,
     }
 
     impl ProbeSource {
@@ -281,6 +310,45 @@ mod policy {
         pub registers: DebugRegisters,
         pub rip: u64,
         pub flags: u32,
+    }
+
+    #[derive(Clone, Copy, Debug, Serialize)]
+    pub struct ProbeTransition {
+        pub snapshot: ProbeSnapshot,
+        pub addresses: [u64; 4],
+        pub control: u64,
+    }
+
+    pub fn transition_matches(
+        old: ProbeTransition,
+        exception: RawException,
+        current: Option<ProbeSnapshot>,
+        addresses: [u64; 4],
+        control: u64,
+    ) -> bool {
+        let Some(current) = current else {
+            return false;
+        };
+        let expected = DebugRegisters::default().installed(addresses, control);
+        exception.first_chance != 0
+            && exception.code == 0x80000004
+            && current.armed
+            && current.rip == old.snapshot.rip
+            && exception.exception_address == current.rip
+            && current.flags == old.snapshot.flags
+            && current.registers.address == expected.address
+            && current.registers.dr7 & !0x400 == control
+            && current.registers.dr6 & 0xE00F == old.snapshot.registers.dr6 & 0xE00F
+            && old
+                .snapshot
+                .registers
+                .own_hit(
+                    old.addresses,
+                    old.control,
+                    old.snapshot.rip,
+                    old.snapshot.flags,
+                )
+                .is_some()
     }
 
     #[derive(Clone, Copy, Debug, Serialize)]
@@ -1047,7 +1115,7 @@ mod platform {
         collections::{BTreeMap, BTreeSet},
         ffi::{c_void, OsString},
         fs::{File, OpenOptions},
-        io::{Read, Write},
+        io::{Read, Seek, SeekFrom, Write},
         mem::size_of,
         os::windows::{ffi::OsStringExt, fs::OpenOptionsExt, io::AsRawHandle},
         panic::{catch_unwind, AssertUnwindSafe},
@@ -1703,6 +1771,33 @@ mod platform {
     }
 
     impl PinnedModule {
+        fn audit_connection(&mut self, process: &Process) -> Result<Value> {
+            self._file
+                .seek(SeekFrom::Start(0))
+                .map_err(|e| format!("seek pinned connection DLL: {e}"))?;
+            let mut bytes = Vec::new();
+            self._file
+                .read_to_end(&mut bytes)
+                .map_err(|e| format!("read pinned connection DLL: {e}"))?;
+            let audit = connection::audit(&bytes, MODULE_SHA256)?;
+            for &(rva, witness) in connection::WITNESSES {
+                for (index, chunk) in witness.chunks(8).enumerate() {
+                    let address = self
+                        .identity
+                        .base
+                        .checked_add(u64::from(rva))
+                        .and_then(|p| p.checked_add((index * 8) as u64))
+                        .ok_or("witness address overflow")?;
+                    if process.read_short(address, chunk.len())? != chunk {
+                        return Err(format!(
+                            "loaded connection instruction mismatch at RVA {rva:X}"
+                        ));
+                    }
+                }
+            }
+            Ok(audit)
+        }
+
         fn open(process: &Process) -> Result<Self> {
             let identity = find_module(process)?;
             let mut file = OpenOptions::new()
@@ -1900,9 +1995,11 @@ mod platform {
         original: DebugRegisters,
         armed: bool,
         enabled: u64,
+        addresses: [u64; 4],
         suspended: bool,
         suspend_previous_count: Option<u32>,
         cleanup_snapshot: Option<ProbeSnapshot>,
+        transition: Option<ProbeTransition>,
     }
 
     struct Pending {
@@ -1937,6 +2034,8 @@ mod platform {
         pending: Option<Pending>,
         cleaned: bool,
         observation: Observation,
+        connection: Option<connection::Connection>,
+        routed_layout: Option<([u64; 4], u64)>,
         installed_total: u32,
         detach_error: Option<String>,
     }
@@ -1979,6 +2078,8 @@ mod platform {
                 pending: None,
                 cleaned: false,
                 observation: Observation::default(),
+                connection: None,
+                routed_layout: None,
                 installed_total: 0,
                 detach_error: None,
             })
@@ -2205,10 +2306,18 @@ mod platform {
                     handle,
                     original: DebugRegisters::default(),
                     armed: false,
-                    enabled: 0x45,
+                    enabled: self
+                        .connection
+                        .as_ref()
+                        .map_or(0x45, |c| c.plan(self.module.addresses).1),
+                    addresses: self
+                        .connection
+                        .as_ref()
+                        .map_or(self.module.addresses, |c| c.plan(self.module.addresses).0),
                     suspended: false,
                     suspend_previous_count: None,
                     cleanup_snapshot: None,
+                    transition: None,
                 },
             );
             let thread = self.threads.get_mut(&tid).ok_or("missing new thread")?;
@@ -2239,9 +2348,7 @@ mod platform {
             if registers(&value) != thread.original || !thread.original.unused() {
                 return Err("debug registers changed before installation".into());
             }
-            let expected = thread
-                .original
-                .installed(self.module.addresses, thread.enabled);
+            let expected = thread.original.installed(thread.addresses, thread.enabled);
             replace_registers(&mut value, expected);
             // Record intent BEFORE the API; even a failed/partial set must restore.
             thread.armed = true;
@@ -2262,9 +2369,7 @@ mod platform {
             let thread = self.threads.get_mut(&tid).ok_or("missing setter thread")?;
             let mut value = context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?;
             let before = registers(&value);
-            let expected = thread
-                .original
-                .installed(self.module.addresses, thread.enabled);
+            let expected = thread.original.installed(thread.addresses, thread.enabled);
             if !thread.armed
                 || thread.enabled != 0x45
                 || before.address != expected.address
@@ -2285,6 +2390,236 @@ mod platform {
                 json!({"event":"trigger_getter_enable","tid":tid,"before":before,"actual":actual}),
             );
             Ok(())
+        }
+
+        fn reconfigure_connection(&mut self) -> Result<()> {
+            let (addresses, control) = self
+                .connection
+                .as_ref()
+                .ok_or("missing connection trace")?
+                .plan(self.module.addresses);
+            // All target threads are stopped by the held debug event. Install
+            // the same two exact data watches on every thread, including new
+            // threads, so a publisher on a different thread is observable.
+            let tids: Vec<_> = self.threads.keys().copied().collect();
+            let held_tid = self
+                .pending
+                .as_ref()
+                .ok_or("connection transition requires a held event")?
+                .event
+                .dwThreadId;
+            for tid in tids {
+                let thread = self.threads.get_mut(&tid).ok_or("missing trace thread")?;
+                if !thread.armed {
+                    continue;
+                }
+                if !thread.handle.alive()? {
+                    continue;
+                }
+                let mut value = match context(
+                    &thread.handle,
+                    CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                ) {
+                    Ok(value) => value,
+                    Err(_) if !thread.handle.alive()? => continue,
+                    Err(error) => return Err(error),
+                };
+                let before = registers(&value);
+                let expected = thread.original.installed(thread.addresses, thread.enabled);
+                if before.address != expected.address || before.dr7 & !0x400 != thread.enabled {
+                    return Err("connection probe ownership changed before reconfigure".into());
+                }
+                if thread.addresses == addresses && thread.enabled == control {
+                    continue;
+                }
+                // Preserve any owned trap already queued on another thread.
+                // Its old execution B bit must not become a new write sample.
+                if tid != held_tid
+                    && thread.transition.is_none()
+                    && before
+                        .own_hit(thread.addresses, thread.enabled, value.Rip, value.EFlags)
+                        .is_some()
+                {
+                    thread.transition = Some(ProbeTransition {
+                        snapshot: ProbeSnapshot {
+                            armed: true,
+                            registers: before,
+                            rip: value.Rip,
+                            flags: value.EFlags,
+                        },
+                        addresses: thread.addresses,
+                        control: thread.enabled,
+                    });
+                }
+                // Save ownership intent before an API that could partially set.
+                thread.addresses = addresses;
+                thread.enabled = control;
+                let expected = DebugRegisters {
+                    dr6: before.dr6,
+                    ..thread.original.installed(addresses, control)
+                };
+                replace_registers(&mut value, expected);
+                // CONTROL was read to identify queued traps. Only set DEBUG;
+                // changing the plan must not normalize the saved flags/RIP.
+                value.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
+                set_context(&thread.handle, value)?;
+                let actual = registers(&context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?);
+                if actual.address != expected.address || actual.dr7 & !0x400 != control {
+                    return Err("connection reconfigure readback mismatch".into());
+                }
+            }
+            self.trace(json!({"event":"connection_plan","addresses":addresses,"control":control}));
+            Ok(())
+        }
+
+        fn connection_sample(
+            &mut self,
+            output: &mut File,
+            tid: u32,
+            source: ProbeSource,
+            value: CONTEXT,
+        ) -> Result<Option<&'static str>> {
+            let state = self.connection.as_ref().ok_or("missing connection state")?;
+            let (addresses, _) = self
+                .routed_layout
+                .ok_or("missing classified connection plan")?;
+            let write = source.data_write;
+            let mut reconfigure = false;
+            let fields = if write {
+                let cache = state.latest.ok_or("write watch without same-city getter")?;
+                let native = state.native_city;
+                let address = addresses[source.slot];
+                let watched_member = if source.slot == 2 {
+                    address.checked_sub(8).ok_or("watched member underflow")?
+                } else {
+                    cache.member
+                };
+                let origin = connection::getter_origin(
+                    |a, n| self.process.read_short(a, n),
+                    watched_member,
+                )?;
+                if origin.key != state.target {
+                    return Err("watched CacheCity was replaced by another city".into());
+                }
+                self.connection.as_mut().ok_or("missing state")?.wrote()?;
+                Some(json!({"event":"connection_write_after","slot":source.slot,
+                    "watched_address":address,"field":if source.slot==2 {"CacheCityCulturalIdentity.current"} else {"City+0x16D8"},
+                    "after_i32":raw_read(self.process.i32_at(address,0)),"getter_origin":origin,
+                    "raw_after_instruction_rip":value.Rip,
+                    "dll_after_instruction_rva":value.Rip.checked_sub(self.module.identity.base).filter(|&r|r<u64::from(self.module.identity.size)),
+                    "raw_16_bytes_before_rip":[raw_read(value.Rip.checked_sub(16).ok_or_else(||"code underflow".to_owned()).and_then(|a|self.process.read::<8>(a))),
+                        raw_read(value.Rip.checked_sub(8).ok_or_else(||"code underflow".to_owned()).and_then(|a|self.process.read::<8>(a)))],
+                    "raw_registers":{"rax":value.Rax,"rbx":value.Rbx,"rcx":value.Rcx,"rdx":value.Rdx,
+                        "rsi":value.Rsi,"rdi":value.Rdi,"rbp":value.Rbp,"rsp":value.Rsp,"r8":value.R8,"r9":value.R9},
+                    "raw_stack_top":raw_read(self.process.u64_at(value.Rsp,0)),
+                    "registration":native.map(|city|connection::registry_fields(|a,n|self.process.read_short(a,n),city+0x1630)),
+                    "scope":"after_write_trap_not_instruction_start_or_authoritative_role"}))
+            } else if source.slot == 0 {
+                let key = connection::CityKey {
+                    owner: self.process.u16_at(value.Rbx, 0xD8)?,
+                    city: u32::from_le_bytes(
+                        self.process.read::<4>(Process::at(value.Rbx, 0xA8)?)?,
+                    ),
+                };
+                if !self
+                    .observation
+                    .setter(value.Rbx, value.Rcx, tid, value.Rsp)?
+                {
+                    return Err("another setter in one-call connection trace".into());
+                }
+                self.connection
+                    .as_mut()
+                    .ok_or("missing state")?
+                    .setter(value.Rbx, key)?;
+                reconfigure = true;
+                let trigger = self.observation.trigger.ok_or("missing trigger")?;
+                Some(
+                    json!({"event":"setter_before","trigger":trigger,"city_key":key,
+                    "raw_city_plus_c0_i32":raw_read(self.process.i32_at(value.Rbx,0xC0)),
+                    "raw_city_plus_c4_i32":raw_read(self.process.i32_at(value.Rbx,0xC4)),
+                    "raw_rdx_pointer":value.Rdx,"raw_delta_i32":raw_read(self.process.i32_at(value.Rdx,0)),
+                    "fields":self.process.cache_fields(trigger),
+                    "registration":connection::registry_fields(|a,n|self.process.read_short(a,n),trigger.receiver)}),
+                )
+            } else if source.slot == 1 {
+                if !self.observation.returned(value.Rbx, tid, value.Rsp) {
+                    None
+                } else {
+                    self.connection.as_mut().ok_or("missing state")?.returned = true;
+                    reconfigure = true;
+                    let trigger = self.observation.trigger.ok_or("missing trigger")?;
+                    Some(json!({"event":"setter_return","trigger":trigger,
+                        "fields":self.process.cache_fields(trigger),
+                        "registration":connection::registry_fields(|a,n|self.process.read_short(a,n),trigger.receiver)}))
+                }
+            } else if value.Rip == self.module.addresses[2] + connection::CONSTRUCTOR_FROM_GETTER {
+                let member = value
+                    .Rax
+                    .checked_add(connection::GETTER_MEMBER)
+                    .ok_or("constructor member overflow")?;
+                let origin =
+                    connection::getter_origin(|a, n| self.process.read_short(a, n), member)?;
+                if !self
+                    .connection
+                    .as_mut()
+                    .ok_or("missing state")?
+                    .constructor(origin, tid, value.Rbx)?
+                {
+                    None
+                } else {
+                    reconfigure = true;
+                    Some(json!({"event":"connection_getter_origin","origin":origin,
+                        "raw_resolved_cache_city":value.Rax,"raw_lua_state":value.Rbx,
+                        "scope":"actual_GetCulturalIdentity_argument_before_member_lea"}))
+                }
+            } else if value.Rip == self.module.addresses[2] {
+                let origin =
+                    connection::getter_origin(|a, n| self.process.read_short(a, n), value.Rax)?;
+                let old = state.latest;
+                let after_return = state.returned;
+                if !self
+                    .connection
+                    .as_mut()
+                    .ok_or("missing state")?
+                    .getter(origin, tid, value.Rbx)?
+                {
+                    None
+                } else {
+                    reconfigure = true;
+                    Some(
+                        json!({"event":"connection_getter","raw_rax_pointer":value.Rax,"origin":origin,
+                        "after_setter_return":after_return,"previous_origin":old,
+                        "origin_correlation":"observed_constructor_same_member_thread_and_Lua_state",
+                        "key_mapping":"pinned_CacheCity_to_object_key_instructions",
+                        "generation_changed":old.is_some_and(|old|old.member!=origin.member)}),
+                    )
+                }
+            } else if self.observation.candidate(value.Rbx, tid) {
+                let record = self.process.read::<8>(value.Rdx);
+                let trigger = self
+                    .observation
+                    .trigger
+                    .ok_or("missing candidate trigger")?;
+                Some(
+                    json!({"event":"candidate_call_raw","raw_rcx_value":value.Rcx,
+                    "raw_record_bytes":raw_read(record),"raw_receiver":value.Rbx,
+                    "fields":self.process.cache_fields(trigger),
+                    "registration":connection::registry_fields(|a,n|self.process.read_short(a,n),trigger.receiver),
+                    "scope":"candidate_call_during_the_retained_setter_not_UI_event_delivery"}),
+                )
+            } else {
+                None
+            };
+            if let Some(mut fields) = fields {
+                fields["tid"] = json!(tid);
+                fields["raw_rip"] = json!(value.Rip);
+                fields["slot"] = json!(source.slot);
+                write_json(output, &fields)?;
+            }
+            if reconfigure {
+                self.reconfigure_connection()?;
+            }
+            Ok(None)
         }
 
         fn observe(
@@ -2477,9 +2812,38 @@ mod platform {
                 .get(&raw.tid)
                 .filter(|_| self.owns_probes)
                 .map_or(0, |thread| thread.enabled);
-            let decision = self
-                .exceptions
-                .decide(raw, snapshot, self.module.addresses, enabled);
+            let addresses = self
+                .threads
+                .get(&raw.tid)
+                .map_or(self.module.addresses, |t| t.addresses);
+            let old_pending_at_this_rip = self
+                .threads
+                .get(&raw.tid)
+                .and_then(|t| t.transition)
+                .is_some_and(|old| {
+                    raw.code == 0x80000004 && old.snapshot.rip == raw.exception_address
+                });
+            let transition = self.threads.get_mut(&raw.tid).and_then(|thread| {
+                thread
+                    .transition
+                    .filter(|old| transition_matches(*old, raw, snapshot, addresses, enabled))
+                    .inspect(|_| {
+                        thread.transition = None;
+                    })
+            });
+            let (classified, addresses, enabled) = transition
+                .map_or((snapshot, addresses, enabled), |old| {
+                    (Some(old.snapshot), old.addresses, old.control)
+                });
+            self.routed_layout = Some((addresses, enabled));
+            // A failed old-context check cannot authorize relabelling its B
+            // bit as a current write watch. Use the existing uncertain policy.
+            let classified = if old_pending_at_this_rip && transition.is_none() {
+                None
+            } else {
+                classified
+            };
+            let decision = self.exceptions.decide(raw, classified, addresses, enabled);
             if matches!(
                 decision,
                 ExceptionDecision::ForwardComposite(_) | ExceptionDecision::RestoreAndForward
@@ -2550,9 +2914,12 @@ mod platform {
                 self.ready = true;
                 let ready = json!({"event":"ready", "pid":args.pid, "created":args.created,
                     "image_path":self.process.pinned.image_path, "module":self.module.identity,
-                    "module_file_sha256":MODULE_SHA256, "probe_rvas":RVAS,
+                    "module_file_sha256":MODULE_SHA256,
+                    "probe_rvas":if self.connection.is_some() {[RVAS[0],RVAS[1],connection::CONSTRUCTOR_RVA,RVAS[3]]} else {RVAS},
                     "threads_installed":self.installed_total, "ready_path":args.ready_path(),
-                    "initial_local_enable_mask":0x45,"getter_enable_policy":"first_setter_thread_only",
+                    "initial_local_enable_mask":if self.connection.is_some() {0x55} else {0x45},
+                    "getter_enable_policy":if self.connection.is_some() {"one_call_same_city_connection"} else {"first_setter_thread_only"},
+                    "connection":self.connection,
                     "attach_break":self.exceptions.attach, "ntdll_identity":self.ntdll.report(),
                     "raw_notification_interface":self.process.interface_fields(self.module.identity.base),
                     "raw_main_image_module":self.process.main_image_fields(),
@@ -2617,6 +2984,9 @@ mod platform {
             let ExceptionDecision::Probe(source) = decision else {
                 return Err("unexpected observation decision".into());
             };
+            if self.connection.is_some() {
+                return self.connection_sample(output, event.dwThreadId, source, value);
+            }
             let fields = match source.slot {
                 0 if self.observation.setter(
                     value.Rbx,
@@ -3180,9 +3550,20 @@ mod platform {
             })
             .map_err(|e| format!("install cancellation handler: {e}"))?;
             let process = Process::open(args)?;
-            let module = PinnedModule::open(&process)?;
+            let mut module = PinnedModule::open(&process)?;
+            let connection = args
+                .connection_city
+                .as_deref()
+                .map(|key| {
+                    Ok::<_, String>(connection::Connection::new(
+                        key.parse()?,
+                        module.audit_connection(&process)?,
+                    ))
+                })
+                .transpose()?;
             let ntdll = PinnedNtdll::open(&process)?;
             session = Some(Session::attach(process, module, ntdll)?);
+            session.as_mut().ok_or("missing debug session")?.connection = connection;
             session
                 .as_mut()
                 .ok_or("missing debug session")?
@@ -3210,6 +3591,7 @@ mod platform {
             "forwarded_probe_context_delivery_unverified":delivery_unverified,
             "probe_resume_error":session.as_ref().and_then(|s| s.probe_resume_error.as_ref()),
             "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
+            "connection":session.as_ref().and_then(|s| s.connection.as_ref()),
             "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
             "exceptions":session.as_ref().map(|s| &s.exceptions),
             "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
@@ -3427,7 +3809,21 @@ mod platform {
                 // shadow space/alignment and saved RBX. Production setter /
                 // return matching and raw memory reads use actual trap context.
                 let getter_result: u64;
-                unsafe {
+                if std::env::var_os("LOYALTY_OWNED_WRITE_WATCH").is_some() {
+                    // Only this newly spawned fixture writes fixture memory.
+                    unsafe { std::arch::asm!(
+                        "push rbx", "sub rsp, 0x28", "mov rbx, rcx",
+                        "lea rcx, [rbx + 0x1630]", "lea rdx, [rbx + 0x16f0]",
+                        "call {setter}",
+                        "mov dword ptr [rbx + 0x16d8], 24320",
+                        "mov dword ptr [rbx + 0x6e0], 24320",
+                        "call {candidate}", "call {returned}",
+                        "mov rcx, 5", "call {getter}",
+                        "add rsp, 0x28", "pop rbx",
+                        setter=sym setter,candidate=sym candidate,returned=sym returned,getter=sym getter,
+                        in("rcx") base,lateout("rax") getter_result,clobber_abi("C"),
+                    ); }
+                } else { unsafe {
                     std::arch::asm!(
                         "push rbx", "sub rsp, 0x28", "mov rbx, rcx",
                         "lea rcx, [rbx + 0x1630]", "lea rdx, [rbx + 0x16f0]",
@@ -3440,6 +3836,7 @@ mod platform {
                         returned = sym returned, getter = sym getter,
                         in("rcx") base, lateout("rax") getter_result, clobber_abi("C"),
                     );
+                }
                 }
                 assert_eq!(getter_result, 16);
                 if std::env::var_os("LOYALTY_OWNED_BS_ONLY").is_some() {
@@ -3513,10 +3910,16 @@ mod platform {
             run_owned_hardware(OwnedMode::Restore);
         }
 
+        #[test]
+        fn windows_one_call_connection_write_watches_restore_owned_child() {
+            run_owned_hardware(OwnedMode::WriteWatch);
+        }
+
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         enum OwnedMode {
             Exit,
             Restore,
+            WriteWatch,
             AppTfObserve,
             AppTfCleanup,
             UncertainDr7,
@@ -3743,6 +4146,9 @@ mod platform {
             if mode == OwnedMode::SecondChance {
                 command.env("LOYALTY_OWNED_UNHANDLED", "1");
             }
+            if mode == OwnedMode::WriteWatch {
+                command.env("LOYALTY_OWNED_WRITE_WATCH", "1");
+            }
             let mut child = OwnedChild(
                 command
                     .args([
@@ -3846,6 +4252,8 @@ mod platform {
                 pending: None,
                 cleaned: false,
                 observation: Observation::default(),
+                connection: None,
+                routed_layout: None,
                 installed_total: 0,
                 detach_error: None,
             };
@@ -3858,6 +4266,7 @@ mod platform {
                 created: session.process.pinned.created,
                 output: output.path().to_owned(),
                 seconds: 20,
+                connection_city: None,
             };
             let mut exits = 0;
             let mut process_exit = None;
@@ -3906,6 +4315,31 @@ mod platform {
                 } else {
                     if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
                         let info = unsafe { event.u.Exception };
+                        if mode == OwnedMode::WriteWatch
+                            && info.dwFirstChance != 0
+                            && info.ExceptionRecord.ExceptionAddress as u64 == addresses[0]
+                        {
+                            let thread = session.threads.get(&event.dwThreadId).unwrap();
+                            let value = context(
+                                &thread.handle,
+                                CONTEXT_INTEGER_AMD64
+                                    | CONTEXT_CONTROL_AMD64
+                                    | CONTEXT_DEBUG_REGISTERS_AMD64,
+                            )
+                            .unwrap();
+                            let origin = connection::getter_origin(
+                                |a, n| session.process.read_short(a, n),
+                                value.Rbx + 0x6D8,
+                            )
+                            .unwrap();
+                            let mut c = connection::Connection::new(
+                                origin.key,
+                                json!({"scope":"owned_heap_fixture_only"}),
+                            );
+                            c.constructor(origin, event.dwThreadId, 0).unwrap();
+                            c.getter(origin, event.dwThreadId, 0).unwrap();
+                            session.connection = Some(c);
+                        }
                         if info.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP
                             && info.dwFirstChance != 0
                             && info.ExceptionRecord.ExceptionAddress as u64 == addresses[2]
@@ -4015,6 +4449,11 @@ mod platform {
                             println!("FAILED_HARDWARE_TRACE={}", json!(session.debug_trace));
                             panic!("{error}");
                         });
+                    if mode == OwnedMode::WriteWatch
+                        && session.connection.as_ref().is_some_and(|c| c.returned)
+                    {
+                        break; // restore while the one return event remains held
+                    }
                     if event.dwDebugEventCode == EXIT_THREAD_DEBUG_EVENT {
                         exits += 1;
                     }
@@ -4140,6 +4579,33 @@ mod platform {
                 "trace_omitted":session.debug_trace_omitted,
                 "trace_omitted_by_kind":session.debug_trace_omitted_by_kind});
             println!("LIVE_HARDWARE_TRACE={trace}");
+            if mode == OwnedMode::WriteWatch {
+                let records: Vec<Value> = std::fs::read_to_string(output.path())
+                    .unwrap()
+                    .lines()
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect();
+                let writes: Vec<_> = records
+                    .iter()
+                    .filter(|r| r["event"] == "connection_write_after")
+                    .collect();
+                assert_eq!(writes.len(), 2);
+                assert_eq!(writes[0]["slot"], 0);
+                assert_eq!(writes[1]["slot"], 2);
+                assert!(writes.iter().all(|r| r["after_i32"] == 24320
+                    && r["raw_after_instruction_rip"] != r["watched_address"]));
+                assert_eq!(session.connection.as_ref().unwrap().writes, 2);
+                assert_eq!(session.exceptions.unknown_first_chance_count, 0);
+                assert_eq!(session.exceptions.second_chance_count, 0);
+                assert!(session
+                    .debug_trace
+                    .iter()
+                    .filter(|r| r["event"] == "probe_restore")
+                    .all(|r| r["readback_ok"] == true));
+                assert_eq!(app["normal_result"], 16);
+                assert_eq!(app["app_steps"], 1);
+                return;
+            }
             let mut counts = [0; 4];
             for record in &session.debug_trace {
                 if record["event"] == "probe_resume" {
@@ -4757,7 +5223,146 @@ mod tests {
             owned_b_bits,
             app_dr6: 0,
             app_tf: false,
+            data_write: false,
         }
+    }
+
+    #[test]
+    fn data_watch_uses_after_write_rip_and_preserves_foreign_traps() {
+        let addresses = [0x2000, 0x3000, 0x4000, 0x5000];
+        let control = 0xD0D0055;
+        let snapshot = ProbeSnapshot {
+            armed: true,
+            registers: DebugRegisters {
+                dr6: 4,
+                ..DebugRegisters::default().installed(addresses, control)
+            },
+            rip: 0x123456,
+            flags: 0,
+        };
+        let raw = RawException {
+            tid: 1,
+            code: 0x80000004,
+            first_chance: 1,
+            exception_address: snapshot.rip,
+        };
+        let source = ProbeSource {
+            slot: 2,
+            data_write: true,
+            ..probe_source(2, 4)
+        };
+        assert_eq!(
+            ExceptionPolicy::default().decide(raw, Some(snapshot), addresses, control),
+            ExceptionDecision::Probe(source)
+        );
+        let foreign = ProbeSnapshot {
+            registers: DebugRegisters {
+                dr6: 4 | 0x4000,
+                ..snapshot.registers
+            },
+            ..snapshot
+        };
+        assert!(matches!(
+            ExceptionPolicy::default().decide(raw, Some(foreign), addresses, control),
+            ExceptionDecision::ForwardComposite(_)
+        ));
+        let ambiguous = ProbeSnapshot {
+            registers: DebugRegisters {
+                dr6: 5,
+                ..snapshot.registers
+            },
+            ..snapshot
+        };
+        assert_eq!(
+            ExceptionPolicy::default().decide(raw, Some(ambiguous), addresses, control),
+            ExceptionDecision::RestoreAndForward
+        );
+        assert_eq!(
+            ExceptionPolicy::default().decide(
+                RawException {
+                    first_chance: 0,
+                    ..raw
+                },
+                Some(snapshot),
+                addresses,
+                control
+            ),
+            ExceptionDecision::ForwardSecondChance
+        );
+    }
+
+    #[test]
+    fn queued_execution_trap_keeps_old_role_after_switch_to_write_watch() {
+        let old_addresses = [100, 200, 300, 400];
+        let old = ProbeTransition {
+            addresses: old_addresses,
+            control: 0x55,
+            snapshot: ProbeSnapshot {
+                armed: true,
+                registers: DebugRegisters {
+                    dr6: 4,
+                    ..DebugRegisters::default().installed(old_addresses, 0x55)
+                },
+                rip: 300,
+                flags: 0,
+            },
+        };
+        let new_addresses = [100, 200, 0x2000, 400];
+        let control = 0xD000055;
+        let current = ProbeSnapshot {
+            registers: DebugRegisters {
+                dr6: 4,
+                ..DebugRegisters::default().installed(new_addresses, control)
+            },
+            ..old.snapshot
+        };
+        let raw = RawException {
+            tid: 9,
+            code: 0x80000004,
+            first_chance: 1,
+            exception_address: 300,
+        };
+        assert!(transition_matches(
+            old,
+            raw,
+            Some(current),
+            new_addresses,
+            control
+        ));
+        assert!(!transition_matches(
+            old,
+            RawException {
+                first_chance: 0,
+                ..raw
+            },
+            Some(current),
+            new_addresses,
+            control
+        ));
+        assert!(!transition_matches(
+            old,
+            RawException {
+                exception_address: 301,
+                ..raw
+            },
+            Some(current),
+            new_addresses,
+            control
+        ));
+        assert!(!transition_matches(
+            old,
+            raw,
+            Some(ProbeSnapshot {
+                flags: 0x100,
+                ..current
+            }),
+            new_addresses,
+            control
+        ));
+        assert_eq!(
+            ExceptionPolicy::default().decide(raw, Some(old.snapshot), old.addresses, old.control),
+            ExceptionDecision::Probe(probe_source(2, 4))
+        );
     }
 
     #[test]
@@ -5132,6 +5737,7 @@ mod tests {
                 owned_b_bits: 9,
                 app_dr6: 0xE004,
                 app_tf: true,
+                data_write: false,
             })
         );
         assert!(!decision.handled());
@@ -5801,6 +6407,7 @@ mod tests {
             created: 456,
             output: std::env::current_dir().unwrap().join("probe.jsonl"),
             seconds: 90,
+            connection_city: None,
         };
         assert!(args.validate().is_ok());
         assert!(args.ready_path().ends_with("probe.jsonl.ready"));
