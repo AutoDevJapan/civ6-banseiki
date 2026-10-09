@@ -127,5 +127,206 @@
     <Row Tag="LOC_JAC_GOSSIP_SOURCE_1534_ACCESS" Language="ru_RU">
       <Text>Ходят слухи, что</Text>
     </Row>
+    <Row Tag="LOC_JAC_MP_ASSIGNMENT" Language="ja_JP"><Text>マルチプレイの分担</Text></Row>
+    <Row Tag="LOC_JAC_MP_ASSIGNMENT" Language="en_US"><Text>Multiplayer assignments</Text></Row>
+    <Row Tag="LOC_JAC_MP_ASSIGNMENT" Language="ru_RU"><Text>Распределение в сетевой игре</Text></Row>
+    <Row Tag="LOC_JAC_MP_ALL_JAPAN" Language="ja_JP"><Text>全員日本</Text></Row>
+    <Row Tag="LOC_JAC_MP_ALL_JAPAN" Language="en_US"><Text>All Japan</Text></Row>
+    <Row Tag="LOC_JAC_MP_ALL_JAPAN" Language="ru_RU"><Text>Все за Японию</Text></Row>
+    <Row Tag="LOC_JAC_MP_DIFFERENT" Language="ja_JP"><Text>異なる勢力</Text></Row>
+    <Row Tag="LOC_JAC_MP_DIFFERENT" Language="en_US"><Text>Different factions</Text></Row>
+    <Row Tag="LOC_JAC_MP_DIFFERENT" Language="ru_RU"><Text>Разные державы</Text></Row>
+    <Row Tag="LOC_JAC_MP_PLAYER" Language="ja_JP"><Text>プレイヤー</Text></Row>
+    <Row Tag="LOC_JAC_MP_PLAYER" Language="en_US"><Text>Player</Text></Row>
+    <Row Tag="LOC_JAC_MP_PLAYER" Language="ru_RU"><Text>Игрок</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA" Language="ja_JP"><Text>担当区域</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA" Language="en_US"><Text>Assigned area</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA" Language="ru_RU"><Text>Область</Text></Row>
+    <Row Tag="LOC_JAC_MP_SUBJECT" Language="ja_JP"><Text>勢力主体</Text></Row>
+    <Row Tag="LOC_JAC_MP_SUBJECT" Language="en_US"><Text>Faction lead</Text></Row>
+    <Row Tag="LOC_JAC_MP_SUBJECT" Language="ru_RU"><Text>Главная сторона</Text></Row>
+    <Row Tag="LOC_JAC_MP_SUBJECT_IS" Language="ja_JP"><Text>勢力主体は</Text></Row>
+    <Row Tag="LOC_JAC_MP_SUBJECT_IS" Language="en_US"><Text>Faction lead:</Text></Row>
+    <Row Tag="LOC_JAC_MP_SUBJECT_IS" Language="ru_RU"><Text>Главная сторона:</Text></Row>
+    <Row Tag="LOC_JAC_MP_UNSET" Language="ja_JP"><Text>未設定</Text></Row>
+    <Row Tag="LOC_JAC_MP_UNSET" Language="en_US"><Text>Not set</Text></Row>
+    <Row Tag="LOC_JAC_MP_UNSET" Language="ru_RU"><Text>Не задано</Text></Row>
+    <Row Tag="LOC_JAC_MP_JAPAN_HELP" Language="ja_JP"><Text>全員を同じチームにし、開始前に担当区域と勢力主体を決めます。</Text></Row>
+    <Row Tag="LOC_JAC_MP_JAPAN_HELP" Language="en_US"><Text>Everyone joins one team. Assign each area and the faction lead before starting.</Text></Row>
+    <Row Tag="LOC_JAC_MP_JAPAN_HELP" Language="ru_RU"><Text>Все вступают в одну команду. Перед стартом назначьте области и главную сторону.</Text></Row>
+    <Row Tag="LOC_JAC_MP_DIFFERENT_HELP" Language="ja_JP"><Text>各プレイヤーが異なる勢力で遊びます。</Text></Row>
+    <Row Tag="LOC_JAC_MP_DIFFERENT_HELP" Language="en_US"><Text>Players control different factions.</Text></Row>
+    <Row Tag="LOC_JAC_MP_DIFFERENT_HELP" Language="ru_RU"><Text>Игроки управляют разными державами.</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_PLAYERS" Language="ja_JP"><Text>2人以上のプレイヤーを待っています。</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_PLAYERS" Language="en_US"><Text>Waiting for at least two players.</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_PLAYERS" Language="ru_RU"><Text>Ожидание как минимум двух игроков.</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_SUBJECT" Language="ja_JP"><Text>勢力主体を選んでください。</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_SUBJECT" Language="en_US"><Text>Select the faction lead.</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_SUBJECT" Language="ru_RU"><Text>Выберите главную сторону.</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_AREA" Language="ja_JP"><Text>各プレイヤーの担当区域を選んでください。</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_AREA" Language="en_US"><Text>Assign an area to every player.</Text></Row>
+    <Row Tag="LOC_JAC_MP_NEED_AREA" Language="ru_RU"><Text>Назначьте область каждому игроку.</Text></Row>
+    <Row Tag="LOC_JAC_MP_OVERLAP" Language="ja_JP"><Text>担当区域が重なっています。別の区域を選んでください。</Text></Row>
+    <Row Tag="LOC_JAC_MP_OVERLAP" Language="en_US"><Text>Areas overlap. Choose a different area.</Text></Row>
+    <Row Tag="LOC_JAC_MP_OVERLAP" Language="ru_RU"><Text>Области пересекаются. Выберите другую область.</Text></Row>
+    <Row Tag="LOC_JAC_MP_TEAM_PENDING" Language="ja_JP"><Text>全員を同じチームに設定しています。</Text></Row>
+    <Row Tag="LOC_JAC_MP_TEAM_PENDING" Language="en_US"><Text>Setting every player to the same team.</Text></Row>
+    <Row Tag="LOC_JAC_MP_TEAM_PENDING" Language="ru_RU"><Text>Все игроки переводятся в одну команду.</Text></Row>
+    <Row Tag="LOC_JAC_MP_READY" Language="ja_JP"><Text>担当区域はゲーム開始前に設定されました。</Text></Row>
+    <Row Tag="LOC_JAC_MP_READY" Language="en_US"><Text>Assignments are set for game start.</Text></Row>
+    <Row Tag="LOC_JAC_MP_READY" Language="ru_RU"><Text>Области назначены до начала игры.</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_EAST" Language="ja_JP"><Text>東日本</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_EAST" Language="en_US"><Text>Eastern Japan</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_EAST" Language="ru_RU"><Text>Восточная Япония</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_WEST" Language="ja_JP"><Text>西日本</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_WEST" Language="en_US"><Text>Western Japan</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_WEST" Language="ru_RU"><Text>Западная Япония</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_KYUSHU" Language="ja_JP"><Text>九州・沖縄</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_KYUSHU" Language="en_US"><Text>Kyushu and Okinawa</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_KYUSHU" Language="ru_RU"><Text>Кюсю и Окинава</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_HOKKAIDO" Language="ja_JP"><Text>北海道</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_HOKKAIDO" Language="en_US"><Text>Hokkaido</Text></Row>
+    <Row Tag="LOC_JAC_MP_AREA_HOKKAIDO" Language="ru_RU"><Text>Хоккайдо</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_01" Language="ja_JP"><Text>北海道</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_01" Language="en_US"><Text>Hokkaido</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_01" Language="ru_RU"><Text>Хоккайдо</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_02" Language="ja_JP"><Text>青森県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_02" Language="en_US"><Text>Aomori</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_02" Language="ru_RU"><Text>Аомори</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_03" Language="ja_JP"><Text>岩手県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_03" Language="en_US"><Text>Iwate</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_03" Language="ru_RU"><Text>Иватэ</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_04" Language="ja_JP"><Text>宮城県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_04" Language="en_US"><Text>Miyagi</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_04" Language="ru_RU"><Text>Мияги</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_05" Language="ja_JP"><Text>秋田県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_05" Language="en_US"><Text>Akita</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_05" Language="ru_RU"><Text>Акита</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_06" Language="ja_JP"><Text>山形県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_06" Language="en_US"><Text>Yamagata</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_06" Language="ru_RU"><Text>Ямагата</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_07" Language="ja_JP"><Text>福島県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_07" Language="en_US"><Text>Fukushima</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_07" Language="ru_RU"><Text>Фукусима</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_08" Language="ja_JP"><Text>茨城県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_08" Language="en_US"><Text>Ibaraki</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_08" Language="ru_RU"><Text>Ибараки</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_09" Language="ja_JP"><Text>栃木県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_09" Language="en_US"><Text>Tochigi</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_09" Language="ru_RU"><Text>Тотиги</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_10" Language="ja_JP"><Text>群馬県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_10" Language="en_US"><Text>Gunma</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_10" Language="ru_RU"><Text>Гумма</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_11" Language="ja_JP"><Text>埼玉県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_11" Language="en_US"><Text>Saitama</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_11" Language="ru_RU"><Text>Сайтама</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_12" Language="ja_JP"><Text>千葉県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_12" Language="en_US"><Text>Chiba</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_12" Language="ru_RU"><Text>Тиба</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_13" Language="ja_JP"><Text>東京都</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_13" Language="en_US"><Text>Tokyo</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_13" Language="ru_RU"><Text>Токио</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_14" Language="ja_JP"><Text>神奈川県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_14" Language="en_US"><Text>Kanagawa</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_14" Language="ru_RU"><Text>Канагава</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_15" Language="ja_JP"><Text>新潟県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_15" Language="en_US"><Text>Niigata</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_15" Language="ru_RU"><Text>Ниигата</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_16" Language="ja_JP"><Text>富山県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_16" Language="en_US"><Text>Toyama</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_16" Language="ru_RU"><Text>Тояма</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_17" Language="ja_JP"><Text>石川県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_17" Language="en_US"><Text>Ishikawa</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_17" Language="ru_RU"><Text>Исикава</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_18" Language="ja_JP"><Text>福井県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_18" Language="en_US"><Text>Fukui</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_18" Language="ru_RU"><Text>Фукуи</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_19" Language="ja_JP"><Text>山梨県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_19" Language="en_US"><Text>Yamanashi</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_19" Language="ru_RU"><Text>Яманаси</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_20" Language="ja_JP"><Text>長野県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_20" Language="en_US"><Text>Nagano</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_20" Language="ru_RU"><Text>Нагано</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_21" Language="ja_JP"><Text>岐阜県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_21" Language="en_US"><Text>Gifu</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_21" Language="ru_RU"><Text>Гифу</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_22" Language="ja_JP"><Text>静岡県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_22" Language="en_US"><Text>Shizuoka</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_22" Language="ru_RU"><Text>Сидзуока</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_23" Language="ja_JP"><Text>愛知県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_23" Language="en_US"><Text>Aichi</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_23" Language="ru_RU"><Text>Айти</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_24" Language="ja_JP"><Text>三重県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_24" Language="en_US"><Text>Mie</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_24" Language="ru_RU"><Text>Миэ</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_25" Language="ja_JP"><Text>滋賀県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_25" Language="en_US"><Text>Shiga</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_25" Language="ru_RU"><Text>Сига</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_26" Language="ja_JP"><Text>京都府</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_26" Language="en_US"><Text>Kyoto</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_26" Language="ru_RU"><Text>Киото</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_27" Language="ja_JP"><Text>大阪府</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_27" Language="en_US"><Text>Osaka</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_27" Language="ru_RU"><Text>Осака</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_28" Language="ja_JP"><Text>兵庫県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_28" Language="en_US"><Text>Hyogo</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_28" Language="ru_RU"><Text>Хёго</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_29" Language="ja_JP"><Text>奈良県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_29" Language="en_US"><Text>Nara</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_29" Language="ru_RU"><Text>Нара</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_30" Language="ja_JP"><Text>和歌山県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_30" Language="en_US"><Text>Wakayama</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_30" Language="ru_RU"><Text>Вакаяма</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_31" Language="ja_JP"><Text>鳥取県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_31" Language="en_US"><Text>Tottori</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_31" Language="ru_RU"><Text>Тоттори</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_32" Language="ja_JP"><Text>島根県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_32" Language="en_US"><Text>Shimane</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_32" Language="ru_RU"><Text>Симанэ</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_33" Language="ja_JP"><Text>岡山県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_33" Language="en_US"><Text>Okayama</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_33" Language="ru_RU"><Text>Окаяма</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_34" Language="ja_JP"><Text>広島県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_34" Language="en_US"><Text>Hiroshima</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_34" Language="ru_RU"><Text>Хиросима</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_35" Language="ja_JP"><Text>山口県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_35" Language="en_US"><Text>Yamaguchi</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_35" Language="ru_RU"><Text>Ямагути</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_36" Language="ja_JP"><Text>徳島県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_36" Language="en_US"><Text>Tokushima</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_36" Language="ru_RU"><Text>Токусима</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_37" Language="ja_JP"><Text>香川県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_37" Language="en_US"><Text>Kagawa</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_37" Language="ru_RU"><Text>Кагава</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_38" Language="ja_JP"><Text>愛媛県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_38" Language="en_US"><Text>Ehime</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_38" Language="ru_RU"><Text>Эхимэ</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_39" Language="ja_JP"><Text>高知県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_39" Language="en_US"><Text>Kochi</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_39" Language="ru_RU"><Text>Коти</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_40" Language="ja_JP"><Text>福岡県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_40" Language="en_US"><Text>Fukuoka</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_40" Language="ru_RU"><Text>Фукуока</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_41" Language="ja_JP"><Text>佐賀県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_41" Language="en_US"><Text>Saga</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_41" Language="ru_RU"><Text>Сага</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_42" Language="ja_JP"><Text>長崎県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_42" Language="en_US"><Text>Nagasaki</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_42" Language="ru_RU"><Text>Нагасаки</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_43" Language="ja_JP"><Text>熊本県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_43" Language="en_US"><Text>Kumamoto</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_43" Language="ru_RU"><Text>Кумамото</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_44" Language="ja_JP"><Text>大分県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_44" Language="en_US"><Text>Oita</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_44" Language="ru_RU"><Text>Оита</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_45" Language="ja_JP"><Text>宮崎県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_45" Language="en_US"><Text>Miyazaki</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_45" Language="ru_RU"><Text>Миядзаки</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_46" Language="ja_JP"><Text>鹿児島県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_46" Language="en_US"><Text>Kagoshima</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_46" Language="ru_RU"><Text>Кагосима</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_47" Language="ja_JP"><Text>沖縄県</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_47" Language="en_US"><Text>Okinawa</Text></Row>
+    <Row Tag="LOC_JAC_MP_PREF_47" Language="ru_RU"><Text>Окинава</Text></Row>
   </LocalizedText>
 </GameData>

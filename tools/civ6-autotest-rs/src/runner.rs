@@ -2198,8 +2198,10 @@ impl Runner {
                         text(step, "path")
                     )));
                 }
-                self.close_options_menu(deadline)?;
-                self.dismiss_advisor(deadline)?;
+                if step["capture_only"] != true {
+                    self.close_options_menu(deadline)?;
+                    self.dismiss_advisor(deadline)?;
+                }
                 self.remaining(deadline)?;
                 let crop = step["crop"].as_array().map(|a| {
                     [

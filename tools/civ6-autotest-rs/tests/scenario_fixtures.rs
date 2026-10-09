@@ -41,6 +41,53 @@ fn embedded_lua(step: &Value) -> Option<&str> {
 }
 
 #[test]
+fn japan_staging_assignment_live_scenario_validates_and_compiles() {
+    let data = scenario("multiplayer-japan-staging-assignment.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(data["strict_lua_errors"], true);
+    assert_eq!(data["session_type"], "hotseat");
+    let run = steps(&data);
+    assert!(action(&run[0], "enable_mods"));
+    assert!(action(&run[1], "configure"));
+    assert_eq!(run[1]["players"].as_array().unwrap().len(), 22);
+    assert!(action(&run[2], "ui_lua"));
+    assert!(action(&run[3], "wait_for"));
+    assert_eq!(run[3]["condition"]["type"], "state");
+    assert_eq!(run[3]["condition"]["name"], "JAC_JapanStagingRoom");
+    assert!(action(&run[4], "wait_for"));
+    assert_eq!(run[4]["condition"]["type"], "lua");
+    assert_eq!(run[4]["condition"]["state_name"], "JAC_JapanStagingRoom");
+    compile_lua(&Lua::new(), run[4]["condition"]["code"].as_str().unwrap());
+    assert!(action(&run[5], "ui_lua"));
+    assert!(action(&run[6], "screenshot"));
+    let lua = Lua::new();
+    for step in [&run[2], &run[5]] {
+        compile_lua(&lua, code(step));
+    }
+}
+
+#[test]
+fn japan_staging_diagnostic_captures_transition_without_tuner() {
+    let data = scenario("multiplayer-japan-staging-diagnostic.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(data["session_type"], "hotseat");
+    let run = steps(&data);
+    assert_eq!(run.len(), 11);
+    assert!(action(&run[3], "wait_for"));
+    assert_eq!(run[3]["condition"]["type"], "state");
+    assert!(action(&run[4], "screenshot"));
+    assert_eq!(run[4]["capture_only"], true);
+    for index in [4, 6, 8, 10] {
+        assert!(action(&run[index], "screenshot"));
+        assert_eq!(run[index]["capture_only"], true);
+    }
+    for index in [5, 7, 9] {
+        assert!(action(&run[index], "pause"));
+        assert_eq!(run[index]["seconds"], 10);
+    }
+}
+
+#[test]
 fn ui_lua_comparison_requires_a_recorded_value() {
     let mut data = json!({
         "name": "snapshot comparison",
