@@ -335,7 +335,7 @@ fn refusals_run_in_an_owned_child() {
 
 #[test]
 fn gateway_frames_describe_the_saved_state() {
-    // Both gateways: one fixed allocation of 0xe8 and a language handler for
+    // Both gateways: one fixed allocation of 0xf8 (rcx/rdx saved above the xmm area, stack arguments 7 and 8 at 30h/38h) and a language handler for
     // unwinding only, so an exception through the original reaches us.
     for gateway in [
         oath_apply_gateway as *const () as u64,
@@ -351,7 +351,7 @@ fn gateway_frames_describe_the_saved_state() {
         assert_eq!(unwind[0] >> 3, 2, "UNW_FLAG_UHANDLER only");
         assert_eq!(unwind[1], 16, "prolog covers the token zeroing");
         assert_eq!(unwind[5] & 15, 1, "one alloc opcode");
-        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0xe8 / 8);
+        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0xf8 / 8);
     }
 }
 
@@ -441,7 +441,18 @@ fn abi_child() {
 
     // Direct callback edges: unreadable effect, then unreadable both.
     let mut claim = 0u64;
-    unsafe { oath_begin(0x10, subject_address, 8, 1, 0x99, &mut claim) };
+    unsafe {
+        oath_begin(
+            0x10,
+            subject_address,
+            8,
+            1,
+            0x99,
+            &mut claim,
+            0x1111,
+            0x2222,
+        )
+    };
     assert_ne!(claim, 0, "the frame slot owns the claim");
     assert_eq!(trace.in_flight(), 1);
     assert_eq!(
@@ -450,7 +461,7 @@ fn abi_child() {
     );
     unsafe { oath_end(&mut claim, 0x1234) };
     assert_eq!(claim, 0, "end consumed the claim");
-    unsafe { oath_begin(0x10, 0x20, 9, 2, 0x99, &mut claim) };
+    unsafe { oath_begin(0x10, 0x20, 9, 2, 0x99, &mut claim, 0x1111, 0x2222) };
     unsafe { oath_end(&mut claim, 0) };
     assert_eq!(trace.in_flight(), 0);
 
@@ -475,6 +486,15 @@ fn abi_child() {
         "caller is the fixture"
     );
     assert_ne!(r.thread_id, 0);
+    // The caller held distinct sentinels in RBP and RDI (the fixture sets all
+    // nonvolatile registers); the rows copy exactly those, not each other.
+    for row in &rows[..4] {
+        assert_eq!(
+            (row.caller_rbp, row.caller_rdi),
+            (0x2222_2222_2222_2222, 0x3333_3333_3333_3333)
+        );
+    }
+    assert_eq!((rows[4].caller_rbp, rows[4].caller_rdi), (0x1111, 0x2222));
     assert!(!rows[1].original_al_true() && rows[1].input_copy_failed());
     assert_eq!(rows[1].copy_flags, COPY_EFFECT_VTABLE);
     assert_eq!((rows[2].call, rows[2].instance_id), (OathCall::Remove, 3));
@@ -830,7 +850,7 @@ fn handler_child() {
     let claim = || unsafe { ptr::read_volatile(slot) };
 
     // A call that finished leaves no claim for a late unwind to settle again.
-    unsafe { oath_begin(0x10, 0x20, 5, 1, 0x99, slot) };
+    unsafe { oath_begin(0x10, 0x20, 5, 1, 0x99, slot, 0x1111, 0x2222) };
     assert_eq!(trace.in_flight(), 1);
     unsafe { oath_end(slot, 7) };
     assert_eq!((trace.in_flight(), claim()), (0, 0));
@@ -839,7 +859,7 @@ fn handler_child() {
     assert_eq!(trace.records().unwrap()[0].state, OathState::Completed);
 
     // The search pass does not settle; the unwind pass settles exactly once.
-    unsafe { oath_begin(0x10, 0x20, 6, 2, 0x99, slot) };
+    unsafe { oath_begin(0x10, 0x20, 6, 2, 0x99, slot, 0x1111, 0x2222) };
     assert_eq!(handler(&searching), 1);
     assert_eq!((trace.in_flight(), claim() != 0), (1, true));
     assert_eq!(handler(&unwinding), 1);
@@ -854,7 +874,7 @@ fn handler_child() {
 
     // A stopped trace claims nothing at all.
     trace.stop();
-    unsafe { oath_begin(0x10, 0x20, 7, 1, 0x99, slot) };
+    unsafe { oath_begin(0x10, 0x20, 7, 1, 0x99, slot, 0x1111, 0x2222) };
     assert_eq!((trace.in_flight(), claim()), (0, 0));
     assert_eq!(unsafe { uninstall_oath() }, Ok(true));
 }

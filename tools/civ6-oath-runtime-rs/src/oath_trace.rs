@@ -29,7 +29,8 @@ use crate::oath_record::*;
 use windows_sys::Win32::System::Diagnostics::Debug::{RtlAddFunctionTable, RtlLookupFunctionEntry};
 
 pub const OATH_MAGIC: u32 = 0x4a41_434f; // JACO
-pub const OATH_VERSION: u32 = 1;
+/// 2: rows carry the caller's raw RBP and RDI (stack arguments 7 and 8).
+pub const OATH_VERSION: u32 = 2;
 const COUNTED: u64 = 1 << 63;
 const SLOT_MASK: u64 = 0xffff_ffff;
 const CALL_SHIFT: u32 = 48;
@@ -48,6 +49,8 @@ pub struct OathRow {
     effect: AtomicU64,
     subject: AtomicU64,
     caller: AtomicU64,
+    caller_rbp: AtomicU64,
+    caller_rdi: AtomicU64,
     effect_vtable: AtomicU64,
     subject_object: AtomicU64,
     subject_control: AtomicU64,
@@ -135,6 +138,8 @@ impl OathTrace {
                 effect: row.effect.load(Ordering::Relaxed),
                 subject: row.subject.load(Ordering::Relaxed),
                 caller: row.caller.load(Ordering::Relaxed),
+                caller_rbp: row.caller_rbp.load(Ordering::Relaxed),
+                caller_rdi: row.caller_rdi.load(Ordering::Relaxed),
                 effect_vtable: row.effect_vtable.load(Ordering::Relaxed),
                 subject_object: row.subject_object.load(Ordering::Relaxed),
                 subject_control: row.subject_control.load(Ordering::Relaxed),
@@ -188,6 +193,8 @@ unsafe extern "system-unwind" fn oath_begin(
     call: u64,
     caller: u64,
     token_slot: *mut u64,
+    caller_rbp: u64,
+    caller_rdi: u64,
 ) {
     let Some(trace) = oath_trace() else {
         return;
@@ -244,6 +251,9 @@ unsafe extern "system-unwind" fn oath_begin(
     row.effect.store(effect, Ordering::Relaxed);
     row.subject.store(subject, Ordering::Relaxed);
     row.caller.store(caller, Ordering::Relaxed);
+    // Raw observations of the caller's nonvolatile registers, never authority.
+    row.caller_rbp.store(caller_rbp, Ordering::Relaxed);
+    row.caller_rdi.store(caller_rdi, Ordering::Relaxed);
     row.copy_flags.store(flags, Ordering::Relaxed);
     row.state.store(1, Ordering::Release);
     stage_point(STAGE_BEGIN_PUBLISHED);
@@ -318,14 +328,15 @@ unsafe extern "system" fn oath_unwind_handler(
     1 // ExceptionContinueSearch
 }
 
-// Frame (0xe8, RSP 16-byte aligned at every call):
-//   00 shadow  20 arg5 (caller)  28 arg6 (&token)
-//   30 rcx 38 rdx 40 r8 48 r9 50 rax 58 r10 60 r11
+// Frame (0xf8, RSP 16-byte aligned at every call):
+//   00 shadow  20 arg5 (caller)  28 arg6 (&token)  30 arg7 (RBP)  38 arg8 (RDI)
+//   40 r8 48 r9 50 rax 58 r10 60 r11  e0 rcx  e8 rdx
 //   68 token (zeroed inside the unwind prologue)  70 original RAX
 //   78 resume address (original entry+2) for the trampoline's jmp [rsp+88h]
-//   80 xmm0..xmm5 on entry, later the returned xmm0  e8 caller's return address
-// Nonvolatile registers and XMM6+ are never written. The original receives
-// every argument/scratch register as it came in and is called exactly once.
+//   80 xmm0..xmm5 on entry, later the returned xmm0  f8 caller's return address
+// Nonvolatile registers and XMM6+ are never written; RBP and RDI are only
+// passed by value to the begin callback. The original receives every
+// argument/scratch register as it came in and is called exactly once.
 macro_rules! oath_gateway {
     ($name:literal, $trampoline:path, $kind:literal) => {
         global_asm!(
@@ -333,12 +344,12 @@ macro_rules! oath_gateway {
             concat!(".seh_proc ", $name),
             concat!($name, ":"),
             ".seh_handler {handler}, @unwind",
-            "sub rsp, 0xe8",
-            ".seh_stackalloc 0xe8",
+            "sub rsp, 0xf8",
+            ".seh_stackalloc 0xf8",
             "mov qword ptr [rsp+0x68], 0",
             ".seh_endprologue",
-            "mov [rsp+0x30], rcx",
-            "mov [rsp+0x38], rdx",
+            "mov [rsp+0xe0], rcx",
+            "mov [rsp+0xe8], rdx",
             "mov [rsp+0x40], r8",
             "mov [rsp+0x48], r9",
             "mov [rsp+0x50], rax",
@@ -351,7 +362,9 @@ macro_rules! oath_gateway {
             "movdqu [rsp+0xc0], xmm4",
             "movdqu [rsp+0xd0], xmm5",
             concat!("mov r9d, ", $kind),
-            "mov rax, [rsp+0xe8]",
+            "mov [rsp+0x30], rbp",
+            "mov [rsp+0x38], rdi",
+            "mov rax, [rsp+0xf8]",
             "mov [rsp+0x20], rax",
             "lea rax, [rsp+0x68]",
             "mov [rsp+0x28], rax",
@@ -359,8 +372,8 @@ macro_rules! oath_gateway {
             "mov rax, [rip+{trampoline}]",
             "mov rax, [rax+{delta}]",
             "mov [rsp+0x78], rax",
-            "mov rcx, [rsp+0x30]",
-            "mov rdx, [rsp+0x38]",
+            "mov rcx, [rsp+0xe0]",
+            "mov rdx, [rsp+0xe8]",
             "mov r8, [rsp+0x40]",
             "mov r9, [rsp+0x48]",
             "mov rax, [rsp+0x50]",
@@ -380,7 +393,7 @@ macro_rules! oath_gateway {
             "call {end}",
             "mov rax, [rsp+0x70]",
             "movdqu xmm0, [rsp+0x80]",
-            "add rsp, 0xe8",
+            "add rsp, 0xf8",
             "ret",
             ".seh_endproc",
             begin = sym oath_begin,

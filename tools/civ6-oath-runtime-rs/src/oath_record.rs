@@ -130,6 +130,10 @@ pub struct OathRecord {
     /// RDX at entry: address of the subject shared_ptr.
     pub subject: u64,
     pub caller: u64,
+    /// Raw RBP / RDI of the caller at gateway entry. Observations only: they
+    /// are copied, never dereferenced, and grant nothing.
+    pub caller_rbp: u64,
+    pub caller_rdi: u64,
     pub effect_vtable: u64,
     pub subject_object: u64,
     pub subject_control: u64,
@@ -177,6 +181,8 @@ mod tests {
             effect: 0x1000,
             subject: 0x2000,
             caller: 0x3000,
+            caller_rbp: 0,
+            caller_rdi: 0,
             effect_vtable: 0,
             subject_object: 0,
             subject_control: 0,
