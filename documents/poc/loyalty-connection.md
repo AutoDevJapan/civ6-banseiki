@@ -127,3 +127,7 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 実機105（5c4cfca0）の通常UI要求からの単発比較は14/14手順・ログ5/5成功、owner3/city65536/座標146,38/turn1でUI100→95・CityLoyaltyChanged1件を確認した。setter CALL/RETURNは各1、観測器0。待機条件は元の二公開以上で、最終記録の実カウンターは11だった。公開数を増やすコード変更やsetter再送はしていない。この成功を製品5条件へ付け替えない。
 
 --single-setter-publish-ui は、同じ一度の要求を次のGameCoreEventPublishComplete callback内から送る比較である。登録時には要求せず、再入や応答不明でもUIRequestIssuedを先に保持し、再送しない。変更先・基準・ターン・二公開の条件は105と同じで、送信する時点の違いだけを比べる。製品の公開callbackが同様に同期要求を送っていることは静的に確認したが、それが原因とはこの追加実機を終えるまで断定しない。
+
+実機106（cde9e81d）は公開callback内からの要求でも14/14・ログ5/5成功、105と同じowner3/city65536/146,38/turn1でUI100→95・CityEvents1、pubCounter10、CALL/RETURN各1だった。要求時点だけでは失敗を再現しないので、公開callback自体を原因とする仮説は採用しない。原11filesをownfe29634f/live106へ全SHA一致で保全し、standardclose/profile元C234復元を確認した。
+
+--single-setter-ai-ui は送信者をactive human3のまま、対象だけ既存AI0の非首都へ変える。ActorとOwnerを別に保持して、Coreはactive senderと対象city owner/id/turnを別々に検査する。変更と再送の回数・二公開・ターン条件は105と同じ。これでAI所有・非手番条件と、未達製品での都市移管後という別の条件を分ける。AI対象のsetterやUI結果は実機前に成功としない。

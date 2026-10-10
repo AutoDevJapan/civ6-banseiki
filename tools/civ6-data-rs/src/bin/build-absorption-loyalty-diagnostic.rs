@@ -204,6 +204,39 @@ fn publication_probe_steps() -> Vec<Value> {
     steps
 }
 
+fn ai_probe_steps() -> Vec<Value> {
+    let mut steps = loyalty_probe_steps(None);
+    let arm = steps[0]["code"]
+        .as_str()
+        .unwrap()
+        .replace(
+            "local capital=assert(Players[actor]:GetCities():GetCapitalCity())",
+            "local subject=0\nlocal capital=assert(Players[subject]:GetCities():GetCapitalCity())",
+        )
+        .replace(
+            "Players[actor]:GetCities():Members()",
+            "Players[subject]:GetCities():Members()",
+        )
+        .replace(
+            "local d={Owner=actor,",
+            "local d={Actor=actor,Owner=subject,",
+        );
+    steps[0] = ui("InGame", &arm);
+    let core = steps[1]["code"]
+        .as_str()
+        .unwrap()
+        .replace("actor==d.Owner", "actor==(d.Actor or d.Owner)");
+    steps[1] = ui("JAC_Absorption_Entry", &core);
+    steps[2] = ui(
+        "InGame",
+        &SINGLE_REQUEST_UI.replace(
+            "UI.RequestPlayerOperation(d.Owner,",
+            "UI.RequestPlayerOperation(d.Actor or d.Owner,",
+        ),
+    );
+    steps
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -246,6 +279,9 @@ fn run() -> Result<()> {
     let publish_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-publish-ui");
+    let ai_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-ai-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -255,9 +291,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui]"
     );
     ensure!(
         !output.exists(),
@@ -277,6 +313,8 @@ fn run() -> Result<()> {
         steps.extend(loyalty_probe_steps(None));
     } else if publish_mode {
         steps.extend(publication_probe_steps());
+    } else if ai_mode {
+        steps.extend(ai_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -333,6 +371,40 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ai_probe_separates_active_sender_from_inactive_city_owner() -> Result<()> {
+        let lua = mlua::Lua::new();
+        lua.load(r#"
+Domain='UI';Calls=0;Requests=0;rawget=nil;local handler
+local identity={__instance={},GetLoyalty=function() assert(Domain=='UI');return 100 end}
+local capital={GetID=function() return 1 end}
+local target={GetOwner=function() return 0 end,GetID=function() return 8 end,
+ GetX=function() return 5 end,GetY=function() return 6 end,
+ GetCulturalIdentity=function() assert(Domain=='UI');return identity end,
+ ChangeLoyalty=function(_,v) assert(Domain=='Core' and v==-5);Calls=Calls+1 end}
+local cities={GetCapitalCity=function() return capital end,Members=function() return ipairs({capital,target}) end}
+Players={[0]={GetCities=function() return cities end,IsTurnActive=function() return false end},
+ [3]={IsTurnActive=function() return true end,GetCities=function() error('wrong human target') end}}
+Game={GetLocalPlayer=function() return 3 end,GetCurrentGameTurn=function() return 1 end}
+CityManager={GetCityAt=function(x,y) assert(x==5 and y==6);return target end}
+ExposedMembers={};DB={MakeHash=function() return 19 end}
+Events={CityLoyaltyChanged={Add=function() end},GameCoreEventPublishComplete={Add=function() end}}
+GameEvents={JAC_LoyaltyNativeProbe_Operation={Add=function(f) handler=f end}}
+PlayerOperations={EXECUTE_SCRIPT=19}
+UI={RequestPlayerOperation=function(actor,op,params)
+ assert(actor==3 and op==19);Requests=Requests+1;Domain='Core';handler(actor,params);Domain='UI'
+end}
+"#).exec()?;
+        let steps = ai_probe_steps();
+        lua.load(steps[0]["code"].as_str().unwrap()).exec()?;
+        lua.load(steps[1]["code"].as_str().unwrap()).exec()?;
+        lua.load(steps[2]["code"].as_str().unwrap()).exec()?;
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.Owner==0 and d.Actor==3 and d.ID==8 and Calls==1 and Requests==1 and d.ObserverReady==nil)").exec()?;
+        assert!(lua.load(steps[2]["code"].as_str().unwrap()).exec().is_err());
+        lua.load("assert(Calls==1 and Requests==1)").exec()?;
+        Ok(())
+    }
+
     #[test]
     fn publication_sender_issues_once_on_event_and_never_retries_unknown_send() -> Result<()> {
         let lua = mlua::Lua::new();
