@@ -137,7 +137,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             })();
             match observed {
                 Ok(value) => observations.push(value),
-                Err(error) => errors.push(error.to_string()),
+                Err(error) => {
+                    // A receipt is published before rename and removed after
+                    // restoration. Do not confuse either transition with a
+                    // changed original archive; retain the uncertain sample.
+                    let archived = archive_path
+                        .as_ref()
+                        .is_some_and(|archive| archive.join("owner-auto-original").is_dir());
+                    if archived && state.exists() {
+                        errors.push(error.to_string());
+                    } else {
+                        observations.push(json!({"phase":"transition", "error":error.to_string()}));
+                    }
+                }
             }
         }
         let renderer_path = paths
