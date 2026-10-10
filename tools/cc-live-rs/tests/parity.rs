@@ -337,6 +337,38 @@ fn reporter_failure_aborts() {
     assert!(close_stale_civ6_reporters(&mut r)
         .unwrap_err()
         .contains("denied"));
+    assert_eq!(r.calls.len(), 1);
+}
+
+const REPORTER_GONE: &str = "+ FullyQualifiedErrorId : NoProcessFoundForGivenId,Microsoft.PowerShell.Commands.StopProcessCommand";
+
+#[test]
+fn reporter_exit_during_stop_requires_successful_scoped_rediscovery() {
+    let mut r = Fake::outputs(&[("", REPORTER_GONE, 1), ("", "", 0)]);
+    close_stale_civ6_reporters(&mut r).unwrap();
+    assert_eq!(r.calls.len(), 2);
+    assert_eq!(r.calls[0].args, r.calls[1].args);
+    assert_eq!(r.calls[1].args.last().unwrap(), REPORTER_COMMAND);
+}
+
+#[test]
+fn reporter_rediscovery_failure_is_not_suppressed_or_repeated() {
+    for error in [REPORTER_GONE, "access denied"] {
+        let mut r = Fake::outputs(&[("", REPORTER_GONE, 1), ("", error, 1)]);
+        assert!(close_stale_civ6_reporters(&mut r).is_err());
+        assert_eq!(r.calls.len(), 2);
+    }
+}
+
+#[test]
+fn reporter_error_prose_does_not_authorize_rediscovery() {
+    let mut r = Fake::outputs(&[(
+        "",
+        "NoProcessFoundForGivenId while inspection was denied",
+        1,
+    )]);
+    assert!(close_stale_civ6_reporters(&mut r).is_err());
+    assert_eq!(r.calls.len(), 1);
 }
 #[test]
 fn answering_game_is_still_closed_before_relaunch() {
@@ -672,7 +704,7 @@ fn lock_timeout_keeps_live_holder_and_removes_own_waiter() {
 
 #[cfg(windows)]
 #[test]
-fn acquisition_protects_dead_owner_until_it_has_written_its_own_lock() {
+fn acquisition_probes_dead_owner_without_blocking_monitor_or_recovery_readers() {
     struct Contender {
         fake: Fake,
         lock: PathBuf,
@@ -682,13 +714,18 @@ fn acquisition_protects_dead_owner_until_it_has_written_its_own_lock() {
         fn run(&mut self, call: Call) -> Result<Output, String> {
             if call.args[0] == "tasklist" && call.args[2] == "PID eq 42" {
                 self.inspected = true;
-                assert!(fs::remove_file(&self.lock).is_err());
-                assert!(fs::write(&self.lock, "another owner").is_err());
-                assert!(fs::OpenOptions::new()
+                use std::os::windows::fs::OpenOptionsExt;
+                let recovery_pin = fs::OpenOptions::new()
                     .read(true)
-                    .write(true)
+                    .share_mode(1)
                     .open(&self.lock)
-                    .is_err());
+                    .expect("holder probing must allow RecoveryLease's actual read handle");
+                let monitor_pin = fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(1)
+                    .open(&self.lock)
+                    .expect("holder probing must allow the monitor's actual read handle");
+                drop((recovery_pin, monitor_pin));
             }
             self.fake.run(call)
         }
@@ -852,8 +889,15 @@ impl OwnedReader {
             os::windows::process::CommandExt,
             process::{Command, Stdio},
             thread,
-            time::Duration,
+            time::{Duration, Instant},
         };
+        // A file keeps diagnostic output from blocking the child on a full pipe.
+        let error_path = ready.with_extension("stderr.log");
+        let diagnostics = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&error_path)
+            .unwrap();
         let child = Command::new(std::env::current_exe().unwrap())
             .args(["--ignored", "--exact", "release_reader_child"])
             .env("CC_LIVE_TEST_LOCK", lock)
@@ -862,16 +906,28 @@ impl OwnedReader {
             .env("CC_LIVE_TEST_SHARE", share.to_string())
             .creation_flags(CREATE_NO_WINDOW)
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::from(diagnostics))
             .spawn()
             .unwrap();
-        let reader = Self {
+        let mut reader = Self {
             child: Some(child),
             release: release.into(),
         };
-        for _ in 0..200 {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
             if ready.exists() {
                 break;
+            }
+            if let Some(status) = reader.child.as_mut().unwrap().try_wait().unwrap() {
+                use std::io::Read;
+                let mut reason = String::new();
+                fs::File::open(&error_path)
+                    .unwrap()
+                    .take(4096)
+                    .read_to_string(&mut reason)
+                    .unwrap();
+                reader.child = None;
+                panic!("test reader exited before acquiring its handle: {status}: {reason}");
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -1082,7 +1138,7 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
     impl Runner for Blocked {
         fn run(&mut self, c: Call) -> Result<Output, String> {
             if is_tuner(&c) && c.args[1] == "lua" {
-                // The verified DELETE handle stays open while cleanup runs.
+                // A verified read pin stays open while cleanup runs.
                 assert_eq!(
                     fs::remove_file(&self.lock).unwrap_err().raw_os_error(),
                     Some(32)
@@ -1203,7 +1259,7 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
     };
     let error = failed_prepare_cli(&mut r, &f.p).unwrap_err();
     assert!(
-        error.contains("ownership changed before cleanup"),
+        error.contains("ownership changed before release"),
         "{error}"
     );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
@@ -1342,6 +1398,29 @@ fn chain_closes_game_after_each_run_and_on_exit() {
         read_text(f.root.join("artifacts.log")).unwrap(),
         "[OK] one\n[FAIL] two\nnoise\n"
     );
+}
+#[test]
+fn chain_preserves_driver_result_location_when_cleanup_fails() {
+    for code in [0, 7] {
+        let f = Fixture::new();
+        let mut r = ready_chain(&f, code);
+        r.replies[READY_CLEANUP_REPLY + 5] = Ok(Output {
+            code: 1,
+            stderr: "reporter access denied".into(),
+            ..Output::default()
+        });
+        let error = cli(&mut r, &f.p, &["name:s.json".into()]).unwrap_err();
+        assert!(error.contains(&format!("driver exit {code}; Civ6 close failed")));
+        assert!(r.printed.contains(&format!(
+            "RESULT name s.json close-error {}",
+            path(f.root.join("artifacts"))
+        )));
+        assert!(!r.printed.iter().any(|line| line == "CHAIN DONE"));
+        assert_eq!(
+            read_text(f.root.join("artifacts.log")).unwrap(),
+            "[OK] one\n[FAIL] two\nnoise\n"
+        );
+    }
 }
 #[test]
 fn chain_stop_on_failure_retains_exit_code_and_cleans() {
@@ -1558,6 +1637,173 @@ fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
     );
 }
 
+struct ProbeTimeoutRunner(Fake);
+impl Runner for ProbeTimeoutRunner {
+    fn run(&mut self, call: Call) -> Result<Output, String> {
+        assert_eq!(call.args[0], "tasklist");
+        let budget = call.timeout.unwrap();
+        assert!(budget > 0.0 && budget <= 2.0);
+        let output = self.0.run(call);
+        if output.as_ref().is_err_and(|e| e == "command timed out") {
+            self.0.time += budget;
+        }
+        output
+    }
+    fn now(&mut self) -> f64 {
+        self.0.now()
+    }
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.0.sleep(seconds)
+    }
+    fn error(&mut self, text: &str) -> Result<(), String> {
+        self.0.error(text)
+    }
+}
+fn probe_timeout_fixture() -> (Fixture, ProbeTimeoutRunner, process::LeaseLimit) {
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json("here/queue/waiter.json", json!({"pid":4321,"since":1000}));
+    let mut fake = Fake::success();
+    fake.time = 1100.0;
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    (f, ProbeTimeoutRunner(fake), limit)
+}
+#[test]
+fn lease_monitor_timeout_is_unknown_and_recovers_without_extending_contention() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(2800.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(r.0.time, 1102.0);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+    assert_eq!(r.0.errors.len(), 1);
+    r.0.replies.push_back(Ok(Output {
+        stdout: "\"live_chain.exe\",\"4321\"".into(),
+        ..Output::default()
+    }));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+    // A new outage after recovery has its own bounded grace period.
+    r.0.time = 1200.0;
+    r.0.replies.push_back(Err("command timed out".into()));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(r.0.errors.len(), 2);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+}
+#[test]
+fn lease_monitor_timeout_never_extends_a_known_competition_deadline() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(1345.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.work_deadline(), Some(1105.0));
+    r.0.time = 1105.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains(process::LEASE_YIELD));
+    assert_eq!(r.0.calls.len(), 1);
+    assert_eq!(limit.hard_deadline(), Some(1345.0));
+}
+#[test]
+fn lease_monitor_yields_when_the_known_deadline_expires_inside_the_query() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(1341.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+    let error = process::monitor_lease(&mut r, &limit).unwrap_err();
+    assert!(error.contains(process::LEASE_YIELD), "{error}");
+    assert_eq!(r.0.time, 1101.0);
+    assert_eq!(r.0.calls[0].timeout, Some(1.0));
+    assert_eq!(limit.hard_deadline(), Some(1341.0));
+}
+#[test]
+fn lease_monitor_authoritative_owner_change_is_fatal_after_a_timeout() {
+    let (f, mut r, limit) = probe_timeout_fixture();
+
+    r.0.replies.push_back(Err("command timed out".into()));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"replacement","acquired_at":1102}),
+    );
+    assert_eq!(
+        process::monitor_lease(&mut r, &limit).unwrap_err(),
+        "Civ6 lease ownership changed while child was running"
+    );
+    assert_eq!(r.0.calls.len(), 1);
+}
+#[test]
+fn lease_monitor_persistent_timeout_is_bounded_and_not_driver_timeout() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+
+    for _ in 0..3 {
+        r.0.replies.push_back(Err("command timed out".into()));
+    }
+    process::monitor_lease(&mut r, &limit).unwrap();
+    process::monitor_lease(&mut r, &limit).unwrap();
+    let error = process::monitor_lease(&mut r, &limit).unwrap_err();
+    assert!(
+        error.contains("lease observation unavailable for 5s"),
+        "{error}"
+    );
+    assert!(!error.contains("command timed out"));
+    assert_eq!(r.0.time, 1105.0);
+    assert_eq!(r.0.errors.len(), 1);
+}
+#[test]
+fn lease_monitor_non_timeout_query_failure_remains_fatal() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    r.0.replies.push_back(Err("permission denied".into()));
+    assert_eq!(
+        process::monitor_lease(&mut r, &limit).unwrap_err(),
+        "permission denied"
+    );
+    assert_eq!(r.0.time, 1100.0);
+}
+#[test]
+fn lease_monitor_startup_outage_deadline_survives_clone_into_the_child() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    for _ in 0..3 {
+        r.0.replies.push_back(Err("command timed out".into()));
+    }
+    // The initial check is exactly the same function called before driver launch.
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.observation_deadline(), Some(1105.0));
+    let child_limit = limit.clone();
+    process::monitor_lease(&mut r, &child_limit).unwrap();
+    assert!(process::monitor_lease(&mut r, &child_limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.0.time, 1105.0);
+    assert_eq!(
+        r.0.calls
+            .iter()
+            .map(|c| c.timeout.unwrap())
+            .collect::<Vec<_>>(),
+        vec![2.0, 2.0, 1.0]
+    );
+    r.0.time = 1110.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.0.calls.len(), 3); // No new query can reset the expired outage.
+}
+#[test]
+fn lease_monitor_missing_lock_uses_the_same_absolute_outage_deadline() {
+    let (f, mut r, limit) = probe_timeout_fixture();
+    fs::remove_file(f.p.here.join("civ6.lock")).unwrap();
+    process::monitor_lease(&mut r, &limit).unwrap();
+    r.0.time = 1105.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert!(r.0.calls.is_empty());
+}
+
 #[cfg(windows)]
 #[test]
 fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
@@ -1580,6 +1826,454 @@ fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
         process::LeaseProbe::Clear
     );
     drop(recovery_pin);
+}
+
+#[cfg(windows)]
+#[test]
+fn slow_holder_and_competitor_probes_allow_readers_beyond_the_observation_deadline() {
+    use std::{
+        os::windows::fs::OpenOptionsExt,
+        sync::mpsc,
+        thread,
+        time::{Duration, Instant},
+    };
+    struct Slow {
+        ready: mpsc::Sender<()>,
+        resume: mpsc::Receiver<()>,
+    }
+    impl Runner for Slow {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert_eq!(call.args[2], "PID eq 42");
+            self.ready.send(()).unwrap();
+            self.resume.recv_timeout(Duration::from_secs(15)).unwrap();
+            Ok(Output::default())
+        }
+        fn now(&mut self) -> f64 {
+            1000.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("no queue wait expected")
+        }
+        fn print(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    struct Monitor(Instant);
+    impl Runner for Monitor {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            Ok(Output {
+                stdout: "\"agent.exe\",\"42\"".into(),
+                ..Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            1000.0 + self.0.elapsed().as_secs_f64()
+        }
+        fn monotonic(&mut self) -> f64 {
+            self.0.elapsed().as_secs_f64()
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("monitor must not wait for a writer")
+        }
+    }
+    for holder_probe in [true, false] {
+        let f = Fixture::new();
+        let lock = f.json(
+            "here/civ6.lock",
+            if holder_probe {
+                json!({"pid":42,"lock_token":"owned","acquired_at":1000})
+            } else {
+                json!({"job":"owner","lock_token":"owned","acquired_at":1000})
+            },
+        );
+        if !holder_probe {
+            f.json("here/queue/waiter.json", json!({"pid":42,"since":1000}));
+        }
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let p = f.p.clone();
+        let worker = thread::spawn(move || {
+            let mut slow = Slow {
+                ready: ready_tx,
+                resume: resume_rx,
+            };
+            if holder_probe {
+                acquire(
+                    &mut slow,
+                    &p,
+                    &json!({"pid":77,"lock_token":"new"}),
+                    1.0,
+                    false,
+                )
+            } else {
+                fairness::Lock::open(&p)
+                    .unwrap()
+                    .unwrap()
+                    .expired(&mut slow, &p, &p.temp.join("todo.json"))
+                    .map(|_| ())
+            }
+        });
+        ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        // Real handles: the probe retains neither a data writer nor a reader
+        // which could postpone close/adoption/deletion for its whole duration.
+        let writer = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(1)
+            .open(&lock)
+            .unwrap();
+        drop(writer);
+        let recovery = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&lock)
+            .unwrap();
+        let started = Instant::now();
+        let mut monitor = Monitor(started);
+        let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+        while started.elapsed() < Duration::from_millis(5100) {
+            process::monitor_lease(&mut monitor, &limit).unwrap();
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert!(limit.observation_deadline().is_none());
+        drop(recovery);
+        resume_tx.send(()).unwrap();
+        worker.join().unwrap().unwrap();
+    }
+}
+
+#[test]
+fn fairness_save_rejects_changed_owner_and_a_replacement_with_identical_bytes() {
+    for replacement in [false, true] {
+        let f = Fixture::new();
+        let owner = json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"owned"});
+        let path = f.json("here/civ6.lock", owner.clone());
+        let mut snapshot = fairness::Lock::open(&f.p).unwrap().unwrap();
+        snapshot.info["competitor_since"] = json!(1000);
+        let peer = if replacement {
+            fs::rename(&path, f.root.join("old-lock")).unwrap();
+            owner
+        } else {
+            json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"peer"})
+        };
+        write_json(&path, &peer).unwrap();
+        assert!(snapshot.save().unwrap_err().contains("snapshot changed"));
+        assert_eq!(read_json(&path).unwrap(), peer);
+    }
+}
+
+#[test]
+fn reader_preparation_happens_before_ownership_and_failure_has_no_slot_effects() {
+    struct Warm {
+        fake: Fake,
+        ready: bool,
+        fail: bool,
+    }
+    impl Runner for Warm {
+        fn prepare_process_queries(&mut self) -> Result<(), String> {
+            self.ready = true;
+            if self.fail {
+                Err("reader startup failed".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert!(self.ready);
+            self.fake.run(call)
+        }
+        fn now(&mut self) -> f64 {
+            assert!(self.ready);
+            self.fake.now()
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.fake.sleep(seconds)
+        }
+        fn print(&mut self, message: &str) -> Result<(), String> {
+            self.fake.print(message)
+        }
+    }
+    for fail in [false, true] {
+        let f = Fixture::new();
+        let mut r = Warm {
+            fake: Fake::success(),
+            ready: false,
+            fail,
+        };
+        let result = failed_prepare_cli(&mut r, &f.p);
+        assert!(r.ready);
+        assert!(!f.p.here.join("civ6.lock").exists());
+        if fail {
+            assert_eq!(result.unwrap_err(), "reader startup failed");
+            assert!(r.fake.calls.is_empty());
+            assert!(!f.p.here.join("queue").exists());
+        } else {
+            assert_eq!(result.unwrap(), 1);
+            assert!(!r.fake.calls.is_empty());
+        }
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn fairness_update_retries_real_read_pins_and_keeps_owner_and_outer_deadline() {
+    use std::{fs::File, os::windows::fs::OpenOptionsExt};
+    struct ReaderBudget {
+        pin: Option<File>,
+        path: PathBuf,
+        time: f64,
+        changed_owner: bool,
+        expires: bool,
+        sleeps: usize,
+    }
+    impl Runner for ReaderBudget {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("no process query is needed");
+        }
+        fn now(&mut self) -> f64 {
+            1000.0
+        }
+        fn monotonic(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.sleeps += 1;
+            self.time += seconds;
+            if self.expires {
+                return Err("Civ6 scenario deadline exhausted".into());
+            }
+            if self.time >= 0.1 {
+                self.pin = None;
+                if self.changed_owner {
+                    write_json(&self.path, &json!({"lock_token":"peer"}))?;
+                }
+            }
+            Ok(())
+        }
+    }
+    for (changed_owner, expires) in [(false, false), (true, false), (false, true)] {
+        let f = Fixture::new();
+        let owner = json!({"lock_token":"ours","competitor_since":100});
+        let path = f.json("here/civ6.lock", owner.clone());
+        let mut lock = fairness::Lock::open(&f.p).unwrap().unwrap();
+        let pin = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        let mut budget = ReaderBudget {
+            pin: Some(pin),
+            path: path.clone(),
+            time: 0.0,
+            changed_owner,
+            expires,
+            sleeps: 0,
+        };
+        let result = lock.expired(&mut budget, &f.p, &f.p.temp.join("absent-todo.json"));
+        assert!(
+            budget.sleeps > 0,
+            "must first encounter an actual sharing conflict"
+        );
+        if expires {
+            assert!(result.unwrap_err().contains("deadline exhausted"));
+            assert_eq!(read_json(&path).unwrap(), owner);
+        } else if changed_owner {
+            assert!(result.unwrap_err().contains("snapshot changed"));
+            assert_eq!(read_json(&path).unwrap(), json!({"lock_token":"peer"}));
+        } else {
+            assert!(!result.unwrap());
+            assert_eq!(read_json(&path).unwrap(), json!({"lock_token":"ours"}));
+        }
+    }
+}
+
+#[test]
+fn fairness_and_monitor_reject_an_owner_changed_during_competitor_inspection() {
+    struct Changed {
+        lock: PathBuf,
+        peer: serde_json::Value,
+    }
+    impl Runner for Changed {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            write_json(&self.lock, &self.peer)?;
+            Ok(Output {
+                stdout: "\"agent.exe\",\"42\"".into(),
+                ..Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            1000.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("no wait expected")
+        }
+    }
+    for monitor in [false, true] {
+        let f = Fixture::new();
+        let lock = f.json(
+            "here/civ6.lock",
+            json!({"lock_token":"owned","acquired_at":1000}),
+        );
+        f.json("here/queue/waiter.json", json!({"pid":42,"since":1000}));
+        let peer = json!({"lock_token":"peer","acquired_at":1000});
+        let mut r = Changed {
+            lock: lock.clone(),
+            peer: peer.clone(),
+        };
+        let error = if monitor {
+            process::lease_probe(&mut r, &process::LeaseLimit::new(&f.p, "owned", 240.0))
+                .unwrap_err()
+        } else {
+            fairness::Lock::open(&f.p)
+                .unwrap()
+                .unwrap()
+                .expired(&mut r, &f.p, &f.p.temp.join("todo.json"))
+                .unwrap_err()
+        };
+        assert!(error.contains("ownership"), "{error}");
+        assert_eq!(read_json(lock).unwrap(), peer);
+    }
+}
+
+#[test]
+fn dead_holder_probe_cannot_adopt_a_changed_or_replaced_owner() {
+    struct Changed {
+        fake: Fake,
+        lock: PathBuf,
+        peer: serde_json::Value,
+        replace: bool,
+    }
+    impl Runner for Changed {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            if self.fake.calls.is_empty() {
+                if self.replace {
+                    fs::rename(&self.lock, self.lock.with_extension("old")).unwrap();
+                }
+                write_json(&self.lock, &self.peer)?;
+            }
+            self.fake.run(call)
+        }
+        fn now(&mut self) -> f64 {
+            self.fake.now()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.fake.sleep(s)
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.fake.print(s)
+        }
+    }
+    for replace in [false, true] {
+        let f = Fixture::new();
+        let path = f.json("here/civ6.lock", json!({"pid":42,"lock_token":"old"}));
+        let peer = if replace {
+            json!({"pid":42,"lock_token":"old"})
+        } else {
+            json!({"job":"peer","pid":42,"lock_token":"new"})
+        };
+        f.json("jobs/peer/job.json", json!({"status":"running"}));
+        let mut r = Changed {
+            fake: Fake::outputs(&[
+                ("", "", 0),
+                ("\"agent.exe\",\"42\"", "", 0),
+                ("\"agent.exe\",\"42\"", "", 0),
+            ]),
+            lock: path.clone(),
+            peer: peer.clone(),
+            replace,
+        };
+        assert!(acquire(
+            &mut r,
+            &f.p,
+            &json!({"pid":77,"lock_token":"mine"}),
+            1.0,
+            false
+        )
+        .is_err());
+        assert_eq!(read_json(path).unwrap(), peer);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn simultaneous_dead_owner_claimants_commit_exactly_one_acquisition() {
+    use std::{
+        sync::{atomic::AtomicBool, mpsc, Arc},
+        thread,
+        time::Duration,
+    };
+    struct Candidate {
+        time: f64,
+        ready: mpsc::Sender<()>,
+        proceed: mpsc::Receiver<()>,
+        live: Arc<AtomicBool>,
+    }
+    impl Runner for Candidate {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            if c.args[2] == "PID eq 42" {
+                self.ready.send(()).unwrap();
+                self.proceed.recv_timeout(Duration::from_secs(5)).unwrap();
+                return Ok(Output::default());
+            }
+            let pid = c.args[2].strip_prefix("PID eq ").unwrap();
+            Ok(if self.live.load(Ordering::SeqCst) {
+                Output {
+                    stdout: format!("\"agent.exe\",\"{pid}\""),
+                    ..Output::default()
+                }
+            } else {
+                Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.time += s;
+            Ok(())
+        }
+        fn print(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    let f = Fixture::new();
+    let path = f.json("here/civ6.lock", json!({"pid":42,"lock_token":"dead"}));
+    let (tx, rx) = mpsc::channel();
+    let live = Arc::new(AtomicBool::new(false));
+    let mut releases = Vec::new();
+    let workers: Vec<_> = [101, 102]
+        .into_iter()
+        .map(|pid| {
+            let p = f.p.clone();
+            let (release, proceed) = mpsc::channel();
+            releases.push(release);
+            let mut r = Candidate {
+                time: 1000.0,
+                ready: tx.clone(),
+                proceed,
+                live: live.clone(),
+            };
+            thread::spawn(move || {
+                acquire(
+                    &mut r,
+                    &p,
+                    &json!({"pid":pid,"lock_token":format!("claim-{pid}")}),
+                    1.0,
+                    false,
+                )
+            })
+        })
+        .collect();
+    rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    live.store(true, Ordering::SeqCst);
+    for release in releases {
+        release.send(()).unwrap();
+    }
+    let results: Vec<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+    assert_ne!(read_json(path).unwrap()["lock_token"], "dead");
+    assert_eq!(fs::read_dir(f.p.here.join("queue")).unwrap().count(), 0);
 }
 
 #[cfg(windows)]
@@ -1690,6 +2384,92 @@ fn departed_waiter_cancels_the_competition_deadline_during_a_running_child() {
         .unwrap();
     writer.join().unwrap();
     assert_eq!(out.code, 0);
+}
+
+#[test]
+fn lease_monitor_forwards_native_identity_within_the_probe_budget() {
+    struct NativeInspect {
+        time: f64,
+        inspections: Vec<(u32, f64)>,
+    }
+    impl Runner for NativeInspect {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("the lease monitor must not fall back to tasklist");
+        }
+        fn process_identity(
+            &mut self,
+            pid: u32,
+            timeout: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            self.inspections.push((pid, timeout));
+            Ok(Some(process::ProcessIdentity {
+                image: "live_chain.exe".into(),
+                created_filetime: None,
+            }))
+        }
+        fn now(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.time += seconds;
+            Ok(())
+        }
+    }
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json("jobs/waiter/job.json", json!({"status":"running"}));
+    f.json(
+        "here/queue/waiter.json",
+        json!({"job":"waiter","live_chain":true,"pid":4321,"since":1000}),
+    );
+    let mut r = NativeInspect {
+        time: 1100.0,
+        inspections: vec![],
+    };
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    assert_eq!(
+        process::observe_lease(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Contended(2800.0)
+    );
+    assert_eq!(r.inspections, vec![(4321, 2.0)]);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+}
+
+#[test]
+#[cfg(windows)]
+fn holder_uses_pinned_creation_identity_instead_of_reopening_the_pid() {
+    struct NativeIdentity;
+    impl Runner for NativeIdentity {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("no process command expected");
+        }
+        fn process_identity(
+            &mut self,
+            _: u32,
+            _: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            Ok(Some(process::ProcessIdentity {
+                image: "live_chain.exe".into(),
+                created_filetime: Some(123),
+            }))
+        }
+        fn now(&mut self) -> f64 {
+            0.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    let f = Fixture::new();
+    // This PID is synthetic. Success therefore requires the captured handle's
+    // creation identity, rather than a second real OpenProcess call.
+    let mut owner = json!({"live_chain":true,"pid":u32::MAX,"pid_created_filetime":123});
+    assert!(holder_alive(&mut NativeIdentity, &f.p, &owner).unwrap());
+    owner["pid_created_filetime"] = json!(124);
+    assert!(!holder_alive(&mut NativeIdentity, &f.p, &owner).unwrap());
 }
 
 #[test]
@@ -2001,22 +2781,43 @@ fn driver_is_bounded_by_the_remaining_scenario_window() {
 
 #[cfg(windows)]
 #[test]
+#[ignore = "only invoked as the managed timeout fixture by its parent test"]
+fn managed_timeout_output_child() {
+    if std::env::var_os("CC_LIVE_TIMEOUT_OUTPUT_CHILD").is_none() {
+        return;
+    }
+    use std::io::Write;
+    println!("partial startup diagnostic");
+    std::io::stdout().flush().unwrap();
+    loop {
+        std::thread::park_timeout(std::time::Duration::from_secs(60));
+    }
+}
+
+#[cfg(windows)]
+#[test]
 fn managed_merged_timeout_retains_partial_output() {
+    // A native child avoids the shell/ping startup competing with the one-second
+    // deadline under parallel load. The child flushes before it deliberately
+    // blocks, and the managed timeout must still retain that output and reap it.
+    let executable = std::env::current_exe().unwrap();
     let error = process::RealRunner
         .run(
             Call::new(args(&[
-                "cmd.exe",
-                "/d",
-                "/c",
-                "echo partial startup diagnostic & ping 127.0.0.1 -n 31 > nul",
+                &path(executable),
+                "--ignored",
+                "--exact",
+                "managed_timeout_output_child",
+                "--nocapture",
             ]))
+            .env("CC_LIVE_TIMEOUT_OUTPUT_CHILD", "1")
             .managed()
             .merged()
-            .timeout(1.0),
+            .timeout(5.0),
         )
         .unwrap_err();
-    assert!(error.contains("command timed out"));
-    assert!(error.contains("partial startup diagnostic"));
+    assert!(error.contains("command timed out"), "{error}");
+    assert!(error.contains("partial startup diagnostic"), "{error}");
 }
 
 struct ReliabilityRunner {
@@ -2041,6 +2842,9 @@ struct ReliabilityRunner {
     isolation_calls: Vec<Call>,
     expect_fifo: bool,
     restore_calls: usize,
+    waiter_during_prepare: bool,
+    reschedule_after_begin_failure: f64,
+    restore_budgets: Vec<f64>,
     revisions: VecDeque<String>,
 }
 impl ReliabilityRunner {
@@ -2075,6 +2879,9 @@ impl ReliabilityRunner {
             isolation_calls: vec![],
             expect_fifo: true,
             restore_calls: 0,
+            waiter_during_prepare: false,
+            reschedule_after_begin_failure: 0.0,
+            restore_budgets: vec![],
             revisions: vec!["a".repeat(40); 10].into(),
         }
     }
@@ -2103,10 +2910,10 @@ impl Runner for ReliabilityRunner {
         }
         if call.args.get(1).is_some_and(|arg| arg == "--begin") {
             self.isolation_calls.push(call.clone());
+            assert!(self.p.here.join("civ6.lock").exists());
             assert_eq!(call.args[2], "--state");
             assert_eq!(call.args[4], "--archive");
             assert_eq!(call.args.len(), 6);
-            assert!(self.p.here.join("civ6.lock").exists());
             assert!(!self.running && !self.closing);
             let original = self
                 .p
@@ -2121,6 +2928,9 @@ impl Runner for ReliabilityRunner {
                 &call.args[3],
                 &json!({"original":original,"archive":archive}),
             )?;
+            // The helper has already exited; model the caller being scheduled
+            // late before it can handle the failure and restore the originals.
+            self.time += self.reschedule_after_begin_failure;
             if self.fail_begin == Some(true) {
                 return Err("begin timed out after original rename".into());
             }
@@ -2135,7 +2945,6 @@ impl Runner for ReliabilityRunner {
             assert!(self.p.here.join("civ6.lock").exists());
             assert_eq!(call.args[2], "--state");
             assert_eq!(call.args.len(), 4);
-            assert!(!self.running && !self.closing);
             if self.fail_restore {
                 return Ok(Output {
                     code: 1,
@@ -2143,6 +2952,8 @@ impl Runner for ReliabilityRunner {
                     ..Output::default()
                 });
             }
+            assert!(!self.running && !self.closing);
+            self.restore_budgets.push(call.timeout.unwrap());
             let record = read_json(&call.args[3])?;
             let original = PathBuf::from(record["original"].as_str().unwrap());
             let archive = PathBuf::from(record["archive"].as_str().unwrap());
@@ -2223,6 +3034,17 @@ impl Runner for ReliabilityRunner {
             );
             let mut ship_runner = Fake::success();
             assert_eq!(ship::cli(&mut ship_runner, &self.p, &call.args[1..])?, 0);
+            if self.waiter_during_prepare {
+                fs::create_dir_all(self.p.jobs.join("waiter")).unwrap();
+                write_json(
+                    self.p.jobs.join("waiter/job.json"),
+                    &json!({"status":"running"}),
+                )?;
+                write_json(
+                    self.p.here.join("queue/waiter.json"),
+                    &json!({"job":"waiter","since":1000}),
+                )?;
+            }
             return Ok(Output {
                 stdout: ship_runner.printed.join("\n"),
                 ..Output::default()
@@ -2318,11 +3140,13 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         "wt/live/tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs",
         json!("fixture source"),
     );
-    fs::write(
-        f.p.live().join("tools/target/release/civ6-steam-sync.exe"),
-        "fixture binary",
-    )
-    .unwrap();
+    for name in ["civ6-steam-sync.exe", "civ6-steam-sync"] {
+        fs::write(
+            f.p.live().join("tools/target/release").join(name),
+            "fixture binary",
+        )
+        .unwrap();
+    }
     fs::create_dir_all(f.p.jobs.join("waiter")).unwrap();
     let mut r = ReliabilityRunner::new(&f, vec![0; 10]);
     r.add_waiter = true;
@@ -2400,111 +3224,6 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
 }
 
 #[test]
-fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
-    for failure in ["none", "begin", "unknown_begin", "unknown_exit", "restore"] {
-        let f = Fixture::new();
-        f.json(
-            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
-            json!("fixture source"),
-        );
-        fs::write(
-            f.p.live()
-                .join("tools/target/release/civ6-save-isolation.exe"),
-            "fixture binary",
-        )
-        .unwrap();
-        let original =
-            f.p.profile
-                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
-        fs::create_dir_all(&original).unwrap();
-        fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
-        let mut r = ReliabilityRunner::new(&f, vec![0]);
-        r.expect_fifo = false;
-        r.running = false;
-        r.fail_begin = match failure {
-            "begin" => Some(false),
-            "unknown_begin" => Some(true),
-            _ => None,
-        };
-        r.unknown_exit = failure == "unknown_exit";
-        r.fail_restore = failure == "restore";
-        let result = cli(&mut r, &f.p, &args(&["main:cycle.json"]));
-        if failure == "none" {
-            assert_eq!(result.unwrap(), 0);
-        } else {
-            assert!(result.is_err(), "{failure} must not be counted as success");
-        }
-        let state = f.p.here.join("reliability-auto-state.json");
-        let begin = &r.isolation_calls[0];
-        assert_eq!(
-            begin.args[0],
-            path(
-                f.p.live()
-                    .join("tools/target/release/civ6-save-isolation.exe")
-            )
-        );
-        assert_eq!(
-            begin.args[1..4],
-            args(&["--begin", "--state", &path(&state)])
-        );
-        assert_eq!(
-            begin.env["CIV6_LIVE_CHAIN_PID"],
-            std::process::id().to_string()
-        );
-        assert_eq!(
-            begin.env["CIV6_LIVE_LOCK_PATH"],
-            path(f.p.here.join("civ6.lock"))
-        );
-        assert!(begin.kill_tree);
-        assert_eq!(begin.creationflags, CREATE_NO_WINDOW);
-        assert_eq!(
-            r.artifacts.len(),
-            usize::from(!matches!(failure, "begin" | "unknown_begin"))
-        );
-        assert!(!r.printed.iter().any(|s| s.starts_with("RELIABILITY")));
-        assert!(!f.p.here.join("civ6.lock").exists());
-        if matches!(failure, "unknown_exit" | "restore") {
-            assert!(
-                state.is_file(),
-                "unresolved recovery must keep the compatible receipt"
-            );
-            let record = read_json(&state).unwrap();
-            assert_eq!(
-                fs::read(
-                    PathBuf::from(record["archive"].as_str().unwrap())
-                        .join("owner-auto-original/owner-save")
-                )
-                .unwrap(),
-                b"owner original bytes"
-            );
-            assert_eq!(r.restore_calls, 0);
-            if failure == "unknown_exit" {
-                assert_eq!(r.isolation_calls.len(), 1);
-            }
-        } else {
-            assert!(!state.exists());
-            assert_eq!(r.restore_calls, 1);
-            assert_eq!(
-                fs::read(original.join("owner-save")).unwrap(),
-                b"owner original bytes"
-            );
-            assert!(!original.join("test-save").exists());
-            let restore = r.isolation_calls.last().unwrap();
-            assert_eq!(
-                restore.args[1..],
-                args(&["--restore", "--state", &path(&state)])
-            );
-            if failure == "none" {
-                assert_eq!(
-                    fs::read(PathBuf::from(&begin.args[5]).join("test-auto/test-save")).unwrap(),
-                    b"test autosave bytes"
-                );
-            }
-        }
-    }
-}
-
-#[test]
 fn failed_or_unknown_isolation_begin_recovers_original_under_lock_before_release() {
     for unknown in [false, true] {
         let f = Fixture::new();
@@ -2512,12 +3231,13 @@ fn failed_or_unknown_isolation_begin_recovers_original_under_lock_before_release
             "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
             json!("fixture source"),
         );
-        fs::write(
-            f.p.live()
-                .join("tools/target/release/civ6-save-isolation.exe"),
-            "fixture binary",
-        )
-        .unwrap();
+        for name in ["civ6-save-isolation.exe", "civ6-save-isolation"] {
+            fs::write(
+                f.p.live().join("tools/target/release").join(name),
+                "fixture binary",
+            )
+            .unwrap();
+        }
         let original =
             f.p.profile
                 .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
@@ -2544,6 +3264,53 @@ fn failed_or_unknown_isolation_begin_recovers_original_under_lock_before_release
             summary["rounds"][0]["cleanup"]["exit"]["autosave_restore_result"],
             "success"
         );
+    }
+}
+
+#[test]
+fn isolation_failure_keeps_known_competition_deadline_for_original_restore() {
+    for unknown in [false, true] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        for name in ["civ6-save-isolation.exe", "civ6-save-isolation"] {
+            fs::write(
+                f.p.live().join("tools/target/release").join(name),
+                "fixture binary",
+            )
+            .unwrap();
+        }
+        let original =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        f.json(
+            "wt/live/tools/civ6-autotest/scenarios/cycle.json",
+            json!({"steps":[
+                {"action":"restart_game","timeout":420},
+                {"action":"load","name":"JAC-Reliability-Seed-1971","exact_name":true},
+                {"action":"save","name":"cycle"},
+                {"action":"pause","seconds":1,"timeout":2000}
+            ]}),
+        );
+        r.running = false;
+        r.fail_begin = Some(unknown);
+        r.waiter_during_prepare = true;
+        r.reschedule_after_begin_failure = 1780.0;
+        assert!(cli(&mut r, &f.p, &args(&["--reliability", "main:cycle.json"])).is_err());
+        assert_eq!(r.restore_calls, 1);
+        assert_eq!(r.restore_budgets, vec![20.0]);
+        assert!(r.artifacts.is_empty());
+        assert_eq!(
+            fs::read(original.join("owner-save")).unwrap(),
+            b"owner original bytes"
+        );
+        assert!(!f.p.here.join("reliability-auto-state.json").exists());
+        assert!(!f.p.here.join("civ6.lock").exists());
     }
 }
 
@@ -3501,20 +4268,23 @@ fn child_specific_environment_is_applied_without_changing_the_parent() {
     let key = "CIV6_LIVE_TEST_CHILD_ENV";
     let previous = std::env::var_os(key);
     let mut r = process::RealRunner;
+    let command = if cfg!(windows) {
+        args(&["cmd.exe", "/d", "/c", "set CIV6_LIVE_TEST_CHILD_ENV"])
+    } else {
+        args(&["printenv", key])
+    };
     let out = r
-        .run(
-            Call::new(args(&[
-                "cmd.exe",
-                "/d",
-                "/c",
-                "set CIV6_LIVE_TEST_CHILD_ENV",
-            ]))
-            .env(key, "chain-owned")
-            .timeout(5.0),
-        )
+        .run(Call::new(command).env(key, "chain-owned").timeout(5.0))
         .unwrap();
     assert_eq!(out.code, 0);
-    assert_eq!(out.stdout, "CIV6_LIVE_TEST_CHILD_ENV=chain-owned\n");
+    assert_eq!(
+        out.stdout,
+        if cfg!(windows) {
+            "CIV6_LIVE_TEST_CHILD_ENV=chain-owned\n"
+        } else {
+            "chain-owned\n"
+        }
+    );
     assert_eq!(std::env::var_os(key), previous);
 }
 
@@ -3679,6 +4449,55 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
             .filter(|c| is_tuner(c) && c.args[1] == "lua")
             .count(),
         2
+    );
+}
+
+#[test]
+fn driver_owner_change_prevents_scenario_close_and_cleanup_of_the_peer_game() {
+    struct Changed {
+        fake: Fake,
+        lock: PathBuf,
+        peer: serde_json::Value,
+    }
+    impl Runner for Changed {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            if is_driver(&c) {
+                fs::rename(&self.lock, self.lock.with_extension("old")).unwrap();
+                write_json(&self.lock, &self.peer)?;
+            }
+            self.fake.run(c)
+        }
+        fn now(&mut self) -> f64 {
+            self.fake.now()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.fake.sleep(s)
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.fake.print(s)
+        }
+    }
+    let f = Fixture::new();
+    let peer = json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"peer"});
+    let mut r = Changed {
+        fake: ready_chain(&f, 0),
+        lock: f.p.here.join("civ6.lock"),
+        peer: peer.clone(),
+    };
+    let error = cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap_err();
+    assert!(
+        error.contains("ownership changed before scenario close"),
+        "{error}"
+    );
+    assert_eq!(read_json(&r.lock).unwrap(), peer);
+    assert_normal_closes(&r.fake.calls, 1);
+    assert_eq!(
+        r.fake
+            .calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        1
     );
 }
 
@@ -3872,6 +4691,146 @@ fn already_ready_pr_skips_conversion_and_pending_merge_is_not_success() {
         } else {
             assert!(result.unwrap_err().contains("not confirmed"));
             assert!(!r.printed.iter().any(|message| message == "merged"));
+        }
+    }
+}
+
+#[test]
+fn queued_session_without_a_chain_does_not_reserve_the_game() {
+    let f = Fixture::new();
+    f.json("todo/todo.json", json!({"items":[{"id":995,"status":"doing","needs":["civ6"],"scheduler":{"job":"waiting"}}]}));
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":2}),
+    );
+    for (status, can_start) in [("queued", true), ("starting", false), ("running", false)] {
+        f.json("jobs/waiting/job.json", json!({"status":status}));
+        let mut r = Fake::success();
+        assert_eq!(my_turn(&mut r, &f.p, &me).unwrap(), can_start, "{status}");
+        assert!(r.calls.is_empty());
+    }
+}
+
+#[test]
+fn queued_session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
+    let f = Fixture::new();
+    f.json("jobs/waiting/job.json", json!({"status":"queued"}));
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":2}),
+    );
+    let owner = json!({"job":"waiting","live_chain":true,"pid":123,"long":0,"since":1});
+    let other = f.json("here/queue/other.json", owner.clone());
+    let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+    assert!(other.exists());
+    assert_eq!(r.calls.len(), 1);
+    let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+    assert!(holder_alive(&mut r, &f.p, &owner).unwrap());
+    assert_eq!(r.calls.len(), 1);
+}
+
+#[test]
+fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
+    for failure in ["none", "begin", "unknown_begin", "unknown_exit", "restore"] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        fs::write(
+            f.p.live()
+                .join("tools/target/release/civ6-save-isolation.exe"),
+            "fixture binary",
+        )
+        .unwrap();
+        let original =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        r.expect_fifo = false;
+        r.running = false;
+        r.fail_begin = match failure {
+            "begin" => Some(false),
+            "unknown_begin" => Some(true),
+            _ => None,
+        };
+        r.unknown_exit = failure == "unknown_exit";
+        r.fail_restore = failure == "restore";
+        let result = cli(&mut r, &f.p, &args(&["main:cycle.json"]));
+        if failure == "none" {
+            assert_eq!(result.unwrap(), 0);
+        } else {
+            assert!(result.is_err(), "{failure} must not be counted as success");
+        }
+        let state = f.p.here.join("reliability-auto-state.json");
+        let begin = &r.isolation_calls[0];
+        assert_eq!(
+            begin.args[0],
+            path(
+                f.p.live()
+                    .join("tools/target/release/civ6-save-isolation.exe")
+            )
+        );
+        assert_eq!(
+            begin.args[1..4],
+            args(&["--begin", "--state", &path(&state)])
+        );
+        assert_eq!(
+            begin.env["CIV6_LIVE_CHAIN_PID"],
+            std::process::id().to_string()
+        );
+        assert_eq!(
+            begin.env["CIV6_LIVE_LOCK_PATH"],
+            path(f.p.here.join("civ6.lock"))
+        );
+        assert!(begin.kill_tree);
+        assert_eq!(begin.creationflags, CREATE_NO_WINDOW);
+        assert_eq!(
+            r.artifacts.len(),
+            usize::from(!matches!(failure, "begin" | "unknown_begin"))
+        );
+        assert!(!r.printed.iter().any(|s| s.starts_with("RELIABILITY")));
+        assert!(!f.p.here.join("civ6.lock").exists());
+        if matches!(failure, "unknown_exit" | "restore") {
+            assert!(
+                state.is_file(),
+                "unresolved recovery must keep the compatible receipt"
+            );
+            let record = read_json(&state).unwrap();
+            assert_eq!(
+                fs::read(
+                    PathBuf::from(record["archive"].as_str().unwrap())
+                        .join("owner-auto-original/owner-save")
+                )
+                .unwrap(),
+                b"owner original bytes"
+            );
+            assert_eq!(r.restore_calls, 0);
+            if failure == "unknown_exit" {
+                assert_eq!(r.isolation_calls.len(), 1);
+            }
+        } else {
+            assert!(!state.exists());
+            assert_eq!(r.restore_calls, 1);
+            assert_eq!(
+                fs::read(original.join("owner-save")).unwrap(),
+                b"owner original bytes"
+            );
+            assert!(!original.join("test-save").exists());
+            let restore = r.isolation_calls.last().unwrap();
+            assert_eq!(
+                restore.args[1..],
+                args(&["--restore", "--state", &path(&state)])
+            );
+            if failure == "none" {
+                assert_eq!(
+                    fs::read(PathBuf::from(&begin.args[5]).join("test-auto/test-save")).unwrap(),
+                    b"test autosave bytes"
+                );
+            }
         }
     }
 }

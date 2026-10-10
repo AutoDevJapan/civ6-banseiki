@@ -1,0 +1,40 @@
+{
+  "todo": 2317,
+  "parent_todo": 134,
+  "library_fix": "e300e5997a50512410130d59d4ff2e3677264714",
+  "baseline_owner": "0fda41ed535ebd6f67531c5e35b2aa48",
+  "baseline_input_sources": [
+    {
+      "relative": "cc-live-rs/src/chain.rs",
+      "sha256": "DFBEE656D45F5878204AAB1564A3392475ED6018D185AC75C242591C98B9167C"
+    },
+    {
+      "relative": "cc-live-rs/src/fairness.rs",
+      "sha256": "B246B7E669A9D069E70E5E6FD94F3522251840CEEA2F32994C739DD435622195"
+    },
+    {
+      "relative": "cc-live-rs/src/process.rs",
+      "sha256": "D7DB9EF9922DE2EC625F902EADA99DD382F68CDEA96536AD0C4FAED638D62EC4"
+    },
+    {
+      "relative": "cc-live-rs/tests/parity.rs",
+      "sha256": "9110593B290C71290EE4144A8FCED4A10A6F43A8379E449534F4EE748BEAABA5"
+    },
+    {
+      "relative": "src/main.rs",
+      "sha256": "0313D675C79F7663801B5EBE20B895B62E9A3399E005F1C3E2C9B95EB5A33D14"
+    },
+    {
+      "relative": "src/scoped_tests.rs",
+      "sha256": "0105FEC0ED265A44AA28160A8239B20298A66A53FD5B8DCADA1666BD11CEC4CF"
+    }
+  ],
+  "candidate_owner": "71c9ea96a42df7e7ed922a9cf0deb370",
+  "binary_name": "live_chain.exe",
+  "baseline_artifacts_copied": false,
+  "common_executor_checks": "173 common checks retained plus existing CPU profile checks",
+  "new_candidate_checks_passed": 191,
+  "prior_skipped": 4,
+  "deployed": false,
+  "live_runs": 0
+}
