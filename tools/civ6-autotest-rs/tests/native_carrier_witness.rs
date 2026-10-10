@@ -333,6 +333,23 @@ fn review_wait_stage_stops_at_its_own_deadline() {
 }
 
 #[test]
+fn review_prebegin_wait_does_not_spend_stage_deadline() {
+    let lua = loaded_ui(false);
+    lua.load(r#"
+local player=Game.GetLocalPlayer
+Game.GetLocalPlayer=function() return -1 end
+UPDATE(600)
+for _,s in ipairs(LOGS) do assert(not s:find('|FAIL|',1,true),'pre-Begin load must not consume the next stage deadline') end
+Game.GetLocalPlayer=player
+UPDATE(119)
+for _,s in ipairs(LOGS) do assert(not s:find('|FAIL|',1,true)) end
+UPDATE(1)
+local failed=false;for _,s in ipairs(LOGS) do if s:find('|33|FAIL|',1,true) then failed=true end end
+assert(failed,'active stage still has its original 120-second deadline')
+"#).exec().unwrap();
+}
+
+#[test]
 fn review_failed_initialization_blocks_only_the_fixture_observer() {
     let lua = loaded_ui(true);
     lua.load(r#"

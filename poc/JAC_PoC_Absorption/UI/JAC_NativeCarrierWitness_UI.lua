@@ -672,10 +672,10 @@ end
 local function tick(delta)
  if failed then return end
  assert(type(delta)=='number' and delta>=0 and delta==delta,'invalid update elapsed time')
+ if Game.GetLocalPlayer()<0 then return end
  if timedStep~=step then timedStep=step;stageElapsed=0 end
  stageElapsed=stageElapsed+delta
  if step<=43 then assert(stageElapsed<assert(actions[step].timeout),'fixed stage timeout: '..step) end
- if Game.GetLocalPlayer()<0 then return end
  local b=bridge.GetHeader();if b.Failure then error(b.Failure) end
  local shown,ready=dialog()
  if ready and lastReady~=true then emit('DIALOG_OPEN',generation,0,canonical({Player=Game.GetLocalPlayer(),Turn=Game.GetCurrentGameTurn(),Paused=GameConfiguration.IsPaused(),Shown=shown,Ready=ready})) end

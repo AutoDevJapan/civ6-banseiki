@@ -158,6 +158,30 @@ end
 }
 
 #[test]
+fn native_witness_installs_once_when_nonce_arrives_after_frontend_creation() {
+    let lua = fixture_with_state(
+        r#"
+nativeIncludes=0
+local stockInclude=include
+include=function(name)
+ if name=='JAC_NativeCarrierWitness_Staging' then nativeIncludes=nativeIncludes+1 else stockInclude(name) end
+end
+"#,
+    );
+    exec(
+        &lua,
+        r#"
+assert(nativeIncludes==0)
+hotseat=true;values.JAC_NATIVE_CARRIER_WITNESS_NONCE='invalid';Events.GameConfigChanged.fire();assert(nativeIncludes==0)
+values.JAC_NATIVE_CARRIER_WITNESS_NONCE='0123456789abcdef0123456789abcdef'
+Events.GameConfigChanged.fire();assert(nativeIncludes==1,'nonce arrives after the original Staging context loaded')
+Events.GameConfigChanged.fire();ContextPtr:show();values.JAC_NATIVE_CARRIER_LOAD_GENERATION=1;ContextPtr:show()
+assert(nativeIncludes==1,'reused context must preserve its generation receipts')
+"#,
+    );
+}
+
+#[test]
 fn host_clicks_assign_nonoverlapping_areas_and_one_team_then_restore_stock_teams() {
     let lua = fixture();
     exec(

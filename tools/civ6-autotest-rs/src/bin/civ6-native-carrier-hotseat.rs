@@ -104,6 +104,12 @@ fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
     Ok(b)
 }
 
+fn pregame_flags(nonce: &str) -> String {
+    let key = scenario::lua_string(NONCE_KEY);
+    let value = scenario::lua_string(nonce);
+    format!("assert(UI.IsInFrontEnd(),'frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
+}
+
 fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
     verify_lease()?;
     let b = bundle(output, repo)?;
@@ -136,7 +142,7 @@ fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> 
             verify_owner(&mut io, &state)
         })?;
     }
-    let flag=format!("assert(UI.IsInFrontEnd(),'frontend required')\nGameConfiguration.SetValue({}, {})\nGameConfiguration.SetGameModeEnabled('GAMEMODE_HEROES',true)\nreturn GameConfiguration.GetValue({})",scenario::lua_string(NONCE_KEY),scenario::lua_string(&b.nonce),scenario::lua_string(NONCE_KEY));
+    let flag = pregame_flags(&b.nonce);
     writeln!(receipt, "nonce")?;
     receipt.sync_all()?;
     let deadline = io.now() + 30.;
@@ -453,6 +459,27 @@ fn main() {
 mod tests {
     use super::*;
     const NONCE: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn pregame_flags_use_the_stock_value_api_and_verify_the_actual_mode() {
+        let lua = mlua::Lua::new();
+        lua.load("local values={};UI={IsInFrontEnd=function() return true end};GameConfiguration={SetValue=function(k,v) values[k]=v end,GetValue=function(k) return values[k] end}").exec().unwrap();
+        assert_eq!(
+            lua.load(pregame_flags(NONCE)).eval::<String>().unwrap(),
+            NONCE
+        );
+        assert!(lua
+            .load("return GameConfiguration.GetValue('GAMEMODE_HEROES')")
+            .eval::<bool>()
+            .unwrap());
+        lua.load("GameConfiguration.SetValue=function() end")
+            .exec()
+            .unwrap();
+        let other = "fedcba9876543210fedcba9876543210";
+        assert!(lua.load(pregame_flags(other)).eval::<String>().is_err());
+        lua.load("local read=GameConfiguration.GetValue;GameConfiguration.GetValue=function(k) if k=='GAMEMODE_HEROES' then return false end;return read(k) end").exec().unwrap();
+        assert!(lua.load(pregame_flags(NONCE)).eval::<String>().is_err());
+    }
 
     #[test]
     fn incomplete_final_journal_record_never_restores_an_older_unsent_state() {

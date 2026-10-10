@@ -738,10 +738,16 @@ if Controls then
   end
   Controls.ReadyButton:RegisterCallback(Mouse.eLClick, OnReadyButton)
   Controls.ReadyCheck:RegisterCallback(Mouse.eLClick, OnReadyButton)
-  local nativeWitnessNonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
-  if type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
-    include('JAC_NativeCarrierWitness_Staging')
+  local nativeWitnessInstalled=false
+  local function installNativeWitness()
+    local nativeWitnessNonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+    if not nativeWitnessInstalled and GameConfiguration.IsHotseat()
+      and type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
+      nativeWitnessInstalled=true -- never retry an unknown include in this context
+      include('JAC_NativeCarrierWitness_Staging')
+    end
   end
+  installNativeWitness()
   Controls.JAC_AllJapanButton:RegisterCallback(Mouse.eLClick, function() onMode(JAPAN) end)
   Controls.JAC_DifferentButton:RegisterCallback(Mouse.eLClick, function() onMode(DIFFERENT) end)
 
@@ -756,11 +762,15 @@ if Controls then
     return (order[tostring(a)] or math.huge) < (order[tostring(b)] or math.huge)
   end)
   ContextPtr:SetShowHandler(function()
+    installNativeWitness()
     stockOnShow()
     resetAttempts()
     syncState()
   end)
-  Events.GameConfigChanged.Add(syncState)
+  Events.GameConfigChanged.Add(function()
+    installNativeWitness()
+    syncState()
+  end)
   Events.PlayerInfoChanged.Add(syncState)
   Events.MultiplayerPlayerConnected.Add(onConnected)
   Events.MultiplayerPrePlayerDisconnected.Add(onPreDisconnect)
