@@ -154,3 +154,9 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 これは移管と移管後の公開を条件に加えた未実機の対照であり、根因の断定や製品修正ではない。実Lua 5.1 fixtureでは登録callbackを動かし、Actor3・Owner1→0・ID変更、UIだけのgetter、Coreだけの移管、副作用1+1の順序、応答不明・再入の再送拒否、キーや手番の不一致拒否、UI公開基準前のsetter要求0を検査する。旧Native observer、製品Lua、受入37手順は変更せず、旧4件・59件の検査は再実行しない。人間製品と移管save-onceは未達のまま、親の製品2/5・40%・残3件を維持する。次の製品修正は親が実機結果に基づいて決める。
 
 生成器に限定した14件は成功・省略0だった。Coreでの登録と公開後の基準未取得をfixtureで明示した後は、新5件だけを再検査して成功・旧9件は対象外とした。最終Clippy（warnings拒否）・build・15手順の生成JSONに対する既存CLIのcheckは終了0。新旧の原ログと時刻・コマンド・source SHAを記録したmeta、生成JSONとexeのSHAは既存6bfdのtarget内の`transfer-generator-*`に保全する。Lua 5.1構文検査は新7手順と原8手順内のLuaを対象にした。game・公開push・製品の受付は親だけが実行する。
+
+## Windows CIのcleanup resume終了競合（有限修正）
+
+Windows job 114150730563の失敗原本は `D:/CC/Work/todo995/ci-6c79-windows-failed.log`。UncertainDr7のresumeでcount 0が2件あり、DR復元・continue・detachは成功、競合履歴は空だった。原本には保持スレッドの終了確認がなく、終了競合が原CIの原因とは断定しない。親6c79b814のmerge後、旧検査を1回実行すると成功した。旧判定を抽出した新しい所有子の回帰検査では、子自身の終了後に同じ保持ハンドルがcount 0を返し、旧判定のエラーを再現した。
+
+修正は同じ保持ハンドルのWaitForSingleObjectをAPI前後に使う。終了確認時は時点・raw count・期待値を残し、生存中の0・不正count・Wait失敗はエラーのままにする。追加resumeは行わない。新4件と旧関連4件はnextestで8成功・60選外、CIに合わせた同一プロセス内の並列libtestも8成功・60選外だった。元のignored入口は通常検査の成功数に含めず、新回帰の所有子として起動し、終了0を別に確認した。DR競合履歴がある場合のcleanup未完了は維持した。Clippy・build・書式確認は終了0。原ログと指紋は既存6bfdのtarget内の `resume-race-*` に残す。未知GETTERのoriginal context配送は未証明のまま。generator・ゲーム・製品の受入・共有ToDo・公開pushは変更していない。

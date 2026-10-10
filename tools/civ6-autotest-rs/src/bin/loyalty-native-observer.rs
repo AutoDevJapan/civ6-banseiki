@@ -774,6 +774,75 @@ mod policy {
         }
     }
 
+    #[derive(Debug, Default, Serialize)]
+    pub struct CleanupResume {
+        pub raw_resume_count: Option<u32>,
+        pub expected_count: Option<u32>,
+        pub alive_before: Option<bool>,
+        pub alive_after: Option<bool>,
+        pub thread_exited: bool,
+        pub termination_phase: Option<&'static str>,
+        pub ownership_retired: bool,
+        pub runnable: bool,
+        pub errors: Vec<String>,
+    }
+
+    // The callbacks must refer to the SAME retained thread handle. Never
+    // reopen by TID or use process exit as evidence for a particular thread.
+    pub fn cleanup_resume(
+        expected_count: Option<u32>,
+        mut alive: impl FnMut() -> Result<bool>,
+        resume_api: impl FnOnce() -> (u32, Option<String>),
+    ) -> CleanupResume {
+        let mut report = CleanupResume {
+            expected_count,
+            ..Default::default()
+        };
+        match alive() {
+            Ok(false) => {
+                report.alive_before = Some(false);
+                report.thread_exited = true;
+                report.termination_phase = Some("before_api");
+                report.ownership_retired = true;
+                return report;
+            }
+            Ok(true) => report.alive_before = Some(true),
+            Err(error) => report.errors.push(format!("wait before resume: {error}")),
+        }
+        // A failed wait must remain an error, but still attempt our single
+        // release. It must not strand this or the other suspended threads.
+        let (count, error) = resume_api();
+        report.raw_resume_count = Some(count);
+        report.ownership_retired = count != u32::MAX;
+        match alive() {
+            Ok(false) => {
+                // Exit may discard the suspend count between the first wait
+                // and ResumeThread. Only this same thread object proves it.
+                report.alive_after = Some(false);
+                report.thread_exited = true;
+                report.termination_phase = Some("after_api");
+                report.ownership_retired = true;
+                return report;
+            }
+            Ok(true) => report.alive_after = Some(true),
+            Err(error) => report.errors.push(format!("wait after resume: {error}")),
+        }
+        if count == u32::MAX {
+            report
+                .errors
+                .push(error.unwrap_or_else(|| "ResumeThread failed".into()));
+        } else if count == 0 || Some(count) != expected_count {
+            report.errors.push(format!(
+                "suspend count {count}, expected {expected_count:?}"
+            ));
+        }
+        // A preexisting application suspension remains owned by the app.
+        // Count mismatches never cause an additional compensating resume.
+        report.runnable =
+            count == 1 && report.alive_after == Some(true) && report.errors.is_empty();
+        report
+    }
+
     pub trait CleanupBackend {
         fn freeze(&mut self) -> Vec<String>;
         fn armed_threads(&self) -> Vec<u32>;
@@ -3842,27 +3911,32 @@ mod platform {
                 if !thread.suspended {
                     continue;
                 }
-                // SAFETY: remove exactly the suspend count owned by cleanup,
-                // after detach has released the debugger's separate event stop.
-                let previous_count = unsafe { ResumeThread(thread.handle.0) };
                 let expected_count = thread.suspend_previous_count.and_then(|n| n.checked_add(1));
-                let released_expected_count = Some(previous_count) == expected_count;
-                records.push(json!({"event":"thread_resume","tid":tid,"previous_count":previous_count,
-                    "expected_count":expected_count,"ok":released_expected_count && previous_count != u32::MAX,
-                    "runnable":previous_count == 1}));
-                if previous_count == u32::MAX {
-                    let error = win_error("ResumeThread");
-                    if thread.handle.alive() != Ok(false) {
-                        errors.push(format!("resume thread {tid}: {error}"));
-                    }
-                } else {
+                let resume = cleanup_resume(
+                    expected_count,
+                    || thread.handle.alive(),
+                    || {
+                        // SAFETY: at most one release of our count on the held
+                        // handle, after detach releases the separate debug stop.
+                        let count = unsafe { ResumeThread(thread.handle.0) };
+                        let error = (count == u32::MAX).then(|| win_error("ResumeThread"));
+                        (count, error)
+                    },
+                );
+                records.push(json!({"event":"thread_resume","tid":tid,
+                    "previous_count":resume.raw_resume_count,"raw_resume_count":resume.raw_resume_count,
+                    "expected_count":resume.expected_count,"ok":resume.errors.is_empty(),
+                    "runnable":resume.runnable,"thread_exited":resume.thread_exited,
+                    "termination_phase":resume.termination_phase,"alive_before":resume.alive_before,
+                    "alive_after":resume.alive_after,"errors":resume.errors}));
+                errors.extend(
+                    resume
+                        .errors
+                        .iter()
+                        .map(|error| format!("resume thread {tid}: {error}")),
+                );
+                if resume.ownership_retired {
                     thread.suspended = false;
-                    if !released_expected_count {
-                        errors.push(format!("resume thread {tid}: suspend count {previous_count}, expected {expected_count:?}"));
-                    }
-                    // Counts above one preserve an application's preexisting
-                    // suspension. Releasing our one count does not imply that
-                    // such a thread became runnable; never resume it again.
                 }
             }
             for record in records {
@@ -4276,6 +4350,23 @@ mod platform {
                 .truncate(true)
                 .open(path)
                 .unwrap();
+            if std::env::var_os("LOYALTY_OWNED_RESUME_EXIT").is_some() {
+                let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+                let (_release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+                std::thread::spawn(move || {
+                    let tid =
+                        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+                    ready_tx.send(tid).unwrap();
+                    let _ = release_rx.recv();
+                });
+                write_json(&mut file, &json!({"resume_tid":ready_rx.recv().unwrap()})).unwrap();
+                let mut go = String::new();
+                std::io::stdin().read_line(&mut go).unwrap();
+                assert_eq!(go.trim(), "go");
+                // The child exits itself while its worker is suspended. No
+                // debugger, TerminateThread, or external process is involved.
+                std::process::exit(0);
+            }
             if std::env::var_os("LOYALTY_OWNED_RESTORE_MUTATION").is_some() {
                 let observed = Box::new([0u32; 4]);
                 let application = Box::new([0u32; 4]);
@@ -4486,6 +4577,107 @@ mod platform {
                 assert_eq!(wait, WAIT_OBJECT_0, "owned synthetic child did not exit");
                 let _ = self.0.try_wait();
             }
+        }
+
+        #[test]
+        fn windows_cleanup_resume_held_thread_termination_race() {
+            let handshake = tempfile::NamedTempFile::new().unwrap();
+            let mut child = OwnedChild(
+                Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "platform::live_tests::owned_hardware_child",
+                        "--ignored",
+                        "--nocapture",
+                    ])
+                    .env("LOYALTY_OWNED_CHILD_HANDSHAKE", handshake.path())
+                    .env("LOYALTY_OWNED_RESUME_EXIT", "1")
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .unwrap(),
+            );
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let tid = loop {
+                if let Ok(message) =
+                    serde_json::from_slice::<Value>(&std::fs::read(handshake.path()).unwrap())
+                {
+                    break message["resume_tid"].as_u64().unwrap() as u32;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "owned resume child handshake deadline"
+                );
+                assert!(child.0.try_wait().unwrap().is_none());
+                std::thread::sleep(Duration::from_millis(1));
+            };
+            // Acquire once from this child's handshake, verify ownership, and
+            // retain this exact object for every later wait/resume operation.
+            let held = Handle::new(
+                unsafe {
+                    OpenThread(
+                        THREAD_SYNCHRONIZE
+                            | THREAD_SUSPEND_RESUME
+                            | THREAD_QUERY_LIMITED_INFORMATION,
+                        0,
+                        tid,
+                    )
+                },
+                "owned resume worker",
+            )
+            .unwrap();
+            assert_eq!(unsafe { GetProcessIdOfThread(held.0) }, child.0.id());
+            assert_eq!(held.alive(), Ok(true));
+            let alive_zero = cleanup_resume(
+                Some(1),
+                || held.alive(),
+                || (unsafe { ResumeThread(held.0) }, None),
+            );
+            assert_eq!(alive_zero.raw_resume_count, Some(0));
+            assert!(
+                !alive_zero.errors.is_empty(),
+                "alive zero must remain an error"
+            );
+            assert_eq!(unsafe { SuspendThread(held.0) }, 0);
+            let waits = std::cell::Cell::new(0);
+            let report = cleanup_resume(
+                Some(1),
+                || {
+                    waits.set(waits.get() + 1);
+                    held.alive()
+                },
+                || {
+                    child.0.stdin.as_mut().unwrap().write_all(b"go\n").unwrap();
+                    assert_eq!(unsafe { WaitForSingleObject(held.0, 3000) }, WAIT_OBJECT_0);
+                    let count = unsafe { ResumeThread(held.0) };
+                    let error =
+                        (count == u32::MAX).then(|| win_error("ResumeThread(owned exiting child)"));
+                    (count, error)
+                },
+            );
+            println!("CLEANUP_RESUME_HELD_EXIT={}", json!(report));
+            assert!(report.errors.is_empty(), "{report:?}");
+            assert_eq!(waits.get(), 2);
+            assert_eq!(report.alive_before, Some(true));
+            assert_eq!(report.alive_after, Some(false));
+            assert_eq!(report.termination_phase, Some("after_api"));
+            assert!(report.thread_exited && report.ownership_retired);
+            assert!(!report.runnable);
+            assert_eq!(
+                unsafe { WaitForSingleObject(child.0.as_raw_handle(), 3000) },
+                WAIT_OBJECT_0
+            );
+            assert!(child.0.try_wait().unwrap().unwrap().success());
+            let before = cleanup_resume(
+                Some(1),
+                || held.alive(),
+                || panic!("ended thread must not be resumed"),
+            );
+            assert!(before.thread_exited && before.errors.is_empty());
+            assert_eq!(before.termination_phase, Some("before_api"));
+            assert_eq!(before.raw_resume_count, None);
         }
 
         #[test]
@@ -5855,9 +6047,26 @@ mod platform {
                 } else if record["event"] == "debug_continue" {
                     assert_eq!(record["ok"], true);
                 } else if record["event"] == "thread_resume" {
-                    assert_eq!(record["ok"], true);
-                    assert_eq!(record["previous_count"], 1);
-                    assert_eq!(record["runnable"], true);
+                    assert_eq!(record["ok"], true, "{record}");
+                    assert_eq!(record["expected_count"], 1);
+                    assert_eq!(record["previous_count"], record["raw_resume_count"]);
+                    if record["thread_exited"] == true {
+                        assert_eq!(record["runnable"], false);
+                        if record["termination_phase"] == "before_api" {
+                            assert_eq!(record["alive_before"], false);
+                            assert!(record["raw_resume_count"].is_null());
+                        } else {
+                            assert_eq!(record["termination_phase"], "after_api");
+                            assert_eq!(record["alive_before"], true);
+                            assert_eq!(record["alive_after"], false);
+                            assert!(record["raw_resume_count"].is_u64());
+                        }
+                    } else {
+                        assert_eq!(record["previous_count"], 1);
+                        assert_eq!(record["alive_before"], true);
+                        assert_eq!(record["alive_after"], true);
+                        assert_eq!(record["runnable"], true);
+                    }
                 }
             }
             let lost_getter = mode == OwnedMode::UncertainDr7;
@@ -7645,6 +7854,102 @@ mod tests {
         }
         fn process_exited(&self) -> bool {
             self.exited
+        }
+    }
+
+    #[test]
+    fn cleanup_resume_ended_before_api_skips_release() {
+        let report = cleanup_resume(Some(1), || Ok(false), || panic!("already ended"));
+        assert_eq!(report.raw_resume_count, None);
+        assert_eq!(report.expected_count, Some(1));
+        assert_eq!(report.alive_before, Some(false));
+        assert_eq!(report.alive_after, None);
+        assert_eq!(report.termination_phase, Some("before_api"));
+        assert!(report.thread_exited && report.ownership_retired);
+        assert!(report.errors.is_empty());
+        assert!(!report.runnable);
+    }
+
+    #[test]
+    fn cleanup_resume_ended_after_api_records_raw_result() {
+        for count in [0, 1, 7, u32::MAX] {
+            let mut states = [Ok(true), Ok(false)].into_iter();
+            let calls = std::cell::Cell::new(0);
+            let report = cleanup_resume(
+                Some(1),
+                || states.next().unwrap(),
+                || {
+                    calls.set(calls.get() + 1);
+                    (count, (count == u32::MAX).then(|| "API failure".into()))
+                },
+            );
+            assert_eq!(calls.get(), 1);
+            assert_eq!(states.next(), None);
+            assert_eq!(report.raw_resume_count, Some(count));
+            assert_eq!(report.expected_count, Some(1));
+            assert_eq!(report.alive_before, Some(true));
+            assert_eq!(report.alive_after, Some(false));
+            assert_eq!(report.termination_phase, Some("after_api"));
+            assert!(report.thread_exited && report.ownership_retired);
+            assert!(report.errors.is_empty(), "{report:?}");
+            assert!(!report.runnable);
+        }
+    }
+
+    #[test]
+    fn cleanup_resume_alive_count_and_wait_failures_remain_errors() {
+        for (before, after, count, expected, ok, runnable) in [
+            (Ok(true), Ok(true), 0, Some(1), false, false),
+            (Ok(true), Ok(true), 2, Some(1), false, false),
+            (Ok(true), Ok(true), u32::MAX, Some(1), false, false),
+            (Ok(true), Ok(true), 1, Some(1), true, true),
+            (Ok(true), Ok(true), 3, Some(3), true, false),
+            (Ok(true), Ok(true), 1, None, false, false),
+            (
+                Err("WaitFailed before".into()),
+                Ok(false),
+                0,
+                Some(1),
+                false,
+                false,
+            ),
+            (
+                Ok(true),
+                Err("WaitFailed after".into()),
+                1,
+                Some(1),
+                false,
+                false,
+            ),
+            (
+                Err("WaitFailed before".into()),
+                Ok(true),
+                1,
+                Some(1),
+                false,
+                false,
+            ),
+        ] {
+            let wait_failed = before.is_err() || after.is_err();
+            let mut states = [before, after].into_iter();
+            let calls = std::cell::Cell::new(0);
+            let report = cleanup_resume(
+                expected,
+                || states.next().unwrap(),
+                || {
+                    calls.set(calls.get() + 1);
+                    (count, (count == u32::MAX).then(|| "API failure".into()))
+                },
+            );
+            assert_eq!(calls.get(), 1, "never compensate with an extra resume");
+            assert_eq!(states.next(), None);
+            assert_eq!(report.errors.is_empty(), ok, "{report:?}");
+            assert_eq!(report.runnable, runnable, "{report:?}");
+            assert_eq!(report.expected_count, expected);
+            assert_eq!(report.raw_resume_count, Some(count));
+            if wait_failed {
+                assert!(report.errors.iter().any(|e| e.contains("WaitFailed")));
+            }
         }
     }
 
