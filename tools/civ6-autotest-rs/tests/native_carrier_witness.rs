@@ -60,7 +60,7 @@ fn gp() -> Lua {
 }
 
 fn gp_with_ui_getters(ui_getters: bool) -> Lua {
-    gp_context(ui_getters, true, true)
+    gp_context(ui_getters, false, true)
 }
 
 fn gp_context(ui_getters: bool, multiplayer: bool, confirmed: bool) -> Lua {
@@ -106,13 +106,14 @@ fn genuine_two_human_hotseat_does_not_require_network_transport() {
 
 #[test]
 fn gameplay_requires_actual_two_humans_and_verified_ui_hotseat_setting() {
-    for (network, confirmed) in [(true, false), (false, false)] {
+    for (network, confirmed) in [(true, true), (true, false), (false, false)] {
         let lua = gp_context(false, network, confirmed);
         lua.load("assert(RECEIVE==nil and ExposedMembers.JAC_NativeCarrierWitness==nil and #WRITES==0 and CREATES==0)").exec().unwrap();
     }
     let lua = gp_with_ui_getters(false);
     lua.load(format!("HOTSEAT_CONFIRMED=false;RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
     for change in [
+        "NATIVE_MULTIPLAYER=true",
         "Players[1].IsHuman=function() return false end",
         "Players[2].IsHuman=function() return true end",
         "Players[1].IsAlive=function() return false end",
@@ -120,6 +121,20 @@ fn gameplay_requires_actual_two_humans_and_verified_ui_hotseat_setting() {
         let lua = gp_context(false, false, true);
         lua.load(change).exec().unwrap();
         lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
+    }
+}
+
+#[test]
+fn optional_native_configuration_getters_returning_no_values_do_not_break_logging() {
+    for change in [
+        "local read=GameConfiguration.GetValue;GameConfiguration.GetValue=function(k) if k~='JAC_NATIVE_CARRIER_WITNESS_HOTSEAT' then return read(k) end end",
+        "GameConfiguration.IsNetworkMultiplayer=function() end",
+    ] {
+        let lua = gp();
+        lua.load("BEFORE=#WRITES").exec().unwrap();
+        lua.load(change).exec().unwrap();
+        lua.load(witness::gameplay_binding()).exec().unwrap();
+        lua.load("assert(#WRITES==BEFORE and CREATES==0)").exec().unwrap();
     }
 }
 
@@ -408,7 +423,7 @@ fn staging_waits_for_configuration_loaded_after_context_creation() {
     lua.globals().set("RUN_ID", nonce()).unwrap();
     lua.load(r#"
 READY_NONCE=nil;GENERATION=nil;CLICKS=0;UPDATES=0
-GameConfiguration={GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return READY_NONCE else return GENERATION end end,
+GameConfiguration={GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return READY_NONCE elseif GENERATION~=nil then return GENERATION end end,
  IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {0,1} end}
 PlayerConfigurations={[0]={GetSlotStatus=function() return 1 end},[1]={GetSlotStatus=function() return 1 end}}
 SlotStatus={SS_TAKEN=1};ContextPtr={IsHidden=function() return false end};Network={IsGameHost=function() return true end}
@@ -420,9 +435,10 @@ LOGS={};print=function(s) LOGS[#LOGS+1]=s end
     lua.load(
         r#"
 UpdateReadyButton();assert(CLICKS==0 and UPDATES==1)
-READY_NONCE=RUN_ID;GENERATION=1;UpdateReadyButton();UpdateReadyButton()
-assert(CLICKS==1 and UPDATES==3,'late loaded configuration must install Ready once')
-GENERATION=2;UpdateReadyButton();assert(CLICKS==2)
+READY_NONCE=RUN_ID;UpdateReadyButton();assert(CLICKS==1 and UPDATES==2,'optional generation getter may return no values')
+GENERATION=1;UpdateReadyButton();UpdateReadyButton()
+assert(CLICKS==2 and UPDATES==4,'late loaded configuration must install Ready once')
+GENERATION=2;UpdateReadyButton();assert(CLICKS==3)
 "#,
     )
     .exec()

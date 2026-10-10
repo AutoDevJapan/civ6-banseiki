@@ -30,9 +30,9 @@ math.min = function(...)
       local limit = hotseatMaxPlayers(second)
       if not scopeReported then
         print('JAC_JP_HS|SCOPE|' .. tostring(GameConfiguration.IsHotseat()) .. '|' ..
-          tostring(GameConfiguration.GetValue('RULESET')) .. '|' ..
-          tostring(MapConfiguration.GetValue('MAP_SCRIPT')) .. '|' ..
-          tostring(MapConfiguration.GetMaxMajorPlayers()) .. '|' .. tostring(limit))
+          tostring((GameConfiguration.GetValue('RULESET'))) .. '|' ..
+          tostring((MapConfiguration.GetValue('MAP_SCRIPT'))) .. '|' ..
+          tostring((MapConfiguration.GetMaxMajorPlayers())) .. '|' .. tostring(limit))
         scopeReported = true
       end
       if limit == 22 then return 22 end

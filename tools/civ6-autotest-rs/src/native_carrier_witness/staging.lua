@@ -1,5 +1,6 @@
 local canonical=assert(JAC_AbsorptionRules and JAC_AbsorptionRules.Canonical,'staging witness requires canonical codec')
-print('[JAC_NATIVE_CARRIER_STAGING_BIND] Nonce='..nonce..' Generation='..tostring(GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')))
+local bindingGeneration=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')
+print('[JAC_NATIVE_CARRIER_STAGING_BIND] Nonce='..nonce..' Generation='..tostring(bindingGeneration))
 local attempted={}
 local failed=false
 local function ready()
