@@ -1555,6 +1555,12 @@ fn main_owned(
             ));
         }
         *game_closed = true;
+        if let Some(profile) = software_profile.as_mut() {
+            profile
+                .restore()
+                .map_err(|e| format!("software renderer restoration pending: {e}"))?;
+            *software_profile = None;
+        }
         for line in run.stdout.lines().filter(|s| {
             ["[OK]", "[FAIL]", "PASS", "FAIL"]
                 .iter()
@@ -1777,6 +1783,19 @@ fn cli_once(
             deadline: cleanup_end,
         };
         let r = &mut budget;
+        // The profile denies DELETE access. Restore under its read protection
+        // before opening the normal owned-delete handle, even after a failed
+        // driver/panic where the owned game is still alive.
+        if let Some(profile) = software_profile.as_mut() {
+            if !game_closed {
+                close_civ6_with_evidence(r, p, &mut cleanup_exit)?;
+                game_closed = true;
+            }
+            profile
+                .restore()
+                .map_err(|e| format!("software renderer restoration pending: {e}"))?;
+            software_profile = None;
+        }
         let file = match open_owned_lock(r, &path, &token) {
             Ok(file) => file,
             Err(release_error) => {
@@ -1828,19 +1847,6 @@ fn cli_once(
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
         game_closed = closed.is_ok();
-        if let Some(profile) = software_profile.as_mut() {
-            if !game_closed {
-                return Err(
-                    "software renderer retains original settings until the owned game closes"
-                        .into(),
-                );
-            }
-            profile
-                .restore()
-                .map_err(|e| format!("software renderer restoration pending: {e}"))?;
-            // Drop the read handle before deleting the same owned lock.
-            software_profile = None;
-        }
         let restored = if game_closed && !options.cleanup_only {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 deployment::restore(r, p, &p.live())
