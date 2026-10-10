@@ -7,21 +7,23 @@
   "implemented": "通常一回でも自動保存の隔離と既存の復元処理を使う",
   "completed": [
     "規則・client guard確認",
-    "通常一回の5状態をargv/state/bytesへ結んだ回帰",
-    "cc-live nextest136成功（従来skip2）",
-    "全workspace1786成功・Lua全件を含む",
-    "全workspace doc・cc-live Clippy/doc成功",
-    "全74シナリオ形式検査と一回用7手順形式検査",
-    "元4自動保存とAppOptions原本を所有23d09へ複製・SHA照合",
-    "既存所有CPU描画共通実行器を保つ候補191成功（従来skip4）・Clippy/doc/release成功",
-    "標準chainだけを一回起動し原本/SHA/lease/state/終了を観測するRust例を作成・Clippy/release成功"
+    "初回修正でcc-live136成功（従来skip2）",
+    "製品workspace1786成功・Lua全件・doc成功（今回のrunnerだけの追加変更では製品コードは変更なし）",
+    "初回cc-live Clippy/doc成功",
+    "全シナリオ形式検査と7手順一回用JSON形式検査",
+    "元4自動保存・2183141bytesとAppOptionsの原本を所有23d09へ複製しSHA照合",
+    "初回配備候補191成功（従来skip4）・Clippy/doc/release成功",
+    "Rustの一回観測器を作成・Clippy/release成功",
+    "通常の各回が成果物ごとに検査保存を保持する追加修正を発見・両branchへ実装"
   ],
   "pending": [
-    "ToDo2321で別モデル読み取りレビュー結果を受領しMustを修正",
-    "PR143のWindows全件CIと全必須CI成功",
-    "レビュー済み候補SHA88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782を標準へ配備",
-    "標準chainでCPU描画の一回だけ最小実機・4原本/AppOptions/seedとSteam終端SHA証跡",
-    "PR143マージと実際の配備source/tree/EXE SHA/実機ID提示"
+    "空きメモリ回復後に最新cc-liveのnextest・Clippy・doc・fmtを再検査（直近の追加修正は未検査）",
+    "配備候補も同じ追加修正をnextest・Clippy/doc/Releaseで再検査し、compiler-artifactのsource/EXE SHAを再記録",
+    "ToDo2321の別モデルレビューを受領しMust解消、最新ソースへ必要なら追審",
+    "PR143の最新ソースの必須CI成功・自己レビュー後のマージ",
+    "他担当の標準chain/shipと既存gameが不在の自然な窓で標準EXEをバックアップ後配備、SHA照合",
+    "標準窓口から一回用7手順をCPU描画で一度実行、state原本・archive SHA・Steam終端・原4autosave/AppOptions/seedの復元を観測例で確認",
+    "完了時にsource/tree/EXE SHA/実機ID/復元証拠をPR/ToDoへ記録"
   ],
   "live_runs": 0,
   "deployed": false,
@@ -31,5 +33,10 @@
   "candidate_worktree": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-71c9ea96a42df7e7ed922a9cf0deb370/wt",
   "candidate_branch": "scheduler/todo-2317-deployment",
   "candidate_exe_sha256": "88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782",
-  "one_run_scenario": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-23d09feb6b95a5d1afeef82294b574d8/one-run-isolation.json"
+  "one_run_scenario": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-23d09feb6b95a5d1afeef82294b574d8/one-run-isolation.json",
+  "scenario_checks": 136,
+  "latest_extra_changes_tested": false,
+  "candidate_binary_is_current": false,
+  "resource_condition": "共有ゲートが空きメモリ不足でCargoを待機、scheduler RAM below 8 GiB・枠0",
+  "review_status": "2321受付済み・未開始・結果未受領"
 }
