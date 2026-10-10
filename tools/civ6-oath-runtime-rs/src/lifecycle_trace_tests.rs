@@ -19,7 +19,7 @@ unsafe extern "system-unwind" fn original(a: u64, b: u64, c: u64, d: u64) -> u64
         .is_ok()
     {
         let f: Call = unsafe { std::mem::transmute(gateway_address(1)) };
-        assert_eq!(unsafe { f(12, 13, 14, 15) }, 12 ^ 13 ^ 14 ^ 15);
+        assert_eq!(unsafe { f(12, 13, 14, 15) }, 0);
     }
     if SELF_STOP.swap(0, Ordering::SeqCst) == 1 {
         assert_eq!(
@@ -508,7 +508,10 @@ fn shared_child() {
     } else {
         None
     };
-    println!("LC_PUBLISHED");
+    // Serial libtest prints `test name ... ` without a newline before the
+    // test body. Keep this exact protocol marker on its own line in both
+    // cargo test and nextest's child environment.
+    println!("\nLC_PUBLISHED");
     std::io::stdout().flush().unwrap();
     line.clear();
     std::io::stdin().read_line(&mut line).unwrap();
@@ -553,6 +556,7 @@ fn shared_helper_process_publication_survives_os_exit() {
                     "--nocapture",
                 ])
                 .env("CC_SHARED_LIFECYCLE_CASE", case)
+                .env("RUST_TEST_THREADS", "1")
                 .creation_flags(CREATE_NO_WINDOW)
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())

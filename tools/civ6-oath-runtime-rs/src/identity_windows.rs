@@ -211,7 +211,7 @@ fn match_function(base: usize, disk: &[u8], rva: u32) -> Result<(), OathStatus> 
     match_window(base, disk, begin, (end - begin) as usize)?;
     let h = source_rva(disk, unwind, 4)?;
     let length = 4
-        + (usize::from(h[2]) + 1) / 2 * 4
+        + usize::from(h[2]).div_ceil(2) * 4
         + if h[0] & 0x20 != 0 {
             12
         } else if h[0] & 0x18 != 0 {

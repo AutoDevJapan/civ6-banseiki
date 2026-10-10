@@ -167,11 +167,11 @@
       }
     },
     {
-      "dll": "D:/CC/Work/todo134/civ6-oath-runtime-ef0375900ce6a7c4720a742af562fe5a6b00ef81ebf552306068a45ec9a168fc.dll",
+      "dll": "D:/CC/Work/todo134/civ6-oath-runtime-a7cc2567691c937198bc0ce1374a7fde538dc9491bb1d23024016dbe30f738a4.dll",
       "timeout": 60,
       "action": "oath_trace_install",
       "max_seconds": 300,
-      "dll_sha256": "ef0375900ce6a7c4720a742af562fe5a6b00ef81ebf552306068a45ec9a168fc",
+      "dll_sha256": "a7cc2567691c937198bc0ce1374a7fde538dc9491bb1d23024016dbe30f738a4",
       "capture": "lifecycle"
     },
     {

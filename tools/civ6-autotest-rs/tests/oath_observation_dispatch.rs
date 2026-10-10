@@ -37,6 +37,7 @@ impl Backend for Probe {
         Ok(
             json!({"snapshot_phase":"after_process_exit","process_exit_observed":!self.fail_operation,
             "controller_deadline_expired":false,"process_exit_code":0,
+            "controller_remaining_seconds":0.25,
             "quantity_accepted":false,"product_accepted":false}),
         )
     }
@@ -305,4 +306,93 @@ fn unknown_final_process_exit_fails_the_step_but_keeps_its_raw_evidence() {
     assert_eq!(proof["native_observation"]["process_exit_observed"], false);
     assert_eq!(proof["product_accepted"], false);
     assert_eq!(calls.lock().unwrap().last(), Some(&Operation::Finalize));
+}
+
+struct ClosingProbe {
+    events: Arc<Mutex<Vec<String>>>,
+    pending: usize,
+}
+impl Backend for ClosingProbe {
+    fn require_single_process(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
+        Ok(Some(60.0))
+    }
+    fn begin_steam_observation(&mut self, _: &std::path::Path) -> Result<()> {
+        self.events.lock().unwrap().push("fresh_mark".into());
+        Ok(())
+    }
+    fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+        Ok(vec!["InGame".into()])
+    }
+    fn run_lua(&mut self, _: &str, code: &str, _: f64) -> Result<String> {
+        if code.contains("UserConfirmedClose") {
+            self.events.lock().unwrap().push("close_once".into());
+            return Err(Error::unknown("game disconnected after sending exit"));
+        }
+        Ok("true".into())
+    }
+    fn oath_trace_finalize(&mut self, _: f64) -> Result<Value> {
+        self.events.lock().unwrap().push("final_copy".into());
+        Ok(json!({"process_exit_observed":true,"process_exit_code":0,
+            "controller_deadline_expired":false,"controller_remaining_seconds":2.0,
+            "raw_first":"first-copy","raw_second":"second-copy"}))
+    }
+    fn steam_sync_status(
+        &mut self,
+        stage: civ6_autotest_rs::steam_sync::Stage,
+    ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus> {
+        assert_eq!(stage, civ6_autotest_rs::steam_sync::Stage::Exit);
+        self.events.lock().unwrap().push("exit_sync".into());
+        if self.pending > 0 {
+            self.pending -= 1;
+            Ok(civ6_autotest_rs::steam_sync::SyncStatus::Pending)
+        } else {
+            Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)
+        }
+    }
+}
+#[test]
+fn lost_close_reply_is_not_resent_and_fresh_steam_sync_is_required() {
+    for pending in [1, usize::MAX] {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("artifacts");
+        fs::create_dir(&output).unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut runner = Runner::with_backend(
+            json!({"name":"shared lifecycle close","diagnostic_only":true}),
+            output.clone(),
+            temp.path().join("logs"),
+            temp.path().join("saves"),
+            4318,
+            Box::new(ClosingProbe {
+                events: events.clone(),
+                pending,
+            }),
+            Arc::new(ManualClock::default()),
+        );
+        runner.test_mode = true;
+        let action = json!({"action":"oath_trace_finalize","timeout":60.0});
+        let outcome = runner.run_step(&action);
+        assert_eq!(outcome.is_ok(), pending == 1, "{outcome:?}");
+        let events = events.lock().unwrap();
+        assert_eq!(events.iter().filter(|e| *e == "close_once").count(), 1);
+        assert_eq!(events.iter().filter(|e| *e == "final_copy").count(), 1);
+        assert!(
+            events.iter().position(|e| e == "fresh_mark").unwrap()
+                < events.iter().position(|e| e == "close_once").unwrap()
+        );
+        assert!(
+            events.iter().position(|e| e == "final_copy").unwrap()
+                < events.iter().position(|e| e == "exit_sync").unwrap()
+        );
+        let proof: Value = serde_json::from_slice(
+            &fs::read(output.join("oath-observation-1-oath_trace_finalize.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(proof["native_observation"]["raw_first"], "first-copy");
+        assert_eq!(proof["native_observation"]["raw_second"], "second-copy");
+        assert_eq!(proof["product_accepted"], false);
+    }
 }

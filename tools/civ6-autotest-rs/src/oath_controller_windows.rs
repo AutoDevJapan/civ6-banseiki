@@ -746,7 +746,7 @@ impl Inner {
             | PROCESS_VM_READ
             | PROCESS_VM_WRITE
             | PROCESS_CREATE_THREAD
-            | PROCESS_DUP_HANDLE;
+            | if lifecycle { PROCESS_DUP_HANDLE } else { 0 };
         let process = Handle::new(unsafe { OpenProcess(access, 0, game.pid) }, "OpenProcess")?;
         let created = creation(process.0)?;
         if unix_start(created) != game.started
@@ -791,7 +791,6 @@ impl Inner {
             max_seconds,
             created,
             callee,
-            lifecycle,
             shared.as_ref(),
         );
         let (base, exports, trace_address, receipt_buffer) = match built {
@@ -1286,6 +1285,9 @@ fn capture_after_exit(
             value["process_exit_observed"] = json!(ended);
             value["process_exit_code"] = if readable { json!(code) } else { Value::Null };
             value["controller_deadline_expired"] = json!(late);
+            value["controller_remaining_seconds"] = json!(until
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64());
             value["pid"] = json!(target.pid);
             value["created_filetime"] = json!(target.created);
             if late || !readable || code != 0 {
@@ -1319,9 +1321,9 @@ fn bring_up(
     max_seconds: u32,
     created: u64,
     callee: bool,
-    lifecycle: bool,
     shared: Option<&civ6_oath_runtime_rs::lifecycle_transport::SharedTrace>,
 ) -> Result<BroughtUp> {
+    let lifecycle = shared.is_some();
     let base = load_dll(target, dll)?;
     let exports = dll.exports.map(|rva| base + rva as usize);
     verify_remote_image(target, dll, base, &exports)?;

@@ -2414,6 +2414,17 @@ impl Runner {
                 let proof = if operation == Operation::Finalize {
                     if let Some(budget) = self.backend.oath_trace_exit_budget()? {
                         let exit_until = self.clock.now() + self.remaining(deadline)?.min(budget);
+                        // Two UI requests can use five seconds each, and the
+                        // existing Steam release observation needs ten seconds.
+                        // Keep five seconds for process exit and final copies.
+                        if self.remaining(exit_until)? < 25.0 {
+                            return Err(Error::input(
+                                "insufficient lifecycle budget for exit and Steam synchronization",
+                            ));
+                        }
+                        self.backend.begin_steam_observation(
+                            &self.output.join("oath-exit-steam-sync.jsonl"),
+                        )?;
                         self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(exit_until, 5.0)?)?;
                         let close_budget = self.budget(exit_until, 5.0)?;
                         // Vanilla InGameTopOptionsMenu.OnExitGame and the
@@ -2454,6 +2465,15 @@ impl Runner {
                         || proof["native_observation"]["process_exit_code"] != 0)
                 {
                     return Err(Error::unknown("final lifecycle process exit was not confirmed within budget; raw evidence preserved"));
+                }
+                if operation == Operation::Finalize {
+                    let remaining = proof["native_observation"]["controller_remaining_seconds"].as_f64()
+                        .filter(|n| n.is_finite() && *n > 0.0)
+                        .ok_or_else(|| Error::unknown("no lifecycle budget remains for Steam synchronization; raw evidence preserved"))?;
+                    let sync_until =
+                        self.clock.now() + self.remaining(deadline)?.min(remaining).min(45.0);
+                    self.wait_steam_exit(sync_until, false)?;
+                    self.remaining(sync_until)?;
                 }
                 Ok(format!("native oath observation: {proof}"))
             }
