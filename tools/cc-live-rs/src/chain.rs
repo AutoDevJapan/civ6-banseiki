@@ -1409,10 +1409,10 @@ fn main_owned(
         let auto_source = p
             .live()
             .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs");
-        if options.reliability && !auto_source.is_file() && p.live().join(".git").exists() {
-            return Err("reliability checkout lacks autosave isolation source; refusing to run against original autosaves".into());
+        if !auto_source.is_file() && p.live().join(".git").exists() {
+            return Err("live checkout lacks autosave isolation source; refusing to run against original autosaves".into());
         }
-        if options.reliability && auto_source.is_file() {
+        if auto_source.is_file() {
             // begin can move the original folder before returning an error.
             // Arm recovery before dispatch, including unknown/timeout outcomes.
             *game_closed = false;
@@ -1422,7 +1422,7 @@ fn main_owned(
             let state = p.here.join("reliability-auto-state.json");
             let archive = Path::new(&artifacts)
                 .parent()
-                .ok_or("reliability artifact parent missing")?;
+                .ok_or("autosave isolation artifact parent missing")?;
             let out = r.run(
                 Call::new(args(&[
                     &path(auto),
