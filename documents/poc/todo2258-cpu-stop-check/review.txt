@@ -1,0 +1,34 @@
+固定ff7bce0bの独立した追加レビュー: Must 3、Suggestion 0、Nit 0。
+対象差分: 404e4318cb8102fa642dbf15c83c325888d9298d..ff7bce0b875cfbdacedab09399f9f2a9248239ad の指定6ファイル。
+担当: ToDo2258の独立Codexセッション（依頼上のAstra追審）。新たなAI子ジョブは起動していない。旧Lunaレビューを今回の合格に読み替えていない。
+
+Must 1: 中断したCPU設定の復元が失敗しても、通常実行のcleanupが共有ロックを解放する。
+場所: tools/cc-live-rs/src/software_renderer.rs:129-139、tools/cc-live-rs/src/chain.rs:1330-1333、1799-1867。
+recoverはProfileを関数内だけで保持し、restoreがErrになると読取ハンドルをdropする。main_owned側のsoftware_profileはNoneのままなので、cleanupは復元を再試行せずdelete_owned_handleへ進み、finish_cleanupも呼ぶ。
+実再現: temp.Pathsへ公開済みの完全な元bytesとCPU設定を配置し、AppOptionsをWindowsのshare_mode(1)で開いたままCPU指定なしのchain::cliを実行。置換はos error 5で拒否され、driver0回、元backupあり、CPU設定残存、civ6.lockなしになった。recovery_replace_refusal_must_preserve_leaseがRED。
+修正案: recoveryでもguardをcli_onceの所有状態へ渡してから復元を試みる。復元未完了ならその状態・元backup・leaseを保持し、cleanup成功や完了フラグへ進めない。applyの公開後の失敗も同じ状態機械で扱う。通常runでの復元拒否を回帰検査に加える。
+
+Must 2: CPU描画中の準備失敗後、継続するはずの次のシナリオが自分のハンドルに阻まれる。
+場所: tools/cc-live-rs/src/chain.rs:1313-1316、1358-1375。
+stop-on-failureなしのprepare失敗はcontinueするが、software_profileはSomeのまま。次の反復でopen_owned_lockはDELETE付きハンドルを要求するため、CPU profileのDELETE非共有readhandleと衝突し、5秒上限後に共有違反で終了する。
+実再現: CPU指定の2シナリオで1回目のprepareだけexit7。2回目prepareを実行する期待に対し、prepare1回・driver0回でos error 32。後段cleanupで元設定とロックは片付くが、次のシナリオは実行されない。prepare_failure_must_continue_next_scenario_without_stop_flagがRED。
+修正案: prepare失敗からcontinueする前にも、ゲームが閉じた状態で復元・profile dropを済ませる共通処理を通す。復元できなければ継続を止め、Must1と同様に復元待ちとして保持する。成功時だけ次の反復で改めてCPU設定を適用する。
+
+Must 3: 追加fixtureが必須Clippyを失敗させる。
+場所: tools/civ6-pe-rs/src/order_phase_tests.rs:80-82。
+対象2crateのClippy --all-targets -- -D warningsはexit101。追加のfilter_map内bool::thenがclippy::filter_map_bool_thenに該当する。
+修正案: 生存threadをfilterし、その後mapで(tid, Registers)へ変換する。lintを抑止せず、全targetの同じClippyを再実行する。
+
+停止後再照合の追審:
+前回2254のMustは今回の順序では解消。phase_barrierのfreeze成功→WaitForDebugEventEx(0)でeventなし確認→rearm_frozen_threads:489のvalidate→最初のDR書込、という順序を確認した。validate_native_imageはowned debug stopまたはlive tracked handleのheldを要求する。初回arm:349とLOAD_DLL:1079の照合も保持される。
+実owned OSの固定lifecycle fixtureは、Coreが存在しない停止中にrearmを拒否し、5threadのDRが不変であることを2ケースで確認した。関連47件は成功。直列指定でも47件成功。実ゲームや実Core reloadを証明したものではない。
+
+CPUの実fixture:
+元候補の153件に加え、public chain::cliをそのまま呼ぶ独立fixtureで6件成功。正常な2シナリオ、driver error、panic、interruptedエラー経路、CPU指定なしの通常復元、実Windows共有ハンドルによる復元拒否時のbackupとlease記録保持を確認した。ファイルI/O・共有違反・標準lease関数は実処理、ゲーム・外部コマンドは注入Runner。Ctrl+CのOS信号そのものは送っておらず、その区別を維持する。
+公開前backupはcreate_newの一時名へ全量write/sync後、同filesystemのhard_linkで原子的に公開する。既存backupを上書きしない元fixtureは成功。未公開tempはrecoverの入力に選ばれない。実write_all/sync_all失敗は本試験では注入していない。実profileは読んでいない。
+
+検査: cc-live nextest153成功/ignored2、Clippy成功、Cargo.toml edition2021のfmt成功。最初のfmt呼出しはedition引数重複でexit1だったため、manifestのeditionを使う正しい呼出しで成功を確認した。利用側native_order/bootstrap22件成功。現候補の既存関連テストは重複を除き222件成功。追加fixtureは6成功・上記2不具合の期待条件が2失敗。
+2254のnative_flight18件成功とpublished条件除去のRED(exit100)を原ログで再確認した。404e4318からnative_flight.rsとtests.rsのblobは不変。古い1461件・静的snapshot・別sourceのreleaseやレビューを最新合格へ付け替えていない。
+
+判定: changes_required。親880が上記3件を修正する。検査担当は製品ソースを変更せず、親の完了を待たない。Must0かつchecks成功というrelease条件を満たさないため、release build・配備・DLL実行/注入/installは0。
+元7条件は0/7。本体の全受付停止、保留公開、同じsetのWait、全退出への接続は未達。CPU観測機能を製品完成と扱わない。

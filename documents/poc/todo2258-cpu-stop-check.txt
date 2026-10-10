@@ -14,3 +14,10 @@ Must0かつchecks成功時だけ固定source release buildと任意標準chain�
 - 2254の18管理部検査とpublished変異REDは404e4318時点の原ログで確認。2ファイルのblobは今回と一致。再実行なし。
 - 追加CPU試験を所有tempの独立fixture crateから実施中。製品ソースを変更せずpublic chain::cliを呼ぶ。ゲーム操作は注入Runnerのみ。
 - チェック不合格のためreleaseビルド・配備は実施しない。残りは追加試験、レビュー、結果返却、所有temp整理。
+
+追加検査と追審が完了:
+- 追加CPU fixtureは6成功・2失敗。復元拒否でCPU設定を残してlease解放、prepare失敗で次のシナリオが自分のhandleに阻まれる事象を再現した。
+- Clippy失敗を合わせてMust3、Suggestion0、Nit0。修正は親880の作業。親の完了は待たない。
+- Native関連47件を外部資源の直列指定でも確認し成功。重複は成功総数222へ足さない。
+- 詳細: todo2258-cpu-stop-check/review.txt と result.json。追加fixtureのソースとCargo入力も同フォルダへ保存。
+- release条件不成立によりbuild/配備なし。原7条件0/7。残りは証跡pushと所有temp片付け・返却記録。

@@ -1,0 +1,550 @@
+{
+  "schema": "todo2258-independent-check-v1",
+  "todo": 2258,
+  "parent_todo": 880,
+  "status": "checks_complete_finalizing",
+  "candidate_verdict": "changes_required",
+  "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+  "base_sha": "404e4318cb8102fa642dbf15c83c325888d9298d",
+  "prefix_is_legacy_330a998b": true,
+  "identity": {
+    "target_owner_id": "803c4a1542a4bc428f6bd4c468eb44e7",
+    "initial_head": "6d21b697c3ae69797fcdfa312b8597cddbe6e721",
+    "gpu": false,
+    "base": "404e4318",
+    "todo": 2258,
+    "parent_todo": 880,
+    "target": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-803c4a1542a4bc428f6bd4c468eb44e7/target",
+    "game": false,
+    "initial_clean": true,
+    "initial_branch": "scheduler/todo-2258-pr86-cpu",
+    "check_branch": "check/todo-2258-cpu-stop-ff7bce0b",
+    "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+    "fixtures": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-803c4a1542a4bc428f6bd4c468eb44e7/fixtures"
+  },
+  "review": {
+    "reviewer": "ToDo2258 independent Codex check session",
+    "new_ai_job_started": false,
+    "text": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/review.txt",
+    "counts": {
+      "Nit": 0,
+      "Suggestion": 0,
+      "Must": 3
+    },
+    "findings": [
+      {
+        "line": 1332,
+        "id": "recovery-releases-lease-on-failure",
+        "severity": "Must",
+        "fix": "Keep recovery Profile in cli_once ownership across restore failures; retain backup and lease; do not finish cleanup",
+        "related": "software_renderer.rs:129-139; chain.rs:1799-1867",
+        "reproduction": "cpu-fixture-negative / recovery_replace_refusal_must_preserve_lease",
+        "file": "tools/cc-live-rs/src/chain.rs"
+      },
+      {
+        "line": 1375,
+        "id": "prepare-failure-blocks-next-scenario",
+        "severity": "Must",
+        "fix": "Before continue after preparation failure, close/restore/drop the CPU profile; keep recovery guard if restoration fails",
+        "related": "chain.rs:1313-1316",
+        "reproduction": "cpu-fixture-negative / prepare_failure_must_continue_next_scenario_without_stop_flag",
+        "file": "tools/cc-live-rs/src/chain.rs"
+      },
+      {
+        "line": 80,
+        "id": "new-fixture-clippy-failure",
+        "severity": "Must",
+        "fix": "Use filter followed by map rather than filter_map bool::then",
+        "reproduction": "native-autotest-clippy exit101",
+        "file": "tools/civ6-pe-rs/src/order_phase_tests.rs"
+      }
+    ],
+    "requested_role": "Astra follow-up"
+  },
+  "checks": [
+    {
+      "name": "cc-live-nextest",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "nextest",
+        "run",
+        "--locked",
+        "--manifest-path",
+        "tools/cc-live-rs/Cargo.toml"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:43:36.7522679+09:00",
+      "ended_utc": "2026-10-10T14:44:01.4085067+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-nextest.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-nextest.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-nextest.stderr.log",
+      "stderr_sha256": "dd58fa4f8864cb0d2a38df53a0c9f9118b0d9fdc0ee99cf2302ff85f3171abdc"
+    },
+    {
+      "name": "cc-live-clippy",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "tools/cc-live-rs/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:44:28.7162179+09:00",
+      "ended_utc": "2026-10-10T14:44:36.748079+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-clippy.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-clippy.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-clippy.stderr.log",
+      "stderr_sha256": "f6420f96fc267b2eb3eb8dfd0df762ada2a55f585f7184d3acad4a30d752a580"
+    },
+    {
+      "name": "cc-live-fmt",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "fmt",
+        "--manifest-path",
+        "tools/cc-live-rs/Cargo.toml",
+        "--check",
+        "--",
+        "--edition",
+        "2021"
+      ],
+      "exit_code": 1,
+      "started_utc": "2026-10-10T14:44:36.9213663+09:00",
+      "ended_utc": "2026-10-10T14:44:37.1346231+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-fmt.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-fmt.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-fmt.stderr.log",
+      "stderr_sha256": "26c7e80f955cd0df4eda15af22bb8f188740fcbc9baf628eeae4277caac3e49a"
+    },
+    {
+      "name": "cc-live-fmt-2021",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "fmt",
+        "--manifest-path",
+        "tools/cc-live-rs/Cargo.toml",
+        "--check"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:45:06.2743614+09:00",
+      "ended_utc": "2026-10-10T14:45:06.9650664+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-fmt-2021.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-fmt-2021.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cc-live-fmt-2021.stderr.log",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "native-related-nextest",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "nextest",
+        "run",
+        "--locked",
+        "--manifest-path",
+        "tools/Cargo.toml",
+        "-p",
+        "civ6-native-probe-rs",
+        "--features",
+        "bootstrap-order",
+        "-E",
+        "test(order_capture) | test(thread_name) | binary(order-capture-contract)",
+        "--success-output",
+        "immediate"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:45:07.0811858+09:00",
+      "ended_utc": "2026-10-10T14:45:22.1601888+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-related-nextest.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-related-nextest.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-related-nextest.stderr.log",
+      "stderr_sha256": "27b72674f76dcc6057a5e49cc4fb5a1d31d0c7e75cdf1f9cf7f9f17871b8b1d9"
+    },
+    {
+      "name": "autotest-related-nextest",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "nextest",
+        "run",
+        "--locked",
+        "--manifest-path",
+        "tools/Cargo.toml",
+        "-p",
+        "civ6-autotest-rs",
+        "--lib",
+        "--test",
+        "native_order",
+        "--test",
+        "bootstrap_integration",
+        "-E",
+        "test(native_order) | test(bootstrap) | binary(native_order) | binary(bootstrap_integration)"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:45:58.7458435+09:00",
+      "ended_utc": "2026-10-10T14:46:28.6873781+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/autotest-related-nextest.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/autotest-related-nextest.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/autotest-related-nextest.stderr.log",
+      "stderr_sha256": "18d6bc43e35c9714b669440fcbbcceabd2d0e30583e64b72626c2c7bae6f7c7d"
+    },
+    {
+      "name": "native-autotest-clippy",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "tools/Cargo.toml",
+        "-p",
+        "civ6-native-probe-rs",
+        "-p",
+        "civ6-autotest-rs",
+        "--features",
+        "civ6-native-probe-rs/bootstrap-order",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 101,
+      "started_utc": "2026-10-10T14:46:28.7721896+09:00",
+      "ended_utc": "2026-10-10T14:46:39.0946495+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-autotest-clippy.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-autotest-clippy.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-autotest-clippy.stderr.log",
+      "stderr_sha256": "37b8dd787e11d687e4eeae2180e5c9c344b9d01d86004d0b79306f1fd8c7484b"
+    },
+    {
+      "name": "cpu-fixture-lock",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "generate-lockfile",
+        "--offline",
+        "--manifest-path",
+        "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-803c4a1542a4bc428f6bd4c468eb44e7/cpu-fixture/Cargo.toml"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:48:21.3677027+09:00",
+      "ended_utc": "2026-10-10T14:48:21.8575842+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-lock.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-lock.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-lock.stderr.log",
+      "stderr_sha256": "3f1b4a4f54df5af04055888c9d38fcd2dd16b6af1af915d2de0fe0981c61ca76"
+    },
+    {
+      "name": "cpu-fixture-positive",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "nextest",
+        "run",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-803c4a1542a4bc428f6bd4c468eb44e7/cpu-fixture/Cargo.toml",
+        "-E",
+        "not test(must_)",
+        "--test-threads",
+        "1",
+        "--success-output",
+        "immediate"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:48:22.0013313+09:00",
+      "ended_utc": "2026-10-10T14:49:04.2270589+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-positive.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-positive.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-positive.stderr.log",
+      "stderr_sha256": "5fe5b4f2376b111fabc691d3b59cc856ac30cfb08c111824075a5a5fb703e106"
+    },
+    {
+      "name": "cpu-fixture-negative",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "nextest",
+        "run",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-803c4a1542a4bc428f6bd4c468eb44e7/cpu-fixture/Cargo.toml",
+        "-E",
+        "test(must_)",
+        "--test-threads",
+        "1",
+        "--no-fail-fast",
+        "--success-output",
+        "immediate",
+        "--failure-output",
+        "immediate"
+      ],
+      "exit_code": 100,
+      "started_utc": "2026-10-10T14:49:05.4406644+09:00",
+      "ended_utc": "2026-10-10T14:49:07.9013847+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-negative.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-negative.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture-negative.stderr.log",
+      "stderr_sha256": "661eb82670ae14ba6bcf8bf6a994dd3a184874c33f4e48cb8ed483e4b5460d31"
+    },
+    {
+      "name": "native-owned-serial",
+      "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
+      "checkout_head": "f020d3649be8cd21af8893c58ac6c598decf2f69",
+      "tools_match_source": true,
+      "command": "D:/CC/Tools/codex-jobs/cargo_gate.exe",
+      "arguments": [
+        "nextest",
+        "run",
+        "--locked",
+        "--manifest-path",
+        "tools/Cargo.toml",
+        "-p",
+        "civ6-native-probe-rs",
+        "--features",
+        "bootstrap-order",
+        "--lib",
+        "--test",
+        "order-capture-contract",
+        "-E",
+        "test(order_capture::) | binary(order-capture-contract)",
+        "--test-threads",
+        "1",
+        "--success-output",
+        "immediate"
+      ],
+      "exit_code": 0,
+      "started_utc": "2026-10-10T14:51:05.324012+09:00",
+      "ended_utc": "2026-10-10T14:51:11.3401355+09:00",
+      "meta": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-owned-serial.meta.json",
+      "stdout": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-owned-serial.stdout.log",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-owned-serial.stderr.log",
+      "stderr_sha256": "74cbacb873e49bfe4ef04f8643d90889671e6883ffe8b445454d757bdc3ad13a"
+    }
+  ],
+  "test_totals": {
+    "original_candidate_tests": 222,
+    "supplemental_failed_expected_contracts": 2,
+    "old_native_flight_count_not_added": 18,
+    "supplemental_passed": 6,
+    "duplicate_native_serial_count_not_added": 47,
+    "cc_live_ignored": 2,
+    "original_candidate_passed": 222
+  },
+  "cpu_fixture": {
+    "source": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cpu-fixture.rs",
+    "standard_public_cli_called": true,
+    "real_owner_profile_read": false,
+    "receipt_rows": [
+      {
+        "case": "fixture driver error",
+        "original_restored": true,
+        "lease_released": true,
+        "game_live": false,
+        "interrupt_is_injected_result": false
+      },
+      {
+        "case": "interrupted",
+        "original_restored": true,
+        "lease_released": true,
+        "game_live": false,
+        "interrupt_is_injected_result": true
+      },
+      {
+        "case": "panicked",
+        "original_restored": true,
+        "lease_released": true,
+        "game_live": false,
+        "interrupt_is_injected_result": false
+      },
+      {
+        "case": "normal_two",
+        "prepares": 2,
+        "drivers": 2,
+        "closed": 2,
+        "original_restored": true,
+        "lease_released": true,
+        "game_live": false
+      },
+      {
+        "case": "active_restore_refusal",
+        "backup_retained": true,
+        "lease_record_retained": true,
+        "game_live": false
+      },
+      {
+        "case": "prepare_failure_continue",
+        "result": "Err(\"open owned lock C:\\\\Users\\\\makhmeto\\\\AppData\\\\Local\\\\Temp\\\\codex-owned-803c4a1542a4bc428f6bd4c468eb44e7\\\\fixtures\\\\todo2258-82152-1791611346147829800\\\\here\\\\civ6.lock for release: The process cannot access the file because it is being used by another process. (os error 32)\")",
+        "prepare_calls": 1,
+        "driver_calls": 0,
+        "game_live": false
+      },
+      {
+        "case": "ordinary_recovery_replace_refusal",
+        "error": "Access is denied. (os error 5)",
+        "backup_retained": true,
+        "lease_record_retained": false,
+        "settings_remain_cpu": true,
+        "driver_calls": 0,
+        "game_live": false
+      }
+    ],
+    "file_io_and_windows_sharing": "real temporary files and Windows handles",
+    "interrupt_result_injected": true,
+    "os_ctrl_c_signal_sent": false,
+    "product_code_modified": false,
+    "external_commands": "injected Runner; never executed",
+    "write_all_sync_fault_injected": false,
+    "source_sha256": "8f8f2a971a48e1895f9a3f4c7735dd098e1bf037c4c5858a001e8423feea0930"
+  },
+  "stopped_revalidation": {
+    "owned_os_fixture": true,
+    "actual_game_core_reload": false,
+    "source_line": 489,
+    "order": [
+      "freeze",
+      "drain pending debug event",
+      "validate_native_image",
+      "first DR write"
+    ],
+    "serial_receipts": [
+      {
+        "core_missing": true,
+        "game_live": false,
+        "owned_fixture": true,
+        "threads_unchanged": 5
+      },
+      {
+        "core_missing": true,
+        "game_live": false,
+        "owned_fixture": true,
+        "threads_unchanged": 5
+      }
+    ],
+    "prior_must_resolved": true
+  },
+  "historical_evidence": {
+    "old_1461_or_static_results_relabelled": false,
+    "published_mutation_exit": 100,
+    "hash_verification": [
+      {
+        "path": "D:/CC/Work/todo880/published-isolation-8c0eb57d-native-flight.meta.json",
+        "sha256": "bfb286ffd9a53e2aa9e4c00d5b8d70fc9a5a6a98261559ceff8817bfff864e5d",
+        "matches_prior_result": true
+      },
+      {
+        "path": "D:/CC/Work/todo880/published-isolation-8c0eb57d-native-flight.stdout.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches_prior_result": true
+      },
+      {
+        "path": "D:/CC/Work/todo880/published-isolation-8c0eb57d-native-flight.stderr.log",
+        "sha256": "720f9c9fbfca63e4f46de83bc9e22f117df1a99d6cbcdd3a99fc466939d7af07",
+        "matches_prior_result": true
+      },
+      {
+        "path": "D:/CC/Work/todo880/published-isolation-8c0eb57d-published-mutation.meta.json",
+        "sha256": "75b51bd756ed0e7e1b23b2aba17d8a2a7354ee095930c7718cf65580e862b786",
+        "matches_prior_result": true
+      },
+      {
+        "path": "D:/CC/Work/todo880/published-isolation-8c0eb57d-published-mutation.stdout.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches_prior_result": true
+      },
+      {
+        "path": "D:/CC/Work/todo880/published-isolation-8c0eb57d-published-mutation.stderr.log",
+        "sha256": "4fb401842e416c9d1c85a084e60cd7783bd5932b433603fb1114f06467e9927f",
+        "matches_prior_result": true
+      }
+    ],
+    "native_flight_passed": 18,
+    "source_sha": "404e4318cb8102fa642dbf15c83c325888d9298d",
+    "source_map": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/native-flight-prior-evidence.json",
+    "rerun": false
+  },
+  "build_gate": {
+    "met": false,
+    "live_chain_deployed": false,
+    "requires": "Must0 and all required checks passed",
+    "bridge_dll_built": false,
+    "reason": "3 Must including required Clippy failure; fixed candidate returned to author for repair",
+    "bridge_installed": 0,
+    "release_built": []
+  },
+  "cleanup": {
+    "retain_for_capture": false,
+    "status": "pending",
+    "reason": "candidate not qualified; no release capture artifacts built",
+    "target_owner": "803c4a1542a4bc428f6bd4c468eb44e7"
+  },
+  "scope": {
+    "whole_workspace_tests": 0,
+    "steam_launches": 0,
+    "scheduler_state_changes": 0,
+    "all_admission_stop_connected": false,
+    "product_acceptance_met": 0,
+    "product_acceptance_total": 7,
+    "whole_exit_connected": false,
+    "new_todos": 0,
+    "game_launches": 0,
+    "same_set_wait_connected": false,
+    "independent_prs": 0,
+    "gpu_work": 0,
+    "merges": 0,
+    "api_key_calls": 0,
+    "pending_publication_connected": false,
+    "direct_ai_children": 0,
+    "parent_source_writes": 0
+  },
+  "handoff": {
+    "parent_action": "Fix 3 concrete findings in parent source; rerun affected checks and review before release/capture",
+    "requires_owner_decision": false,
+    "review": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/review.txt",
+    "progress_commit": "f020d3649be8cd21af8893c58ac6c598decf2f69",
+    "result": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/result.json",
+    "wait_for_parent": false
+  }
+}

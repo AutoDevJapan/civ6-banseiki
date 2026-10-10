@@ -1,0 +1,10 @@
+[package]
+name = "todo2258-cpu-fixture"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+cc-live = { path = "C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/todo-2258-pr86-cpu/tools/cc-live-rs" }
+serde_json = "1"
