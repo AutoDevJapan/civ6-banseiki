@@ -568,6 +568,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "multiplayer-japan-staging-diagnostic.json",
                 "mod-selection-rollback.json",
                 "oath-native-apply-observation-134.json",
+                "oath-native-lifecycle-observation-134.json",
                 "banseiki-pool-hotseat.json",
                 "banseiki-pool-single-player.json",
                 "banseiki-pool-bridge.json",

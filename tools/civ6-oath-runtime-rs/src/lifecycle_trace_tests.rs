@@ -55,6 +55,19 @@ fn child() {
         unsafe { install_at(i, *s as *const _ as usize, target, t).unwrap() };
     }
     assert_eq!(t.deadline_ms.load(Ordering::Acquire), 0);
+    if case == "installed_poll" {
+        assert_eq!(Civ6OathLifecyclePoll(), 0);
+        assert_eq!(t.stopped.load(Ordering::Acquire), 1);
+        assert_eq!(t.deadline_ms.load(Ordering::Acquire), 0);
+        assert_eq!(t.expired.load(Ordering::Acquire), 0);
+        assert_eq!(t.detached.load(Ordering::Acquire), 0);
+        SECONDS.store(300, Ordering::Release);
+        assert_eq!(Civ6OathLifecycleStart(), 0);
+        assert_eq!(t.stopped.load(Ordering::Acquire), 0);
+        assert!(t.deadline_ms.load(Ordering::Acquire) > now());
+        assert_eq!(Civ6OathLifecycleStop(), 0);
+        return;
+    }
     t.start(300).unwrap();
     let f: Call = unsafe { std::mem::transmute(slots[0].load(Ordering::Acquire)) };
     if let Some(stage) = case
@@ -194,8 +207,20 @@ fn child() {
 #[test]
 fn synthetic_win64_cases() {
     for case in [
-        "normal", "float", "reentry", "selfstop", "threads", "overflow", "unwind", "deadline",
-        "park", "stage1", "stage2", "stage3", "stage4",
+        "installed_poll",
+        "normal",
+        "float",
+        "reentry",
+        "selfstop",
+        "threads",
+        "overflow",
+        "unwind",
+        "deadline",
+        "park",
+        "stage1",
+        "stage2",
+        "stage3",
+        "stage4",
     ] {
         let result = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "lifecycle_trace::tests::child", "--nocapture"])
