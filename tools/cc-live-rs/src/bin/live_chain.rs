@@ -193,7 +193,6 @@ impl Profile {
         Ok(())
     }
     #[cfg(test)]
-    #[path = "live_chain/scoped_tests.rs"]
     fn apply(lock_path: &Path, path: &Path, backup: &Path) -> Result<Self, String> {
         let mut profile = Self::prepare(lock_path, path, backup, None)?;
         profile.write_applied()?;
