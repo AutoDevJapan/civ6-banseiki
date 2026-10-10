@@ -5,7 +5,7 @@ use crate::oath_wire::{u32_at, u64_at};
 use serde_json::{json, Value};
 
 pub(crate) const EXPORTS: [&str; 4] = [
-    "Civ6OathLifecycleInstall",
+    "Civ6OathLifecycleInstallShared",
     "Civ6OathLifecycleStart",
     "Civ6OathLifecycleStop",
     "Civ6OathLifecyclePoll",

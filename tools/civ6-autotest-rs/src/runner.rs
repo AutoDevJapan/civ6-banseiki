@@ -27,6 +27,16 @@ pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 an
 pub const OATH_OBSERVER_READY_UI: &str = "local p=Game.GetLocalPlayer(); return p==0 and Players[p] and Players[p]:IsHuman() and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and not UI.HasSentTurnComplete()";
 
 pub trait Backend: Send {
+    fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
+        Err(Error::input(
+            "shared lifecycle observer session unavailable",
+        ))
+    }
+    fn oath_trace_finalize(&mut self, _timeout: f64) -> Result<Value> {
+        Err(Error::input(
+            "final lifecycle capture unavailable on this backend",
+        ))
+    }
     fn oath_trace_operation(
         &mut self,
         _operation: crate::oath_observation::Operation,
@@ -251,6 +261,39 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            self.oath_observer
+                .as_mut()
+                .ok_or_else(|| Error::input("oath observer session missing"))?
+                .exit_request_budget()
+                .map(|budget| budget.map(|d| d.as_secs_f64()))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Err(Error::input(
+            "shared lifecycle capture requires Windows x86_64",
+        ))
+    }
+    fn oath_trace_finalize(&mut self, timeout: f64) -> Result<Value> {
+        if !timeout.is_finite() || timeout <= 0.0 || timeout > 300.0 {
+            return Err(Error::input("invalid final lifecycle timeout"));
+        }
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            // Session owns the original process handle and previously checked
+            // the real mode. The game's Lua and live startup check may no
+            // longer exist; finalization must not request them after exit.
+            self.oath_observer
+                .as_mut()
+                .ok_or_else(|| Error::input("oath observer session missing"))?
+                .finalize(std::time::Duration::from_secs_f64(timeout))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Err(Error::input(
+            "final lifecycle capture requires Windows x86_64",
+        ))
+    }
     fn oath_trace_operation(
         &mut self,
         operation: crate::oath_observation::Operation,
@@ -293,6 +336,11 @@ impl Backend for SystemBackend {
                         Operation::Snapshot => session.snapshot()?,
                         Operation::Stop => session.stop()?,
                         Operation::Install => unreachable!(),
+                        Operation::Finalize => {
+                            return Err(Error::input(
+                                "finalize requires an explicit finite timeout",
+                            ))
+                        }
                     }
                 }
             };
@@ -2325,7 +2373,8 @@ impl Runner {
             "oath_trace_install"
             | "oath_trace_start"
             | "oath_trace_snapshot"
-            | "oath_trace_stop" => {
+            | "oath_trace_stop"
+            | "oath_trace_finalize" => {
                 use crate::oath_observation::{self, Operation};
                 let operation = oath_observation::validate_step(step)?;
                 oath_observation::validate_mode(
@@ -2334,7 +2383,9 @@ impl Runner {
                     crate::session::SessionType::from_scenario(&self.scenario)?
                         != crate::session::SessionType::SinglePlayer,
                 )?;
-                self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
+                if operation != Operation::Finalize {
+                    self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
+                }
                 if matches!(operation, Operation::Install | Operation::Start) {
                     self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":CORE_PLAYER0_READY}), self.remaining(deadline)?, false)?;
                     self.wait(
@@ -2360,9 +2411,33 @@ impl Runner {
                 }))?)?;
                 file.sync_all()?;
                 self.remaining(deadline)?;
-                let proof = self
-                    .backend
-                    .oath_trace_operation(operation, install.as_ref())?;
+                let proof = if operation == Operation::Finalize {
+                    if let Some(budget) = self.backend.oath_trace_exit_budget()? {
+                        let exit_until = self.clock.now() + self.remaining(deadline)?.min(budget);
+                        self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(exit_until, 5.0)?)?;
+                        let close_budget = self.budget(exit_until, 5.0)?;
+                        // Vanilla InGameTopOptionsMenu.OnExitGame and the
+                        // shared chain use this official request. Send once;
+                        // a lost response may mean the game already exited.
+                        match self.lua(
+                            "InGame",
+                            "Events.UserConfirmedClose()\nreturn true",
+                            close_budget,
+                        ) {
+                            Ok(_) => {}
+                            Err(error) if error.kind == ErrorKind::LuaResponseUnknown => {
+                                self.log("oath_trace_exit_request", "UNKNOWN", &error.to_string())?;
+                            }
+                            Err(error) => return Err(error),
+                        }
+                        self.disconnect();
+                    }
+                    self.backend
+                        .oath_trace_finalize(self.remaining(deadline)?.min(300.0))?
+                } else {
+                    self.backend
+                        .oath_trace_operation(operation, install.as_ref())?
+                };
                 // Even a successful observer operation never accepts an effect
                 // quantity, ruleset installation or a product requirement.
                 let proof = json!({"diagnostic_only":true,"quantity_accepted":false,
@@ -2373,6 +2448,13 @@ impl Runner {
                 file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
                 file.sync_all()?;
                 self.remaining(deadline)?;
+                if operation == Operation::Finalize
+                    && (proof["native_observation"]["process_exit_observed"] != true
+                        || proof["native_observation"]["controller_deadline_expired"] != false
+                        || proof["native_observation"]["process_exit_code"] != 0)
+                {
+                    return Err(Error::unknown("final lifecycle process exit was not confirmed within budget; raw evidence preserved"));
+                }
                 Ok(format!("native oath observation: {proof}"))
             }
             "oath_exact_removal" => {

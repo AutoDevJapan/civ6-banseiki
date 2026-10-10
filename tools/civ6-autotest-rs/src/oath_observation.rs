@@ -11,6 +11,7 @@ pub enum Operation {
     Start,
     Snapshot,
     Stop,
+    Finalize,
 }
 
 #[derive(Clone, Debug)]
@@ -28,6 +29,7 @@ pub fn operation(action: &str) -> Result<Operation> {
         "oath_trace_start" => Ok(Operation::Start),
         "oath_trace_snapshot" => Ok(Operation::Snapshot),
         "oath_trace_stop" => Ok(Operation::Stop),
+        "oath_trace_finalize" => Ok(Operation::Finalize),
         _ => Err(Error::scenario("unknown oath observer action")),
     }
 }

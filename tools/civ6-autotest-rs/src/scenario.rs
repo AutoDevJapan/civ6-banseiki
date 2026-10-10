@@ -19,6 +19,7 @@ pub const ACTIONS: &[&str] = &[
     "oath_trace_start",
     "oath_trace_snapshot",
     "oath_trace_stop",
+    "oath_trace_finalize",
     "carrier_checkpoint",
     "carrier_exchange",
     "screenshot",
@@ -136,7 +137,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             "oath_trace_install"
             | "oath_trace_start"
             | "oath_trace_snapshot"
-            | "oath_trace_stop" => {
+            | "oath_trace_stop"
+            | "oath_trace_finalize" => {
                 if data["diagnostic_only"] != true || session != SessionType::SinglePlayer {
                     return Err(fail(
                         "oath observer requires a single-player diagnostic".into(),

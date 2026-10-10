@@ -7,7 +7,7 @@
 //!
 //! Ownership rules kept here:
 //! - the DLL file stays open with writes/deletes denied until the session
-//!   object goes away, and its SHA256 and PE exports are measured from that
+//!   process exits, and its SHA256 and PE exports are measured from that
 //!   very handle;
 //! - the game handle is pinned (PID + exact FILETIME + image path) before and
 //!   after every operation;
@@ -49,10 +49,10 @@ use windows_sys::Win32::{
             MEM_RESERVE, PAGE_READWRITE,
         },
         Threading::{
-            CreateRemoteThread, GetExitCodeThread, GetProcessTimes, IsWow64Process, OpenProcess,
-            TerminateProcess, WaitForSingleObject, PROCESS_QUERY_INFORMATION,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
-            PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+            CreateRemoteThread, GetExitCodeProcess, GetExitCodeThread, GetProcessTimes,
+            IsWow64Process, OpenProcess, TerminateProcess, WaitForSingleObject,
+            PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            PROCESS_TERMINATE, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
         },
     },
 };
@@ -68,6 +68,7 @@ unsafe extern "system" {
 const KNOWN_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
 const MAX_DLL_BYTES: u64 = 8 * 1024 * 1024;
 const PROCESS_CREATE_THREAD: u32 = 0x0002;
+const PROCESS_DUP_HANDLE: u32 = 0x0040;
 const WAIT_TIMEOUT: u32 = 258;
 const CALL_LIMIT: Duration = Duration::from_secs(8);
 const KILL_LIMIT: Duration = Duration::from_secs(30);
@@ -242,6 +243,7 @@ struct Target {
     fail_terminate: bool,
     call_limit: Duration,
     kill_limit: Duration,
+    absolute_deadline: Option<Instant>,
     /// Remote allocations, kept for the life of the game and never freed.
     allocations: Vec<(usize, usize)>,
 }
@@ -345,7 +347,11 @@ impl Target {
             unsafe {
                 TerminateProcess(self.process.0, 1);
             }
-            let wait = self.kill_limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+            let limit = self.absolute_deadline.map_or(self.kill_limit, |deadline| {
+                self.kill_limit
+                    .min(deadline.saturating_duration_since(Instant::now()))
+            });
+            let wait = limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
             let ended = unsafe { WaitForSingleObject(self.process.0, wait) };
             ended == 0
         };
@@ -396,9 +402,6 @@ impl Target {
     /// object has signalled. Only the same handle with the original creation
     /// time counts; anything else leaves the obligation open.
     fn observe_end(&mut self) -> bool {
-        if !self.unresolved() {
-            return true;
-        }
         if creation(self.process.0).ok() != Some(self.created) {
             return false;
         }
@@ -420,6 +423,14 @@ impl Target {
         }
         time::check_interrupt()?;
         self.alive_pinned()?;
+        if self
+            .absolute_deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            return Err(Error::input(
+                "remote call absolute deadline expired before dispatch",
+            ));
+        }
         self.flight = true;
         let routine: Option<unsafe extern "system" fn(*mut c_void) -> u32> = Some(unsafe {
             std::mem::transmute::<usize, unsafe extern "system" fn(*mut c_void) -> u32>(start)
@@ -442,7 +453,11 @@ impl Target {
             return Err(win_error("CreateRemoteThread"));
         }
         let thread = Handle(raw);
-        let wait = self.call_limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+        let limit = self.absolute_deadline.map_or(self.call_limit, |deadline| {
+            self.call_limit
+                .min(deadline.saturating_duration_since(Instant::now()))
+        });
+        let wait = limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
         if unsafe { WaitForSingleObject(thread.0, wait) } != 0 {
             return Err(self.kill_report("remote call did not finish in time"));
         }
@@ -451,6 +466,12 @@ impl Target {
             return Err(self.kill_report("remote call exit code is unreadable"));
         }
         self.flight = false;
+        if self
+            .absolute_deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            return Err(self.kill_report("remote completion arrived after the absolute deadline"));
+        }
         self.alive_pinned()?;
         Ok(code)
     }
@@ -560,6 +581,8 @@ struct Inner {
     stop_value: Option<Value>,
     callee: bool,
     lifecycle: bool,
+    shared: Option<civ6_oath_runtime_rs::lifecycle_transport::SharedTrace>,
+    deadline: Option<Instant>,
 }
 unsafe impl Send for Inner {}
 
@@ -617,23 +640,56 @@ impl Session {
     pub(crate) fn stop(&mut self) -> Result<Value> {
         self.inner.stop()
     }
+    pub(crate) fn finalize(&mut self, timeout: Duration) -> Result<Value> {
+        self.inner.finalize(timeout)
+    }
+    pub(crate) fn exit_request_budget(&mut self) -> Result<Option<Duration>> {
+        if !self.inner.lifecycle || self.inner.phase != Phase::Started {
+            return Err(Error::input(
+                "exit capture requires the started shared lifecycle observer",
+            ));
+        }
+        if self.inner.target.observe_end() {
+            return Ok(None);
+        }
+        self.inner.target.alive_pinned()?;
+        let remaining = self
+            .inner
+            .deadline
+            .ok_or_else(|| Error::input("observation deadline missing"))?
+            .saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(Error::input("lifecycle exit request deadline expired"));
+        }
+        Ok(Some(remaining))
+    }
 }
 impl Drop for Session {
     fn drop(&mut self) {
         // One last attempt on the same pinned handle. Without a confirmed
         // end every pin is handed to the pending list, not released.
-        if self.inner.target.unresolved() && !self.inner.target.kill() {
+        let unresolved = self.inner.target.unresolved() && !self.inner.target.kill();
+        // Detached entrances can still have cached callers. Every observer's
+        // file pins remain until the same game process is actually gone.
+        let live_observer = !self.inner.target.observe_end();
+        if unresolved || live_observer {
             let inner = unsafe { std::mem::ManuallyDrop::take(&mut self.inner) };
             let Inner {
                 target,
                 _lease,
                 _exe_file,
                 _dll,
+                shared,
                 ..
             } = inner;
             retain(Held {
                 target,
-                keep: vec![Box::new(_lease), Box::new(_exe_file), Box::new(_dll)],
+                keep: vec![
+                    Box::new(_lease),
+                    Box::new(_exe_file),
+                    Box::new(_dll),
+                    Box::new(shared),
+                ],
             });
         } else {
             unsafe { std::mem::ManuallyDrop::drop(&mut self.inner) };
@@ -689,7 +745,8 @@ impl Inner {
             | PROCESS_VM_OPERATION
             | PROCESS_VM_READ
             | PROCESS_VM_WRITE
-            | PROCESS_CREATE_THREAD;
+            | PROCESS_CREATE_THREAD
+            | PROCESS_DUP_HANDLE;
         let process = Handle::new(unsafe { OpenProcess(access, 0, game.pid) }, "OpenProcess")?;
         let created = creation(process.0)?;
         if unix_start(created) != game.started
@@ -719,7 +776,13 @@ impl Inner {
             fail_terminate: false,
             call_limit: CALL_LIMIT,
             kill_limit: KILL_LIMIT,
+            absolute_deadline: None,
             allocations: Vec::new(),
+        };
+        let shared = if lifecycle {
+            Some(civ6_oath_runtime_rs::lifecycle_transport::SharedTrace::new()?)
+        } else {
+            None
         };
         let built = bring_up(
             &mut target,
@@ -729,6 +792,7 @@ impl Inner {
             created,
             callee,
             lifecycle,
+            shared.as_ref(),
         );
         let (base, exports, trace_address, receipt_buffer) = match built {
             Ok(done) => done,
@@ -737,7 +801,12 @@ impl Inner {
                     // The game may still run our thread: keep every pin.
                     retain(Held {
                         target,
-                        keep: vec![Box::new(lease), Box::new(exe_file), Box::new(dll)],
+                        keep: vec![
+                            Box::new(lease),
+                            Box::new(exe_file),
+                            Box::new(dll),
+                            Box::new(shared),
+                        ],
                     });
                 }
                 return Err(error);
@@ -757,6 +826,8 @@ impl Inner {
             _dll: dll,
             callee,
             lifecycle,
+            shared,
+            deadline: None,
         })
     }
 
@@ -804,6 +875,9 @@ impl Inner {
                 self.phase
             )));
         }
+        // Include the remote start itself in the single observation budget.
+        self.deadline = Some(Instant::now() + Duration::from_secs(u64::from(self.max_seconds)));
+        self.target.absolute_deadline = self.deadline;
         let status = self.call(1)?;
         if status != 0 {
             self.phase = Phase::Failed;
@@ -839,8 +913,39 @@ impl Inner {
     }
 
     fn call(&mut self, export: usize) -> Result<u32> {
+        if let Some(deadline) = self.deadline {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(Error::input("oath observation absolute deadline expired"));
+            }
+            self.target.call_limit = CALL_LIMIT.min(remaining);
+        }
         let argument = if export == 3 { self.receipt_buffer } else { 0 };
         self.target.call(self.exports[export], argument)
+    }
+
+    /// The game must have been asked to close by its normal UI. This operation
+    /// sends no remote call, stop, or termination. Its final copies come from
+    /// the controller-owned mapping only after the same process object signals.
+    fn finalize(&mut self, timeout: Duration) -> Result<Value> {
+        if !self.lifecycle || self.phase != Phase::Started || self.shared.is_none() {
+            return Err(Error::input(
+                "final lifecycle capture requires a started shared observer",
+            ));
+        }
+        if timeout.is_zero() || timeout > Duration::from_secs(300) {
+            return Err(Error::input(
+                "final lifecycle timeout must be within 0..300 seconds",
+            ));
+        }
+        let deadline = self
+            .deadline
+            .ok_or_else(|| Error::input("observation deadline missing"))?;
+        capture_after_exit(
+            &mut self.target,
+            self.shared.as_ref().unwrap(),
+            deadline.min(Instant::now() + timeout),
+        )
     }
 
     /// Receipt plus two raw copies of the trace. While recording, rows that
@@ -853,21 +958,27 @@ impl Inner {
                 "snapshot refused: the observer failed earlier",
             ));
         }
+        if self.lifecycle {
+            let shared = self
+                .shared
+                .as_ref()
+                .ok_or_else(|| Error::input("shared lifecycle trace missing"))?;
+            let first = shared.snapshot();
+            let second = shared.snapshot();
+            let mut value =
+                crate::oath_lifecycle_wire::project(&first, &second).map_err(Error::input)?;
+            value["snapshot_phase"] = json!("intermediate");
+            value["controller_phase"] = json!(format!("{:?}", self.phase));
+            value["controller_deadline_expired"] =
+                json!(self.deadline.is_some_and(|d| Instant::now() >= d));
+            return Ok(value);
+        }
         let status = self.call(3)?;
         if status != 0 {
             self.phase = Phase::Failed;
             return Err(self
                 .target
                 .runtime_refusal("OathRuntimeReadReceipt", status));
-        }
-        if self.lifecycle {
-            let first = self.target.read(self.trace_address, self.trace_size())?;
-            let second = self.target.read(self.trace_address, self.trace_size())?;
-            let mut value =
-                crate::oath_lifecycle_wire::project(&first, &second).map_err(Error::input)?;
-            value["controller_phase"] = json!(format!("{:?}", self.phase));
-            value["trace_address"] = json!(format!("0x{:x}", self.trace_address));
-            return Ok(value);
         }
         let receipt_bytes = self.target.read(self.receipt_buffer, wire::RECEIPT_SIZE)?;
         if wire::u32_at(&receipt_bytes, 12) != Some(u32::from(self.callee)) {
@@ -1150,6 +1261,53 @@ fn verify_remote_image(
     Ok(())
 }
 
+fn capture_after_exit(
+    target: &mut Target,
+    shared: &civ6_oath_runtime_rs::lifecycle_transport::SharedTrace,
+    until: Instant,
+) -> Result<Value> {
+    loop {
+        time::check_interrupt()?;
+        let ended = target.observe_end();
+        let remaining = until.saturating_duration_since(Instant::now());
+        if ended || remaining.is_zero() {
+            let first = shared.snapshot();
+            let second = shared.snapshot();
+            let mut value =
+                crate::oath_lifecycle_wire::project(&first, &second).map_err(Error::input)?;
+            let mut code = 0;
+            let readable = ended && unsafe { GetExitCodeProcess(target.process.0, &mut code) } != 0;
+            let late = Instant::now() >= until;
+            value["snapshot_phase"] = json!(if ended {
+                "after_process_exit"
+            } else {
+                "intermediate"
+            });
+            value["process_exit_observed"] = json!(ended);
+            value["process_exit_code"] = if readable { json!(code) } else { Value::Null };
+            value["controller_deadline_expired"] = json!(late);
+            value["pid"] = json!(target.pid);
+            value["created_filetime"] = json!(target.created);
+            if late || !readable || code != 0 {
+                value["diagnostic_capture_incomplete"] = json!(true);
+                for name in ["context_root_diagnostic", "application_teardown_diagnostic"] {
+                    if value[name] != "observed" {
+                        value[name] = json!("unknown");
+                    }
+                }
+            }
+            // Copies from one final read only, never intermediate/final mixed.
+            // Even an exit code of zero does not certify call coverage.
+            return Ok(value);
+        }
+        let wait = remaining.min(Duration::from_millis(100)).as_millis().max(1) as u32;
+        let status = unsafe { WaitForSingleObject(target.process.0, wait) };
+        if status != 0 && status != WAIT_TIMEOUT {
+            return Err(win_error("final lifecycle process wait"));
+        }
+    }
+}
+
 type BroughtUp = (usize, [usize; 4], u64, usize);
 
 /// Load, verify and install; every step after the load runs on the poisoned-
@@ -1162,23 +1320,31 @@ fn bring_up(
     created: u64,
     callee: bool,
     lifecycle: bool,
+    shared: Option<&civ6_oath_runtime_rs::lifecycle_transport::SharedTrace>,
 ) -> Result<BroughtUp> {
     let base = load_dll(target, dll)?;
     let exports = dll.exports.map(|rva| base + rva as usize);
     verify_remote_image(target, dll, base, &exports)?;
-    let mut config = wire::encode_config(pid, max_seconds, created);
+    let mut config = wire::encode_config(pid, max_seconds, created).to_vec();
     config[28..32].copy_from_slice(&u32::from(callee).to_le_bytes());
-    let config_at = target.alloc(wire::CONFIG_SIZE)?;
+    if lifecycle {
+        let mapping = shared.ok_or_else(|| Error::input("shared lifecycle mapping required"))?;
+        config.extend_from_slice(&mapping.duplicate_into(target.process.0)?.to_le_bytes());
+        config.extend_from_slice(&(crate::oath_lifecycle_wire::SIZE as u32).to_le_bytes());
+        config.extend_from_slice(&0u32.to_le_bytes());
+    }
+    let config_at = target.alloc(config.len())?;
     target.write(config_at, &config)?;
     let status = target.call(exports[0], config_at)?;
     if status != 0 {
         return Err(target.runtime_refusal("OathRuntimeInstall", status));
     }
     target.verify_after_install(|target| {
-        let after = target.read(config_at, wire::CONFIG_SIZE)?;
+        let after = target.read(config_at, config.len())?;
         let (trace_address, _) = if lifecycle {
             if after[..32] != config[..32]
                 || after[44..48] != config[44..48]
+                || after[48..] != config[48..]
                 || wire::u32_at(&after, 40) != Some(crate::oath_lifecycle_wire::SIZE as u32)
             {
                 return Err(Error::input("invalid lifecycle installed configuration"));
@@ -1189,7 +1355,8 @@ fn bring_up(
             }
             (address, crate::oath_lifecycle_wire::SIZE as u32)
         } else {
-            wire::check_installed_config(&config, &after).map_err(Error::input)?
+            wire::check_installed_config(config[..wire::CONFIG_SIZE].try_into().unwrap(), &after)
+                .map_err(Error::input)?
         };
         if lifecycle {
             crate::oath_lifecycle_wire::validate(
@@ -1343,6 +1510,7 @@ mod tests {
             fail_terminate: false,
             call_limit,
             kill_limit: Duration::from_secs(10),
+            absolute_deadline: None,
             allocations: Vec::new(),
         }
     }
@@ -1400,6 +1568,19 @@ mod tests {
         assert_eq!(target.allocations.len(), 1);
         assert!(target.read(at, 0).is_err());
         assert!(target.read(at, wire::MAX_TRACE_READ + 1).is_err());
+    }
+
+    #[test]
+    fn an_expired_absolute_budget_never_dispatches_another_remote_call() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_secs(8));
+        target.absolute_deadline = Some(Instant::now());
+        let error = target
+            .call(kernel32_export(b"GetCurrentProcessId\0"), 0)
+            .unwrap_err();
+        assert!(error.message.contains("expired before dispatch"));
+        assert!(!target.flight && !target.poisoned && target.allocations.is_empty());
+        assert!(child.0.try_wait().unwrap().is_none());
     }
 
     #[test]
@@ -1468,6 +1649,58 @@ mod tests {
         child.0.wait().unwrap();
         assert_eq!(drain_pending(), before);
         assert!(!locked(), "pin released after the observed end");
+    }
+
+    #[test]
+    fn a_completed_remote_call_does_not_release_a_live_observers_file_pin() {
+        let bytes = synthetic_dll(&wire::EXPORTS, false);
+        let (_dir, path) = dll_file(&bytes);
+        let local = LocalDll::open(&path, &sha(&bytes)).unwrap();
+        let mut child = sleeper();
+        let target = target_of(&child, Duration::from_secs(1));
+        assert!(!target.unresolved());
+        let before = pending_count();
+        retain(Held {
+            target,
+            keep: vec![Box::new(local)],
+        });
+        assert_eq!(drain_pending(), before + 1);
+        assert!(OpenOptions::new().write(true).open(&path).is_err());
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert_eq!(drain_pending(), before);
+        assert!(OpenOptions::new().write(true).open(&path).is_ok());
+    }
+
+    #[test]
+    fn final_capture_waits_for_the_same_handle_without_remote_calls_or_killing() {
+        let shared = civ6_oath_runtime_rs::lifecycle_transport::SharedTrace::new().unwrap();
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_secs(1));
+        let value = capture_after_exit(&mut target, &shared, Instant::now()).unwrap();
+        assert_eq!(value["process_exit_observed"], false);
+        assert_eq!(value["snapshot_phase"], "intermediate");
+        assert_eq!(value["context_root_diagnostic"], "unknown");
+        assert!(child.0.try_wait().unwrap().is_none());
+        assert!(!target.poisoned && target.allocations.is_empty());
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        let value = capture_after_exit(
+            &mut target,
+            &shared,
+            Instant::now() + Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(value["process_exit_observed"], true);
+        assert_eq!(value["snapshot_phase"], "after_process_exit");
+        assert_eq!(value["pid"], child.0.id());
+        assert_eq!(value["quantity_accepted"], false);
+        assert_eq!(value["first_root_observed"], false);
+        // Losing the original creation identity never upgrades exit to final.
+        target.created += 1;
+        let value = capture_after_exit(&mut target, &shared, Instant::now()).unwrap();
+        assert_eq!(value["process_exit_observed"], false);
+        assert_eq!(value["snapshot_phase"], "intermediate");
     }
 
     #[test]

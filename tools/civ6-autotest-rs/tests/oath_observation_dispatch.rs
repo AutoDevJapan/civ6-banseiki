@@ -18,6 +18,28 @@ struct Probe {
     fail_operation: bool,
 }
 impl Backend for Probe {
+    fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
+        let calls = self.calls.lock().unwrap();
+        if !calls.contains(&Operation::Install) || !calls.contains(&Operation::Start) {
+            return Err(Error::input("observer session missing"));
+        }
+        Ok(None)
+    }
+    fn oath_trace_finalize(&mut self, timeout: f64) -> Result<Value> {
+        if timeout <= 0.0 || timeout > 300.0 {
+            return Err(Error::input("invalid final budget"));
+        }
+        let mut calls = self.calls.lock().unwrap();
+        if !calls.contains(&Operation::Install) || !calls.contains(&Operation::Start) {
+            return Err(Error::input("observer session missing"));
+        }
+        calls.push(Operation::Finalize);
+        Ok(
+            json!({"snapshot_phase":"after_process_exit","process_exit_observed":!self.fail_operation,
+            "controller_deadline_expired":false,"process_exit_code":0,
+            "quantity_accepted":false,"product_accepted":false}),
+        )
+    }
     fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
         Ok(vec!["InGame".into(), "GameCore_Tuner".into()])
     }
@@ -197,4 +219,90 @@ fn preserved_evidence_and_unknown_native_outcome_prevent_resending() {
             assert_eq!(fs::read(file).unwrap(), b"original proof");
         }
     }
+}
+
+#[test]
+fn finalization_uses_the_existing_session_and_reserves_evidence_without_live_lua() {
+    let temp = tempfile::tempdir().unwrap();
+    // All Lua calls on this backend fail. Finalization still requires an
+    // installed/started session, but it must be usable after the game exits.
+    let (mut runner, calls) = runner(temp.path(), false, true, false);
+    assert!(runner.run_step(&step("oath_trace_finalize")).is_err());
+    assert!(calls.lock().unwrap().is_empty());
+    runner.completed_steps = 1;
+    calls
+        .lock()
+        .unwrap()
+        .extend([Operation::Install, Operation::Start]);
+    let action = step("oath_trace_finalize");
+    runner.scenario["steps"] = json!([action]);
+    scenario::validate_scenario(&runner.scenario).unwrap();
+    runner.run_step(&action).unwrap();
+    assert_eq!(calls.lock().unwrap().last(), Some(&Operation::Finalize));
+    let proof: Value = serde_json::from_slice(
+        &fs::read(
+            runner
+                .output
+                .join("oath-observation-2-oath_trace_finalize.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(proof["native_observation"]["process_exit_observed"], true);
+    assert_eq!(proof["product_accepted"], false);
+    let count = calls.lock().unwrap().len();
+    assert!(runner.run_step(&action).is_err());
+    assert_eq!(
+        calls.lock().unwrap().len(),
+        count,
+        "same evidence is never overwritten or resent"
+    );
+}
+
+#[test]
+fn finalization_preserves_explicit_diagnostic_single_player_guards() {
+    for mode in ["not_test", "not_diagnostic", "multiplayer"] {
+        let temp = tempfile::tempdir().unwrap();
+        let (mut runner, calls) = runner(temp.path(), true, false, false);
+        // Establish a real positive mock path before testing each rejection.
+        runner.run_step(&step("oath_trace_install")).unwrap();
+        runner.completed_steps = 1;
+        runner.run_step(&step("oath_trace_start")).unwrap();
+        runner.completed_steps = 2;
+        match mode {
+            "not_test" => runner.test_mode = false,
+            "not_diagnostic" => runner.scenario["diagnostic_only"] = json!(false),
+            "multiplayer" => runner.scenario["session_type"] = json!("hotseat"),
+            _ => unreachable!(),
+        }
+        assert!(runner.run_step(&step("oath_trace_finalize")).is_err());
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec![Operation::Install, Operation::Start]
+        );
+    }
+}
+
+#[test]
+fn unknown_final_process_exit_fails_the_step_but_keeps_its_raw_evidence() {
+    let temp = tempfile::tempdir().unwrap();
+    let (mut runner, calls) = runner(temp.path(), false, true, true);
+    calls
+        .lock()
+        .unwrap()
+        .extend([Operation::Install, Operation::Start]);
+    let error = runner.run_step(&step("oath_trace_finalize")).unwrap_err();
+    assert!(error.message.contains("raw evidence preserved"));
+    let proof: Value = serde_json::from_slice(
+        &fs::read(
+            runner
+                .output
+                .join("oath-observation-1-oath_trace_finalize.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(proof["native_observation"]["process_exit_observed"], false);
+    assert_eq!(proof["product_accepted"], false);
+    assert_eq!(calls.lock().unwrap().last(), Some(&Operation::Finalize));
 }
