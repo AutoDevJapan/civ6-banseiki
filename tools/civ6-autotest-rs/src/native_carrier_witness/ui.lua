@@ -14,6 +14,8 @@ local lastReady
 local closeSeen=false
 local earlyArmed=false
 local loadClosed=false
+local timedStep=step
+local stageElapsed=0
 local function canonical(value) return api.Canonical(value) end
 local function failure(code,err)
  if failed then return end;failed=true
@@ -84,8 +86,12 @@ local function saveGame(n)
  saving.Returned=true
  emit('SAVE_RETURNED',generation,n,value,{name=b.SaveName,code=ret==nil and 'API_RETURNED_VOID' or 'API_RETURNED_'..type(ret)..':'..tostring(ret)})
 end
-local function tick()
+local function tick(delta)
  if failed then return end
+ assert(type(delta)=='number' and delta>=0 and delta==delta,'invalid update elapsed time')
+ if timedStep~=step then timedStep=step;stageElapsed=0 end
+ stageElapsed=stageElapsed+delta
+ if step<=43 then assert(stageElapsed<assert(actions[step].timeout),'fixed stage timeout: '..step) end
  if Game.GetLocalPlayer()<0 then return end
  local b=bridge.GetHeader();if b.Failure then error(b.Failure) end
  local shown,ready=dialog()
@@ -135,7 +141,7 @@ assert(generation~=1 or earlyArmed)
 emit('LOAD_READY',generation,0,canonical({EarlyMoveListenerRegistered=earlyArmed,LoadScreenCloseReceived=loadClosed,Bridge=construction}))
 booted=true
 ContextPtr:SetHide(false) -- the existing HeroKeys context has no visual controls
-ContextPtr:SetUpdate(function()
- local ok,err=pcall(tick)
+ContextPtr:SetUpdate(function(delta)
+ local ok,err=pcall(tick,delta)
  if not ok then failure('FIXTURE_STAGE',err) end
 end)

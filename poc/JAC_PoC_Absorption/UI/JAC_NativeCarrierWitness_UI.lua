@@ -53,6 +53,7 @@ return GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer()
  and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroReadAPI~=nil
  and Players[1]:GetCities():GetCapitalCity()~=nil
 end}
+actions[6].timeout=240
 actions[7]={kind="ui_lua",capture="",compare="",run=function()
 assert(Game.GetLocalPlayer()==0 and Players[0]:IsTurnActive(),'human0 turn required')
 local range=assert(tonumber(GlobalParameters.CITY_MIN_RANGE),'city spacing unavailable')
@@ -74,10 +75,13 @@ assert(site,'fixture preparation incomplete: no valid owned land beyond city spa
 ExposedMembers.JAC996Site=site
 return 'selected owned empty land, nearest city distance '..site.Distance
 end}
+actions[7].timeout=120
 actions[8]={kind='GP'}
+actions[8].timeout=120
 actions[9]={kind="wait_for",capture="",compare="",run=function()
 local e=Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996');local c=e and CityManager.GetCityAt(e.Target.X,e.Target.Y);return c and c:GetOwner()==1 and c:GetID()==e.Target.ID
 end}
+actions[9].timeout=45
 actions[10]={kind="ui_lua",capture="",compare="",run=function()
 -- UI owns district/slot getters; Gameplay receives detached, freshly read observations.
 local F={Serial=0}
@@ -188,32 +192,45 @@ assert(target:GetOwner()==1 and target:GetID()==e.Target.ID,'fresh native city n
 ExposedMembers.JAC996TemplePlan=F.Plan(target,'carrier')
 return 'planned stock Temple on a plot purchased by the exact extra recipient city'
 end}
+actions[10].timeout=120
 actions[11]={kind='GP'}
+actions[11].timeout=120
 actions[12]={kind='GP'}
+actions[12].timeout=120
 actions[13]={kind="ui_lua",capture="",compare="",run=function()
 local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','Holy');return 'observed carrier Holy city '..r.ID
 end}
+actions[13].timeout=120
 actions[14]={kind='GP'}
+actions[14].timeout=120
 actions[15]={kind="wait_for",capture="",compare="",run=function()
 return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Holy')
 end}
+actions[15].timeout=45
 actions[16]={kind="ui_lua",capture="",compare="",run=function()
 local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','Shrine');return 'observed carrier Shrine city '..r.ID
 end}
+actions[16].timeout=120
 actions[17]={kind='GP'}
+actions[17].timeout=120
 actions[18]={kind="wait_for",capture="",compare="",run=function()
 return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Shrine')
 end}
+actions[18].timeout=45
 actions[19]={kind="ui_lua",capture="",compare="",run=function()
 local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','Temple');return 'observed carrier Temple city '..r.ID
 end}
+actions[19].timeout=120
 actions[20]={kind='GP'}
+actions[20].timeout=120
 actions[21]={kind="wait_for",capture="",compare="",run=function()
 return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Temple')
 end}
+actions[21].timeout=45
 actions[22]={kind="ui_lua",capture="",compare="",run=function()
 local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','grant');assert(r.Temple and r.SlotValue==-1,'stock Temple not empty');return 'fresh empty stock Temple published'
 end}
+actions[22].timeout=120
 actions[23]={kind="ui_lua",capture="",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption)
 local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
@@ -253,7 +270,9 @@ end
 ExposedMembers.JAC996RecipientUnits=units
 return 'observed empty human0 Palace and sole eligible recipient noncapital Temple'
 end}
+actions[23].timeout=120
 actions[24]={kind='GP'}
+actions[24].timeout=120
 actions[25]={kind="wait_for",capture="",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local source=assert(CityManager.GetCityAt(e.Source.X,e.Source.Y))
@@ -273,6 +292,7 @@ end
 ExposedMembers.JAC996Original=w
 return true
 end}
+actions[25].timeout=45
 actions[26]={kind="ui_lua",capture="",compare="",run=function()
 assert(JAC996BorrowObserver==nil,'borrow observer already armed')
 local original=assert(JAC_ObserveNativeCarrierMP,'product MP observer missing in HeroKeys UI context')
@@ -283,7 +303,9 @@ JAC_ObserveNativeCarrierMP=function(c)
 end
 return 'transient HeroKeys observer stops only this fixture at BORROWED; load removes wrapper'
 end}
+actions[26].timeout=120
 actions[27]={kind='GP'}
+actions[27].timeout=120
 actions[28]={kind="wait_for",capture="",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local r=A.GetState().Recoveries[e.Token];local c=r and r.NativeCarrier;local m=c and c.MP
@@ -303,10 +325,15 @@ ExposedMembers.JAC996Borrowed={Owner=target:GetOwner(),ID=target:GetID(),Token=c
  SourceID=source:GetID(),TargetOriginalID=l.ID,Phase=m.Phase}
 return true
 end}
+actions[28].timeout=120
 actions[29]={kind='GP'}
+actions[29].timeout=120
 actions[30]={kind='save',generation=1}
+actions[30].timeout=90
 actions[31]={kind='exit'}
+actions[31].timeout=90
 actions[32]={kind='external_load'}
+actions[32].timeout=600
 actions[33]={kind="wait_for",capture="",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local r=A.GetState().Recoveries[e.Token];local c=r and r.NativeCarrier;local m=c and c.MP
@@ -315,10 +342,13 @@ local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y));local l=assert(m
 assert(c.Phase=='PROVED' and l.ReturnIssued and l.RestoredCore and city:GetOwner()==1 and city:GetID()==l.FinalID,'actual borrowed city not returned and restored')
 return true
 end}
+actions[33].timeout=120
 actions[34]={kind='GP'}
+actions[34].timeout=120
 actions[35]={kind="ui_lua",capture="",compare="",run=function()
 assert(JAC996StopMoves)();JAC996StopMoves=nil;return 'removed fixture native event observer'
 end}
+actions[35].timeout=120
 actions[36]={kind="ui_lua",capture="",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local function equal(a,b) return A.Canonical(a)==A.Canonical(b) end
@@ -368,6 +398,7 @@ assert(equal(units,e.RecipientUnits),'recipient native units changed during the 
 print('[JAC_NATIVE_HOTSEAT_SAVE_PROOF] index='..w.Index..' moves='..e.NativeMoveCount..' borrowedID='..l.BorrowedID..' returnedID='..l.FinalID)
 return 'actual original recovered once; native city returned with provenance and world uniqueness'
 end}
+actions[36].timeout=120
 actions[37]={kind="ui_lua",capture="NATIVE_HOTSEAT_COMPLETE_LEDGER_WORLD",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local world={};local rosters={};local owners={};local seen={}
@@ -405,9 +436,13 @@ return A.Canonical({Ledger=A.GetState(),Rosters=rosters,
  NativeInventory=Game:GetProperty('JAC_NATIVE_INVENTORY_V1'),Boundary=Game:GetProperty('JAC_CARRIER_BOUNDARY_V1'),
  Fixture=e,World=world,OriginalLocations=A.ReadNativeLocations(e.Original.Index)})
 end}
+actions[37].timeout=120
 actions[38]={kind='save',generation=2}
+actions[38].timeout=90
 actions[39]={kind='exit'}
+actions[39].timeout=90
 actions[40]={kind='external_load'}
+actions[40].timeout=600
 actions[41]={kind="wait_for",capture="",compare="",run=function()
 return GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer()
  and Game.GetLocalPlayer()==0 and Players[0]:IsHuman() and Players[1]:IsHuman()
@@ -416,6 +451,7 @@ return GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer()
  and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroReadAPI~=nil
  and Players[1]:GetCities():GetCapitalCity()~=nil
 end}
+actions[41].timeout=120
 actions[42]={kind="ui_lua",capture="",compare="",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local function equal(a,b) return A.Canonical(a)==A.Canonical(b) end
@@ -465,6 +501,7 @@ assert(equal(units,e.RecipientUnits),'recipient native units changed during the 
 print('[JAC_NATIVE_HOTSEAT_SAVE_PROOF] index='..w.Index..' moves='..e.NativeMoveCount..' borrowedID='..l.BorrowedID..' returnedID='..l.FinalID)
 return 'actual original recovered once; native city returned with provenance and world uniqueness'
 end}
+actions[42].timeout=120
 actions[43]={kind="ui_lua",capture="",compare="NATIVE_HOTSEAT_COMPLETE_LEDGER_WORLD",run=function()
 local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
 local world={};local rosters={};local owners={};local seen={}
@@ -502,6 +539,7 @@ return A.Canonical({Ledger=A.GetState(),Rosters=rosters,
  NativeInventory=Game:GetProperty('JAC_NATIVE_INVENTORY_V1'),Boundary=Game:GetProperty('JAC_CARRIER_BOUNDARY_V1'),
  Fixture=e,World=world,OriginalLocations=A.ReadNativeLocations(e.Original.Index)})
 end}
+actions[43].timeout=120
 local function armLoadedMove()
 assert(JAC996BorrowObserver==nil,'transient borrow wrapper survived actual load')
 assert(type(JAC_ObserveNativeCarrierMP)=='function','unmodified product observer absent after load')
@@ -536,6 +574,12 @@ JAC996StopMoves=function() Events.GreatWorkMoved.Remove(moved) end
 return true
 end
 
+local initialized=false
+local originalObserver=assert(JAC_ObserveNativeCarrierMP)
+JAC_ObserveNativeCarrierMP=function(c)
+ if not initialized and c and c.MP and c.MP.Recovery=='fixture-native-hotseat-996' then return false end
+ return originalObserver(c)
+end
 local function initialize()
 local api=assert(ExposedMembers.JAC_Absorption,'product Gameplay must initialize before native witness UI')
 local bridge=assert(ExposedMembers.JAC_NativeCarrierWitness,'fixed Gameplay witness entry missing')
@@ -553,6 +597,8 @@ local lastReady
 local closeSeen=false
 local earlyArmed=false
 local loadClosed=false
+local timedStep=step
+local stageElapsed=0
 local function canonical(value) return api.Canonical(value) end
 local function failure(code,err)
  if failed then return end;failed=true
@@ -623,8 +669,12 @@ local function saveGame(n)
  saving.Returned=true
  emit('SAVE_RETURNED',generation,n,value,{name=b.SaveName,code=ret==nil and 'API_RETURNED_VOID' or 'API_RETURNED_'..type(ret)..':'..tostring(ret)})
 end
-local function tick()
+local function tick(delta)
  if failed then return end
+ assert(type(delta)=='number' and delta>=0 and delta==delta,'invalid update elapsed time')
+ if timedStep~=step then timedStep=step;stageElapsed=0 end
+ stageElapsed=stageElapsed+delta
+ if step<=43 then assert(stageElapsed<assert(actions[step].timeout),'fixed stage timeout: '..step) end
  if Game.GetLocalPlayer()<0 then return end
  local b=bridge.GetHeader();if b.Failure then error(b.Failure) end
  local shown,ready=dialog()
@@ -674,13 +724,14 @@ assert(generation~=1 or earlyArmed)
 emit('LOAD_READY',generation,0,canonical({EarlyMoveListenerRegistered=earlyArmed,LoadScreenCloseReceived=loadClosed,Bridge=construction}))
 booted=true
 ContextPtr:SetHide(false) -- the existing HeroKeys context has no visual controls
-ContextPtr:SetUpdate(function()
- local ok,err=pcall(tick)
+ContextPtr:SetUpdate(function(delta)
+ local ok,err=pcall(tick,delta)
  if not ok then failure('FIXTURE_STAGE',err) end
 end)
 
 end
-local initialized,initialError=pcall(initialize)
+local initialError
+initialized,initialError=pcall(initialize)
 if not initialized then
  local reported=false
  ContextPtr:SetUpdate(function()

@@ -264,8 +264,83 @@ Events={{GreatWorkMoved={{Add=function(f) MOVE=f;ADD_ORDER[#ADD_ORDER+1]='MOVE' 
  LoadScreenClose={{Add=function(f) CLOSE=f;ADD_ORDER[#ADD_ORDER+1]='CLOSE' end}}}}
 print=function(s) LOGS[#LOGS+1]=s end
 "#)).exec().unwrap();
-    lua.load(witness::ui_binding()).exec().unwrap();
+    lua.load(
+        fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_Absorption/UI/JAC_NativeCarrierWitness_UI.lua"),
+        )
+        .unwrap(),
+    )
+    .exec()
+    .unwrap();
     lua
+}
+
+#[test]
+fn review_staging_ready_is_once_per_generation_in_the_same_context() {
+    let lua = Lua::new();
+    lua.load(RULES).exec().unwrap();
+    lua.load(format!(r#"
+GENERATION=0
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{NONCE}' else return GENERATION end end,
+ IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {{0,1,2}} end}}
+PlayerConfigurations={{[0]={{GetSlotStatus=function() return 1 end}},[1]={{GetSlotStatus=function() return 1 end}},[2]={{GetSlotStatus=function() return 2 end}}}}
+SlotStatus={{SS_TAKEN=1}};ContextPtr={{IsHidden=function() return false end}};Network={{IsGameHost=function() return true end}}
+CLICKS=0;UPDATES=0
+Controls={{ReadyButton={{IsDisabled=function() return false end,DoLeftClick=function() CLICKS=CLICKS+1 end}}}}
+UpdateReadyButton=function() UPDATES=UPDATES+1 end
+LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
+"#)).exec().unwrap();
+    lua.load(
+        fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_JapanMapScale/UI/JAC_NativeCarrierWitness_Staging.lua"),
+        )
+        .unwrap(),
+    )
+    .exec()
+    .unwrap();
+    lua.load(
+        r#"
+for g=0,2 do
+ GENERATION=g;UpdateReadyButton();UpdateReadyButton()
+ assert(CLICKS==g+1,'same context must Ready once for each loaded generation')
+end
+GENERATION=0;UpdateReadyButton();assert(CLICKS==3 and UPDATES==7)
+"#,
+    )
+    .exec()
+    .unwrap();
+}
+
+#[test]
+fn review_wait_stage_stops_at_its_own_deadline() {
+    let lua = loaded_ui(false);
+    lua.load("UPDATE(119);assert(MOVE~=nil);UPDATE(1);UPDATE(1)")
+        .exec()
+        .unwrap();
+    let log = lua
+        .globals()
+        .get::<mlua::Table>("LOGS")
+        .unwrap()
+        .sequence_values::<String>()
+        .collect::<mlua::Result<Vec<_>>>()
+        .unwrap()
+        .join("\n");
+    assert!(
+        log.contains("|33|FAIL|"),
+        "the fixed 120-second stage must fail while still waiting for the actual dialog"
+    );
+    assert!(!log.contains("|33|RESULT|"));
+}
+
+#[test]
+fn review_failed_initialization_blocks_only_the_fixture_observer() {
+    let lua = loaded_ui(true);
+    lua.load(r#"
+assert(JAC_ObserveNativeCarrierMP({MP={Recovery='another-flow'}})==true)
+assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996'}})==false,'failed early MOVE listener must keep fixture stopped')
+"#).exec().unwrap();
+    let successful = loaded_ui(false);
+    successful.load("assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996'}})==true)").exec().unwrap();
 }
 
 #[test]
@@ -276,9 +351,9 @@ fn loaded_scene_arms_real_move_signature_before_publication_and_emits_only_trans
 assert(ADD_ORDER[1]=='MOVE' and ADD_ORDER[2]=='CLOSE' and JAC996BorrowObserver==nil)
 MOVE(2,2,0,44,7,37);MOVE(0,2,0,45,7,37);assert(#ExposedMembers.JAC996MoveEvents==0)
 MOVE(0,2,0,44,7,37);assert(#ExposedMembers.JAC996MoveEvents==1)
-UPDATE();local logs=#LOGS;for i=1,100 do UPDATE() end;assert(#LOGS==logs)
-CLOSE();SHOWN=false;PAUSED=false;UPDATE();local final=#LOGS
-for i=1,100 do UPDATE() end;assert(#LOGS==final)
+UPDATE(0.01);local logs=#LOGS;for i=1,100 do UPDATE(0.01) end;assert(#LOGS==logs)
+CLOSE();SHOWN=false;PAUSED=false;UPDATE(0.01);local final=#LOGS
+for i=1,100 do UPDATE(0.01) end;assert(#LOGS==final)
 "#,
     )
     .exec()
@@ -303,7 +378,7 @@ for i=1,100 do UPDATE() end;assert(#LOGS==final)
 #[test]
 fn an_already_dispatched_load_never_claims_an_early_ready_receipt() {
     let lua = loaded_ui(true);
-    lua.load("UPDATE();UPDATE();assert(MOVE==nil)")
+    lua.load("UPDATE(0.01);UPDATE(0.01);assert(MOVE==nil)")
         .exec()
         .unwrap();
     let log = lua
@@ -412,10 +487,10 @@ RETURNED_FROM_API=false
 Network={{GetGameConfigurationSaveType=function() return 3 end,SaveGame=function() SAVECB();RETURNED_FROM_API=true;return true end}}
 local originalPrint=print
 print=function(s) if s:find('|SAVE_RETURNED|',1,true) or s:find('|SAVE_COMPLETE|',1,true) then assert(RETURNED_FROM_API) end;originalPrint(s) end
-UPDATE();SHOWN=false;PAUSED=false
+UPDATE(0.01);SHOWN=false;PAUSED=false
 SAVE(30)
 local before=#LOGS;for _,s in ipairs(LOGS) do assert(not s:find('|SAVE_COMPLETE|',1,true)) end
-UPDATE();assert(#LOGS>before)
+UPDATE(0.01);assert(#LOGS>before)
 local returned,complete
 for i,s in ipairs(LOGS) do if s:find('|SAVE_RETURNED|',1,true) then returned=i elseif s:find('|SAVE_COMPLETE|',1,true) then complete=complete or i end end
 assert(returned and complete and returned<complete)
