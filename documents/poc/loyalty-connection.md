@@ -123,3 +123,7 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 実機103はUIにrawgetがないため情報記録で失敗した。実機104は通常のtable field lookupへ修正後、10/10手順とログ5/5が成功した。identityの実型はtable、__instanceの実型はuserdata、getmetatableはfunction、metatableとcustom formatterはnilだった。表示文字列は保全するが、これだけをメモリアドレスや正本の根拠にしない。両実機はsetter・操作要求・観測器が0で、忠誠心変更の受入ではない。ゲーム終了・描画設定の元SHA一致を標準chainで確認した。
 
 生成器の --single-setter-ui は、UIで実値の基準を読んでから同期操作を一度要求する。Gameplayは基準の取得と当事者・手番・再送を検査し、変更命令だけを実行する。UI getterのclosureをGameplayから呼ばない。観測器のreadyを偽に用意する処理はなく、この方式は観測器を起動しない。二公開後の実getterと都市通知数を記録し、ターン・公開回数・停止条件を延長しない。元の --native-observer の検証付きready/finishは維持する。この追加方式も診断であり、Core正本の更新や製品成功をCLI完走で代用しない。
+
+実機105（5c4cfca0）の通常UI要求からの単発比較は14/14手順・ログ5/5成功、owner3/city65536/座標146,38/turn1でUI100→95・CityLoyaltyChanged1件を確認した。setter CALL/RETURNは各1、観測器0。待機条件は元の二公開以上で、最終記録の実カウンターは11だった。公開数を増やすコード変更やsetter再送はしていない。この成功を製品5条件へ付け替えない。
+
+--single-setter-publish-ui は、同じ一度の要求を次のGameCoreEventPublishComplete callback内から送る比較である。登録時には要求せず、再入や応答不明でもUIRequestIssuedを先に保持し、再送しない。変更先・基準・ターン・二公開の条件は105と同じで、送信する時点の違いだけを比べる。製品の公開callbackが同様に同期要求を送っていることは静的に確認したが、それが原因とはこの追加実機を終えるまで断定しない。

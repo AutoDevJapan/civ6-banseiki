@@ -197,6 +197,13 @@ fn native_probe_steps(handoff: &std::path::Path) -> Vec<Value> {
     loyalty_probe_steps(Some(handoff))
 }
 
+fn publication_probe_steps() -> Vec<Value> {
+    let mut steps = loyalty_probe_steps(None);
+    let request = format!("local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe)\nassert(not d.PublicationSenderRegistered,'publication sender already registered')\nEvents.GameCoreEventPublishComplete.Add(function()\n if d.UIRequestIssued then return end\n print('JAC_LOYALTY_REQUEST_CONTEXT publish_complete')\n{SINGLE_REQUEST_UI}\nend)\nd.PublicationSenderRegistered=true\nreturn 'one setter request registered for next publish complete; no native observer'");
+    steps[2] = ui("InGame", &request);
+    steps
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -236,6 +243,9 @@ fn run() -> Result<()> {
         .is_some_and(|v| v == "--operation-context");
     let native_mode = option.as_deref().is_some_and(|v| v == "--native-observer");
     let single_mode = option.as_deref().is_some_and(|v| v == "--single-setter-ui");
+    let publish_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-publish-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -245,9 +255,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui]"
     );
     ensure!(
         !output.exists(),
@@ -265,6 +275,8 @@ fn run() -> Result<()> {
         steps.extend(native_probe_steps(handoff.as_ref().unwrap()));
     } else if single_mode {
         steps.extend(loyalty_probe_steps(None));
+    } else if publish_mode {
+        steps.extend(publication_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -321,6 +333,31 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn publication_sender_issues_once_on_event_and_never_retries_unknown_send() -> Result<()> {
+        let lua = mlua::Lua::new();
+        lua.load(
+            r#"
+local handlers={};Reads=0;Requests=0
+Events={GameCoreEventPublishComplete={Add=function(f) handlers[#handlers+1]=f end}}
+Fire=function() for _,f in ipairs(handlers) do f() end end
+ExposedMembers={JAC_LoyaltyNativeProbe={Owner=3,Before=100,Publications=9,
+ ReadCurrent=function() Reads=Reads+1;return 100 end}}
+PlayerOperations={EXECUTE_SCRIPT=19}
+UI={RequestPlayerOperation=function(owner,op,params)
+ assert(owner==3 and op==19 and params.Tag=='native-probe')
+ Requests=Requests+1;Fire();error('request sent but response unknown')
+end}
+"#,
+        )
+        .exec()?;
+        let steps = publication_probe_steps();
+        assert_eq!(steps.len(), 5);
+        lua.load(steps[2]["code"].as_str().unwrap()).exec()?;
+        lua.load("assert(Requests==0 and Reads==0);assert(not pcall(Fire));Fire();assert(Requests==1 and Reads==1);assert(ExposedMembers.JAC_LoyaltyNativeProbe.ObserverReady==nil)").exec()?;
+        Ok(())
+    }
+
     #[test]
     fn single_ui_operation_reads_in_ui_and_mutates_once_without_observer() -> Result<()> {
         let lua = mlua::Lua::new();
