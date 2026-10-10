@@ -237,6 +237,16 @@ fn ai_probe_steps() -> Vec<Value> {
     steps
 }
 
+fn cross_context_probe_steps() -> Vec<Value> {
+    let mut steps = ai_probe_steps();
+    let core = steps[1]["code"].as_str().unwrap().replace(
+        "c:ChangeLoyalty(-5)",
+        "d.CrossContextBefore=d.ReadCurrent('cross-context-before-setter')\n c:ChangeLoyalty(-5)",
+    );
+    steps[1] = ui("JAC_Absorption_Entry", &core);
+    steps
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -282,6 +292,9 @@ fn run() -> Result<()> {
     let ai_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-ai-ui");
+    let cross_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-ai-cross-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -291,9 +304,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui]"
     );
     ensure!(
         !output.exists(),
@@ -315,6 +328,8 @@ fn run() -> Result<()> {
         steps.extend(publication_probe_steps());
     } else if ai_mode {
         steps.extend(ai_probe_steps());
+    } else if cross_mode {
+        steps.extend(cross_context_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -371,6 +386,39 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cross_context_comparison_changes_only_one_pre_setter_getter_call() -> Result<()> {
+        let baseline = ai_probe_steps();
+        let comparison = cross_context_probe_steps();
+        for index in [0, 2, 3, 4] {
+            assert_eq!(comparison[index], baseline[index]);
+        }
+        let extra = "d.CrossContextBefore=d.ReadCurrent('cross-context-before-setter')\n ";
+        let code = comparison[1]["code"].as_str().unwrap();
+        assert_eq!(code.matches(extra).count(), 1);
+        assert_eq!(
+            code.replace(extra, ""),
+            baseline[1]["code"].as_str().unwrap()
+        );
+        assert_eq!(code.matches("c:ChangeLoyalty(-5)").count(), 1);
+        let lua = mlua::Lua::new();
+        lua.load(r#"
+local handler;Reads=0;Calls=0
+ExposedMembers={JAC_LoyaltyNativeProbe={Actor=3,Owner=0,ID=8,X=5,Y=6,Turn=1,Before=100,
+ UIRequestIssued=true,ImmediateBefore=100,ReadCurrent=function(label)
+ assert(label=='cross-context-before-setter');Reads=Reads+1;return 100 end}}
+Players={[3]={IsTurnActive=function() return true end}}
+Game={GetCurrentGameTurn=function() return 1 end}
+CityManager={GetCityAt=function() return {GetOwner=function() return 0 end,GetID=function() return 8 end,
+ ChangeLoyalty=function(_,v) assert(v==-5 and Reads==1);Calls=Calls+1 end} end}
+GameEvents={JAC_LoyaltyNativeProbe_Operation={Add=function(f) handler=f end}}
+Invoke=function() handler(3,{Tag='native-probe'}) end
+"#).exec()?;
+        lua.load(code).exec()?;
+        lua.load("Invoke();assert(Reads==1 and Calls==1);assert(not pcall(Invoke));assert(Reads==1 and Calls==1)").exec()?;
+        Ok(())
+    }
+
     #[test]
     fn ai_probe_separates_active_sender_from_inactive_city_owner() -> Result<()> {
         let lua = mlua::Lua::new();

@@ -131,3 +131,7 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 実機106（cde9e81d）は公開callback内からの要求でも14/14・ログ5/5成功、105と同じowner3/city65536/146,38/turn1でUI100→95・CityEvents1、pubCounter10、CALL/RETURN各1だった。要求時点だけでは失敗を再現しないので、公開callback自体を原因とする仮説は採用しない。原11filesをownfe29634f/live106へ全SHA一致で保全し、standardclose/profile元C234復元を確認した。
 
 --single-setter-ai-ui は送信者をactive human3のまま、対象だけ既存AI0の非首都へ変える。ActorとOwnerを別に保持して、Coreはactive senderと対象city owner/id/turnを別々に検査する。変更と再送の回数・二公開・ターン条件は105と同じ。これでAI所有・非手番条件と、未達製品での都市移管後という別の条件を分ける。AI対象のsetterやUI結果は実機前に成功としない。
+
+実機107（ae9b8051）の既存AI0非首都/131073/129,39/turn1も、sender3の一回の要求でUI100→95・対象CityEvents1、pubCounter11、14/14・ログ5/5だった。既存都市のAI所有・非手番だけでは旧失敗を再現しない。原11filesをowna9caf719/live107へ全SHA一致で保全し、standardclose/profile元C234復元を確認した。次の製品108は元smallAI38手順で未払い保存/読込まで成功し、自然な資格成立を待っている。
+
+--single-setter-ai-cross-ui は107からGameplayのsetter直前にUIのReadCurrent closureを1回呼ぶ条件だけを戻す。旧native診断100に含まれていたこの処理と、正常107との差を監視無しで比べる限定診断である。製品へUI closure呼出しを追加しない。actor/owner/都市キー/実before/一回setter/二公開/ターンは107と同じ。再送や観測回数延長で通さず、結果が出るまで原因を断定しない。
