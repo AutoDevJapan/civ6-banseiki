@@ -58,6 +58,7 @@ local function receive(actor,p)
  local ok,result=pcall(operations[p.Step])
  b=box();local receipt=assert(b.Receipts[key])
  if ok then
+  receipt.Fixture=R.Copy(Game:GetProperty(fixtureKey))
   receipt.Status='COMPLETE';receipt.Canonical=A.Canonical({Result=result,Fixture=Game:GetProperty(fixtureKey),State=A.GetState()})
   receipt.Value=R.Copy(result);b.NextOperation=b.NextOperation+1
  else receipt.Status='FAIL';receipt.Error=tostring(result) end

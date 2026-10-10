@@ -336,6 +336,31 @@ print=function(s) LOGS[#LOGS+1]=s end
 }
 
 #[test]
+fn gameplay_receipt_waits_for_actual_ui_property_publication() {
+    let lua = loaded_ui(false);
+    lua.load(r#"
+local R=JAC_AbsorptionRules
+local function set(fn,key,value)
+ for i=1,64 do local name=debug.getupvalue(fn,i);if not name then break end
+  if name==key then debug.setupvalue(fn,i,value);return end end
+ error('missing tested upvalue '..key)
+end
+local tick
+for i=1,64 do local name,value=debug.getupvalue(UPDATE,i);if name=='tick' then tick=value;break end end
+assert(tick)
+local expected=R.Copy(E);expected.Fixtures={carrier={ID=44}}
+local receipt={Status='COMPLETE',Value='plan persisted',Canonical='core receipt',Fixture=expected}
+ExposedMembers.JAC_NativeCarrierWitness.GetReceipt=function() return R.Copy(receipt) end
+set(tick,'pending',{Generation=1,Step=11});set(tick,'step',11)
+UPDATE(0.01);SHOWN=false;PAUSED=false;UPDATE(0.01)
+for _,s in ipairs(LOGS) do assert(not s:find('|11|RESULT|',1,true),'Core completion preceded actual UI publication');assert(not s:find('|FAIL|',1,true)) end
+E=R.Copy(expected);UPDATE(0.01)
+local count=0;for _,s in ipairs(LOGS) do if s:find('|11|RESULT|',1,true) then count=count+1 end;assert(not s:find('|FAIL|',1,true)) end
+assert(count==1,'published plan did not complete exactly once')
+"#).exec().unwrap();
+}
+
+#[test]
 fn review_staging_ready_is_once_per_generation_in_the_same_context() {
     let run_id = nonce();
     let lua = Lua::new();

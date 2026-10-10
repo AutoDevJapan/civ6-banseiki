@@ -689,6 +689,11 @@ local function tick(delta)
   local receipt=bridge.GetReceipt(pending.Generation,pending.Step)
   if not receipt or receipt.Status=='STARTED' then return end
   if receipt.Status~='COMPLETE' then error(receipt.Error or 'fixed operation rejected') end
+  assert(type(receipt.Fixture)=='table','completed operation lacks its fixture publication')
+  -- A direct Gameplay receipt can arrive before the UI's native property view.
+  -- Keep this operation spent and its deadline running until the actual UI
+  -- value matches. Never substitute the receipt for the UI's world observation.
+  if canonical(Game:GetProperty(fixtureKey))~=canonical(receipt.Fixture) then return end
   local n=pending.Step;pending=nil
   if actions[n].kind=='save' then saveGame(n) else result(n,receipt.Value,receipt.Canonical) end
   return

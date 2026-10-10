@@ -340,7 +340,16 @@ return A.Canonical({Ledger=A.GetState(),Rosters=rosters,
  Fixture=e,World=world,OriginalLocations=A.ReadNativeLocations(e.Original.Index)})"#;
 
 fn ui(state: &str, code: impl Into<String>) -> Value {
-    json!({"action":"ui_lua","state_name":state,"code":code.into()})
+    let mut code = code.into();
+    if state == "JAC_Absorption_Entry" {
+        // Never mutate the engine's table before SetProperty can publish the
+        // change to a separate UI view. This also covers stage request helpers.
+        code = code.replace(
+            "Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')",
+            "JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))",
+        );
+    }
+    json!({"action":"ui_lua","state_name":state,"code":code})
 }
 fn wait(state: &str, code: impl Into<String>, timeout: u32) -> Value {
     json!({"action":"wait_for","timeout":timeout,"condition":{"type":"lua","state_name":state,"code":code.into()}})
@@ -442,6 +451,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixture_plan_publishes_a_new_property_without_mutating_the_read_value() {
+        let lua = mlua::Lua::new();
+        lua.load(include_str!(
+            "../../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua"
+        ))
+        .exec()
+        .unwrap();
+        lua.load(r#"
+local R=JAC_AbsorptionRules
+JAC_AbsorptionGameplay={Rules=R}
+ORIGINAL={Target={ID=23},Fixtures={}};CURRENT=ORIGINAL;PUBLISHED=R.Copy(ORIGINAL)
+Game={GetProperty=function() return CURRENT end,SetProperty=function(_,k,v)
+ if R.Canonical(CURRENT)~=R.Canonical(v) then PUBLISHED=R.Copy(v) end;CURRENT=v end}
+ExposedMembers={JAC996TemplePlan={Owner=0,ID=23,X=4,Y=5,Plot=9}}
+CityManager={GetCityAt=function() return {GetOwner=function() return 0 end,GetID=function() return 23 end,
+ GetProperty=function() return nil end,SetProperty=function() end} end}
+"#).exec().unwrap();
+        let scenario = generate();
+        let code = scenario["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| s["code"].as_str())
+            .find(|s| s.contains("persisted detached stock Temple plan"))
+            .unwrap();
+        lua.load(code).exec().unwrap();
+        lua.load("assert(ORIGINAL.Fixtures.carrier==nil,'engine read was mutated before SetProperty');assert(PUBLISHED.Fixtures.carrier.ID==23,'UI did not receive the persisted Temple plan')").exec().unwrap();
+    }
 
     // Test doubles exercise rejection of evidence. They are never emitted into
     // the real-game scenario and are not a claim of native engine acceptance.

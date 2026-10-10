@@ -27,7 +27,7 @@ local operations={}
 local operation_order={}
 operations[8]=function()
 local A=assert(JAC_AbsorptionGameplay)
-assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')==nil,'fixture already exists')
+assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))==nil,'fixture already exists')
 assert(nativeHotseat(),'hotseat required')
 assert(Players[0]:IsHuman() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'need human0/human1/AI2')
 local site=assert(ExposedMembers.JAC996Site,'detached UI site absent')
@@ -57,7 +57,7 @@ return 'created genuine extra recipient city; fixture archive seed is separate f
 end
 operation_order[#operation_order+1]=8
 operations[11]=function()
-local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
 local plan=assert(ExposedMembers.JAC996TemplePlan)
 local c=assert(CityManager.GetCityAt(plan.X,plan.Y))
 assert(c:GetOwner()==1 and c:GetID()==e.Target.ID and plan.ID==e.Target.ID,'detached Temple plan changed')
@@ -73,7 +73,7 @@ operation_order[#operation_order+1]=11
 operations[12]=function()
 -- Mutations run in Gameplay; never enumerate UI-only city district members here.
 local function requestTemple(label,stage)
- local t=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
+ local t=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
  local target=assert(t.Fixtures[label])
  local token=label..':'..stage
  local r=assert(ExposedMembers.JAC_NativeTempleObservation[label],label..': UI temple observation missing')
@@ -121,7 +121,7 @@ return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Temple')
 end
 operation_order[#operation_order+1]=20
 operations[24]=function()
-local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
 local p=assert(ExposedMembers.JAC996GrantPlan);local c=assert(CityManager.GetCityAt(p.X,p.Y))
 local r=assert(ExposedMembers.JAC_NativeTempleObservation.carrier);local req=assert(e.Fixtures.carrier.Request)
 assert(req.Stage=='Temple' and r.Token=='carrier:grant' and r.Read>req.Read and r.Temple and r.SlotValue==-1,'fresh stock Temple publication missing')
@@ -136,7 +136,7 @@ end
 operation_order[#operation_order+1]=24
 operations[27]=function()
 local A=assert(JAC_AbsorptionGameplay);local R=A.Rules
-local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
+local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
 local original=assert(ExposedMembers.JAC996Original,'actual original UI observation absent')
 assert(e.GrantIssued and original.Owner==0 and original.CityID==e.Source.ID and not e.Before[original.Index],'fixture original changed')
 e.Original=R.Copy(original);e.AssetID='native-work:'..original.Index
@@ -153,7 +153,7 @@ return 'public RecoverArchived waiting for product NativeInventory; no Gameplay 
 end
 operation_order[#operation_order+1]=27
 operations[29]=function()
-local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
 local b=assert(ExposedMembers.JAC996Borrowed,'fresh actual borrowed observation absent')
 local r=assert(A.GetState().Recoveries[e.Token]);local m=assert(r.NativeCarrier.MP)
 local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))
@@ -167,7 +167,7 @@ operation_order[#operation_order+1]=29
 operations[30]=function() return prepareSave(1) end
 operation_order[#operation_order+1]=30
 operations[34]=function()
-local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
 local before=assert(A.GetState().Recoveries[e.Token]);assert(before.NativeCarrier.MP.Phase=='DONE','unmodified executor did not finish')
 local events=assert(ExposedMembers.JAC996MoveEvents,'native MOVE event observer absent')
 assert(#events==1,'expected exactly one real native GreatWorkMoved event, observed '..#events)
@@ -243,6 +243,7 @@ local function receive(actor,p)
  local ok,result=pcall(operations[p.Step])
  b=box();local receipt=assert(b.Receipts[key])
  if ok then
+  receipt.Fixture=R.Copy(Game:GetProperty(fixtureKey))
   receipt.Status='COMPLETE';receipt.Canonical=A.Canonical({Result=result,Fixture=Game:GetProperty(fixtureKey),State=A.GetState()})
   receipt.Value=R.Copy(result);b.NextOperation=b.NextOperation+1
  else receipt.Status='FAIL';receipt.Error=tostring(result) end
