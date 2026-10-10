@@ -237,6 +237,19 @@ fn ai_probe_steps() -> Vec<Value> {
     steps
 }
 
+fn capital_probe_steps() -> Vec<Value> {
+    let mut steps = ai_probe_steps();
+    let selection = "local target\nfor _,c in Players[subject]:GetCities():Members() do\n if c:GetID()~=capital:GetID() and (not target or c:GetID()<target:GetID()) then target=c end\nend\nassert(target,'human noncapital missing')";
+    let arm = steps[0]["code"].as_str().unwrap();
+    assert_eq!(
+        arm.matches(selection).count(),
+        1,
+        "capital selection template changed"
+    );
+    steps[0] = ui("InGame", &arm.replace(selection, "local target=capital"));
+    steps
+}
+
 fn cross_context_probe_steps() -> Vec<Value> {
     let mut steps = ai_probe_steps();
     let core = steps[1]["code"].as_str().unwrap().replace(
@@ -295,6 +308,9 @@ fn run() -> Result<()> {
     let cross_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-ai-cross-ui");
+    let capital_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-ai-capital-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -304,9 +320,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui]"
     );
     ensure!(
         !output.exists(),
@@ -330,6 +346,8 @@ fn run() -> Result<()> {
         steps.extend(ai_probe_steps());
     } else if cross_mode {
         steps.extend(cross_context_probe_steps());
+    } else if capital_mode {
+        steps.extend(capital_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -386,6 +404,31 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn capital_probe_selects_engine_capital_without_searching_noncapitals() -> Result<()> {
+        let lua = mlua::Lua::new();
+        lua.load(r#"
+rawget=nil
+local identity={__instance={},GetLoyalty=function() return 100 end}
+local capital={GetOwner=function() return 0 end,GetID=function() return 9 end,
+ GetX=function() return 12 end,GetY=function() return 13 end,
+ GetCulturalIdentity=function() return identity end}
+local cities={GetCapitalCity=function() return capital end,Members=function() error('must select native capital') end}
+Players={[0]={GetCities=function() return cities end},[3]={IsTurnActive=function() return true end}}
+Game={GetLocalPlayer=function() return 3 end,GetCurrentGameTurn=function() return 1 end}
+ExposedMembers={};DB={MakeHash=function() return 19 end}
+Events={CityLoyaltyChanged={Add=function() end},GameCoreEventPublishComplete={Add=function() end}}
+"#).exec()?;
+        let steps = capital_probe_steps();
+        let baseline = ai_probe_steps();
+        for index in 1..5 {
+            assert_eq!(steps[index], baseline[index]);
+        }
+        lua.load(steps[0]["code"].as_str().unwrap()).exec()?;
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.Actor==3 and d.Owner==0 and d.ID==9 and d.X==12 and d.Y==13 and d.Before==100 and d.ObserverReady==nil and not d.MutationIssued)").exec()?;
+        Ok(())
+    }
+
     #[test]
     fn cross_context_comparison_changes_only_one_pre_setter_getter_call() -> Result<()> {
         let baseline = ai_probe_steps();
