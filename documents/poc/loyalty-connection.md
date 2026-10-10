@@ -97,3 +97,23 @@ preflight・新しいスレッドの登録・設置直前・接続計画の切�
 最終sourceで観測器の関連nextest59件が成功、独立実行をしない子fixture1件は対象外だった。事前検査、設置直前、登録時、getter増設、動的切替、実照会失敗の各経路を含む。隠しgetterを実行した全5モードと事前検査の所有子はOS終了0・終了確認trueだった。前者では別のアプリ用DR枠を保持し、RF/TFの変化0と自前プローブの復元を実読戻しで確認した。登録時の検査は既に隠れた実OSスレッドの保持handleを再登録するものであり、CREATEイベント後にhideする競合を解決した証拠ではない。基準getter・setterの捕捉はfalseのまま。元のconnection/writewatch/route/restore、復元後の保全snapshotからの自前例外配送、実DLLの32組監査も成功した。Clippy（warnings拒否）、fmt、Windows CLI buildは終了0。所有子の残存は0だった。
 
 今回の原ログとコマンド・開始終了時刻・終了コード・source SHAを含むmetaは、子の生成先`C:/Users/makhmeto/AppData/Local/Temp/codex-owned-6bfd169444d1814547e40876dbdba279/target/`に保持する。最終検査は`hidden-thread-nextest-final-02.log`、`hidden-thread-clippy-final.log`、`hidden-thread-fmt-final.log`、`hidden-thread-build-final.log`。先行失敗は`hidden-thread-red-01.log`、実照会は`hidden-thread-query-02.log`。検査済みobserver source SHA-256は`050BFCDC60AA85287210D3E6FC0F484A68F0CCF16FC561A1B2E9E58663DF461F`、Windows exe SHA-256は`F764EF495E350F5E546AFAD7DED9DF04747B19F15567E79319321F4D6C1DADF6`。親受領commit`9c9216fbc12b6d62c1759084c914e1f4f6115892`は旧e392と親781を両祖先に持ち、返却用の有限修正commitとは分けた。
+
+## 同一アドレスで制御が変わった枠の復元（112508レビューMust1）
+
+親は子47c0ebb0をf1ed1671へ受領した。追加レビューは、同じ設置アドレスのDR7をアプリが変えた場合、その活性が残っていても読戻し一致だけでarmed=false・復元完了へ進む問題を指摘した。この子ではobserverと本書だけを修正し、生成器・identity/型/文字列のmetadata・製品処理は変更していない。共有ToDoの状態・担当・場所・noteも変更していない。
+
+復元計画は、所有を照合して戻した枠と、観測器が実際に使った枠に同じアドレスの監視が有効なまま残る場合を別に返す。後者はL/Gのいずれかが有効なら競合であり、アプリのアドレス・DR7・未分類DR6を消さず、実読戻しの残存mask・枠番号・L/G・RW/LEN・理由・元/変更前/要求/実値を記録する。読戻しが成功しても残存maskがあればarmedを解除せず、復元完了はfalseになる。無効化済みの同一アドレス、別アドレスのアプリ監視、元から使っていない枠へ追加された監視は活性残存と区別する。
+
+競合はAPI失敗とは別の復元結果で返す。cleanupは他スレッドの復元、保留イベントの続行、デタッチ、所有した停止回数の解除を最後まで行う。照会失敗時のskip経路で競合を検出した場合も、所有した停止を戻してから観測を終える。既に保持する停止回数をfreezeで再び増やさない。APIの後始末と復元完了を分け、競合を成功数へ加算しない。
+
+競合履歴は復元試行時の事実として保持する。対象が後から終了すれば現在のarmed・残存maskは終了済みへ更新するが、元の競合履歴は消さず、診断の全体完了はfalseのままである。終了済みの現在API事実と過去の有効監視を混同しない。履歴は最大128件、超過は省略数を明示する。既存traceの128件上限、90秒・二公開・都市対応・32組監査の条件は変えない。
+
+先行ログ`restore-control-red-01.log`で、所有Win64子の同一アドレスをexecutionからwrite4へ実変更し、別の未使用枠へアプリ用data watchを追加した。復元後も同一アドレスの監視が有効だったが、旧コードはarmed=false・cleanup_complete=trueを返し、新しい検査が失敗した。子のOS終了は0である。途中の`restore-control-green-01.log`はfixtureの借用エラーによるビルド失敗で、実検査は未実行。修正後の`restore-control-green-02.log`では競合の2件が成功した一方、execution例外を保留していた対照子はOS終了2147483652となった。後者の配送原因は未確定で、再実行成功へ置き換えず原ログを保全した。
+
+最終fixtureはexecution監視やアプリ例外handlerを使わない。所有子が読み書きも解放もしない専用領域にwrite4監視を設置し、通常の停止中に同じアドレスをwrite1へ変える。別slotへ追加したアプリ用write4監視も実OSで読み戻す。子はgoまで待ち、復元後の状態を確認してから終了0となる。残存検出を一時的に外した`restore-control-safe-red-02.log`でも、同一アドレスが有効なのに完了trueとなって検査が失敗した。検出を戻し、元sourceのSHA一致を確認した後、新規4件が成功した。対象外60件は旧59件と独立起動しない子fixture1件であり、旧59全件・全workspace・CIは再実行していない。
+
+実測した3つの所有子は、直接cleanupの競合、照会失敗によるskip中の競合、未変更自前枠の正常復元である。すべて保持spawn handleと生成時刻で対象を限定し、OS終了0・残存プロセス0を確認した。競合時の残存mask=1・slot0・armed=true・cleanup_complete=false、API後始末trueを確認した。アプリ用slot2は復元後も保持し、他スレッドは復元、continue/detach・所有した停止解除も成功した。終了後は現在mask=0・process_exited=trueだが元の競合履歴と完了falseは残る。正常対照は元の自前枠だけが除去され、追加アプリ監視が残り、完了trueだった。
+
+pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更、RW/LEN変更、LENだけの変更、制御変更後の無効化、元制御への無効化、別アドレスを区別する。未分類DR6と追加アプリ枠を保持することも固定値で確認した。Gのみ・L/G両方・RWだけの変更・無効化の全ケースを実OSで測ったとは主張しない。実測はLのみの安全なdata watchとLEN変更であり、非zeroのアプリDR6保持はpolicy検査の範囲である。ゲームや実機には接続せず、設置後hideと保留execution例外の配送の限界を解決した修正とは呼ばない。Core現在値の変更成功・製品受入の更新ではなく、製品2/5・40%・残り3件は維持する。
+
+最終検査は`restore-control-green-03.log`（4成功・60対象外）、`restore-control-clippy.log`（warnings拒否、終了0）、`restore-control-build.log`（Windows CLI、終了0）。それぞれのmetaにコマンド・開始終了時刻・実行元commitとsource SHAを保存した。場所は既存の子生成先`C:/Users/makhmeto/AppData/Local/Temp/codex-owned-6bfd169444d1814547e40876dbdba279/target/`。最終observer source SHA-256は`CBA9E5C3DCBB7BB262C9B720324726675FFA62EC996706C05714B21DA8591B08`。旧hidden-thread系列の原ログ、102の`D:/CC/Work/todo995/native-1743-live09-copy-proof.json`と保全25件にも触れていない。

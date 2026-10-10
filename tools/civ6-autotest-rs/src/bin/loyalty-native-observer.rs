@@ -212,6 +212,36 @@ mod policy {
         pub dr7: u64,
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+    pub struct RestorePlan {
+        pub registers: DebugRegisters,
+        pub restored_slot_mask: u8,
+        pub residual_active_mask: u8,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+    pub struct ResidualSlot {
+        pub slot: usize,
+        pub address: u64,
+        pub local_enabled: bool,
+        pub global_enabled: bool,
+        pub rw: u8,
+        pub len_code: u8,
+        pub reason: &'static str,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+    pub struct RestoreConflict {
+        pub tid: u32,
+        pub before: DebugRegisters,
+        pub original: DebugRegisters,
+        pub requested: RestorePlan,
+        pub actual: DebugRegisters,
+        pub residual_active_mask: u8,
+        pub slots: Vec<ResidualSlot>,
+        pub scope: &'static str,
+    }
+
     impl DebugRegisters {
         pub fn unused(self) -> bool {
             // DR6's architectural reset/reserved ones and DR7's fixed bit 10
@@ -240,7 +270,7 @@ mod policy {
             addresses: [u64; 4],
             enabled: u64,
             known_bits: u64,
-        ) -> Self {
+        ) -> RestorePlan {
             let installed = self.installed(addresses, enabled);
             let mut restored = current;
             let mut restored_bits = 0;
@@ -260,7 +290,26 @@ mod policy {
             // survive. Only confirmed bits in slots actually restored are removed.
             restored.dr6 =
                 (self.dr6 & !0xE00F) | (current.dr6 & 0xE00F & !(known_bits & restored_bits));
-            restored
+            RestorePlan {
+                registers: restored,
+                restored_slot_mask: restored_bits as u8,
+                residual_active_mask: restored.active_observer_slots(addresses, enabled),
+            }
+        }
+
+        pub fn active_observer_slots(self, addresses: [u64; 4], enabled: u64) -> u8 {
+            (0..4).fold(0, |mask, slot| {
+                // Only slots actually installed by this observer. A later
+                // application watch in a previously unused slot is not ours.
+                if enabled & (1 << (slot * 2)) != 0
+                    && self.address[slot] == addresses[slot]
+                    && self.dr7 & (3 << (slot * 2)) != 0
+                {
+                    mask | (1 << slot)
+                } else {
+                    mask
+                }
+            })
         }
 
         pub fn own_hit(
@@ -551,6 +600,7 @@ mod policy {
             || record["event"] == "error"
             || record["event"] == "exit"
             || record["event"] == "probe_skip"
+            || record["restoration_complete"] == false
         {
             return 3;
         }
@@ -693,6 +743,7 @@ mod policy {
     pub enum RestoreOutcome {
         Restored,
         ThreadExited,
+        Conflicted(Box<RestoreConflict>),
     }
 
     #[derive(Debug, Default, Serialize)]
@@ -704,10 +755,19 @@ mod policy {
         pub debug_active_process_stop_ok: bool,
         pub debug_active_process_stop_error: Option<String>,
         pub process_exited: bool,
+        // Facts at restoration attempts, not live activity after process exit.
+        pub restore_conflict_history: Vec<RestoreConflict>,
+        pub restore_conflict_history_omitted: u64,
     }
 
     impl CleanupReport {
         pub fn complete(&self) -> bool {
+            self.api_complete()
+                && self.restore_conflict_history.is_empty()
+                && self.restore_conflict_history_omitted == 0
+        }
+
+        pub fn api_complete(&self) -> bool {
             self.errors.is_empty()
                 && self.continue_pending_ok
                 && (self.debug_active_process_stop_ok || self.process_exited)
@@ -739,6 +799,9 @@ mod policy {
             match backend.restore(tid) {
                 Ok(RestoreOutcome::Restored) => report.threads_restored += 1,
                 Ok(RestoreOutcome::ThreadExited) => report.threads_exited += 1,
+                Ok(RestoreOutcome::Conflicted(conflict)) => {
+                    report.restore_conflict_history.push(*conflict)
+                }
                 Err(error) => report.errors.push(format!("restore thread {tid}: {error}")),
             }
         }
@@ -2123,6 +2186,7 @@ mod platform {
         cleanup_snapshot: Option<ProbeSnapshot>,
         transition: Option<ProbeTransition>,
         probe_blocked: Option<ThreadVisibility>,
+        residual_active_mask: u8,
     }
 
     struct Pending {
@@ -2161,6 +2225,8 @@ mod platform {
         routed_layout: Option<([u64; 4], u64)>,
         installed_total: u32,
         detach_error: Option<String>,
+        restore_conflict_history: Vec<RestoreConflict>,
+        restore_conflict_history_omitted: u64,
     }
 
     impl Session {
@@ -2205,12 +2271,18 @@ mod platform {
                 routed_layout: None,
                 installed_total: 0,
                 detach_error: None,
+                restore_conflict_history: Vec::new(),
+                restore_conflict_history_omitted: 0,
             })
         }
 
         fn finish(&mut self) -> CleanupReport {
             self.cleaned = true;
-            let report = cleanup(self);
+            let mut report = cleanup(self);
+            // Preserve earlier conflicts even if the process subsequently exits
+            // or a later API call succeeds. Each record is explicitly historical.
+            report.restore_conflict_history = self.restore_conflict_history.clone();
+            report.restore_conflict_history_omitted = self.restore_conflict_history_omitted;
             self.trace(json!({"event":"exit","cleanup":report}));
             report
         }
@@ -2442,6 +2514,7 @@ mod platform {
                     cleanup_snapshot: None,
                     transition: None,
                     probe_blocked: None,
+                    residual_active_mask: 0,
                 },
             );
             if !self.ready {
@@ -2486,7 +2559,10 @@ mod platform {
             if was_armed {
                 // Existing restoration owns exactly one suspension and writes
                 // DEBUG only. A hidden thread may not share the debug-event stop.
-                self.restore(tid)?;
+                let residual = match self.restore(tid)? {
+                    RestoreOutcome::Conflicted(conflict) => conflict.residual_active_mask,
+                    _ => 0,
+                };
                 let thread = self
                     .threads
                     .get_mut(&tid)
@@ -2508,6 +2584,11 @@ mod platform {
                     if expected != Some(previous) {
                         return Err("skipped probe restore suspend count changed".into());
                     }
+                }
+                if residual != 0 {
+                    return Err(format!(
+                        "probe restoration conflict on thread {tid}: active mask {residual:#x}"
+                    ));
                 }
             }
             Ok(false)
@@ -3305,16 +3386,18 @@ mod platform {
                 }
                 // SAFETY: same owned target thread handle. Retain exactly one
                 // suspend count across restore, event drainage, and detach.
-                let previous_count = unsafe { SuspendThread(thread.handle.0) };
-                if previous_count == u32::MAX {
-                    errors.push(format!(
-                        "freeze thread {tid}: {}",
-                        win_error("SuspendThread")
-                    ));
-                    continue;
+                if !thread.suspended {
+                    let previous_count = unsafe { SuspendThread(thread.handle.0) };
+                    if previous_count == u32::MAX {
+                        errors.push(format!(
+                            "freeze thread {tid}: {}",
+                            win_error("SuspendThread")
+                        ));
+                        continue;
+                    }
+                    thread.suspended = true;
+                    thread.suspend_previous_count = Some(previous_count);
                 }
-                thread.suspended = true;
-                thread.suspend_previous_count = Some(previous_count);
                 match context(
                     &thread.handle,
                     CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
@@ -3369,6 +3452,7 @@ mod platform {
             let thread = self.threads.get_mut(&tid).ok_or("missing cleanup thread")?;
             if !thread.handle.alive()? {
                 thread.armed = false;
+                thread.residual_active_mask = 0;
                 return Ok(RestoreOutcome::ThreadExited);
             }
             if !thread.suspended {
@@ -3378,6 +3462,8 @@ mod platform {
                 if previous_count == u32::MAX {
                     let error = win_error("SuspendThread(restore)");
                     if !thread.handle.alive()? {
+                        thread.armed = false;
+                        thread.residual_active_mask = 0;
                         return Ok(RestoreOutcome::ThreadExited);
                     }
                     return Err(error);
@@ -3392,12 +3478,14 @@ mod platform {
             // Restore the addresses/control we own, retaining the application's
             // status. Confirmed probe bits were removed by the common resume
             // policy; uncertain/second-chance bits must not be guessed away.
-            let expected = thread.original.restore_owned(
-                registers(&value),
+            let before = registers(&value);
+            let plan = thread.original.restore_owned(
+                before,
                 thread.addresses,
                 thread.enabled,
                 known_owned_bits,
             );
+            let expected = plan.registers;
             replace_registers(&mut value, expected);
             let requested = ProbeSnapshot {
                 armed: false,
@@ -3423,22 +3511,83 @@ mod platform {
                     })
                     .map_err(Clone::clone),
             );
+            let residual_mask = actual_context
+                .as_ref()
+                .ok()
+                .map(|v| registers(v).active_observer_slots(thread.addresses, thread.enabled));
+            let conflict = actual_context
+                .as_ref()
+                .ok()
+                .filter(|_| residual_mask.is_some_and(|m| m != 0))
+                .map(|v| {
+                    let actual = registers(v);
+                    let slots = (0..4)
+                        .filter(|slot| residual_mask.unwrap() & (1 << slot) != 0)
+                        .map(|slot| {
+                            let mask = (3u64 << (slot * 2)) | (0xFu64 << (16 + slot * 4));
+                            let installed =
+                                thread.original.installed(thread.addresses, thread.enabled);
+                            ResidualSlot {
+                                slot,
+                                address: actual.address[slot],
+                                local_enabled: actual.dr7 & (1 << (slot * 2)) != 0,
+                                global_enabled: actual.dr7 & (2 << (slot * 2)) != 0,
+                                rw: ((actual.dr7 >> (16 + slot * 4)) & 3) as u8,
+                                len_code: ((actual.dr7 >> (18 + slot * 4)) & 3) as u8,
+                                reason: if actual.dr7 & mask != installed.dr7 & mask
+                                    && actual.dr7 & mask != thread.original.dr7 & mask
+                                {
+                                    "same_observer_address_active_control_changed_owner_unknown"
+                                } else {
+                                    "owned_address_still_active_after_restore"
+                                },
+                            }
+                        })
+                        .collect();
+                    RestoreConflict {
+                        tid,
+                        before,
+                        original: thread.original,
+                        requested: plan,
+                        actual,
+                        residual_active_mask: residual_mask.unwrap(),
+                        slots,
+                        scope: "at_restore_attempt_not_live_activity_after_process_exit",
+                    }
+                });
             let actual = actual_context.map(|v| {
                 json!({"address":registers(&v).address,
                 "dr6":v.Dr6,"dr7":v.Dr7,"rip":v.Rip,"eflags":v.EFlags})
             });
-            let record = json!({"event":"probe_restore","tid":tid,"requested":expected,
+            let restoration_complete =
+                updated.is_ok() && verified.is_ok() && residual_mask == Some(0);
+            let record = json!({"event":"probe_restore","tid":tid,"before":before,"requested":expected,
                 "actual":raw_read(actual),"original":thread.original,
                 "control_before":{"rip":requested.rip,"eflags":requested.flags},
-                "known_owned_bits_removed":known_owned_bits,
+                "known_owned_bits":known_owned_bits,
+                "known_owned_bits_removed":known_owned_bits & u64::from(plan.restored_slot_mask),
+                "restored_slot_mask":plan.restored_slot_mask,"residual_active_mask":residual_mask,
+                "conflict":conflict,"restoration_complete":restoration_complete,
                 "set_context_ok":updated.is_ok(),"readback_ok":verified.is_ok(),"readback_error":verified.as_ref().err()});
-            if updated.is_ok() && verified.is_ok() {
+            if restoration_complete {
                 thread.armed = false;
+            }
+            if let Some(mask) = residual_mask {
+                thread.residual_active_mask = mask;
+            }
+            if let Some(conflict) = &conflict {
+                if self.restore_conflict_history.len() < 128 {
+                    self.restore_conflict_history.push(conflict.clone());
+                } else {
+                    self.restore_conflict_history_omitted += 1;
+                }
             }
             self.trace(record);
             updated?;
             verified.map_err(|e| format!("original debug-register readback mismatch: {e}"))?;
-            Ok(RestoreOutcome::Restored)
+            Ok(conflict.map_or(RestoreOutcome::Restored, |c| {
+                RestoreOutcome::Conflicted(Box::new(c))
+            }))
         }
 
         fn continue_pending(&mut self) -> Result<()> {
@@ -3807,13 +3956,16 @@ mod platform {
         );
         // The only orderly cleanup path, before any completion output can fail.
         let cleanup_report = session.as_mut().map(Session::finish);
-        let api_complete = cleanup_report.as_ref().is_none_or(CleanupReport::complete);
+        let api_complete = cleanup_report
+            .as_ref()
+            .is_none_or(CleanupReport::api_complete);
+        let restoration_complete = cleanup_report.as_ref().is_none_or(CleanupReport::complete);
         // NOT_HANDLED can deliver the original exception CONTEXT despite a
         // successful Set/GetThreadContext readback, including installed DR7.
         // The owned-child acceptance tests keep this OS discrepancy visible.
         let delivery_unverified = session.as_ref().is_some_and(|s| s.forwarded_probe_context)
             && !cleanup_report.as_ref().is_some_and(|r| r.process_exited);
-        let complete = api_complete && !delivery_unverified;
+        let complete = api_complete && restoration_complete && !delivery_unverified;
         // EXIT_PROCESS can race the timeout path's held-handle exit check.
         // Keep the OS result even when no target_exit event was dispatched.
         let target_exit_status = cleanup_report
@@ -3826,6 +3978,7 @@ mod platform {
             "ready_reached":session.as_ref().is_some_and(|s| s.ready),
             "elapsed_ms":started.elapsed().as_millis(), "cleanup_complete":complete,
             "debugger_api_cleanup_complete":api_complete,
+            "probe_restoration_complete":restoration_complete,
             "forwarded_probe_context_delivery_unverified":delivery_unverified,
             "probe_resume_error":session.as_ref().and_then(|s| s.probe_resume_error.as_ref()),
             "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
@@ -4123,6 +4276,28 @@ mod platform {
                 .truncate(true)
                 .open(path)
                 .unwrap();
+            if std::env::var_os("LOYALTY_OWNED_RESTORE_MUTATION").is_some() {
+                let observed = Box::new([0u32; 4]);
+                let application = Box::new([0u32; 4]);
+                let base = observed.as_ptr() as u64;
+                let addresses: [u64; 4] = std::array::from_fn(|slot| base + 4 * slot as u64);
+                let application_watch = application.as_ptr() as u64;
+                // Publish only addresses. These allocations are never touched
+                // again, including at exit. No execution probes/VEH are used.
+                std::mem::forget(observed);
+                std::mem::forget(application);
+                let tid = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+                write_json(
+                    &mut file,
+                    &json!({"identity":own,"addresses":addresses,
+                    "application_watch":application_watch,"mutation_tid":tid}),
+                )
+                .unwrap();
+                let mut go = String::new();
+                std::io::stdin().read_line(&mut go).unwrap();
+                assert_eq!(go.trim(), "go");
+                std::process::exit(0);
+            }
             if std::env::var_os("LOYALTY_OWNED_HIDDEN_PREFLIGHT").is_some() {
                 let (ready_tx, ready_rx) = std::sync::mpsc::channel();
                 let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -4437,6 +4612,21 @@ mod platform {
             run_owned_hardware(OwnedMode::QueuedAfterRestore);
         }
 
+        #[test]
+        fn windows_restore_same_address_control_conflict_is_incomplete() {
+            run_owned_hardware(OwnedMode::RestoreConflict);
+        }
+
+        #[test]
+        fn windows_restore_unchanged_probe_keeps_added_application_data_watch() {
+            run_owned_hardware(OwnedMode::RestoreUnchanged);
+        }
+
+        #[test]
+        fn windows_restore_guard_conflict_still_releases_suspension_and_detaches() {
+            run_owned_hardware(OwnedMode::RestoreGuardConflict);
+        }
+
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         enum OwnedMode {
             Exit,
@@ -4448,6 +4638,9 @@ mod platform {
             HiddenDiscovery,
             UnknownConnection,
             QueuedAfterRestore,
+            RestoreConflict,
+            RestoreUnchanged,
+            RestoreGuardConflict,
             AppTfObserve,
             AppTfCleanup,
             UncertainDr7,
@@ -4461,6 +4654,13 @@ mod platform {
         }
 
         impl OwnedMode {
+            fn restore_mutation(self) -> bool {
+                matches!(
+                    self,
+                    Self::RestoreConflict | Self::RestoreUnchanged | Self::RestoreGuardConflict
+                )
+            }
+
             fn hidden_fixture(self) -> bool {
                 matches!(
                     self,
@@ -4692,6 +4892,9 @@ mod platform {
             if mode.hidden_fixture() {
                 command.env("LOYALTY_OWNED_HIDDEN_CONNECTION", "1");
             }
+            if mode.restore_mutation() {
+                command.env("LOYALTY_OWNED_RESTORE_MUTATION", "1");
+            }
             let mut child = OwnedChild(
                 command
                     .args([
@@ -4799,6 +5002,8 @@ mod platform {
                 routed_layout: None,
                 installed_total: 0,
                 detach_error: None,
+                restore_conflict_history: Vec::new(),
+                restore_conflict_history_omitted: 0,
             };
             // SAFETY: this test is the attaching thread.
             assert_ne!(unsafe { DebugSetProcessKillOnExit(0) }, 0);
@@ -4815,6 +5020,7 @@ mod platform {
             let mut process_exit = None;
             let mut getter_traps = 0;
             let mut terminal_reason = None;
+            let mut restore_mutation = None;
             for _ in 0..2048 {
                 assert!(Instant::now() < deadline, "real hardware event deadline");
                 let mut event = DEBUG_EVENT::default();
@@ -4849,11 +5055,82 @@ mod platform {
                         session.route_exception(raw, None).unwrap(),
                         ExceptionDecision::AttachBreak
                     );
+                    let data_control = 0x45
+                        | (connection::WRITE4 << 16)
+                        | (connection::WRITE4 << 20)
+                        | (connection::WRITE4 << 28);
+                    if mode.restore_mutation() {
+                        for thread in session.threads.values_mut() {
+                            thread.enabled = data_control;
+                        }
+                    }
                     let tids: Vec<_> = session.threads.keys().copied().collect();
                     for tid in tids {
                         session.install(tid).unwrap();
                     }
                     session.ready = true;
+                    if mode.restore_mutation() {
+                        let tid = message["mutation_tid"].as_u64().unwrap() as u32;
+                        let mut value = context(
+                            &session.threads[&tid].handle,
+                            CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                        )
+                        .unwrap();
+                        let before = registers(&value);
+                        assert_eq!(before.dr7 & !0x400, data_control);
+                        assert!(addresses[0].is_multiple_of(4));
+                        let application_watch = message["application_watch"].as_u64().unwrap();
+                        assert!(application_watch != 0 && application_watch.is_multiple_of(4));
+                        // This changes OS DRs on the retained owned child
+                        // handle. The watched allocations cannot
+                        // be accessed while this child waits for go. No execution probes.
+                        if mode != OwnedMode::RestoreUnchanged {
+                            value.Dr7 = (value.Dr7 & !(0xF << 16)) | (1 << 16);
+                        }
+                        value.Dr2 = application_watch;
+                        value.Dr7 |= 0x10 | (connection::WRITE4 << 24);
+                        value.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
+                        set_context(&session.threads[&tid].handle, value).unwrap();
+                        let actual = context(
+                            &session.threads[&tid].handle,
+                            CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                        )
+                        .unwrap();
+                        assert_eq!(actual.Dr0, addresses[0]);
+                        assert_eq!(actual.Dr2, application_watch);
+                        assert_eq!(actual.Dr7 & !0x400, value.Dr7 & !0x400);
+                        restore_mutation = Some((tid, before, registers(&actual), actual.EFlags));
+                        if mode == OwnedMode::RestoreGuardConflict {
+                            let limited = Handle::new(
+                                unsafe {
+                                    OpenThread(
+                                        THREAD_GET_CONTEXT
+                                            | THREAD_SET_CONTEXT
+                                            | THREAD_SUSPEND_RESUME
+                                            | THREAD_QUERY_LIMITED_INFORMATION
+                                            | THREAD_SYNCHRONIZE,
+                                        0,
+                                        tid,
+                                    )
+                                },
+                                "restore guard conflict fixture",
+                            )
+                            .unwrap();
+                            assert_eq!(
+                                unsafe { GetProcessIdOfThread(limited.0) },
+                                session.process.pinned.pid
+                            );
+                            session.threads.get_mut(&tid).unwrap().handle = limited;
+                            assert!(session
+                                .probe_allowed(tid, "restore_guard_fixture")
+                                .unwrap_err()
+                                .contains("probe restoration conflict"));
+                            assert!(!session.threads[&tid].suspended);
+                            assert!(session.threads[&tid].armed);
+                        }
+                        break;
+                    }
+
                     child.0.stdin.as_mut().unwrap().write_all(b"go\n").unwrap();
                 } else {
                     if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
@@ -5190,6 +5467,115 @@ mod platform {
                 }
             }
             let report = session.finish();
+            if mode.restore_mutation() {
+                let (tid, before, mutated, flags) = restore_mutation.unwrap();
+                let thread = &session.threads[&tid];
+                let armed = thread.armed;
+                let residual_mask = thread.residual_active_mask;
+                let suspended = thread.suspended;
+                let mut suspension = Suspension::new(&thread.handle).unwrap();
+                let actual = context(
+                    &thread.handle,
+                    CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                )
+                .unwrap();
+                let restored = registers(&actual);
+                suspension.resume().unwrap();
+                drop(suspension);
+                // Let the child leave in its preserved application state,
+                // then confirm the original spawn handle's OS exit before assertions.
+                child.0.stdin.as_mut().unwrap().write_all(b"go\n").unwrap();
+                assert_eq!(
+                    unsafe { WaitForSingleObject(session.process.handle.0, 3000) },
+                    WAIT_OBJECT_0
+                );
+                let child_exit = child
+                    .0
+                    .try_wait()
+                    .unwrap()
+                    .unwrap()
+                    .code()
+                    .map(|n| n as u32);
+                let after_exit = session.finish();
+                println!(
+                    "RESTORE_CONTROL_TRACE={}",
+                    json!({"mode":format!("{mode:?}"),
+                    "identity":session.process.pinned,"tid":tid,"before":before,"mutated":mutated,
+                    "restored":restored,"flags_before":flags,"flags_after":actual.EFlags,
+                    "armed_after_restore":armed,"residual_active_mask_after_restore":residual_mask,
+                    "owned_suspend_retained":suspended,
+                    "cleanup_complete":report.complete(),"cleanup":report,
+                    "api_cleanup_complete":report.api_complete(),
+                    "after_exit_cleanup":after_exit,"after_exit_cleanup_complete":after_exit.complete(),
+                    "after_exit_api_complete":after_exit.api_complete(),
+                    "after_exit_current_residual_mask":session.threads[&tid].residual_active_mask,
+                    "child_exit":child_exit,"held_handle_exit":session.process.exit_code().unwrap(),
+                    "trace":session.debug_trace})
+                );
+                assert_eq!(child_exit, Some(0));
+                assert_eq!(restored.address[2], mutated.address[2]);
+                assert_eq!(
+                    restored.dr7 & (0x30 | (0xF << 24)),
+                    mutated.dr7 & (0x30 | (0xF << 24))
+                );
+                assert_eq!(restored.dr6 & 0xE00F, mutated.dr6 & 0xE00F);
+                let restore_record = session
+                    .debug_trace
+                    .iter()
+                    .find(|r| r["event"] == "probe_restore" && r["tid"] == tid)
+                    .unwrap();
+                // RF can clear normally when execution resumes after detach.
+                // Compare CONTROL at the actual stopped restoration/readback.
+                assert_eq!(
+                    restore_record["actual"]["eflags"].as_u64().unwrap() & 0x10100,
+                    restore_record["control_before"]["eflags"].as_u64().unwrap() & 0x10100
+                );
+                assert!(!suspended);
+                assert!(report.threads_restored >= 2);
+                assert!(report.continue_pending_ok && report.debug_active_process_stop_ok);
+                assert!(report.api_complete());
+                assert!(after_exit.process_exited && after_exit.api_complete());
+                assert_eq!(session.threads[&tid].residual_active_mask, 0);
+                if mode != OwnedMode::RestoreUnchanged {
+                    assert_eq!(restored.address[0], addresses[0]);
+                    assert_eq!(
+                        restored.dr7 & (3 | (0xF << 16)),
+                        mutated.dr7 & (3 | (0xF << 16))
+                    );
+                    assert!(
+                        !report.complete(),
+                        "same-address active data watch reported as restored"
+                    );
+                    assert!(armed);
+                    assert_eq!(residual_mask, 1);
+                    assert!(!after_exit.complete());
+                    assert_eq!(
+                        report.restore_conflict_history.len(),
+                        if mode == OwnedMode::RestoreGuardConflict {
+                            2
+                        } else {
+                            1
+                        }
+                    );
+                    for conflict in &report.restore_conflict_history {
+                        assert_eq!(conflict.residual_active_mask, 1);
+                        assert_eq!(conflict.slots.len(), 1);
+                        assert_eq!(conflict.slots[0].slot, 0);
+                        assert_eq!(
+                            conflict.slots[0].reason,
+                            "same_observer_address_active_control_changed_owner_unknown"
+                        );
+                        assert_eq!(conflict.actual.address[2], mutated.address[2]);
+                    }
+                } else {
+                    assert_eq!(restored.address[0], 0);
+                    assert!(report.complete());
+                    assert!(!armed);
+                    assert_eq!(residual_mask, 0);
+                    assert!(after_exit.complete());
+                }
+                return;
+            }
             if mode.hidden_fixture() {
                 let app: Value =
                     serde_json::from_slice(&std::fs::read(app_report.path()).unwrap()).unwrap();
@@ -5935,6 +6321,71 @@ mod tests {
     }
 
     #[test]
+    fn restore_control_conflict_matrix_preserves_unowned_activity_and_dr6() {
+        // Same address: L only, G only, both, RW change, LEN change, disabled.
+        // Different address and unchanged owned slot are independent controls.
+        let cases = [
+            ("unchanged", 0x1000, 1, 1, 0, 1, 0),
+            ("global_only", 0x1000, 1, 2, 0x1000, 0, 1),
+            ("both", 0x1000, 1, 3, 0x1000, 0, 1),
+            ("local_write1", 0x1000, 1, 1 | (1 << 16), 0x1000, 0, 1),
+            ("local_write4", 0x1000, 1, 1 | (13 << 16), 0x1000, 0, 1),
+            (
+                "length_only",
+                0x1000,
+                1 | (13 << 16),
+                1 | (1 << 16),
+                0x1000,
+                0,
+                1,
+            ),
+            ("disabled_changed", 0x1000, 1, 13 << 16, 0x1000, 0, 0),
+            ("disabled_original", 0x1000, 1, 0, 0, 1, 0),
+            ("different_address", 0x5000, 1, 1, 0x5000, 0, 0),
+        ];
+        assert_eq!(cases.len(), 9);
+        for (
+            name,
+            current_address,
+            installed_control,
+            slot_control,
+            expected_address,
+            restored_mask,
+            active_mask,
+        ) in cases
+        {
+            let original = DebugRegisters::default();
+            let addresses = [0x1000, 0x2000, 0x3000, 0x4000];
+            let current = DebugRegisters {
+                address: [current_address, 0, 0x9000, 0],
+                dr7: slot_control | 0x10 | (13 << 24),
+                dr6: 0xE005,
+            };
+            let plan = original.restore_owned(current, addresses, installed_control, 1);
+            assert_eq!(
+                plan.registers.address,
+                [expected_address, 0, 0x9000, 0],
+                "{name}"
+            );
+            assert_eq!(plan.restored_slot_mask, restored_mask, "{name}");
+            assert_eq!(plan.residual_active_mask, active_mask, "{name}");
+            assert_eq!(
+                plan.registers.dr7 & (0x30 | (15 << 24)),
+                0x10 | (13 << 24),
+                "{name}"
+            );
+            assert_eq!(
+                plan.registers.dr6,
+                if restored_mask == 1 { 0xE004 } else { 0xE005 },
+                "{name}"
+            );
+            if restored_mask == 0 {
+                assert_eq!(plan.registers.dr7, current.dr7, "{name}");
+            }
+        }
+    }
+
+    #[test]
     fn restore_owned_preserves_changed_application_slots_control_and_status() {
         let original = DebugRegisters {
             address: [0; 4],
@@ -5947,7 +6398,9 @@ mod tests {
         current.address[2] = 0x444;
         current.dr7 = (current.dr7 & !0xC) | 0xC | (5 << 20) | 0x20 | 0x2000;
         current.dr6 |= 0xE00F;
-        let restored = original.restore_owned(current, addresses, 0x45, 0xF);
+        let restored = original
+            .restore_owned(current, addresses, 0x45, 0xF)
+            .registers;
         assert_eq!(restored.address, [0, 0x999, 0x444, 0]);
         assert_eq!(restored.dr7, 0x400 | 0xC | (5 << 20) | 0x20 | 0x2000);
         assert_eq!(restored.dr6 & 0xE00F, 0xE006);
