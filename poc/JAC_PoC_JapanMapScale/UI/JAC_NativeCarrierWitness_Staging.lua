@@ -204,11 +204,15 @@ local bindingGeneration=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENE
 print('[JAC_NATIVE_CARRIER_STAGING_BIND] Nonce='..nonce..' Generation='..tostring(bindingGeneration))
 local attempted={}
 local failed=false
+local observedGeneration=0
 local function ready()
  if failed then return end
+ if not GameConfiguration.IsHotseat() or not GameConfiguration.IsAnyMultiplayer()
+  or GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')~=nonce then return end
  local savedGeneration=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')
  local generation=savedGeneration~=nil and assert(tonumber(savedGeneration)) or 0
  assert(generation==0 or generation==1 or generation==2)
+ observedGeneration=generation
  if attempted[generation] or ContextPtr:IsHidden() or not Network.IsGameHost() or Controls.ReadyButton:IsDisabled() then return end
  local humans=0
  for _,id in ipairs(GameConfiguration.GetParticipatingPlayerIDs()) do
@@ -224,10 +228,9 @@ end
 local update=UpdateReadyButton
 UpdateReadyButton=function(...) update(...);local ok,err=pcall(ready)
  if not ok then
-  local g=tonumber(GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')) or 0
-  if g~=0 and g~=1 and g~=2 then g=0 end
   failed=true
-  emit('FAIL',g,0,canonical({Error=tostring(err)}),{code='STAGING_READY',error=tostring(err)})
+  -- Do not call the failing API again while recording its original error.
+  emit('FAIL',observedGeneration,0,canonical({Error=tostring(err)}),{code='STAGING_READY',error=tostring(err)})
  end
 end
 

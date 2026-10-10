@@ -417,8 +417,7 @@ GENERATION=0;UpdateReadyButton();assert(CLICKS==3 and UPDATES==7)
     .unwrap();
 }
 
-#[test]
-fn staging_waits_for_configuration_loaded_after_context_creation() {
+fn staging_context() -> Lua {
     let lua = Lua::new();
     lua.globals().set("RUN_ID", nonce()).unwrap();
     lua.load(r#"
@@ -431,6 +430,54 @@ Controls={ReadyButton={IsDisabled=function() return false end,DoLeftClick=functi
 UpdateReadyButton=function() UPDATES=UPDATES+1 end
 LOGS={};print=function(s) LOGS[#LOGS+1]=s end
 "#).exec().unwrap();
+    lua
+}
+
+#[test]
+fn staging_failure_without_generation_preserves_the_original_error_once() {
+    let lua = staging_context();
+    lua.load("READY_NONCE=RUN_ID;Controls.ReadyButton.IsDisabled=function() error('fixture readiness failed') end").exec().unwrap();
+    lua.load(witness::staging_binding()).exec().unwrap();
+    lua.load("UpdateReadyButton();UpdateReadyButton();assert(CLICKS==0 and UPDATES==2)")
+        .exec()
+        .unwrap();
+    let lines = lua
+        .globals()
+        .get::<mlua::Table>("LOGS")
+        .unwrap()
+        .sequence_values::<String>()
+        .collect::<mlua::Result<Vec<_>>>()
+        .unwrap();
+    let mut bytes = Vec::new();
+    let mut parts = 0;
+    for line in lines.iter().filter(|line| line.starts_with("JAC_NC|")) {
+        let fields: Vec<_> = line.split('|').collect();
+        assert_eq!((fields[4], fields[5], fields[7]), ("1", "0", "FAIL"));
+        parts += 1;
+        assert_eq!(
+            fields[8]
+                .split('/')
+                .next()
+                .unwrap()
+                .parse::<usize>()
+                .unwrap(),
+            parts
+        );
+        for pair in fields[9].as_bytes().chunks_exact(2) {
+            bytes.push(u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap());
+        }
+    }
+    assert!(parts > 0);
+    let payload: Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(payload["error"]
+        .as_str()
+        .unwrap()
+        .contains("fixture readiness failed"));
+}
+
+#[test]
+fn staging_waits_for_configuration_loaded_after_context_creation() {
+    let lua = staging_context();
     lua.load(witness::staging_binding()).exec().unwrap();
     lua.load(
         r#"
@@ -443,6 +490,14 @@ GENERATION=2;UpdateReadyButton();assert(CLICKS==3)
     )
     .exec()
     .unwrap();
+}
+
+#[test]
+fn staging_never_clicks_ready_after_the_session_ceases_to_be_hotseat() {
+    let lua = staging_context();
+    lua.load("READY_NONCE=RUN_ID;DISABLED=true;Controls.ReadyButton.IsDisabled=function() return DISABLED end").exec().unwrap();
+    lua.load(witness::staging_binding()).exec().unwrap();
+    lua.load("UpdateReadyButton();assert(CLICKS==0);GameConfiguration.IsHotseat=function() return false end;DISABLED=false;UpdateReadyButton();assert(CLICKS==0 and UPDATES==2)").exec().unwrap();
 }
 
 #[test]

@@ -73,7 +73,7 @@ local function saveGame(n)
  local value=actions[37].run()
  assert(type(value)=='string' and #value>0)
  GameConfiguration.SetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION',generation)
- assert(tonumber(GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION'))==generation,'save configuration generation was not applied')
+ assert(tonumber((GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')))==generation,'save configuration generation was not applied')
  saving={Step=n,Name=b.SaveName,Canonical=value,Returned=false,Complete=false,Emitted=false}
  local requested=saving
  local function completed()
