@@ -6,18 +6,30 @@
   "evidence": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-23d09feb6b95a5d1afeef82294b574d8",
   "implemented": "通常一回でも自動保存の隔離と既存の復元処理を使う",
   "completed": [
-    "対象規則・client guard確認",
-    "通常一回の成功・開始失敗・応答不明・終了不明・復元失敗の回帰追加",
-    "cc-live nextest 136件成功（2件は従来のskip）"
+    "規則・client guard確認",
+    "通常一回の5状態をargv/state/bytesへ結んだ回帰",
+    "cc-live nextest136成功（従来skip2）",
+    "全workspace1786成功・Lua全件を含む",
+    "全workspace doc・cc-live Clippy/doc成功",
+    "全74シナリオ形式検査と一回用7手順形式検査",
+    "元4自動保存とAppOptions原本を所有23d09へ複製・SHA照合",
+    "既存所有CPU描画共通実行器を保つ候補191成功（従来skip4）・Clippy/doc/release成功",
+    "標準chainだけを一回起動し原本/SHA/lease/state/終了を観測するRust例を作成・Clippy/release成功"
   ],
   "pending": [
-    "別モデルレビュー",
-    "最新全workspace・doc・Lua・シナリオ検査",
-    "PR作成と必須CI・マージ",
-    "共有実行器の所有と差分の検査・標準配備",
-    "CPU描画だけを使う一回実機・原本SHA復元実証"
+    "ToDo2321で別モデル読み取りレビュー結果を受領しMustを修正",
+    "PR143のWindows全件CIと全必須CI成功",
+    "レビュー済み候補SHA88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782を標準へ配備",
+    "標準chainでCPU描画の一回だけ最小実機・4原本/AppOptions/seedとSteam終端SHA証跡",
+    "PR143マージと実際の配備source/tree/EXE SHA/実機ID提示"
   ],
   "live_runs": 0,
   "deployed": false,
-  "merged": false
+  "merged": false,
+  "review_todo": 2321,
+  "pr": "https://github.com/AutoDevJapan/civ6-banseiki/pull/143",
+  "candidate_worktree": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-71c9ea96a42df7e7ed922a9cf0deb370/wt",
+  "candidate_branch": "scheduler/todo-2317-deployment",
+  "candidate_exe_sha256": "88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782",
+  "one_run_scenario": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-23d09feb6b95a5d1afeef82294b574d8/one-run-isolation.json"
 }
