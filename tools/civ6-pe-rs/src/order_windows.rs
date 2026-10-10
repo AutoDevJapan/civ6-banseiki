@@ -139,11 +139,19 @@ struct CaptureEpoch {
     sites: [Option<u64>; 4],
 }
 impl CaptureEpoch {
-    fn new(phase: Phase, generation: u64, base: u64, core: Option<u64>, req: &Request) -> Result<Self, String> {
+    fn new(
+        phase: Phase,
+        generation: u64,
+        base: u64,
+        core: Option<u64>,
+        req: &Request,
+    ) -> Result<Self, String> {
         let mut sites = [None; 4];
         for (i, site) in plan::prefix(phase, req.count(phase))?.iter().enumerate() {
             sites[i] = Some(
-                site.image.base(base, core)?.checked_add(site.rva)
+                site.image
+                    .base(base, core)?
+                    .checked_add(site.rva)
                     .ok_or("capture address overflow")?,
             );
         }
@@ -816,7 +824,8 @@ pub fn observe(req: Request) -> Result<(), String> {
     if sha256(&core_path)? != plan::CORE_SHA {
         return Err("GameCore disk hash differs".into());
     }
-    static_proof["native_outer"] = plan::disk_native_sites(&fs::read(&core_path).map_err(|e| e.to_string())?)?;
+    static_proof["native_outer"] =
+        plan::disk_native_sites(&fs::read(&core_path).map_err(|e| e.to_string())?)?;
     if !req.source_dll.is_absolute()
         || req
             .source_dll
@@ -841,7 +850,10 @@ pub fn observe(req: Request) -> Result<(), String> {
     }
     // Refuse missing native capability before attaching the debugger.
     let initial_core = core_module(req.pid)?;
-    if initial_core.as_ref().is_some_and(|m| !same_path(&m.path, &core_path)) {
+    if initial_core
+        .as_ref()
+        .is_some_and(|m| !same_path(&m.path, &core_path))
+    {
         return Err("initial GameCore path differs".into());
     }
     let capture_core_base = initial_core.as_ref().map(|core| core.base);

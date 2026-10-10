@@ -134,7 +134,12 @@ mod order_capture {
                 json!(301),
                 "invalid capture limits or identity",
             ),
-            (3, "phase", json!("unknown"), "phase must be front, load or native-outer"),
+            (
+                3,
+                "phase",
+                json!("unknown"),
+                "phase must be front, load or native-outer",
+            ),
         ] {
             let mut request = manifest(&temp.0);
             request[key] = value;
