@@ -99,13 +99,28 @@ fn gameplay_initializes_without_ui_only_session_getters() {
 }
 
 #[test]
-fn gameplay_requires_real_native_mp_and_verified_ui_hotseat_setting() {
-    for (network, confirmed) in [(false, true), (true, false), (false, false)] {
+fn genuine_two_human_hotseat_does_not_require_network_transport() {
+    let lua = gp_context(false, false, true);
+    lua.load("local b=ExposedMembers.JAC_NativeCarrierWitness.Get();assert(type(RECEIVE)=='function' and b.NextOperation==1 and b.NetworkMultiplayer==false and CREATES==0)").exec().unwrap();
+}
+
+#[test]
+fn gameplay_requires_actual_two_humans_and_verified_ui_hotseat_setting() {
+    for (network, confirmed) in [(true, false), (false, false)] {
         let lua = gp_context(false, network, confirmed);
         lua.load("assert(RECEIVE==nil and ExposedMembers.JAC_NativeCarrierWitness==nil and #WRITES==0 and CREATES==0)").exec().unwrap();
     }
     let lua = gp_with_ui_getters(false);
     lua.load(format!("HOTSEAT_CONFIRMED=false;RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
+    for change in [
+        "Players[1].IsHuman=function() return false end",
+        "Players[2].IsHuman=function() return true end",
+        "Players[1].IsAlive=function() return false end",
+    ] {
+        let lua = gp_context(false, false, true);
+        lua.load(change).exec().unwrap();
+        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
+    }
 }
 
 #[test]

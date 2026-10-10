@@ -1,6 +1,6 @@
 local A=assert(JAC_AbsorptionGameplay);local R=A.Rules
 local function fresh()
- return {Version=1,Nonce=nonce,Generation=0,ResumeStep=6,NextOperation=1,Receipts={}}
+ return {Version=1,Nonce=nonce,Generation=0,ResumeStep=6,NextOperation=1,Receipts={},NetworkMultiplayer=GameConfiguration.IsNetworkMultiplayer(),HotseatQualification='UI_VERIFIED_SETTING_AND_ACTUAL_TWO_LIVING_HUMANS'}
 end
 local function read()
  local b=Game:GetProperty(bridgeKey)
@@ -37,7 +37,7 @@ prepareSave=function(generation)
  return A.Canonical(b.Checkpoint)
 end
 local function receive(actor,p)
- assert(nativeHotseat(),'native multiplayer or verified hotseat setting changed')
+ assert(nativeHotseat(),'actual two-human roster or verified hotseat setting changed')
  assert(type(p)=='table' and p.Version==1 and p.Command=='FIXED' and p.Nonce==nonce,'invalid fixed witness packet')
  assert(actor==0 and p.Actor==0 and Players[0]:IsAlive() and Players[0]:IsHuman()
   and Players[0]:IsTurnActive() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'actual human0 fixture turn required')
@@ -75,7 +75,8 @@ ExposedMembers.JAC_NativeCarrierWitness={Get=function() return R.Copy(box()) end
 ExposedMembers.JAC_NativeCarrierWitness.GetHeader=function()
  local b=read()
  return {Version=b.Version,Nonce=b.Nonce,Generation=b.Generation,ResumeStep=b.ResumeStep,
-  NextOperation=b.NextOperation,SaveName=b.SaveName,Failure=b.Failure}
+  NextOperation=b.NextOperation,SaveName=b.SaveName,Failure=b.Failure,
+  NetworkMultiplayer=b.NetworkMultiplayer,HotseatQualification=b.HotseatQualification}
 end
 ExposedMembers.JAC_NativeCarrierWitness.GetReceipt=function(generation,step)
  return R.Copy(read().Receipts[tostring(generation)..':'..tostring(step)])
