@@ -2412,8 +2412,14 @@ impl Runner {
                 file.sync_all()?;
                 self.remaining(deadline)?;
                 let proof = if operation == Operation::Finalize {
-                    if let Some(budget) = self.backend.oath_trace_exit_budget()? {
-                        let exit_until = self.clock.now() + self.remaining(deadline)?.min(budget);
+                    let budget_at = self.clock.now();
+                    let exit_budget = self.backend.oath_trace_exit_budget()?;
+                    // A fresh Steam generation is independent of whether a
+                    // UI close is needed. Old sync cannot satisfy this close.
+                    self.backend
+                        .begin_steam_observation(&self.output.join("oath-exit-steam-sync.jsonl"))?;
+                    if let Some(budget) = exit_budget {
+                        let exit_until = deadline.min(budget_at + budget);
                         // Two UI requests can use five seconds each, and the
                         // existing Steam release observation needs ten seconds.
                         // Keep five seconds for process exit and final copies.
@@ -2422,9 +2428,6 @@ impl Runner {
                                 "insufficient lifecycle budget for exit and Steam synchronization",
                             ));
                         }
-                        self.backend.begin_steam_observation(
-                            &self.output.join("oath-exit-steam-sync.jsonl"),
-                        )?;
                         self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(exit_until, 5.0)?)?;
                         let close_budget = self.budget(exit_until, 5.0)?;
                         // Vanilla InGameTopOptionsMenu.OnExitGame and the

@@ -16,8 +16,24 @@ struct Probe {
     ready: bool,
     reject_mode: bool,
     fail_operation: bool,
+    steam_marked: bool,
 }
 impl Backend for Probe {
+    fn begin_steam_observation(&mut self, _: &std::path::Path) -> Result<()> {
+        self.steam_marked = true;
+        Ok(())
+    }
+    fn steam_sync_status(
+        &mut self,
+        _: civ6_autotest_rs::steam_sync::Stage,
+    ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus> {
+        if !self.steam_marked {
+            return Err(Error::input(
+                "stale Steam observation; fresh marker required",
+            ));
+        }
+        Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)
+    }
     fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
         let calls = self.calls.lock().unwrap();
         if !calls.contains(&Operation::Install) || !calls.contains(&Operation::Start) {
@@ -86,6 +102,7 @@ fn runner(
         ready,
         reject_mode,
         fail_operation,
+        steam_marked: false,
     };
     let mut runner = Runner::with_backend(
         data,
