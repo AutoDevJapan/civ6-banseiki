@@ -750,6 +750,7 @@ mod policy {
     pub struct CleanupReport {
         pub threads_restored: u32,
         pub threads_exited: u32,
+        pub threads_retired_by_process_exit: u32,
         pub errors: Vec<String>,
         pub continue_pending_ok: bool,
         pub debug_active_process_stop_ok: bool,
@@ -2347,7 +2348,34 @@ mod platform {
 
         fn finish(&mut self) -> CleanupReport {
             self.cleaned = true;
-            let mut report = cleanup(self);
+            // A signaled, retained PROCESS handle is a terminal lifecycle
+            // state. Thread handles can lag behind it; do not try to freeze
+            // or change the context of that terminated process again. This
+            // retires ownership, rather than claiming successful restoration
+            // or individual thread-exit observations. Unknown waits still use
+            // the normal cleanup path and retain its API failures.
+            let mut report = if self.process.handle.alive() == Ok(false) {
+                let mut report = CleanupReport {
+                    process_exited: true,
+                    ..Default::default()
+                };
+                match self.continue_pending() {
+                    Ok(()) => report.continue_pending_ok = true,
+                    Err(error) => report.errors.push(error),
+                }
+                for thread in self.threads.values_mut() {
+                    if thread.armed || thread.suspended || thread.residual_active_mask != 0 {
+                        report.threads_retired_by_process_exit += 1;
+                    }
+                    thread.armed = false;
+                    thread.suspended = false;
+                    thread.suspend_previous_count = None;
+                    thread.residual_active_mask = 0;
+                }
+                report
+            } else {
+                cleanup(self)
+            };
             // Preserve earlier conflicts even if the process subsequently exits
             // or a later API call succeeds. Each record is explicitly historical.
             report.restore_conflict_history = self.restore_conflict_history.clone();
@@ -5728,7 +5756,11 @@ mod platform {
                 assert!(report.api_complete());
                 assert!(after_exit.process_exited && after_exit.api_complete());
                 assert_eq!(session.threads[&tid].residual_active_mask, 0);
+                assert!(!session.threads[&tid].armed);
+                assert!(!session.threads[&tid].suspended);
+                assert!(!after_exit.debug_active_process_stop_ok);
                 if mode != OwnedMode::RestoreUnchanged {
+                    assert!(after_exit.threads_retired_by_process_exit >= 1);
                     assert_eq!(restored.address[0], addresses[0]);
                     assert_eq!(
                         restored.dr7 & (3 | (0xF << 16)),

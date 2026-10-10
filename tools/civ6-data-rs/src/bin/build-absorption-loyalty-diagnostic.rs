@@ -405,6 +405,19 @@ fn transfer_direct_core_probe_steps() -> Vec<Value> {
     steps
 }
 
+fn transfer_reload_probe_steps() -> Vec<Value> {
+    let mut steps = vec![
+        ui("JAC_Absorption_Entry", "local c=assert(Players[1]:GetCities():GetCapitalCity());Game:SetProperty('JAC_LOYALTY_RELOAD_DIAGNOSTIC_V1',{Turn=Game.GetCurrentGameTurn(),Owner=c:GetOwner(),ID=c:GetID(),X=c:GetX(),Y=c:GetY()});return 'save diagnostic baseline before any transfer or setter'"),
+        json!({"action":"save","name":"JAC-loyalty-transfer-reload-diagnostic"}),
+        json!({"action":"exit_to_menu","timeout":90}),
+        json!({"action":"load","name":"JAC-loyalty-transfer-reload-diagnostic","timeout":600}),
+        json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"InGame","code":"return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil and ExposedMembers.JAC_HeroReadAPI and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function' and Game.GetLocalPlayer()==3 and Players[3]:IsTurnActive()"}}),
+        ui("JAC_Absorption_Entry", "local s=assert(Game:GetProperty('JAC_LOYALTY_RELOAD_DIAGNOSTIC_V1'),'saved diagnostic baseline absent');local c=assert(Players[1]:GetCities():GetCapitalCity());assert(Game.GetCurrentGameTurn()==s.Turn and c:GetOwner()==s.Owner and c:GetID()==s.ID and c:GetX()==s.X and c:GetY()==s.Y,'reload changed baseline turn or donor identity');return 'physical reload preserved turn and donor; transfer and setter still unissued'"),
+    ];
+    steps.extend(transfer_probe_steps());
+    steps
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -462,6 +475,9 @@ fn run() -> Result<()> {
     let direct_core_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-transfer-direct-core");
+    let reload_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-transfer-reload-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -471,9 +487,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode || direct_core_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode || direct_core_mode || reload_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui|--single-setter-transfer-direct-core]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui|--single-setter-transfer-direct-core|--single-setter-transfer-reload-ui]"
     );
     ensure!(
         !output.exists(),
@@ -503,6 +519,8 @@ fn run() -> Result<()> {
         steps.extend(transfer_probe_steps());
     } else if direct_core_mode {
         steps.extend(transfer_direct_core_probe_steps());
+    } else if reload_mode {
+        steps.extend(transfer_reload_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -559,6 +577,39 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reload_comparison_keeps_original_transfer_and_rejects_changed_saved_identity() -> Result<()>
+    {
+        let steps = transfer_reload_probe_steps();
+        assert_eq!(&steps[6..], transfer_probe_steps().as_slice());
+        assert_eq!(steps[1]["action"], "save");
+        assert_eq!(steps[2]["action"], "exit_to_menu");
+        assert_eq!(steps[3]["action"], "load");
+        assert_eq!(steps[1]["name"], steps[3]["name"]);
+        let lua = transfer_fixture()?;
+        lua.load("Domain='Core';Saved={};Game.SetProperty=function(_,k,v) Saved[k]=v end;Game.GetProperty=function(_,k) return Saved[k] end").exec()?;
+        lua.load(steps[0]["code"].as_str().unwrap()).exec()?;
+        lua.load(steps[5]["code"].as_str().unwrap()).exec()?;
+        for change in ["Turn=2", "CoreID=12", "CoreOwner=0", "CoreX=7", "CoreY=8"] {
+            lua.load("Turn=1;CoreID=11;CoreOwner=1;CoreX=5;CoreY=6")
+                .exec()?;
+            lua.load(change).exec()?;
+            assert!(lua.load(steps[5]["code"].as_str().unwrap()).exec().is_err());
+        }
+        lua.load("assert(Transfers==0 and Setters==0 and #Requests==0)")
+            .exec()?;
+        for step in &steps {
+            if let Some(code) = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+            {
+                lua.load(format!("return function()\n{code}\nend"))
+                    .into_function()?;
+            }
+        }
+        Ok(())
+    }
 
     fn transfer_fixture() -> Result<mlua::Lua> {
         transfer_fixture_for_steps(transfer_probe_steps())
