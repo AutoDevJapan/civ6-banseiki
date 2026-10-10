@@ -29,6 +29,7 @@
 | [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント61件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
 | [`spec/data/sengoku-events.json`](spec/data/sengoku-events.json) | 上記イベントの機械可読データ |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
+| [`poc/todo2254-404e4318-check.md`](poc/todo2254-404e4318-check.md) | 固定404e4318の独立検査、公開済み件数の変異、停止中の再照合に関する追加レビュー |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、オーナー判断 L（時代の名前を元号に、友好宣言の点、令和・遅代までの改元、誓約は各家に固有3つ）、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
