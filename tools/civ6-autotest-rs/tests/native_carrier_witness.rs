@@ -188,9 +188,14 @@ LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
     lua.load(witness::staging_binding()).exec().unwrap();
     lua.load("UpdateReadyButton();assert(CLICKS==0);DISABLED=false;UpdateReadyButton();UpdateReadyButton();assert(CLICKS==1 and UPDATES==3)").exec().unwrap();
     let logs = lua.globals().get::<mlua::Table>("LOGS").unwrap();
+    let lines = logs
+        .sequence_values::<String>()
+        .collect::<mlua::Result<Vec<_>>>()
+        .unwrap();
+    let diagnostic = format!("[JAC_NATIVE_CARRIER_STAGING_BIND] Nonce={run_id} Generation=1");
+    assert_eq!(lines.iter().filter(|line| **line == diagnostic).count(), 1);
     let mut bytes = Vec::new();
-    for (expected, line) in (1..).zip(logs.sequence_values::<String>()) {
-        let line = line.unwrap();
+    for (expected, line) in (1..).zip(lines.into_iter().filter(|line| *line != diagnostic)) {
         let fields: Vec<_> = line.split('|').collect();
         assert_eq!(fields.len(), 10);
         assert_eq!(fields[0], "JAC_NC");
@@ -391,6 +396,33 @@ for g=0,2 do
  assert(CLICKS==g+1,'same context must Ready once for each loaded generation')
 end
 GENERATION=0;UpdateReadyButton();assert(CLICKS==3 and UPDATES==7)
+"#,
+    )
+    .exec()
+    .unwrap();
+}
+
+#[test]
+fn staging_waits_for_configuration_loaded_after_context_creation() {
+    let lua = Lua::new();
+    lua.globals().set("RUN_ID", nonce()).unwrap();
+    lua.load(r#"
+READY_NONCE=nil;GENERATION=nil;CLICKS=0;UPDATES=0
+GameConfiguration={GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return READY_NONCE else return GENERATION end end,
+ IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {0,1} end}
+PlayerConfigurations={[0]={GetSlotStatus=function() return 1 end},[1]={GetSlotStatus=function() return 1 end}}
+SlotStatus={SS_TAKEN=1};ContextPtr={IsHidden=function() return false end};Network={IsGameHost=function() return true end}
+Controls={ReadyButton={IsDisabled=function() return false end,DoLeftClick=function() CLICKS=CLICKS+1 end}}
+UpdateReadyButton=function() UPDATES=UPDATES+1 end
+LOGS={};print=function(s) LOGS[#LOGS+1]=s end
+"#).exec().unwrap();
+    lua.load(witness::staging_binding()).exec().unwrap();
+    lua.load(
+        r#"
+UpdateReadyButton();assert(CLICKS==0 and UPDATES==1)
+READY_NONCE=RUN_ID;GENERATION=1;UpdateReadyButton();UpdateReadyButton()
+assert(CLICKS==1 and UPDATES==3,'late loaded configuration must install Ready once')
+GENERATION=2;UpdateReadyButton();assert(CLICKS==2)
 "#,
     )
     .exec()
