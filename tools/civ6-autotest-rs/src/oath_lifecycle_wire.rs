@@ -59,6 +59,9 @@ pub(crate) fn project(first: &[u8], second: &[u8]) -> Result<Value, String> {
     let mut normal = 0;
     let mut unwound = 0;
     let mut unknown = 0;
+    let mut entered = 0;
+    let mut unpublished = 0;
+    let mut changed = 0;
     let mut roots = 0;
     let mut nonnull_roots = 0;
     let mut teardowns = 0;
@@ -68,9 +71,19 @@ pub(crate) fn project(first: &[u8], second: &[u8]) -> Result<Value, String> {
             let at = HEADER + i * ROW;
             let row = &second[at..at + ROW];
             let state = u32_at(row, 0).unwrap();
-            if i >= first_count || row != &first[at..at + ROW] || state == 0 {
+            if i >= first_count || row != &first[at..at + ROW] {
+                changed += 1;
                 unknown += 1;
                 return json!({"index":i,"state":"unknown"});
+            }
+            if state == 0 {
+                unpublished += 1;
+                unknown += 1;
+                return json!({"index":i,"state":"unknown"});
+            }
+            if state == 1 {
+                entered += 1;
+                unknown += 1;
             }
             normal += usize::from(state == 2);
             if state == 2 {
@@ -105,15 +118,30 @@ pub(crate) fn project(first: &[u8], second: &[u8]) -> Result<Value, String> {
         && u32_at(second, 20) == Some(normal as u32)
         && u32_at(second, 24) == Some(unwound as u32);
     let consistent = consistent && completion_orders == (1..=normal as u32).collect::<Vec<_>>();
+    // A stable prefix can omit a call because recording is still running,
+    // expired, full, or interrupted. Only terminal, consistent coverage can
+    // report absence. A copied completed call remains evidence of that call.
+    let incomplete = !consistent || u32_at(second, 40) == Some(1) || unwound != 0;
+    let diagnostic = |completed| {
+        if completed > 0 {
+            "observed"
+        } else if incomplete {
+            "unknown"
+        } else {
+            "not_observed"
+        }
+    };
     let hex = |b: &[u8]| b.iter().map(|n| format!("{n:02x}")).collect::<String>();
     Ok(json!({"format":"oath-lifecycle-v1","records":records,
         "in_flight":u32_at(second,16),"completed":u32_at(second,20),"unwound":u32_at(second,24),
         "dropped":u32_at(second,12),"stopped":u32_at(second,28),"expired":u32_at(second,40),
         "detached":u32_at(second,44),"unknown_rows":unknown,
+        "entered_rows":entered,"unpublished_rows":unpublished,"changed_rows":changed,
+        "diagnostic_capture_incomplete":incomplete,
         "completed_context_root_calls":roots,"completed_nonnull_context_root_calls":nonnull_roots,
         "completed_application_teardown_calls":teardowns,
-        "context_root_diagnostic":if nonnull_roots>0 {"observed"} else if unknown>0 {"unknown"} else {"not_observed"},
-        "application_teardown_diagnostic":if teardowns>0 {"observed"} else if unknown>0 {"unknown"} else {"not_observed"},
+        "context_root_diagnostic":diagnostic(nonnull_roots),
+        "application_teardown_diagnostic":diagnostic(teardowns),
         "record_consistent_at_read":consistent,"permanent_drain_proved":false,
         "first_root_observed":false,"native_lifetime_proved":false,
         "quantity_accepted":false,"product_accepted":false,
@@ -223,6 +251,59 @@ mod tests {
             project(&no_rows, &b).unwrap()["records"][0]["state"],
             "unknown"
         );
+    }
+    #[test]
+    fn incomplete_capture_cannot_report_an_absent_call() {
+        // None of these buffers contains a completed non-null root or teardown.
+        // A stable pair is still insufficient when its coverage is incomplete.
+        for (at, n) in [
+            (HEADER, 0),
+            (HEADER, 1),
+            (HEADER, 3),
+            (20, 0),
+            (16, 1),
+            (12, 1),
+            (28, 0),
+            (40, 1),
+            (44, 0),
+        ] {
+            let mut b = fixture();
+            put(&mut b, at, n);
+            let p = project(&b, &b).unwrap();
+            for diagnostic in ["context_root_diagnostic", "application_teardown_diagnostic"] {
+                assert_eq!(p[diagnostic], "unknown", "{at}={n}: {diagnostic}");
+            }
+        }
+        let mut first = fixture();
+        let mut second = first.clone();
+        put(&mut first, 12, 1);
+        put(&mut second, 8, 0);
+        put(&mut second, 20, 0);
+        let p = project(&first, &second).unwrap();
+        assert_eq!(p["context_root_diagnostic"], "unknown");
+        assert_eq!(p["application_teardown_diagnostic"], "unknown");
+    }
+    #[test]
+    fn incomplete_entry_remains_visible_and_completed_calls_are_still_observed() {
+        let mut b = fixture();
+        put(&mut b, HEADER, 1);
+        put(&mut b, 20, 0);
+        put(&mut b, 16, 1);
+        let p = project(&b, &b).unwrap();
+        assert_eq!(p["records"][0]["state"], 1);
+        assert_eq!(p["entered_rows"], 1);
+        assert_eq!(p["unknown_rows"], 1);
+
+        let mut b = fixture();
+        for at in [HEADER + 16, HEADER + 32] {
+            b[at..at + 8].copy_from_slice(&0x1234u64.to_le_bytes());
+        }
+        put(&mut b, 12, 1);
+        let p = project(&b, &b).unwrap();
+        assert_eq!(p["context_root_diagnostic"], "observed");
+        assert_eq!(p["application_teardown_diagnostic"], "unknown");
+        assert_eq!(p["record_consistent_at_read"], false);
+        assert_eq!(p["product_accepted"], false);
     }
     #[test]
     fn unknown_versions_dimensions_flags_and_rows_are_rejected() {
