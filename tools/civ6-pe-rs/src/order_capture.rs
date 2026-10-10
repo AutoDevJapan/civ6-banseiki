@@ -86,55 +86,79 @@ pub fn source_identity() -> Value {
 pub enum Phase {
     Front,
     Load,
+    NativeOuter,
 }
 impl Phase {
     pub fn parse(s: &str) -> Result<Self, String> {
         match s {
             "front" => Ok(Self::Front),
             "load" => Ok(Self::Load),
-            _ => Err("phase must be front or load".into()),
+            "native-outer" => Ok(Self::NativeOuter),
+            _ => Err("phase must be front, load or native-outer".into()),
         }
     }
     pub fn name(self) -> &'static str {
         match self {
             Self::Front => "front",
             Self::Load => "load",
+            Self::NativeOuter => "native-outer",
         }
     }
     pub fn sites(self) -> &'static [Site; 4] {
         match self {
             Self::Front => &FRONT,
             Self::Load => &LOAD,
+            Self::NativeOuter => &NATIVE_OUTER,
         }
     }
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Site {
+    pub image: Image,
     pub name: &'static str,
     pub rva: u64,
     pub bytes: &'static [u8],
     pub next: Next,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Image {
+    Exe,
+    Core,
+}
+impl Image {
+    pub fn base(self, exe: u64, core: Option<u64>) -> Result<u64, String> {
+        match self {
+            Self::Exe => Ok(exe),
+            Self::Core => core
+                .filter(|base| *base != 0)
+                .ok_or("pinned Core base missing".into()),
+        }
+    }
 }
 #[derive(Clone, Copy, Debug)]
 pub enum Next {
     Sequential,
     Rcx,
     Rva(u64),
+    StackReturn,
 }
 pub const FRONT: [Site; 4] = [
     Site {
+        image: Image::Exe,
         name: "loader_return",
         rva: 0xf8577,
         bytes: &[0x48, 0x89, 0x05, 0x5a, 0xdb, 0x1d, 2],
         next: Next::Sequential,
     },
     Site {
+        image: Image::Exe,
         name: "context_factory_call",
         rva: 0xf845d,
         bytes: &[0xff, 0xd1],
         next: Next::Rcx,
     },
     Site {
+        image: Image::Exe,
         name: "context_factory_return",
         rva: 0xf845f,
         bytes: &[0x48, 0x89, 0x05, 0x5a, 0xdc, 0x1d, 2],
@@ -142,6 +166,7 @@ pub const FRONT: [Site; 4] = [
     },
     // lua_newstate call is 0x972bb8 -> 0xdbd848. This is its return, not Gameplay identity.
     Site {
+        image: Image::Exe,
         name: "lua_newstate_return",
         rva: 0x972bbd,
         bytes: &[0x44, 0x8b, 0xc6],
@@ -150,30 +175,68 @@ pub const FRONT: [Site; 4] = [
 ];
 pub const LOAD: [Site; 4] = [
     Site {
+        image: Image::Exe,
         name: "context_release",
         rva: 0xf7110,
         bytes: &[0x40, 0x53],
         next: Next::Sequential,
     },
     Site {
+        image: Image::Exe,
         name: "context_replace",
         rva: 0xf7830,
         bytes: &[0x48, 0x89, 0x5c, 0x24, 8],
         next: Next::Sequential,
     },
     Site {
+        image: Image::Exe,
         name: "lua_close_call",
         rva: 0x971b11,
         bytes: &[0xe8, 0x26, 0xbd, 0x44, 0],
         next: Next::Rva(0xdbd83c),
     },
     Site {
+        image: Image::Exe,
         name: "lua_close_deleting_call",
         rva: 0x971cb7,
         bytes: &[0xe8, 0x80, 0xbb, 0x44, 0],
         next: Next::Rva(0xdbd83c),
     },
 ];
+// CHAININFO joins 418427 -> 41841a -> 4182b0. Observe the real
+// entry and its common RET, not the middle of a chained fragment.
+// Four slots cannot cover all producer domains. This profile can refute a
+// boundary contract; it cannot certify global native quiescence.
+pub const NATIVE_OUTER: [Site; 4] = [
+    Site {
+        image: Image::Core,
+        name: "native_outer_entry",
+        rva: 0x4182b0,
+        bytes: &[0x40, 0x53],
+        next: Next::Sequential,
+    },
+    Site {
+        image: Image::Core,
+        name: "native_outer_return",
+        rva: 0x41885f,
+        bytes: &[0xc3],
+        next: Next::StackReturn,
+    },
+    Site {
+        image: Image::Core,
+        name: "native_shutdown_entry",
+        rva: 0x63e160,
+        bytes: &[0x40, 0x53],
+        next: Next::Sequential,
+    },
+    LOAD[0],
+];
+pub fn inventory(include_native: bool) -> impl Iterator<Item = &'static Site> {
+    FRONT
+        .iter()
+        .chain(LOAD.iter())
+        .chain(NATIVE_OUTER[..if include_native { 3 } else { 0 }].iter())
+}
 pub fn prefix(phase: Phase, count: usize) -> Result<&'static [Site], String> {
     if !(1..=4).contains(&count) {
         return Err("approved prefix count must be 1..4".into());
@@ -181,12 +244,21 @@ pub fn prefix(phase: Phase, count: usize) -> Result<&'static [Site], String> {
     Ok(&phase.sites()[..count])
 }
 pub fn successor(site: Site, base: u64, rcx: u64) -> Result<u64, String> {
+    successor_with_return(site, base, rcx, None)
+}
+pub fn successor_with_return(
+    site: Site,
+    base: u64,
+    rcx: u64,
+    stack_return: Option<u64>,
+) -> Result<u64, String> {
     match site.next {
         Next::Sequential => base
             .checked_add(site.rva)
             .and_then(|a| a.checked_add(site.bytes.len() as u64)),
         Next::Rva(rva) => base.checked_add(rva),
         Next::Rcx => (rcx != 0).then_some(rcx),
+        Next::StackReturn => stack_return.filter(|address| *address != 0),
     }
     .ok_or("invalid instruction successor".into())
 }
@@ -338,6 +410,7 @@ impl Request {
         match phase {
             Phase::Front => self.front_prefix,
             Phase::Load => self.load_prefix,
+            Phase::NativeOuter => 4,
         }
     }
 }
@@ -355,13 +428,29 @@ pub fn disk_sites(bytes: &[u8]) -> Result<Value, String> {
     if hash != EXE_SHA {
         return Err("EXE SHA mismatch".into());
     }
+    let rows = disk_site_rows(bytes, &[Phase::Front, Phase::Load], Image::Exe)?;
+    Ok(
+        json!({"schema":SCHEMA,"source":source_identity(),"exe_sha256":hash,"gamecore_sha256":CORE_SHA,"static_sites":rows,"calibration_cap":4,"prefix_range":[1,4],"max_hits":256,"max_seconds":300,"phase_switch_cap":8,"live_observation":"unknown","common_boundary_proof":"unknown","startup_before_gameplay":"unknown","console_lease_generation_verified":false,"native_parent_cleanup_verified":false,"native_order_observed":false,"memory_writes":0,"dll_install_calls":0,"live_runs":0}),
+    )
+}
+
+pub fn disk_native_sites(bytes: &[u8]) -> Result<Value, String> {
+    if format!("{:x}", Sha256::digest(bytes)) != CORE_SHA {
+        return Err("Core SHA mismatch".into());
+    }
+    Ok(
+        json!({"core_sha256":CORE_SHA,"static_sites":disk_site_rows(bytes, &[Phase::NativeOuter], Image::Core)?,"all_producer_domains_covered":false,"native_quiescence_proven":false}),
+    )
+}
+
+fn disk_site_rows(bytes: &[u8], phases: &[Phase], image: Image) -> Result<Vec<Value>, String> {
     let p = u32at(bytes, 0x3c)? as usize;
     let n = (u32at(bytes, p + 4)? >> 16) as usize;
     let optional = (u32at(bytes, p + 20)? & 0xffff) as usize;
     let table = p + 24 + optional;
     let mut rows = Vec::new();
-    for phase in [Phase::Front, Phase::Load] {
-        for site in phase.sites() {
+    for phase in phases {
+        for site in phase.sites().iter().filter(|site| site.image == image) {
             let mut offset = None;
             for i in 0..n {
                 let s = table + i * 40;
@@ -382,9 +471,7 @@ pub fn disk_sites(bytes: &[u8]) -> Result<Value, String> {
             rows.push(json!({"phase":phase.name(),"name":site.name,"rva":format!("0x{:x}",site.rva),"instruction_hex":site.bytes.iter().map(|b|format!("{b:02x}")).collect::<String>(),"file_offset":o,"static_admission":"matched","runtime_hits":null,"original_instruction_executions":null}));
         }
     }
-    Ok(
-        json!({"schema":SCHEMA,"source":source_identity(),"exe_sha256":hash,"gamecore_sha256":CORE_SHA,"static_sites":rows,"calibration_cap":4,"prefix_range":[1,4],"max_hits":256,"max_seconds":300,"phase_switch_cap":8,"live_observation":"unknown","common_boundary_proof":"unknown","startup_before_gameplay":"unknown","console_lease_generation_verified":false,"native_parent_cleanup_verified":false,"native_order_observed":false,"memory_writes":0,"dll_install_calls":0,"live_runs":0}),
-    )
+    Ok(rows)
 }
 
 #[cfg(test)]
@@ -427,6 +514,28 @@ mod tests {
         assert!(verify_step(10, 10, 10, 1 << 14, 1 << 8, 1 << 8).is_err());
         verify_step(10, 10, 10, 0xffff4ff0, 0x202, 0x10302).unwrap();
         assert!(disk_sites(b"bad PE").is_err());
+    }
+    #[test]
+    fn native_outer_uses_full_entry_and_ret_in_the_pinned_core_image() {
+        assert_eq!(Phase::parse("native-outer").unwrap(), Phase::NativeOuter);
+        assert_eq!(NATIVE_OUTER[0].rva, 0x4182b0);
+        assert_eq!(NATIVE_OUTER[1].rva, 0x41885f);
+        assert!(NATIVE_OUTER.iter().all(|site| site.rva != 0x418427));
+        assert_eq!(NATIVE_OUTER[3].image, Image::Exe);
+        assert!(Image::Core.base(0x140000000, None).is_err());
+        assert_eq!(
+            Image::Core.base(0x140000000, Some(0x180000000)).unwrap(),
+            0x180000000
+        );
+        assert!(successor(NATIVE_OUTER[1], 0x180000000, 0).is_err());
+        assert!(successor_with_return(NATIVE_OUTER[1], 0x180000000, 0, Some(0)).is_err());
+        assert_eq!(
+            successor_with_return(NATIVE_OUTER[1], 0x180000000, 0, Some(0x180413b70)).unwrap(),
+            0x180413b70
+        );
+        assert_eq!(inventory(true).count(), 11);
+        assert_eq!(inventory(false).count(), 8);
+        assert!(disk_native_sites(b"bad Core").is_err());
     }
     #[test]
     fn request_rejects_unbounded_prefix_and_forged_identity_fields() {

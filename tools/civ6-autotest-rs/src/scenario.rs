@@ -261,7 +261,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail("unexpected native order option".into()));
                 }
                 if phase_change {
-                    if !matches!(step["phase"].as_str(), Some("front" | "load"))
+                    if !matches!(step["phase"].as_str(), Some("front" | "load" | "native-outer"))
                         || order_changes >= 8
                         || order_phase == step["phase"].as_str()
                     {

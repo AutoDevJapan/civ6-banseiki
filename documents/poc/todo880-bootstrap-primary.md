@@ -409,3 +409,15 @@ D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manif
 実機08は`82cfdf9e`で9手順・6判定が成功した。同じobserverと所有PID・起動時刻を保ち、メニュー退出後に同じ保存を再読込した。次の読込中に`context_release`2回と`context_replace`6回を同じスレッドで記録した。Lua破棄の2候補は0回。復元前の115保持スレッドは全て期待DRと一致し、不一致・不明・保留命令は0だった。復元・子回収・ゲーム終了も確認した。この終了時の照合だけで全観測期間の連続性を保証しない。
 
 根拠は`D:/CC/Work/todo880/order-fixed-07-proof.json`と`order-reload-08-proof.json`、それぞれの`*-artifacts`と全ファイルのSHA照合表。保持slotの旧値から新値への変化は観測したが、Release呼出しが実際の最終参照解放か、そのslotがGameplay/worldそのものかは未確認である。次は実呼出し元とオブジェクトの一次コードへ結び付ける。自動Install、世代Rebuild、AI自身の支払い、製品の同一プロセス読込の合格へ拡張しない。
+
+### 外側4182B0の入口・RETと自然な終了を同じ窓で観測する
+
+共有ToDo2193の一次調査とCHAININFOを受け、既存のcapture-only観測器へ`native-outer`を追加する。4slotはCoreの4182B0（40 53）、41885F（C3）、63E160（40 53）とEXEのF7110（40 53）。中間fragment418427を入口にしない。4182B0の固定PEでは早期分岐も418856の共通epilogueへ進み、41885FでRETする。これは固定ソースの静的経路であり、SEH退出や全発行者の寿命を証明しない。
+
+同じ15fieldのrequestでphase=`native-outer`を指定するか、既存Sessionへ`phase native-outer`を送る。通常のシナリオ操作も同じ名前を受け付ける。初期attach時にCoreがロード済みであることが必要で、Coreのbaseが変化した後はこのprofileへ切り替えられない。native観測中のCore unloadは異常として復元・回収へ進む。任意のアドレス入力、native関数の省略、未知フラグへの書込み、runtimeやAI候補e273の有効化は加えない。
+
+EXEとCoreのRVAを混ぜず、各々の固定SHA・命令bytes・実行可能なimage pageを照合する。RET直前にRSP上の戻り先を読み、その一命令を実行した後のRIPと、解析時のRSP+8を照合する。原関数の復帰先へ勝手に分岐させず、既存のTF観測・例外転送・debug register復元・所有子回収を使う。snapshotもCoreの追加3命令を静的照合する。
+
+解析は同じarmed window・TID・RSP・戻り先で入口とRETを対応させ、受け手候補のRCXと生のRDXを記録する。終了入口やContext解放の時点で同じ窓の未復帰入口があれば記録し、別スレッド、戻り先の不一致、観測phaseの空白、片側欠落を成功へ補わない。古い8siteの記録は従来の範囲で解析し、新記録は11siteの終端目録を要求する。
+
+このprofileは外側4182B0の具体的な観測である。35800・35F70・36180・383E0・39650・39920、保留発行の公開と同じsetのWaitは同時には観測しない。解析結果の全発行者網羅・同set Wait・native全排出・runtime有効化は必ずfalseを維持する。観測0件、局所的な復帰、停止時のregister一致を全排出の根拠にしない。原7条件0/7と未マージを保持し、修正版の関連検査・別モデル・実機観測は次の検証に残る。

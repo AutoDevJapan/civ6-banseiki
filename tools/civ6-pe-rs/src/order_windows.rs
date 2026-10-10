@@ -139,11 +139,11 @@ struct CaptureEpoch {
     sites: [Option<u64>; 4],
 }
 impl CaptureEpoch {
-    fn new(phase: Phase, generation: u64, base: u64, req: &Request) -> Result<Self, String> {
+    fn new(phase: Phase, generation: u64, base: u64, core: Option<u64>, req: &Request) -> Result<Self, String> {
         let mut sites = [None; 4];
         for (i, site) in plan::prefix(phase, req.count(phase))?.iter().enumerate() {
             sites[i] = Some(
-                base.checked_add(site.rva)
+                site.image.base(base, core)?.checked_add(site.rva)
                     .ok_or("capture address overflow")?,
             );
         }
@@ -811,11 +811,12 @@ pub fn observe(req: Request) -> Result<(), String> {
         return Err("loaded EXE path differs".into());
     }
     let disk = fs::read(&exe.path).map_err(|e| e.to_string())?;
-    let static_proof = plan::disk_sites(&disk)?;
+    let mut static_proof = plan::disk_sites(&disk)?;
     let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
     if sha256(&core_path)? != plan::CORE_SHA {
         return Err("GameCore disk hash differs".into());
     }
+    static_proof["native_outer"] = plan::disk_native_sites(&fs::read(&core_path).map_err(|e| e.to_string())?)?;
     if !req.source_dll.is_absolute()
         || req
             .source_dll
@@ -837,6 +838,17 @@ pub fn observe(req: Request) -> Result<(), String> {
     }
     for site in plan::FRONT.iter().chain(plan::LOAD.iter()) {
         instruction(&game, exe.base, *site)?;
+    }
+    // Refuse missing native capability before attaching the debugger.
+    let initial_core = core_module(req.pid)?;
+    if initial_core.as_ref().is_some_and(|m| !same_path(&m.path, &core_path)) {
+        return Err("initial GameCore path differs".into());
+    }
+    let capture_core_base = initial_core.as_ref().map(|core| core.base);
+    if req.phase == Phase::NativeOuter {
+        for site in plan::NATIVE_OUTER {
+            instruction(&game, site.image.base(exe.base, capture_core_base)?, site)?;
+        }
     }
     let game_guard = exact_process(req.pid, req.created, &exe.path, false)?;
     let output = Jsonl::new(&req.output)?;
@@ -867,13 +879,6 @@ pub fn observe(req: Request) -> Result<(), String> {
     })?;
     d.mode = ProbeMode::Property; // existing restoration walks our pinned threads
     d.attach_ready_deadline = Some(Instant::now() + ATTACH_READY_BUDGET);
-    let initial_core = core_module(req.pid)?;
-    if initial_core
-        .as_ref()
-        .is_some_and(|m| !same_path(&m.path, &core_path))
-    {
-        return Err("initial GameCore path differs".into());
-    }
     let initial_context = read_pointer(&d.game, exe.base + 0x22d60c0)?;
     let mut module_identities = BTreeMap::new();
     if let Some(core) = &initial_core {
@@ -884,7 +889,7 @@ pub fn observe(req: Request) -> Result<(), String> {
         json!({"type":"order_identity","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll":req.source_dll,"source_dll_sha256":req.source_dll_sha,"exe_base":exe.base,"capture_phase":req.phase.name(),"front_prefix":req.front_prefix,"load_prefix":req.load_prefix,"static_proof":static_proof,"initial_core_base":initial_core.as_ref().map(|m|m.base),"initial_context":initial_context,"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
     )?;
     let mut phase = req.phase;
-    let mut epoch = CaptureEpoch::new(phase, 0, exe.base, &req)?;
+    let mut epoch = CaptureEpoch::new(phase, 0, exe.base, capture_core_base, &req)?;
     let mut capture_threads = CaptureThreads::default();
     let mut desired = phase;
     let mut steps: BTreeMap<u32, Step> = BTreeMap::new();
@@ -907,8 +912,9 @@ pub fn observe(req: Request) -> Result<(), String> {
                     "stop" => stop = true,
                     "phase front" => desired = Phase::Front,
                     "phase load" => desired = Phase::Load,
+                    "phase native-outer" => desired = Phase::NativeOuter,
                     "game_close_requested" => d.close_ack.store(true, Ordering::SeqCst),
-                    _ => return Err("unknown command; use phase front, phase load, stop".into()),
+                    _ => return Err("unknown command; use phase front, phase load, phase native-outer, stop".into()),
                 }
             }
             if stop || started.elapsed() >= Duration::from_secs(req.seconds) || hits >= req.max_hits
@@ -936,8 +942,14 @@ pub fn observe(req: Request) -> Result<(), String> {
                 }
                 if desired != phase && steps.is_empty() && d.attach_origin.accepted {
                     if epoch.generation >= 8 {return Err("phase change bound exceeded".into());}
-                    let next = CaptureEpoch::new(desired, epoch.generation + 1, exe.base, &req)?;
-                    for site in plan::prefix(desired, req.count(desired))? {instruction(&d.game,exe.base,*site)?;}
+                    if desired == Phase::NativeOuter {
+                        let core = core_module(req.pid)?.ok_or("native capture requires loaded Core")?;
+                        if Some(core.base) != capture_core_base || !same_path(&core.path, &core_path) || sha256(&core.path)? != plan::CORE_SHA {
+                            return Err("native capture Core changed since attach".into());
+                        }
+                    }
+                    let next = CaptureEpoch::new(desired, epoch.generation + 1, exe.base, capture_core_base, &req)?;
+                    for site in plan::prefix(desired, req.count(desired))? {instruction(&d.game,site.image.base(exe.base,capture_core_base)?,*site)?;}
                     match phase_barrier(&mut d,&steps,epoch,next,&mut capture_threads)? {
                         PhaseBarrier::Deferred => continue,
                         PhaseBarrier::Event(pending) => event=pending,
@@ -1000,6 +1012,9 @@ pub fn observe(req: Request) -> Result<(), String> {
                 }
                 UNLOAD_DLL_DEBUG_EVENT => {
                     let module_base=unsafe {event.u.UnloadDll.lpBaseOfDll} as u64;
+                    if phase == Phase::NativeOuter && Some(module_base) == capture_core_base {
+                        return Err("native capture Core unloaded; no lifetime certificate".into());
+                    }
                     let prior_identity=module_identities.remove(&module_base);
                     mark(
                         &mut d,
@@ -1013,7 +1028,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                 EXCEPTION_DEBUG_EVENT => {
                     let info = unsafe { event.u.Exception };
                     let address = info.ExceptionRecord.ExceptionAddress as u64;
-                    let sites:Vec<_>=plan::prefix(phase,req.count(phase))?.iter().map(|s|exe.base+s.rva).collect();
+                    let sites:Vec<_>=epoch.sites.iter().flatten().copied().collect();
                     classify_then_record(&mut d,&event,&steps,&sites,|d,mut row|{row["phase"]=json!(phase.name());mark(d,row).map_err(std::io::Error::other)})?;
                     if info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT {
                         if steps.contains_key(&tid) {
@@ -1061,14 +1076,14 @@ pub fn observe(req: Request) -> Result<(), String> {
                             let mut row = step.capture;
                             row["type"] = json!("instruction_completed");
                             row["completion_rip"] = json!(c.Rip);
+                            row["completion_rsp"] = json!(c.Rsp);
                             row["original_instruction_executions"] = json!(1);
                             row["phase"] = json!(step.phase.name());
                             *counts.entry(step.site.name.into()).or_default() += 1;
                             mark(&mut d, row)?;
                         } else {
                             let sites = plan::prefix(phase, req.count(phase))?;
-                            let addresses: Vec<_> =
-                                sites.iter().map(|s| exe.base + s.rva).collect();
+                            let addresses: Vec<_> = epoch.sites.iter().flatten().copied().collect();
                             match plan::classify_hit(
                                 address,
                                 c.Rip,
@@ -1090,8 +1105,10 @@ pub fn observe(req: Request) -> Result<(), String> {
                                         return Err("capture hit bound reached with other threads still stepping; missing completion is not success".into());
                                     }
                                     let site = sites[i];
-                                    instruction(&d.game, exe.base, site)?;
-                                    let expected = plan::successor(site, exe.base, c.Rcx)?;
+                                    let site_base = site.image.base(exe.base, capture_core_base)?;
+                                    instruction(&d.game, site_base, site)?;
+                                    let stack_return = read_pointer(&d.game, c.Rsp).ok();
+                                    let expected = plan::successor_with_return(site, site_base, c.Rcx, stack_return)?;
                                     let expected_base = if matches!(site.next, plan::Next::Rcx) {
                                         let core =
                                             module_named(req.pid, "GameCore_XP2_FinalRelease.dll")?;
@@ -1105,8 +1122,15 @@ pub fn observe(req: Request) -> Result<(), String> {
                                             );
                                         }
                                         core.base
+                                    } else if matches!(site.next, plan::Next::StackReturn) {
+                                        let core = initial_core.as_ref().ok_or("native return Core missing")?;
+                                        if expected >= core.base && expected < core.base.checked_add(core.size).ok_or("Core image range overflow")? {
+                                            core.base
+                                        } else {
+                                            exe.base
+                                        }
                                     } else {
-                                        exe.base
+                                        site_base
                                     };
                                     executable(&d.game, expected_base, expected, 1)?;
                                     let pointer = match site.name {
@@ -1128,7 +1152,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                                     let context_slot = if matches!(site.name,"context_release"|"context_replace") {
                                         context_facts::capture(&d,&exe,site,&c,pointer.unwrap_or(0))
                                     } else {Value::Null};
-                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
+                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"stack_return":stack_return,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
                                     mark(&mut d, row.clone())?;
                                     steps.insert(
                                         tid,
@@ -1221,7 +1245,7 @@ pub fn observe(req: Request) -> Result<(), String> {
         d.terminal = TerminalKind::TargetExited;
         d.held.clear();
     }
-    let rows:Vec<_>=plan::FRONT.iter().chain(plan::LOAD.iter()).map(|s|json!({"site":s.name,"completed":counts.get(s.name).copied().unwrap_or(0),"armed_windows":armed_windows.get(s.name).copied().unwrap_or(0),"coverage":"bounded_phase_only","missing_is_not_zero_calls":true})).collect();
+    let rows:Vec<_>=plan::inventory(true).map(|s|json!({"site":s.name,"completed":counts.get(s.name).copied().unwrap_or(0),"armed_windows":armed_windows.get(s.name).copied().unwrap_or(0),"coverage":"bounded_phase_only","missing_is_not_zero_calls":true})).collect();
     let terminal = d.terminal.label();
     let handles = d.threads.len();
     d.threads.clear();

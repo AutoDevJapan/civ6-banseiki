@@ -119,7 +119,7 @@ fn order_capture_real_mov_single_step_measurement() {
                     assert_eq!(following, 0);
                     guard.unwrap();
                     let mut steps = BTreeMap::from([(tid, Step {
-                        site: Site { name:"owned_fixture_mov", rva:mov-remote_base, bytes:&[], next:plan::Next::Sequential },
+                        site: Site { image:plan::Image::Exe, name:"owned_fixture_mov", rva:mov-remote_base, bytes:&[], next:plan::Next::Sequential },
                         expected: mov + 8, armed_eflags,
                         capture:json!({"capture_seq":1}), phase:Phase::Front,
                     })]);

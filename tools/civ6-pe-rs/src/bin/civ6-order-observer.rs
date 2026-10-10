@@ -1,4 +1,4 @@
-use civ6_native_probe_rs::order_capture::{disk_sites, Request};
+use civ6_native_probe_rs::order_capture::{disk_native_sites, disk_sites, Request};
 use sha2::{Digest, Sha256};
 use std::io::Write;
 fn output(value: &str) -> Result<(), String> {
@@ -52,13 +52,8 @@ fn run() -> Result<(), String> {
         proof["checkout_sources_match_binary"] = serde_json::json!(true);
         let core = std::path::Path::new(civ6_native_probe_rs::GAME_ROOT)
             .join("DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll");
-        let actual = format!(
-            "{:x}",
-            Sha256::digest(std::fs::read(core).map_err(|e| e.to_string())?)
-        );
-        if actual != civ6_native_probe_rs::order_capture::CORE_SHA {
-            return Err("GameCore SHA mismatch".into());
-        }
+        proof["native_outer"] =
+            disk_native_sites(&std::fs::read(core).map_err(|e| e.to_string())?)?;
         proof["gamecore_identity_verified"] = serde_json::json!(true);
         if args[0] == "summary" {
             let summary = serde_json::json!({"schema":proof["schema"],"checkout_head":proof["checkout_head_at_snapshot"],"compiled_source_sha256":proof["source"]["compiled_source_sha256"],"static_site_count":proof["static_sites"].as_array().unwrap().len(),"source_file_count":proof["source"]["source_files"].as_array().unwrap().len(),"sources_match_binary":true,"gamecore_identity_verified":true,"calibration_cap":4,"runtime_hit_count":null,"common_boundary_proof":"unknown","live_runs":0,"memory_writes":0,"dll_install_calls":0,"old_prefix_clones":0});

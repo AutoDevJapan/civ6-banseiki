@@ -311,7 +311,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 assert!(d.threads.contains_key(&tid));
                 // Negative ledger fault injection on a REAL exit event. It is
                 // not a claim that this exiting worker executed a pending MOV.
-                steps.insert(tid,Step{site:Site{name:"missing_fixture_step",rva:0,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:TF,capture:json!({"capture_seq":99}),phase:epoch.phase});
+                steps.insert(tid,Step{site:Site{image:plan::Image::Exe,name:"missing_fixture_step",rva:0,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:TF,capture:json!({"capture_seq":99}),phase:epoch.phase});
                 assert!(capture_thread_event(&mut d,&event,epoch,&mut threads,&steps).unwrap_err().contains("before original instruction completion"));
                 assert!(steps.contains_key(&tid));
                 assert!(d.threads.contains_key(&tid));
@@ -352,7 +352,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
                         c.EFlags|=TF|RF;c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
                         let armed=context(&d.threads[&tid].handle).unwrap();
-                        step.insert(Step{site:Site{name:"owned_fixture_mov",rva:mov-remote,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:armed.EFlags,capture:json!({"capture_seq":completed+1}),phase:epoch.phase});
+                        step.insert(Step{site:Site{image:plan::Image::Exe,name:"owned_fixture_mov",rva:mov-remote,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:armed.EFlags,capture:json!({"capture_seq":completed+1}),phase:epoch.phase});
                         let next=CaptureEpoch{phase:Phase::Load,generation:epoch.generation+1,sites:load};
                         assert!(matches!(phase_barrier(&mut d,&steps,epoch,next,&mut threads).unwrap(),PhaseBarrier::Deferred));
                         deferred+=1;

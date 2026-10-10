@@ -534,7 +534,12 @@ impl<R: Recovery> ChildGuard<R> {
             for _ in 0..64 {
                 match input.try_recv() {
                     Ok(Ok(cmd)) if cmd == "stop" => self.finish(None),
-                    Ok(Ok(cmd)) if matches!(cmd.as_str(), "phase front" | "phase load") => {
+                    Ok(Ok(cmd))
+                        if matches!(
+                            cmd.as_str(),
+                            "phase front" | "phase load" | "phase native-outer"
+                        ) =>
+                    {
                         if matches!(self.state, State::Active(Ownership::Attached)) {
                             if let Err(e) = self.send(&cmd) {
                                 self.finish(Some(e.to_string()));

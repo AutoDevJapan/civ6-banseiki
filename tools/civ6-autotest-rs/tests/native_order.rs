@@ -66,6 +66,28 @@ fn observer_inputs_and_phase_changes_remain_finite() {
     source["source_dll"] = json!("relative.dll");
     assert!(native_order::validate_options(&source).is_err());
 }
+
+#[test]
+fn native_outer_capture_uses_the_same_bounded_scenario_and_excludes_runtime_hooks() {
+    let mut native = start();
+    native["phase"] = json!("native-outer");
+    native_order::validate_options(&native).unwrap();
+    let capture = json!({"name":"native outer capture only","steps":[native,
+        {"action":"load","name":"SAVED_GAME"},
+        {"action":"stop_native_order_capture"}]});
+    validate_scenario(&capture).unwrap();
+    validate_scenario(&scenario(vec![
+        json!({"action":"set_native_order_phase","phase":"native-outer"}),
+        json!({"action":"set_native_order_phase","phase":"load"}),
+    ]))
+    .unwrap();
+    let mut overlap = capture;
+    overlap["steps"].as_array_mut().unwrap().insert(
+        1,
+        json!({"action":"start_native_production_admission","name":"runtime","max_seconds":10}),
+    );
+    assert!(validate_scenario(&overlap).is_err());
+}
 #[test]
 fn restored_success_needs_the_exact_process_and_complete_parent_receipt() {
     let good = json!({"type":"order_parent_receipt","schema":"todo880-order-v1","game_pid":12,
