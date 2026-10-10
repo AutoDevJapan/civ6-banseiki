@@ -31,6 +31,8 @@ mod identity_windows;
 #[cfg(windows)]
 pub mod lifecycle_trace;
 #[cfg(windows)]
+pub mod lifecycle_transport;
+#[cfg(windows)]
 mod native;
 #[cfg(windows)]
 mod oath_trace;

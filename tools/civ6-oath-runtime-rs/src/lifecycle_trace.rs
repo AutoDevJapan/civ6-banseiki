@@ -1,6 +1,7 @@
 //! Finite diagnostic vtable observation of context root-setting and main teardown.
 //! No reference acquisition, getter, quantity or save operation is added.
 //! Direct callers bypassing these slots are outside this observation's coverage.
+use crate::lifecycle_transport::{MappedTrace, SharedLifecycleConfig, MAPPING_SIZE};
 use crate::native::*;
 use crate::runtime::{OathRuntimeConfig, OathStatus};
 use std::cell::Cell;
@@ -44,8 +45,8 @@ pub struct LifecycleTrace {
     pub rows: [Row; CAPACITY],
 }
 impl LifecycleTrace {
-    fn boxed() -> Box<Self> {
-        Box::new(Self {
+    pub(crate) fn new() -> Self {
+        Self {
             magic: 0x4c43_3134,
             version: 1,
             next: AtomicU32::new(0),
@@ -58,7 +59,11 @@ impl LifecycleTrace {
             expired: AtomicU32::new(0),
             detached: AtomicU32::new(0),
             rows: std::array::from_fn(|_| Row::default()),
-        })
+        }
+    }
+    #[cfg(test)]
+    fn boxed() -> Box<Self> {
+        Box::new(Self::new())
     }
     fn start(&self, seconds: u32) -> Result<(), OathStatus> {
         self.deadline_ms.store(
@@ -79,6 +84,61 @@ impl LifecycleTrace {
             self.expired.store(1, Ordering::Release);
             self.stop();
         }
+    }
+    pub(crate) fn snapshot(&self) -> Vec<u8> {
+        let mut bytes = vec![0; std::mem::size_of::<Self>()];
+        macro_rules! field {
+            ($value:expr, $offset:expr) => {{
+                let value = $value.to_le_bytes();
+                bytes[$offset..$offset + value.len()].copy_from_slice(&value);
+            }};
+        }
+        // These fields are immutable after the parent's sole initialization.
+        field!(self.magic, std::mem::offset_of!(Self, magic));
+        field!(self.version, std::mem::offset_of!(Self, version));
+        macro_rules! header {
+            ($($name:ident),*) => {$(
+                field!(self.$name.load(Ordering::Acquire), std::mem::offset_of!(Self, $name));
+            )*};
+        }
+        header!(
+            next,
+            dropped,
+            flight,
+            completed,
+            unwound,
+            stopped,
+            deadline_ms,
+            expired,
+            detached
+        );
+        for (i, row) in self.rows.iter().enumerate() {
+            let base = std::mem::offset_of!(Self, rows) + i * std::mem::size_of::<Row>();
+            macro_rules! row_fields {
+                ($($name:ident),*) => {$(
+                    field!(row.$name.load(Ordering::Acquire), base + std::mem::offset_of!(Row, $name));
+                )*};
+            }
+            // Acquire the publication state before reading payload. An entered
+            // row may complete during this snapshot; its state stays conservative.
+            row_fields!(
+                state,
+                kind,
+                thread,
+                depth,
+                root_or_this,
+                rcx,
+                rdx,
+                caller,
+                rax,
+                completion_order
+            );
+            field!(row.reserved, base + std::mem::offset_of!(Row, reserved));
+        }
+        bytes
+    }
+    pub(crate) fn initialized(&self) -> bool {
+        self.snapshot() == Self::new().snapshot()
     }
     pub fn wire_layout() -> (usize, usize, usize) {
         (
@@ -268,40 +328,93 @@ pub extern "system" fn Civ6OathLifecycleInstall(input: *mut c_void) -> u32 {
         if crate::runtime::validate(&c).is_err() || c.flags != 0 {
             return OathStatus::InvalidInput;
         }
-        let Ok(mut used) = CONTROL.lock() else {
-            return OathStatus::Panic;
-        };
-        if *used {
-            return OathStatus::WrongState;
+        if let Err(status) = install(&mut c, None, Civ6OathLifecycleInstall as *const () as usize) {
+            return status;
         }
-        let slots = match crate::identity_windows::verify_lifecycle(&c) {
-            Ok(s) => s,
-            Err(e) => return e,
-        };
-        if crate::runtime::pin_module(Civ6OathLifecycleInstall as *const () as usize).is_none() {
-            return OathStatus::HookFailure;
-        }
-        *used = true;
-        let t = Box::leak(LifecycleTrace::boxed());
-        for (i, (address, original)) in slots.into_iter().enumerate() {
-            if unsafe { install_at(i, address, original, t) }.is_err() {
-                t.stop();
-                return if unsafe { uninstall() }.is_ok() {
-                    OathStatus::HookFailure
-                } else {
-                    OathStatus::Critical
-                };
-            }
-        }
-        c.out_trace_address = t as *const _ as u64;
-        c.trace_size = std::mem::size_of_val(t) as u32;
-        // Install is inactive; parent controls finite start and final reads.
-        SECONDS.store(c.max_seconds, Ordering::Release);
         unsafe { ptr::write(input.cast::<OathRuntimeConfig>(), c) };
         OathStatus::Ok
     })
     .unwrap_or(OathStatus::Panic);
     status as u32
+}
+/// Shared transport entry; never called from DllMain. Validates the same
+/// fixed process/image/slot contract as the legacy entry before publication.
+/// Does not initialize or reset the parent's mapping, or close the duplicated
+/// target handle. On success (and attempted publication failure) its view is
+/// retained until process exit; the parent can read its own view after exit.
+#[unsafe(no_mangle)]
+pub extern "system" fn Civ6OathLifecycleInstallShared(input: *mut c_void) -> u32 {
+    std::panic::catch_unwind(|| {
+        if !committed_range(
+            input as usize,
+            std::mem::size_of::<SharedLifecycleConfig>(),
+            8,
+            true,
+        ) {
+            return OathStatus::InvalidInput;
+        }
+        let mut c = unsafe { ptr::read(input.cast::<SharedLifecycleConfig>()) };
+        if crate::runtime::validate(&c.config).is_err()
+            || c.config.flags != 0
+            || c.mapping_size != MAPPING_SIZE
+            || c.reserved != 0
+            || c.mapping_handle == 0
+            || c.mapping_handle == u64::MAX
+        {
+            return OathStatus::InvalidInput;
+        }
+        // The transport contract requires sole initialization before sharing,
+        // immutable header/reserved fields, and exclusively atomic publication.
+        let view = match unsafe { MappedTrace::map(c.mapping_handle as _, c.mapping_size) } {
+            Ok(view) if view.trace().initialized() => view,
+            _ => return OathStatus::InvalidInput,
+        };
+        if let Err(status) = install(
+            &mut c.config,
+            Some(view),
+            Civ6OathLifecycleInstallShared as *const () as usize,
+        ) {
+            return status;
+        }
+        unsafe { ptr::write(input.cast::<SharedLifecycleConfig>(), c) };
+        OathStatus::Ok
+    })
+    .unwrap_or(OathStatus::Panic) as u32
+}
+
+fn install(
+    c: &mut OathRuntimeConfig,
+    shared: Option<MappedTrace>,
+    entry: usize,
+) -> Result<(), OathStatus> {
+    let mut used = CONTROL.lock().map_err(|_| OathStatus::Panic)?;
+    if *used {
+        return Err(OathStatus::WrongState);
+    }
+    let slots = crate::identity_windows::verify_lifecycle(c)?;
+    if crate::runtime::pin_module(entry).is_none() {
+        return Err(OathStatus::HookFailure);
+    }
+    *used = true;
+    let t = match shared {
+        Some(view) => view.retain(),
+        None => Box::leak(Box::new(LifecycleTrace::new())),
+    };
+    for (i, (address, original)) in slots.into_iter().enumerate() {
+        if unsafe { install_at(i, address, original, t) }.is_err() {
+            t.stop();
+            return Err(if unsafe { uninstall() }.is_ok() {
+                OathStatus::HookFailure
+            } else {
+                OathStatus::Critical
+            });
+        }
+    }
+    c.out_trace_address = t as *const _ as u64;
+    c.trace_size = std::mem::size_of_val(t) as u32;
+    // Install is inactive; start controls the finite deadline.
+    SECONDS.store(c.max_seconds, Ordering::Release);
+    Ok(())
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn Civ6OathLifecycleStart() -> u32 {
