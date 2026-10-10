@@ -1600,6 +1600,55 @@ fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
 
 #[cfg(windows)]
 #[test]
+fn lease_observer_reads_while_tick_holds_a_writer_and_retains_deadline_during_save() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let f = Fixture::new();
+    let path = f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","acquired_at":0}),
+    );
+    let mut tick = cc_live::fairness::Lock::open(&f.p).unwrap().unwrap();
+    // The previous observation flags reject even a valid, quiet writer.
+    assert_eq!(
+        fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap_err()
+            .raw_os_error(),
+        Some(32)
+    );
+    let mut runner = Fake::success();
+    let limit = process::LeaseLimit::new(&f.p, "owned", 120.0);
+    assert_eq!(
+        process::observe_lease(&mut runner, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    // Model the truncate/rewrite interval through the real tick handle.
+    tick.file.set_len(0).unwrap();
+    limit.record_probe(&process::LeaseProbe::Contended(1800.0));
+    assert_eq!(
+        process::observe_lease(&mut runner, &limit).unwrap(),
+        process::LeaseProbe::Unavailable
+    );
+    assert_eq!(limit.hard_deadline(), Some(1800.0));
+    tick.save().unwrap();
+    assert_eq!(
+        process::observe_lease(&mut runner, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    assert_eq!(limit.hard_deadline(), None);
+    tick.info["lock_token"] = json!("peer");
+    tick.save().unwrap();
+    assert!(process::observe_lease(&mut runner, &limit)
+        .unwrap_err()
+        .contains("ownership changed"));
+    drop(tick);
+    assert_eq!(read_json(path).unwrap()["lock_token"], "peer");
+}
+
+#[cfg(windows)]
+#[test]
 fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
     use std::os::windows::fs::OpenOptionsExt;
     let f = Fixture::new();
