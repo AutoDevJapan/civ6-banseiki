@@ -1029,7 +1029,17 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
     if options.reliability {
         return cli(r, p, a);
     }
-    main_owned(r, p, &options, None, None, &mut false, &mut None)
+    if options.software_renderer {
+        return Err("software rendering requires the standard owned cli lease".into());
+    }
+    main_owned(
+        r,
+        p,
+        &options,
+        None,
+        None,
+        (&mut false, &mut None, &mut None),
+    )
 }
 
 struct Reliability {
@@ -1163,7 +1173,7 @@ impl<R: Runner> Runner for WithinDeadline<'_, R> {
     }
 }
 
-const HELP: &str = "Usage: live_chain [--test-mode] [--stop-on-failure] [--reliability] name:scenario.json [...]\n--reliability: run exactly one scenario 10 times, release the lock after each run, stop on any failure.\n--cleanup-only: restore original autosaves under the shared lock; requires Civ6 absent, no checkout or launch.\n-h, --help: show this help without acquiring the Civ6 lock.";
+const HELP: &str = "Usage: live_chain [--test-mode] [--stop-on-failure] [--reliability] [--software-rendering] name:scenario.json [...]\n--reliability: run exactly one scenario 10 times, release the lock after each run, stop on any failure.\n--software-rendering: CPU renderer under the standard lease; restore original settings after game closure.\n--cleanup-only: restore original autosaves under the shared lock; requires Civ6 absent, no checkout or launch.\n-h, --help: show this help without acquiring the Civ6 lock.";
 const CLEANUP_RESERVE_SECONDS: f64 = 240.0;
 #[derive(Default)]
 struct Options {
@@ -1173,6 +1183,7 @@ struct Options {
     reliability: bool,
     help: bool,
     cleanup_only: bool,
+    software_renderer: bool,
 }
 impl Options {
     fn parse(a: &[String]) -> Result<Self, String> {
@@ -1184,6 +1195,7 @@ impl Options {
                 "--stop-on-failure" => options.stop = true,
                 "--reliability" => options.reliability = true,
                 "--cleanup-only" => options.cleanup_only = true,
+                "--software-rendering" => options.software_renderer = true,
                 _ if arg.starts_with('-') => return Err(format!("unknown argument: {arg}")),
                 _ => {
                     let (name, scenario) =
@@ -1206,6 +1218,7 @@ impl Options {
             && (!options.items.is_empty()
                 || options.reliability
                 || options.test_mode
+                || options.software_renderer
                 || options.stop)
         {
             return Err("--cleanup-only takes no scenarios or other run flags".into());
@@ -1262,8 +1275,11 @@ fn main_owned(
     options: &Options,
     token: Option<&str>,
     mut reliability: Option<&mut Reliability>,
-    game_closed: &mut bool,
-    cleanup_deadline: &mut Option<f64>,
+    (game_closed, cleanup_deadline, software_profile): (
+        &mut bool,
+        &mut Option<f64>,
+        &mut Option<crate::software_renderer::Profile>,
+    ),
 ) -> Result<i32, String> {
     if options.cleanup_only {
         if civ6_running(r)? {
@@ -1310,7 +1326,21 @@ fn main_owned(
         )?;
         drop(protection);
         *game_closed = true;
+        if software_profile.is_none() {
+            if let Some(token) = token {
+                // Recover an interrupted CPU run even for an ordinary next run.
+                crate::software_renderer::Profile::recover(p, token)?;
+            }
+        }
         let ship = std::env::var("CC_LIVE_SHIP").unwrap_or_else(|_| path(p.here.join("ship.exe")));
+        if options.software_renderer && software_profile.is_none() {
+            // The game was closed by this standard chain under its real lock.
+            // Keep the original settings until final cleanup, including failed
+            // preparation/driver calls. Do not use a copied chain or new lock.
+            let token = token.ok_or("software rendering requires an owned lease")?;
+            *software_profile = Some(crate::software_renderer::Profile::apply(p, token)?);
+            r.print("CPU rendering selected: DeviceID=140 AllowSWRenderer=1; verify Renderer.log")?;
+        }
         let prepare_args = args(&[&ship, "live", name, scenario]);
         let prepare_timeout = time_left(r, deadline)?.min(1200.0);
         let out = r
@@ -1718,6 +1748,7 @@ fn cli_once(
     acquire(r, p, &owner, 6.0 * 3600.0, is_long(&options.items))?;
     let mut game_closed = false;
     let mut cleanup_deadline = None;
+    let mut software_profile = None;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         main_owned(
             r,
@@ -1725,8 +1756,11 @@ fn cli_once(
             options,
             Some(&token),
             reliability.as_deref_mut(),
-            &mut game_closed,
-            &mut cleanup_deadline,
+            (
+                &mut game_closed,
+                &mut cleanup_deadline,
+                &mut software_profile,
+            ),
         )
     }))
     .unwrap_or_else(|_| Err("live chain panicked".into()));
@@ -1794,6 +1828,19 @@ fn cli_once(
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
         game_closed = closed.is_ok();
+        if let Some(profile) = software_profile.as_mut() {
+            if !game_closed {
+                return Err(
+                    "software renderer retains original settings until the owned game closes"
+                        .into(),
+                );
+            }
+            profile
+                .restore()
+                .map_err(|e| format!("software renderer restoration pending: {e}"))?;
+            // Drop the read handle before deleting the same owned lock.
+            software_profile = None;
+        }
         let restored = if game_closed && !options.cleanup_only {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 deployment::restore(r, p, &p.live())
@@ -1810,7 +1857,9 @@ fn cli_once(
             _ => Ok(()),
         }
     })();
-    process::finish_cleanup();
+    if software_profile.is_none() {
+        process::finish_cleanup();
+    }
     if let Some(state) = reliability {
         state.round()["cleanup"] = json!({"game_closed":game_closed,"lock_released":lock_released,
             "exit":cleanup_exit,
