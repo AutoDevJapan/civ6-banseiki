@@ -552,18 +552,21 @@ assert(m.Phase=='BORROWED',
 assert(not m.Claimed and e.Borrowed.Phase=='BORROWED','loaded checkpoint was already dispatched')
 local events={};local diagnostics={}
 ExposedMembers.JAC996MoveEventDiagnostics=diagnostics
-local expectedType=assert(GameInfo.GreatWorks[e.Original.GreatWorkType]).Index
+local expectedWork=assert(tonumber(e.Original.Index),'original native work index missing')
+assert(expectedWork>=0 and expectedWork==math.floor(expectedWork),'invalid original native work index')
 local targetBuilding=assert(m.Loans[2]).Building
-local function moved(fromOwner,fromCity,toOwner,toCity,building,greatWorkType)
- local row={fromOwner,fromCity,toOwner,toCity,building,greatWorkType}
+local function moved(fromOwner,fromCity,toOwner,toCity,building,workIndex)
+ local row={fromOwner,fromCity,toOwner,toCity,building,workIndex}
  if #diagnostics<32 then
   diagnostics[#diagnostics+1]=row
   print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT_RAW] args='..ExposedMembers.JAC_Absorption.Canonical(row))
  end
- -- GreatWorksOverview.lua:1045 defines these six parameters. City ownership
- -- notifications and unrelated works must not count as this native MOVE.
+ -- GreatWorksOverview.lua:1045 names its sixth argument greatWorkType, but
+ -- live14 reports the original instance index (0), not the catalogue index.
+ -- Exact source/target and instance are required; later world checks retain
+ -- the original type, provenance and uniqueness checks independently.
  if fromOwner~=0 or fromCity~=e.Source.ID or toOwner~=0 or toCity~=e.Borrowed.ID
-  or building~=targetBuilding or greatWorkType~=expectedType then return end
+  or building~=targetBuilding or workIndex~=expectedWork then return end
  events[#events+1]={Turn=Game.GetCurrentGameTurn(),Arguments=row}
  print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT] count='..#events..' args='..ExposedMembers.JAC_Absorption.Canonical(row))
 end

@@ -228,18 +228,21 @@ assert(m.Phase=='BORROWED' or m.Phase=='READY',
 assert(not m.Claimed and e.Borrowed.Phase=='BORROWED','loaded checkpoint was already dispatched')
 local events={};local diagnostics={}
 ExposedMembers.JAC996MoveEventDiagnostics=diagnostics
-local expectedType=assert(GameInfo.GreatWorks[e.Original.GreatWorkType]).Index
+local expectedWork=assert(tonumber(e.Original.Index),'original native work index missing')
+assert(expectedWork>=0 and expectedWork==math.floor(expectedWork),'invalid original native work index')
 local targetBuilding=assert(m.Loans[2]).Building
-local function moved(fromOwner,fromCity,toOwner,toCity,building,greatWorkType)
- local row={fromOwner,fromCity,toOwner,toCity,building,greatWorkType}
+local function moved(fromOwner,fromCity,toOwner,toCity,building,workIndex)
+ local row={fromOwner,fromCity,toOwner,toCity,building,workIndex}
  if #diagnostics<32 then
   diagnostics[#diagnostics+1]=row
   print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT_RAW] args='..ExposedMembers.JAC_Absorption.Canonical(row))
  end
- -- GreatWorksOverview.lua:1045 defines these six parameters. City ownership
- -- notifications and unrelated works must not count as this native MOVE.
+ -- GreatWorksOverview.lua:1045 names its sixth argument greatWorkType, but
+ -- live14 reports the original instance index (0), not the catalogue index.
+ -- Exact source/target and instance are required; later world checks retain
+ -- the original type, provenance and uniqueness checks independently.
  if fromOwner~=2 or fromCity~=e.Source.ID or toOwner~=2 or toCity~=e.Borrowed.ID
-  or building~=targetBuilding or greatWorkType~=expectedType then return end
+  or building~=targetBuilding or workIndex~=expectedWork then return end
  events[#events+1]={Turn=Game.GetCurrentGameTurn(),Arguments=row}
  print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT] count='..#events..' args='..ExposedMembers.JAC_Absorption.Canonical(row))
 end
@@ -643,12 +646,13 @@ assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996',Pha
     }
 
     #[test]
-    fn pre_begin_event_observer_filters_exact_native_source_target_and_type() {
+    fn pre_begin_event_observer_filters_exact_native_source_target_and_instance() {
         let lua = verifier_world();
         lua.load(r#"
           M.Phase='BORROWED';M.Claimed=nil;M.Loans[2].Building=7
           E.Source.ID=11;E.Borrowed.Phase='BORROWED';E.Borrowed.ID=22
           E.Original.GreatWorkType='WORK_RELIC'
+          E.Original.Index=4
           GameInfo={GreatWorks={WORK_RELIC={Index=9}}}
           Game.GetCurrentGameTurn=function() return 1 end
           JAC_ObserveNativeCarrierMP=function() return true end
@@ -657,20 +661,26 @@ assert(JAC_ObserveNativeCarrierMP({MP={Recovery='fixture-native-hotseat-996',Pha
         assert!(lua.load(ARM_MOVE).eval::<bool>().unwrap());
         lua.load(
             r#"
-          MOVE_HANDLER(2,11,0,22,7,9) -- city return/ownership event
-          MOVE_HANDLER(2,12,2,22,7,9) -- another source
-          MOVE_HANDLER(2,11,2,23,7,9) -- another target
-          MOVE_HANDLER(2,11,2,22,8,9) -- another building
-          MOVE_HANDLER(2,11,2,22,7,10) -- another work type
+          MOVE_HANDLER(2,11,0,22,7,4) -- city return/ownership event
+          MOVE_HANDLER(2,12,2,22,7,4) -- another source
+          MOVE_HANDLER(2,11,2,23,7,4) -- another target
+          MOVE_HANDLER(2,11,2,22,8,4) -- another building
+          MOVE_HANDLER(2,11,2,22,7,9) -- catalogue type index, not the original instance
+          MOVE_HANDLER(2,11,2,22,7,5) -- another instance
           assert(#ExposedMembers.JAC996MoveEvents==0)
-          MOVE_HANDLER(2,11,2,22,7,9)
+          MOVE_HANDLER(2,11,2,22,7,4)
           assert(#ExposedMembers.JAC996MoveEvents==1)
-          assert(#ExposedMembers.JAC996MoveEventDiagnostics==6)
+          assert(#ExposedMembers.JAC996MoveEventDiagnostics==7)
           JAC996StopMoves()
         "#,
         )
         .exec()
         .unwrap();
+        lua.load("E.Original.Index=0").exec().unwrap();
+        assert!(lua.load(ARM_MOVE).eval::<bool>().unwrap());
+        lua.load("MOVE_HANDLER(2,11,2,22,7,0);assert(#ExposedMembers.JAC996MoveEvents==1)")
+            .exec()
+            .unwrap();
     }
 
     #[test]

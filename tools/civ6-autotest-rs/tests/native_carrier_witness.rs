@@ -600,8 +600,9 @@ fn loaded_scene_arms_real_move_signature_before_publication_and_emits_only_trans
     lua.load(
         r#"
 assert(ADD_ORDER[1]=='MOVE' and ADD_ORDER[2]=='CLOSE' and JAC996BorrowObserver==nil)
-MOVE(2,2,0,44,7,37);MOVE(0,2,0,45,7,37);assert(#ExposedMembers.JAC996MoveEvents==0)
-MOVE(0,2,0,44,7,37);assert(#ExposedMembers.JAC996MoveEvents==1)
+MOVE(2,2,0,44,7,99);MOVE(0,2,0,45,7,99);MOVE(0,2,0,44,7,37)
+assert(#ExposedMembers.JAC996MoveEvents==0,'catalogue type index must not count as the original instance')
+MOVE(0,2,0,44,7,99);assert(#ExposedMembers.JAC996MoveEvents==1)
 UPDATE(0.01);local logs=#LOGS;for i=1,100 do UPDATE(0.01) end;assert(#LOGS==logs)
 CLOSE();SHOWN=false;PAUSED=false;UPDATE(0.01);local final=#LOGS
 for i=1,100 do UPDATE(0.01) end;assert(#LOGS==final)
