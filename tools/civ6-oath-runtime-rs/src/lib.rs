@@ -29,6 +29,8 @@ pub mod game_property;
 #[cfg(windows)]
 mod identity_windows;
 #[cfg(windows)]
+pub mod lifecycle_trace;
+#[cfg(windows)]
 mod native;
 #[cfg(windows)]
 mod oath_trace;

@@ -645,3 +645,15 @@ EXEの`F7956`はglobal `22D6070`から補助オブジェクトをRBXへ取り、
 | 待機内部と補助オブジェクト | `985E4B`が呼ぶ`E3EA70`には、分岐条件を通ると同じ待機呼出し内で受信先のslot`28`を反復して呼ぶ`E3EAF0..E3EB0E`の枝がある。この間接呼出しの内容は未確定で、単に待つだけの処理や再入しない処理とは扱わない。補助オブジェクトの`F7A60`も`+450`の対象にslot`1A0`を呼ぶ枝を持ち、`F7B14`では`+448`を0にする。これをDLLの全処理完了を待つ証拠へ置き換えない。 |
 
 これで非null rootの候補を渡すEXE側の二つの接続と、補助オブジェクト破棄を呼ぶ本体側の後段が特定できた。次の観測位置はCoreの`45050`入口とEXEの`63B90`入口で、root・戻り先・OSスレッドID・再入深度を同じ実行で記録する。`45050`入口の参照取得とDLL自身の入口管理を分け、数量・元Apply/Remove・正式保存読込・都市poolの全変更と後続解放へ結ぶ保持区間はなお未実装である。この照合だけで台帳を公開せず、通常38/66・残28件と製品Must、割合・許容幅・保存条件を維持する。
+
+## root設定と本体破棄の有限診断observer
+
+[独立した診断module](../../tools/civ6-oath-runtime-rs/src/lifecycle_trace.rs)は、Coreの`A10248→591750→45050`とEXEの`FA5C10→63B90`の仮想表スロットを置き換える。異なるprologueへ既存の2byte gatewayを流用せず、元関数本体と元unwind情報を保持する。slotを経由しない直接callerの網羅は主張しない。root入力はcontext入口のRDX、破棄対象はRCXであり、参照取得・Release・getterを追加しない。
+
+公開関数は`Civ6OathLifecycleInstall(config*)`、`Civ6OathLifecycleStart()`、`Civ6OathLifecycleStop()`、`Civ6OathLifecyclePoll()`で、戻り値は既存の`OathStatus`である。Installは48byteの既存`OathRuntimeConfig`、version=`0x01340002`、mode=1、flags=0、期限1〜300秒を要求し、成功時だけtraceのアドレスとサイズを書き戻す。設置直後は記録しない。Startは一度だけ許し、Stopはスロットを復元する。Pollは期限を確認して期限後の復元を行う。親driverがプロセス所有・新規起動・ruleset・単独プレイと設置時期、最後の読取を担う。既存Apply/Remove診断の既定動作は変更しない。
+
+設置前にPID・作成時刻、固定EXE/CoreのパスとSHA256、loaded header、元関数のPE関数範囲の命令とunwind情報、8byte thunk全体、スロットのMEM_IMAGE所有と再配置後の元ポインターを照合する。原ファイルの書込・削除共有を拒否して保持し、EXE/Coreとobserver DLLをprocess終了までpinする。元ポインター・trace・bindingも再利用せず保持する。停止は永久drainやDLL解放の許可ではなく、復元前に取得された関数ポインターは停止後も元関数を一度だけ呼ぶ。復元不能はCriticalのまま返す。
+
+traceはversion=1、magic=`0x4C433134`、総サイズ32816byte。先頭はmagic/version（各u32）、next/dropped/flight/completed/unwound/stopped（各u32）、deadline_ms（u64）、expired/detached（各u32）の48byte。stoppedは1=設置済み、0=記録中、2=停止。末尾に64byteのrowが512件続き、満杯では既存prefixを上書きせずdroppedを増やす。rowはstate/kind/thread/depth（各u32）、root_or_this/rcx/rdx/caller/rax（各u64）、completion_order/reserved（各u32）。kindは0=root設定、1=本体破棄。stateは0=未公開、1=入口、2=正常復帰、3=unwind。RAXはstate=2のときだけ元戻り値として解釈する。同じOSスレッドで両入口を合算した深度を採る。コピー中のstateとflightも確認し、未完了・欠落・unwindを正常終了へ替えない。
+
+合成Win64検査は整数4引数と浮動小数点4引数の転送、RAX/XMM0の戻り値、元関数の一度の実行、同スレッド再入、別OSスレッド、有限prefix、期限、実行中の停止と停止後の先行取得を確認する。Windows上のRust panicが元関数と観測callbackからgatewayをunwindする経路、および`RtlVirtualUnwind`による復帰先・RSP・非volatileレジスターの復元を検査する。実ゲームの設置、初回root設定の採取、終了直前の取得、任意のnative SEH例外と全callerは未確認である。全workspace・Lua・シナリオ・実機の既存結果をこの新実装の合格へ付け替えず、通常38/66・残28件と製品Must3群は未解消のまま維持する。

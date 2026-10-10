@@ -135,6 +135,162 @@ fn header_matches(base: usize, disk: &[u8]) -> bool {
 }
 
 pub(crate) struct CurrentGameGate;
+
+// Read-only PE RVA conversion for the two fixed, hashed lifecycle images.
+fn source_rva(disk: &[u8], rva: u32, len: usize) -> Result<&[u8], OathStatus> {
+    let fail = OathStatus::EntryBytes;
+    let read32 = |at: usize| -> Result<u32, OathStatus> {
+        Ok(u32::from_le_bytes(
+            disk.get(at..at + 4)
+                .ok_or(fail)?
+                .try_into()
+                .map_err(|_| fail)?,
+        ))
+    };
+    let pe = read32(0x3c)? as usize;
+    let count = u16::from_le_bytes(
+        disk.get(pe + 6..pe + 8)
+            .ok_or(fail)?
+            .try_into()
+            .map_err(|_| fail)?,
+    ) as usize;
+    let optional = u16::from_le_bytes(
+        disk.get(pe + 20..pe + 22)
+            .ok_or(fail)?
+            .try_into()
+            .map_err(|_| fail)?,
+    ) as usize;
+    for i in 0..count {
+        let s = pe + 24 + optional + i * 40;
+        let virtual_at = read32(s + 12)?;
+        let raw_len = read32(s + 16)?;
+        if let Some(offset) = rva.checked_sub(virtual_at) {
+            if u64::from(offset) + len as u64 <= u64::from(raw_len) {
+                let start = read32(s + 20)? as usize + offset as usize;
+                return disk.get(start..start + len).ok_or(fail);
+            }
+        }
+    }
+    Err(fail)
+}
+fn match_window(base: usize, disk: &[u8], rva: u32, len: usize) -> Result<(), OathStatus> {
+    let expected = source_rva(disk, rva, len)?;
+    let mut actual = vec![0; len];
+    CurrentImage(base)
+        .copy(base as u64 + u64::from(rva), &mut actual)
+        .map_err(|_| OathStatus::EntryBytes)?;
+    if actual != expected {
+        return Err(OathStatus::EntryBytes);
+    }
+    Ok(())
+}
+fn match_function(base: usize, disk: &[u8], rva: u32) -> Result<(), OathStatus> {
+    let mut owner = 0;
+    let entry = unsafe {
+        RtlLookupFunctionEntry(
+            base as u64 + u64::from(rva),
+            &mut owner,
+            std::ptr::null_mut(),
+        )
+    };
+    if entry.is_null() || owner != base as u64 {
+        return Err(OathStatus::EntryBytes);
+    }
+    let entry_rva = (entry as usize)
+        .checked_sub(base)
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or(OathStatus::EntryBytes)?;
+    match_window(base, disk, entry_rva, 12)?;
+    let e = source_rva(disk, entry_rva, 12)?;
+    let begin = u32::from_le_bytes(e[..4].try_into().unwrap());
+    let end = u32::from_le_bytes(e[4..8].try_into().unwrap());
+    let unwind = u32::from_le_bytes(e[8..12].try_into().unwrap());
+    if begin != rva || end <= begin || end - begin > 0x10000 {
+        return Err(OathStatus::EntryBytes);
+    }
+    match_window(base, disk, begin, (end - begin) as usize)?;
+    let h = source_rva(disk, unwind, 4)?;
+    let length = 4
+        + (usize::from(h[2]) + 1) / 2 * 4
+        + if h[0] & 0x20 != 0 {
+            12
+        } else if h[0] & 0x18 != 0 {
+            4
+        } else {
+            0
+        };
+    match_window(base, disk, unwind, length)
+}
+
+/// Independent read-only gate: does not require unmodified Apply/Remove
+/// hooks and can coexist with their capture. Files/modules remain pinned.
+pub(crate) fn verify_lifecycle(
+    config: &OathRuntimeConfig,
+) -> Result<[(usize, u64); 2], OathStatus> {
+    own_process(config)?;
+    let exe = unsafe { GetModuleHandleW(std::ptr::null()) };
+    if exe.is_null() || !same_path(&module_path(exe)?, EXE_PATH) {
+        return Err(OathStatus::ProcessIdentity);
+    }
+    let name: Vec<u16> = "GameCore_XP2_FinalRelease.dll\0".encode_utf16().collect();
+    let mut core = std::ptr::null_mut();
+    if unsafe { GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN, name.as_ptr(), &mut core) } == 0
+        || core.is_null()
+        || !same_path(&module_path(core)?, CORE_PATH)
+    {
+        return Err(OathStatus::ImageIdentity);
+    }
+    let (ef, ed) = pinned_disk(EXE_PATH)?;
+    let (cf, cd) = pinned_disk(CORE_PATH)?;
+    if format!("{:x}", Sha256::digest(&ed)) != EXE_SHA256
+        || format!("{:x}", Sha256::digest(&cd)) != crate::preflight::CORE_SHA256
+        || !header_matches(exe as usize, &ed)
+        || !header_matches(core as usize, &cd)
+    {
+        return Err(OathStatus::ImageIdentity);
+    }
+    match_function(core as usize, &cd, 0x45050)?;
+    match_function(exe as usize, &ed, 0x63b90)?;
+    // Entire mov RCX,RDX; jmp 45050 thunk, from the fixed source.
+    if source_rva(&cd, 0x591750, 8)? != [0x48, 0x8b, 0xca, 0xe9, 0xf8, 0x38, 0xab, 0xff] {
+        return Err(OathStatus::EntryBytes);
+    }
+    match_window(core as usize, &cd, 0x591750, 8)?;
+    let slots = [
+        (core as usize + 0xa10248, core as u64 + 0x591750),
+        (exe as usize + 0xfa5c10, exe as u64 + 0x63b90),
+    ];
+    for (base, disk, table, slot, target, preferred) in [
+        (
+            core as usize,
+            &cd,
+            0xa101e8u32,
+            0xa10248u32,
+            0x591750u64,
+            0x180000000u64,
+        ),
+        (exe as usize, &ed, 0xfa5be0, 0xfa5c10, 0x63b90, 0x140000000),
+    ] {
+        if !image_region(base, base + table as usize, (slot - table) as usize + 8)
+            || source_rva(disk, slot, 8)? != (preferred + target).to_le_bytes()
+            || copy_current::<8>(base as u64 + u64::from(slot))
+                != Some((base as u64 + target).to_le_bytes())
+        {
+            return Err(OathStatus::EntryBytes);
+        }
+    }
+    if crate::runtime::pin_module(exe as usize) != Some(exe as usize) {
+        return Err(OathStatus::ImageIdentity);
+    }
+    // Keep file ownership even if a later publication fails.
+    static LIFECYCLE_FILES: Mutex<Option<Vec<File>>> = Mutex::new(None);
+    let mut files = LIFECYCLE_FILES.lock().map_err(|_| OathStatus::Panic)?;
+    if files.is_some() {
+        return Err(OathStatus::WrongState);
+    }
+    *files = Some(vec![ef, cf]);
+    Ok(slots)
+}
 impl Gate for CurrentGameGate {
     fn verify(&self, config: &OathRuntimeConfig) -> Result<Verified, OathStatus> {
         own_process(config)?;
