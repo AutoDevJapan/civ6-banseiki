@@ -1,23 +1,30 @@
-固定source ff7bce0b875cfbdacedab09399f9f2a9248239ad。base 404e4318。
-初期clean・分岐のため初期branchを保持し専用check branchへcheckout済み。
-ルールと指定Skill読込済み。コード変更なし、GPU/Civ6/Steam/profile操作なし。
-証跡: D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010
-残り: 関連native/autotest検査・cc-live有限全crate・Clippy・fmt・独立review。
-Must0かつchecks成功時だけ固定source release buildと任意標準chain配備。
-最後にresult.json/review.txtを保存し親880へ返す。親の修正完了は待たない。
+独立検査は完了しました。候補にはMust3件が残り、親880が修正する必要があります。
 
-検査途中（2026-10-10）:
-- cc-live: nextest 153成功、ignored2。Clippy成功。manifestのedition2021でfmt成功。
-- native: 関連47成功（owned OS phase/lifecycle/name/step・CLI）。新missing Core拒否fixtureのDR不変を記録。
-- autotest: native_order/bootstrap関連22成功。
-- 対象2crate全target Clippy: exit101。order_phase_tests.rs:80-82のfilter_map内bool::thenをfilterとmapへ分ける必要あり。
-- 2254の18管理部検査とpublished変異REDは404e4318時点の原ログで確認。2ファイルのblobは今回と一致。再実行なし。
-- 追加CPU試験を所有tempの独立fixture crateから実施中。製品ソースを変更せずpublic chain::cliを呼ぶ。ゲーム操作は注入Runnerのみ。
-- チェック不合格のためreleaseビルド・配備は実施しない。残りは追加試験、レビュー、結果返却、所有temp整理。
+対象: ff7bce0b875cfbdacedab09399f9f2a9248239ad（base 404e4318cb8102fa642dbf15c83c325888d9298d）。
+初期branch scheduler/todo-2258-pr86-cpuと開始時HEAD 6d21b697は保持しました。
+専用branch check/todo-2258-cpu-stop-ff7bce0bに検査記録だけをコミットしました。製品ソースは固定候補と一致します。
 
-追加検査と追審が完了:
-- 追加CPU fixtureは6成功・2失敗。復元拒否でCPU設定を残してlease解放、prepare失敗で次のシナリオが自分のhandleに阻まれる事象を再現した。
-- Clippy失敗を合わせてMust3、Suggestion0、Nit0。修正は親880の作業。親の完了は待たない。
-- Native関連47件を外部資源の直列指定でも確認し成功。重複は成功総数222へ足さない。
-- 詳細: todo2258-cpu-stop-check/review.txt と result.json。追加fixtureのソースとCargo入力も同フォルダへ保存。
-- release条件不成立によりbuild/配備なし。原7条件0/7。残りは証跡pushと所有temp片付け・返却記録。
+修正事項:
+1. 通常実行のCPU設定復元が拒否されると、CPU設定を残したままleaseを解放する。
+2. CPU描画中にprepareが失敗すると、自分の保護handleに阻まれて次のシナリオへ進めない。
+3. order_phase_tests.rs:80のfilter_map内bool::thenにより、必須Clippyがexit101になる。
+
+検査結果:
+- cc-liveの153件、native関連47件、利用側22件が成功。既存検査は重複を除き222件。
+- cc-liveのClippyとCargo.toml edition2021によるfmtは成功。ignored2件は成功件数へ含めない。
+- 追加CPU fixtureは6成功、上記1・2の期待条件で2失敗。実Windowsの一時ファイルと共有handleを使い、public chain::cliを呼ぶ。外部コマンドとゲームは注入Runnerである。
+- 前回の停止後再照合のMustは解消。実owned OS fixtureでCore missingを拒否し、5threadのDR不変を2ケースで確認した。native47件は直列でも成功したが、重複を件数へ足していない。
+- 2254のnative_flight18件とpublished変異REDは元404e4318の証拠として確認。対象2ファイルのblobは不変。古い1461件や静的snapshotを今回の合格へ読み替えていない。
+
+詳細は todo2258-cpu-stop-check/review.txt と result.json。追加fixtureのソースとCargo入力も同フォルダに保存しています。
+原stdout/stderr/exit/sourceSHA: D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010
+初回成果の保存: https://github.com/AutoDevJapan/civ6-banseiki/commit/7239236340a06043e13eed5e2cb9c247602c431a
+最終pushの確認: 同証跡フォルダのfinal-delivery.json。
+
+後片付け:
+検査用プロセスの残存0。所有ID 803c4a1542a4bc428f6bd4c468eb44e7の4,096,471,973byteは、safe-deleteのsize計画に従い削除希望へ退避し、元パス不在を確認しました。再現ソースはpush済みです。
+
+検査担当に残る作業はありません。親の修正完了は待ちません。
+release条件不成立によりbuild・配備・DLL実行/注入/installは0。GPU、Civ6、Steamの起動と実profile変更は0です。
+実OSのCtrl+C信号やwrite_all/sync_all失敗は注入していません。interruptedの結果を返す経路とpanicの後始末は確認しました。
+元7条件は0/7。本体の全受付停止・保留公開・same-set Wait・全退出の接続は未達です。

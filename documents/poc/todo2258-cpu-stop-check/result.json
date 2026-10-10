@@ -2,7 +2,7 @@
   "schema": "todo2258-independent-check-v1",
   "todo": 2258,
   "parent_todo": 880,
-  "status": "checks_complete_finalizing",
+  "status": "completed",
   "candidate_verdict": "changes_required",
   "source_sha": "ff7bce0b875cfbdacedab09399f9f2a9248239ad",
   "base_sha": "404e4318cb8102fa642dbf15c83c325888d9298d",
@@ -515,10 +515,24 @@
     "release_built": []
   },
   "cleanup": {
+    "status": "quarantined",
+    "target_owner": "803c4a1542a4bc428f6bd4c468eb44e7",
+    "bytes": 4096471973,
+    "destination": "C:\\Users\\makhmeto\\Downloads\\削除希望\\20261010-civ6-banseiki-todo2258-cpu-stop-target-803c4a15",
+    "log_receipt": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/cleanup-log.stdout.log",
+    "source_absent": true,
+    "reason": "size",
+    "receipt": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/target-quarantine-original-temp.stdout.log",
+    "first_attempt": {
+      "cause": "test TMP/TEMP inherited by safe-delete",
+      "resolution": "restored normal inherited TEMP for non-Cargo tools and confirmed plan before same-ID quarantine",
+      "exit_code": 2,
+      "code": "ROOT_MUST_BE_TEMP_OR_WORKTREE_TOP"
+    },
     "retain_for_capture": false,
-    "status": "pending",
-    "reason": "candidate not qualified; no release capture artifacts built",
-    "target_owner": "803c4a1542a4bc428f6bd4c468eb44e7"
+    "notification": "single no-mention cleanup log",
+    "entries": 3170,
+    "remaining_owned_processes": 0
   },
   "scope": {
     "whole_workspace_tests": 0,
@@ -545,6 +559,25 @@
     "review": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/review.txt",
     "progress_commit": "f020d3649be8cd21af8893c58ac6c598decf2f69",
     "result": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/result.json",
-    "wait_for_parent": false
+    "wait_for_parent": false,
+    "check_work_complete": true,
+    "remaining_check_work": [],
+    "evidence_commit": "7239236340a06043e13eed5e2cb9c247602c431a",
+    "evidence_url": "https://github.com/AutoDevJapan/civ6-banseiki/commit/7239236340a06043e13eed5e2cb9c247602c431a"
+  },
+  "completed_utc": "2026-10-10T14:56:51.2206281+09:00",
+  "delivery": {
+    "independent_pr_created": false,
+    "evidence_branch": "check/todo-2258-cpu-stop-ff7bce0b",
+    "push_exit": 0,
+    "merged": false,
+    "verification_exit": 0,
+    "remote_verified_sha": "7239236340a06043e13eed5e2cb9c247602c431a",
+    "finalization_receipt": "D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010/final-delivery.json"
+  },
+  "ci": {
+    "reason": "Independent evidence-only branch; workflow pushes only on main. No PR created.",
+    "new_run_requested": false,
+    "workflow": ".github/workflows/rust.yml:3-7"
   }
 }
