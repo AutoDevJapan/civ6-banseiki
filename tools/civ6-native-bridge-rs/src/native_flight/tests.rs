@@ -83,7 +83,7 @@ fn inner_job_completion_does_not_drain_its_outer_native_caller() {
         ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let closing = world.close().unwrap();
         let late_rejected = matches!(world.dispatch(), Err(Error::Closed));
-        let result = closing.wait(Instant::now());
+        let result = closing.wait(Instant::now() + Duration::from_millis(20));
         leave_tx.send(()).unwrap();
         worker.join().unwrap();
         assert!(late_rejected);
@@ -189,6 +189,57 @@ fn blocking_drain_wakes_when_old_world_work_finishes() {
         });
         let drained = closing.wait(deadline()).unwrap();
         worker.join().unwrap();
+        assert_eq!(world.rebuild(drained), Ok(2));
+    });
+}
+
+#[test]
+fn expired_idle_drain_does_not_authorize_rebuild() {
+    let world = WorldFlights::new(1).unwrap();
+    let closing = world.close().unwrap();
+    let expired = Instant::now();
+    assert!(matches!(closing.wait(expired), Err(Error::Timeout)));
+    assert!(matches!(world.dispatch(), Err(Error::Closed)));
+    assert_eq!(world.lock().unwrap().phase, Phase::Closing);
+    let drained = world.close().unwrap().wait(deadline()).unwrap();
+    assert_eq!(world.rebuild(drained), Ok(2));
+}
+
+#[test]
+fn final_join_after_wait_deadline_cannot_turn_timeout_into_drain() {
+    let world = WorldFlights::new(1).unwrap();
+    let caller = world.dispatch().unwrap().enter().unwrap();
+    let job = caller.issue().unwrap().publish().unwrap();
+    drop(caller);
+    let closing = world.close().unwrap();
+    thread::scope(|scope| {
+        let (finish_tx, finish_rx) = mpsc::channel();
+        let worker = scope.spawn(move || {
+            finish_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+            // The waiter sends while holding the mutex. Completion cannot
+            // acquire it until Condvar releases it, so this is a real wake.
+            job.complete_after_native_join().unwrap();
+        });
+        let before = Instant::now();
+        let limit = before + Duration::from_secs(5);
+        let mut observations = 0;
+        let result = closing.wait_with_clock(limit, || {
+            observations += 1;
+            if observations == 1 {
+                finish_tx.send(()).unwrap();
+                before
+            } else {
+                // Deterministically model the expired reacquisition instant;
+                // do not depend on scheduler speed or a fixed sleep.
+                limit
+            }
+        });
+        worker.join().unwrap();
+        assert_eq!(observations, 2);
+        assert!(matches!(result, Err(Error::Timeout)));
+        assert_eq!(world.lock().unwrap().phase, Phase::Closing);
+        assert!(matches!(world.dispatch(), Err(Error::Closed)));
+        let drained = world.close().unwrap().wait(deadline()).unwrap();
         assert_eq!(world.rebuild(drained), Ok(2));
     });
 }

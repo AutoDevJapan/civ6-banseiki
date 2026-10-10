@@ -369,6 +369,14 @@ impl<'a> Closing<'a> {
     /// settled. The deadline starts at the caller, not after lock preparation.
     /// A timeout leaves the seal in place; it does not authorize destruction.
     pub fn wait(self, deadline: Instant) -> Result<Drained<'a>, Error> {
+        self.wait_with_clock(deadline, Instant::now)
+    }
+
+    fn wait_with_clock(
+        self,
+        deadline: Instant,
+        mut now: impl FnMut() -> Instant,
+    ) -> Result<Drained<'a>, Error> {
         let mut s = self.world.lock()?;
         loop {
             if s.generation != self.generation {
@@ -383,6 +391,13 @@ impl<'a> Closing<'a> {
             if s.callers.contains_key(&thread::current().id()) {
                 return Err(Error::Reentrant);
             }
+            // Recheck after acquiring/reacquiring the lock. A final native
+            // join may settle while a timed-out waiter is waiting for it.
+            // Even an idle generation needs an observation before deadline.
+            let remaining = deadline
+                .checked_duration_since(now())
+                .filter(|remaining| !remaining.is_zero())
+                .ok_or(Error::Timeout)?;
             if s.callers.is_empty() && s.dispatched == 0 && s.pending == 0 && s.published == 0 {
                 s.phase = Phase::Drained;
                 return Ok(Drained {
@@ -390,14 +405,14 @@ impl<'a> Closing<'a> {
                     generation: self.generation,
                 });
             }
-            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
-                return Err(Error::Timeout);
-            };
-            let (next, _) = self
+            let (next, timeout) = self
                 .world
                 .changed
                 .wait_timeout(s, remaining)
                 .map_err(|_| Error::Poisoned)?;
+            if timeout.timed_out() {
+                return Err(Error::Timeout);
+            }
             s = next;
         }
     }
