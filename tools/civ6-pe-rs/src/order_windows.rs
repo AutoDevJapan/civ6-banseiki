@@ -166,6 +166,17 @@ impl CaptureEpoch {
         if self.phase != Phase::NativeOuter {
             return Ok(());
         }
+        if d.cleanup_event.is_none()
+            && (d.threads.is_empty()
+                || d.threads.iter().any(|(tid, state)| {
+                    (unsafe { WaitForSingleObject(state.handle.0, 0) }) == WAIT_TIMEOUT
+                        && !d.held.contains(tid)
+                }))
+        {
+            return Err(
+                "native image validation requires an owned debug stop or complete freeze".into(),
+            );
+        }
         let core = core_module(d.pid)?.ok_or("stopped native capture Core missing")?;
         let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
         let expected_core = self.sites[0]
@@ -442,9 +453,6 @@ fn phase_barrier(
     if !steps.is_empty() || d.cleanup_event.is_some() {
         return Ok(PhaseBarrier::Deferred);
     }
-    // The pre-freeze check can race module reload. Validate again inside the
-    // existing complete freeze before touching any thread's new DR set.
-    to.validate_native_image(d)?;
     if to.generation
         != from
             .generation
@@ -476,6 +484,9 @@ fn rearm_frozen_threads(
     if !steps.is_empty() || d.cleanup_event.is_some() {
         return Err("phase commit with pending instruction/event".into());
     }
+    // This is after freeze AND the zero-time pending-event drain. Keep the
+    // native check beside its first use, rather than before the stop boundary.
+    to.validate_native_image(d)?;
     let mut prepared = Vec::new();
     let mut evidence = Vec::new();
     for tid in d.threads.keys().copied().collect::<Vec<_>>() {

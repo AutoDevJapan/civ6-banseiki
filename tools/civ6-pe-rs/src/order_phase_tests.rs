@@ -74,6 +74,20 @@ fn fixed_thread_lifecycle(erase_registers: bool) {
             assert!(Instant::now() < deadline, "owned lifecycle absolute deadline");
             if finish_rx.try_recv().is_ok() {
                 d.freeze().unwrap();
+                // The owned fixture has no GameCore. Exercise the actual
+                // stopped rearm path, not a mocked module lookup: it must
+                // reject before changing even the first thread's registers.
+                let prior: Vec<_> = d.threads.iter().filter_map(|(tid,state)| {
+                    (unsafe{WaitForSingleObject(state.handle.0,0)}==WAIT_TIMEOUT).then(||(*tid,Registers::from(&context(&state.handle).unwrap())))
+                }).collect();
+                let missing_core=CaptureEpoch { phase:Phase::NativeOuter,generation:1,
+                    sites:[Some(0x1804182b0),Some(0x18041885f),Some(0x180418419),Some(0x1400f7110)] };
+                let rejected=rearm_frozen_threads(&mut d,&steps,epoch,missing_core,&mut ledger);
+                assert!(rejected.as_ref().is_err_and(|error| error.contains("Core missing")));
+                for (tid,before) in &prior {
+                    assert!(*before == Registers::from(&context(&d.threads[tid].handle).unwrap()));
+                }
+                println!("TODO880_NATIVE_STOP_REFUSAL={}",json!({"owned_fixture":true,"core_missing":true,"threads_unchanged":prior.len(),"game_live":false}));
                 for tid in d.threads.keys().copied().collect::<Vec<_>>() {
                     let (mut row,c,wait) = arm_evidence(&d,tid,Some(epoch),epoch,&ledger.generations);
                     row["sample_stage"] = json!("suspended_after_calls");
