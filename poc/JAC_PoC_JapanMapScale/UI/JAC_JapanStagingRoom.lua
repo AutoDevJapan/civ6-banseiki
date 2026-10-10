@@ -741,7 +741,7 @@ if Controls then
   local nativeWitnessInstalled=false
   local function installNativeWitness()
     local nativeWitnessNonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
-    if not nativeWitnessInstalled and GameConfiguration.IsHotseat()
+    if not nativeWitnessInstalled and scoped() and GameConfiguration.IsHotseat()
       and type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
       nativeWitnessInstalled=true -- never retry an unknown include in this context
       include('JAC_NativeCarrierWitness_Staging')

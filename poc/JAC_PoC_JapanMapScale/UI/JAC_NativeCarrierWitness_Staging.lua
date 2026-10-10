@@ -198,6 +198,8 @@ function R.Rebind(record, tx)
   return result
 end
 
+local requiredRuleset="RULESET_JAC_BANSEIKI"
+local requiredMap="{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map"
 local UpdateReadyButton=stockUpdate
 local canonical=assert(JAC_AbsorptionRules and JAC_AbsorptionRules.Canonical,'staging witness requires canonical codec')
 local bindingGeneration=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')
@@ -209,6 +211,8 @@ local function ready()
  if failed then return end
  if not GameConfiguration.IsHotseat() or not GameConfiguration.IsAnyMultiplayer()
   or GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')~=nonce then return end
+ if GameConfiguration.GetValue('RULESET')~=requiredRuleset or not MapConfiguration
+  or type(MapConfiguration.GetValue)~='function' or MapConfiguration.GetValue('MAP_SCRIPT')~=requiredMap then return end
  local savedGeneration=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')
  local generation=savedGeneration~=nil and assert(tonumber(savedGeneration)) or 0
  assert(generation==0 or generation==1 or generation==2)

@@ -174,6 +174,9 @@ end
 assert(nativeIncludes==0)
 hotseat=true;values.JAC_NATIVE_CARRIER_WITNESS_NONCE='invalid';Events.GameConfigChanged.fire();assert(nativeIncludes==0)
 values.JAC_NATIVE_CARRIER_WITNESS_NONCE='0123456789abcdef0123456789abcdef'
+local originalRuleset=values.RULESET
+values.RULESET='RULESET_STANDARD';Events.GameConfigChanged.fire();assert(nativeIncludes==0)
+values.RULESET=originalRuleset
 Events.GameConfigChanged.fire();assert(nativeIncludes==1,'nonce arrives after the original Staging context loaded')
 Events.GameConfigChanged.fire();ContextPtr:show();values.JAC_NATIVE_CARRIER_LOAD_GENERATION=1;ContextPtr:show()
 assert(nativeIncludes==1,'reused context must preserve its generation receipts')

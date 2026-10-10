@@ -190,10 +190,11 @@ fn staging_uses_the_guarded_official_button_once_and_frames_are_json() {
     let run_id = nonce();
     let lua = Lua::new();
     lua.load(format!(r#"
-GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' else return 1 end end,
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' elseif k=='RULESET' then return 'RULESET_JAC_BANSEIKI' else return 1 end end,
  IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {{0,1,2}} end}}
 PlayerConfigurations={{[0]={{GetSlotStatus=function() return 1 end}},[1]={{GetSlotStatus=function() return 1 end}},[2]={{GetSlotStatus=function() return 2 end}}}}
 SlotStatus={{SS_TAKEN=1}};ContextPtr={{IsHidden=function() return false end}};Network={{IsGameHost=function() return true end}}
+MapConfiguration={{GetValue=function() return '{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_15km.Civ6Map' end}}
 CLICKS=0;UPDATES=0;DISABLED=true
 UI={{GetElapsedTime=function() return 10.125 end}}
 Controls={{ReadyButton={{IsDisabled=function() return DISABLED end,DoLeftClick=function() CLICKS=CLICKS+1 end}}}}
@@ -387,10 +388,11 @@ fn review_staging_ready_is_once_per_generation_in_the_same_context() {
     lua.load(RULES).exec().unwrap();
     lua.load(format!(r#"
 GENERATION=0
-GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' else return GENERATION end end,
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' elseif k=='RULESET' then return 'RULESET_JAC_BANSEIKI' else return GENERATION end end,
  IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {{0,1,2}} end}}
 PlayerConfigurations={{[0]={{GetSlotStatus=function() return 1 end}},[1]={{GetSlotStatus=function() return 1 end}},[2]={{GetSlotStatus=function() return 2 end}}}}
 SlotStatus={{SS_TAKEN=1}};ContextPtr={{IsHidden=function() return false end}};Network={{IsGameHost=function() return true end}}
+MapConfiguration={{GetValue=function() return '{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_15km.Civ6Map' end}}
 CLICKS=0;UPDATES=0
 Controls={{ReadyButton={{IsDisabled=function() return false end,DoLeftClick=function() CLICKS=CLICKS+1 end}}}}
 UpdateReadyButton=function() UPDATES=UPDATES+1 end
@@ -421,8 +423,9 @@ fn staging_context() -> Lua {
     let lua = Lua::new();
     lua.globals().set("RUN_ID", nonce()).unwrap();
     lua.load(r#"
-READY_NONCE=nil;GENERATION=nil;CLICKS=0;UPDATES=0
-GameConfiguration={GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return READY_NONCE elseif GENERATION~=nil then return GENERATION end end,
+READY_NONCE=nil;GENERATION=nil;CLICKS=0;UPDATES=0;RULESET='RULESET_JAC_BANSEIKI';CURRENT_MAP='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map'
+MapConfiguration={GetValue=function() return CURRENT_MAP end}
+GameConfiguration={GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return READY_NONCE elseif k=='RULESET' then return RULESET elseif GENERATION~=nil then return GENERATION end end,
  IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {0,1} end}
 PlayerConfigurations={[0]={GetSlotStatus=function() return 1 end},[1]={GetSlotStatus=function() return 1 end}}
 SlotStatus={SS_TAKEN=1};ContextPtr={IsHidden=function() return false end};Network={IsGameHost=function() return true end}
@@ -498,6 +501,20 @@ fn staging_never_clicks_ready_after_the_session_ceases_to_be_hotseat() {
     lua.load("READY_NONCE=RUN_ID;DISABLED=true;Controls.ReadyButton.IsDisabled=function() return DISABLED end").exec().unwrap();
     lua.load(witness::staging_binding()).exec().unwrap();
     lua.load("UpdateReadyButton();assert(CLICKS==0);GameConfiguration.IsHotseat=function() return false end;DISABLED=false;UpdateReadyButton();assert(CLICKS==0 and UPDATES==2)").exec().unwrap();
+}
+
+#[test]
+fn staging_checks_the_fixed_ruleset_and_map_immediately_before_ready() {
+    let lua = staging_context();
+    lua.load("READY_NONCE=RUN_ID;DISABLED=true;Controls.ReadyButton.IsDisabled=function() return DISABLED end").exec().unwrap();
+    lua.load(witness::staging_binding()).exec().unwrap();
+    lua.load(r#"
+UpdateReadyButton();assert(CLICKS==0)
+DISABLED=false;RULESET='RULESET_STANDARD';UpdateReadyButton();assert(CLICKS==0)
+RULESET='RULESET_JAC_BANSEIKI';local original=CURRENT_MAP;CURRENT_MAP='Maps/Continents.lua';UpdateReadyButton();assert(CLICKS==0)
+CURRENT_MAP=nil;UpdateReadyButton();assert(CLICKS==0)
+CURRENT_MAP=original;UpdateReadyButton();assert(CLICKS==1 and UPDATES==5)
+"#).exec().unwrap();
 }
 
 #[test]

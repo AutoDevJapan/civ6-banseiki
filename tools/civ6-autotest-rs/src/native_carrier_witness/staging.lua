@@ -8,6 +8,8 @@ local function ready()
  if failed then return end
  if not GameConfiguration.IsHotseat() or not GameConfiguration.IsAnyMultiplayer()
   or GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')~=nonce then return end
+ if GameConfiguration.GetValue('RULESET')~=requiredRuleset or not MapConfiguration
+  or type(MapConfiguration.GetValue)~='function' or MapConfiguration.GetValue('MAP_SCRIPT')~=requiredMap then return end
  local savedGeneration=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')
  local generation=savedGeneration~=nil and assert(tonumber(savedGeneration)) or 0
  assert(generation==0 or generation==1 or generation==2)
