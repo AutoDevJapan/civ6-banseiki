@@ -15,6 +15,7 @@ pub mod oath_call_identity;
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod oath_controller_windows;
 pub mod oath_exact_removal;
+mod oath_lifecycle_wire;
 pub mod oath_observation;
 pub mod oath_quantity;
 mod oath_recipient_wire;

@@ -19,6 +19,7 @@ pub struct Install {
     pub sha256: String,
     pub max_seconds: u32,
     pub callee: bool,
+    pub lifecycle: bool,
 }
 
 pub fn operation(action: &str) -> Result<Operation> {
@@ -63,10 +64,15 @@ pub fn validate_step(step: &Value) -> Result<Operation> {
 }
 
 pub fn install_request(step: &Value) -> Result<Install> {
-    let callee = match step.get("capture") {
-        None => false,
-        Some(Value::String(value)) if value == "callee" => true,
-        _ => return Err(Error::scenario("oath capture must be absent or callee")),
+    let (callee, lifecycle) = match step.get("capture") {
+        None => (false, false),
+        Some(Value::String(value)) if value == "callee" => (true, false),
+        Some(Value::String(value)) if value == "lifecycle" => (false, true),
+        _ => {
+            return Err(Error::scenario(
+                "oath capture must be absent, callee or lifecycle",
+            ))
+        }
     };
     let dll = step["dll"]
         .as_str()
@@ -85,6 +91,7 @@ pub fn install_request(step: &Value) -> Result<Install> {
         sha256: digest.to_ascii_lowercase(),
         max_seconds: seconds as u32,
         callee,
+        lifecycle,
     })
 }
 
@@ -139,6 +146,11 @@ mod tests {
         assert!(!install_request(&value).unwrap().callee);
         value["capture"] = json!("callee");
         assert!(install_request(&value).unwrap().callee);
+        validate_step(&value).unwrap();
+        value["capture"] = json!("lifecycle");
+        let request = install_request(&value).unwrap();
+        assert!(request.lifecycle);
+        assert!(!request.callee);
         validate_step(&value).unwrap();
         for capture in [json!(true), json!("quantity"), json!(null)] {
             value["capture"] = capture;

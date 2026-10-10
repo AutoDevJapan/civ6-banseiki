@@ -165,7 +165,11 @@ struct LocalDll {
     exports: [u32; 4],
 }
 impl LocalDll {
+    #[cfg(test)]
     fn open(path: &Path, expected_sha: &str) -> Result<Self> {
+        Self::open_mode(path, expected_sha, false)
+    }
+    fn open_mode(path: &Path, expected_sha: &str, lifecycle: bool) -> Result<Self> {
         if !wire::lower_hex_sha(expected_sha) {
             return Err(Error::input(
                 "expected DLL SHA256 must be 64 lowercase hex digits",
@@ -190,7 +194,22 @@ impl LocalDll {
             ));
         }
         let image = wire::parse_pe(&bytes).map_err(Error::input)?;
-        let exports = wire::runtime_exports(&image).map_err(Error::input)?;
+        let exports = if lifecycle {
+            let mut exports = [0; 4];
+            for (index, name) in crate::oath_lifecycle_wire::EXPORTS.iter().enumerate() {
+                exports[index] = image
+                    .export(name)
+                    .ok_or_else(|| Error::input(format!("missing lifecycle export {name}")))?;
+                if !image.rva_is_executable(exports[index])
+                    || image.bytes_at(&bytes, exports[index], 32).is_none()
+                {
+                    return Err(Error::input("lifecycle export outside measured file"));
+                }
+            }
+            exports
+        } else {
+            wire::runtime_exports(&image).map_err(Error::input)?
+        };
         Ok(Self {
             _file: file,
             path,
@@ -540,6 +559,7 @@ struct Inner {
     phase: Phase,
     stop_value: Option<Value>,
     callee: bool,
+    lifecycle: bool,
 }
 unsafe impl Send for Inner {}
 
@@ -561,6 +581,7 @@ impl Session {
     ) -> Result<Self> {
         Self::install_capture(game, dll_path, expected_sha, max_seconds, false)
     }
+    #[cfg(test)]
     pub(crate) fn install_capture(
         game: GameProcess,
         dll_path: &Path,
@@ -568,8 +589,20 @@ impl Session {
         max_seconds: u32,
         callee: bool,
     ) -> Result<Self> {
-        Inner::install(game, dll_path, expected_sha, max_seconds, callee).map(|inner| Self {
-            inner: std::mem::ManuallyDrop::new(inner),
+        Self::install_mode(game, dll_path, expected_sha, max_seconds, callee, false)
+    }
+    pub(crate) fn install_mode(
+        game: GameProcess,
+        dll_path: &Path,
+        expected_sha: &str,
+        max_seconds: u32,
+        callee: bool,
+        lifecycle: bool,
+    ) -> Result<Self> {
+        Inner::install(game, dll_path, expected_sha, max_seconds, callee, lifecycle).map(|inner| {
+            Self {
+                inner: std::mem::ManuallyDrop::new(inner),
+            }
         })
     }
     pub(crate) fn identity(&self) -> Value {
@@ -617,7 +650,11 @@ impl Inner {
         expected_sha: &str,
         max_seconds: u32,
         callee: bool,
+        lifecycle: bool,
     ) -> Result<Self> {
+        if callee && lifecycle {
+            return Err(Error::input("incompatible oath capture modes"));
+        }
         if game.pid == 0
             || game.pid == std::process::id()
             || !game.started.is_finite()
@@ -632,7 +669,7 @@ impl Inner {
             return Err(Error::input("max_seconds is outside 1..=300"));
         }
         // Everything about the DLL is settled before the game is touched.
-        let dll = LocalDll::open(dll_path, expected_sha)?;
+        let dll = LocalDll::open_mode(dll_path, expected_sha, lifecycle)?;
         let mut lease = RecoveryLease::acquire()?;
         lease.check()?;
         if click::civ_process_ids()?
@@ -684,7 +721,15 @@ impl Inner {
             kill_limit: KILL_LIMIT,
             allocations: Vec::new(),
         };
-        let built = bring_up(&mut target, &dll, game.pid, max_seconds, created, callee);
+        let built = bring_up(
+            &mut target,
+            &dll,
+            game.pid,
+            max_seconds,
+            created,
+            callee,
+            lifecycle,
+        );
         let (base, exports, trace_address, receipt_buffer) = match built {
             Ok(done) => done,
             Err(error) => {
@@ -711,6 +756,7 @@ impl Inner {
             stop_value: None,
             _dll: dll,
             callee,
+            lifecycle,
         })
     }
 
@@ -724,7 +770,7 @@ impl Inner {
             "module_base": format!("0x{:x}", self.module_base),
             "trace_address": format!("0x{:x}", self.trace_address),
             "trace_size": self.trace_size(),
-            "capture":if self.callee { "callee" } else { "adapter" },
+            "capture":if self.lifecycle { "lifecycle" } else if self.callee { "callee" } else { "adapter" },
             "max_seconds": self.max_seconds,
             "quantity_accepted": false,
         })
@@ -740,7 +786,9 @@ impl Inner {
         })
     }
     fn trace_size(&self) -> usize {
-        if self.callee {
+        if self.lifecycle {
+            crate::oath_lifecycle_wire::SIZE
+        } else if self.callee {
             crate::oath_recipient_wire::SIZE
         } else {
             wire::TRACE_SIZE
@@ -811,6 +859,15 @@ impl Inner {
             return Err(self
                 .target
                 .runtime_refusal("OathRuntimeReadReceipt", status));
+        }
+        if self.lifecycle {
+            let first = self.target.read(self.trace_address, self.trace_size())?;
+            let second = self.target.read(self.trace_address, self.trace_size())?;
+            let mut value =
+                crate::oath_lifecycle_wire::project(&first, &second).map_err(Error::input)?;
+            value["controller_phase"] = json!(format!("{:?}", self.phase));
+            value["trace_address"] = json!(format!("0x{:x}", self.trace_address));
+            return Ok(value);
         }
         let receipt_bytes = self.target.read(self.receipt_buffer, wire::RECEIPT_SIZE)?;
         if wire::u32_at(&receipt_bytes, 12) != Some(u32::from(self.callee)) {
@@ -1104,6 +1161,7 @@ fn bring_up(
     max_seconds: u32,
     created: u64,
     callee: bool,
+    lifecycle: bool,
 ) -> Result<BroughtUp> {
     let base = load_dll(target, dll)?;
     let exports = dll.exports.map(|rva| base + rva as usize);
@@ -1117,10 +1175,28 @@ fn bring_up(
         return Err(target.runtime_refusal("OathRuntimeInstall", status));
     }
     target.verify_after_install(|target| {
-        let (trace_address, _) =
-            wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
-                .map_err(Error::input)?;
-        if callee {
+        let after = target.read(config_at, wire::CONFIG_SIZE)?;
+        let (trace_address, _) = if lifecycle {
+            if after[..32] != config[..32]
+                || after[44..48] != config[44..48]
+                || wire::u32_at(&after, 40) != Some(crate::oath_lifecycle_wire::SIZE as u32)
+            {
+                return Err(Error::input("invalid lifecycle installed configuration"));
+            }
+            let address = wire::u64_at(&after, 32).unwrap();
+            if address == 0 || !address.is_multiple_of(8) {
+                return Err(Error::input("invalid lifecycle trace address"));
+            }
+            (address, crate::oath_lifecycle_wire::SIZE as u32)
+        } else {
+            wire::check_installed_config(&config, &after).map_err(Error::input)?
+        };
+        if lifecycle {
+            crate::oath_lifecycle_wire::validate(
+                &target.read(trace_address as usize, crate::oath_lifecycle_wire::SIZE)?,
+            )
+            .map_err(Error::input)?;
+        } else if callee {
             crate::oath_recipient_wire::validate(
                 &target.read(trace_address as usize, crate::oath_recipient_wire::SIZE)?,
             )

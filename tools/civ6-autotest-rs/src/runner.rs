@@ -271,12 +271,13 @@ impl Backend for SystemBackend {
                     }
                     let request =
                         install.ok_or_else(|| Error::input("oath install request missing"))?;
-                    let session = crate::oath_controller_windows::Session::install_capture(
+                    let session = crate::oath_controller_windows::Session::install_mode(
                         game,
                         &request.dll,
                         &request.sha256,
                         request.max_seconds,
                         request.callee,
+                        request.lifecycle,
                     )?;
                     let proof = session.identity();
                     self.oath_observer = Some(session);

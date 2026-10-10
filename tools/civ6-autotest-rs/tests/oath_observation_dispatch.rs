@@ -113,6 +113,25 @@ fn positive_dispatch_reserves_before_call_and_preserves_nonacceptance() {
 }
 
 #[test]
+fn lifecycle_install_uses_the_same_mode_and_readiness_guards() {
+    for mode in ["valid", "wrong_mode", "not_ready"] {
+        let temp = tempfile::tempdir().unwrap();
+        let (mut runner, calls) = runner(
+            temp.path(),
+            mode != "not_ready",
+            mode == "wrong_mode",
+            false,
+        );
+        let mut install = step("oath_trace_install");
+        install["capture"] = json!("lifecycle");
+        runner.scenario["steps"][0] = install.clone();
+        scenario::validate_scenario(&runner.scenario).unwrap();
+        assert_eq!(runner.run_step(&install).is_ok(), mode == "valid");
+        assert_eq!(calls.lock().unwrap().len(), usize::from(mode == "valid"));
+    }
+}
+
+#[test]
 fn actual_mode_ready_and_explicit_optin_guards_precede_every_native_operation() {
     for action in [
         "oath_trace_install",
