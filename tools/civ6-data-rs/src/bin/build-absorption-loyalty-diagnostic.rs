@@ -418,6 +418,73 @@ fn transfer_reload_probe_steps() -> Vec<Value> {
     steps
 }
 
+fn transfer_restart_probe_steps() -> Vec<Value> {
+    let mut steps = transfer_reload_probe_steps();
+    // Keep the failed menu-transition experiment intact. This separately
+    // measures a physical save reload after a new engine process is started.
+    steps[2] = json!({"action":"restart_game","timeout":600});
+    steps
+}
+
+fn last_city_transfer_steps() -> Vec<Value> {
+    let mut steps = transfer_probe_steps();
+    let arm = steps[0]["code"].as_str().unwrap().replace(
+        "assert(Players[donor]:GetCities():GetCount()>1,'donor needs another city')",
+        "assert(Players[donor]:GetCities():GetCount()==1,'donor must have only its capital')",
+    );
+    steps[0] = ui("InGame", &arm);
+    let core = steps[1]["code"]
+        .as_str()
+        .unwrap()
+        .replace(
+            "cities:GetCount()>1 and capital:GetID()==d.OriginalID",
+            "cities:GetCount()==1 and capital:GetID()==d.OriginalID",
+        )
+        .replace(
+            "cities:GetCount()>0,'transfer changed turn or eliminated donor'",
+            "cities:GetCount()==0,'last-city transfer changed turn or retained donor cities'",
+        );
+    steps[1] = ui("JAC_Absorption_Entry", &core);
+    steps
+}
+
+fn transfer_last_city_probe_steps() -> Vec<Value> {
+    let mut steps = vec![
+        ui(
+            "JAC_Absorption_Entry",
+            r#"
+local key='JAC_LOYALTY_LAST_CITY_PREPARATION_V1'
+assert(not Game:GetProperty(key),'last-city preparation must not replay')
+assert(Players[3]:IsTurnActive(),'preparation sender is inactive')
+local cities=Players[1]:GetCities();local capital=assert(cities:GetCapitalCity())
+assert(cities:GetCount()>1,'comparison requires original donor cities')
+local extra={};for _,c in cities:Members() do
+ if c:GetID()~=capital:GetID() then extra[#extra+1]={ID=c:GetID(),X=c:GetX(),Y=c:GetY()} end
+end
+table.sort(extra,function(a,b) return a.ID<b.ID end)
+local record={Turn=Game.GetCurrentGameTurn(),Capital=capital:GetID(),X=capital:GetX(),Y=capital:GetY(),Expected=#extra,Calls=0}
+Game:SetProperty(key,record)
+for _,s in ipairs(extra) do
+ local c=assert(CityManager.GetCityAt(s.X,s.Y))
+ assert(c:GetOwner()==1 and c:GetID()==s.ID,'preparation city changed')
+ record.Calls=record.Calls+1;Game:SetProperty(key,record)
+ CityManager.TransferCity(c,0)
+ local moved=assert(CityManager.GetCityAt(s.X,s.Y))
+ assert(moved:GetOwner()==0 and moved:GetX()==s.X and moved:GetY()==s.Y,'preparation transfer failed')
+end
+local remaining=assert(cities:GetCapitalCity())
+assert(cities:GetCount()==1 and remaining:GetID()==record.Capital and remaining:GetX()==record.X and remaining:GetY()==record.Y and Game.GetCurrentGameTurn()==record.Turn,'preparation changed capital or turn')
+record.Done=true;Game:SetProperty(key,record)
+print('JAC_LOYALTY_LAST_CITY_PREPARATION transfers='..record.Calls..' remaining='..cities:GetCount()..' turn='..record.Turn)
+return 'other donor cities moved once; capital transfer and setter still unissued'
+"#,
+        ),
+        json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local s=Game:GetProperty('JAC_LOYALTY_LAST_CITY_PREPARATION_V1');local cities=Players[1]:GetCities();local c=cities:GetCapitalCity();return s and s.Done and s.Calls==s.Expected and Game.GetCurrentGameTurn()==s.Turn and cities:GetCount()==1 and c and c:GetOwner()==1 and c:GetID()==s.Capital and c:GetX()==s.X and c:GetY()==s.Y"}}),
+    ];
+    steps.extend(last_city_transfer_steps());
+    steps
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -478,6 +545,12 @@ fn run() -> Result<()> {
     let reload_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-transfer-reload-ui");
+    let restart_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-transfer-restart-ui");
+    let last_city_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-transfer-last-city-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -487,9 +560,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode || direct_core_mode || reload_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode || direct_core_mode || reload_mode || restart_mode || last_city_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui|--single-setter-transfer-direct-core|--single-setter-transfer-reload-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui|--single-setter-transfer-direct-core|--single-setter-transfer-reload-ui|--single-setter-transfer-restart-ui|--single-setter-transfer-last-city-ui]"
     );
     ensure!(
         !output.exists(),
@@ -521,6 +594,10 @@ fn run() -> Result<()> {
         steps.extend(transfer_direct_core_probe_steps());
     } else if reload_mode {
         steps.extend(transfer_reload_probe_steps());
+    } else if restart_mode {
+        steps.extend(transfer_restart_probe_steps());
+    } else if last_city_mode {
+        steps.extend(transfer_last_city_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -579,6 +656,72 @@ mod tests {
     use super::*;
 
     #[test]
+    fn last_city_preparation_keeps_capital_and_cannot_replay_an_unknown_transfer() -> Result<()> {
+        let steps = transfer_last_city_probe_steps();
+        for unknown in [false, true] {
+            let lua = mlua::Lua::new();
+            lua.globals().set("Unknown", unknown)?;
+            lua.load(r#"
+Saved={};Calls=0;SideOwner=1
+Game={GetCurrentGameTurn=function() return 1 end,
+ GetProperty=function(_,k) return Saved[k] end,
+ SetProperty=function(_,k,v) local copy={};for a,b in pairs(v) do copy[a]=b end;Saved[k]=copy end}
+local capital={GetOwner=function() return 1 end,GetID=function() return 11 end,GetX=function() return 5 end,GetY=function() return 6 end}
+local side={GetOwner=function() return SideOwner end,GetID=function() return 12 end,GetX=function() return 7 end,GetY=function() return 8 end}
+Players={[3]={IsTurnActive=function() return true end},[1]={GetCities=function() return {
+ GetCapitalCity=function() return capital end,GetCount=function() return SideOwner==1 and 2 or 1 end,
+ Members=function() return ipairs({capital,side}) end} end}}
+CityManager={GetCityAt=function(x,y) assert(x==7 and y==8);return side end,
+ TransferCity=function(c,to) assert(c==side and to==0);Calls=Calls+1;SideOwner=0;if Unknown then error('effect happened; reply unknown') end end}
+print=function() end
+"#).exec()?;
+            let result = lua.load(steps[0]["code"].as_str().unwrap()).exec();
+            assert_eq!(result.is_err(), unknown);
+            lua.load("local s=assert(Saved.JAC_LOYALTY_LAST_CITY_PREPARATION_V1);assert(Calls==1 and s.Calls==1 and s.Capital==11 and s.X==5 and s.Y==6 and s.Turn==1 and (s.Done==true)==(not Unknown))").exec()?;
+            assert!(lua.load(steps[0]["code"].as_str().unwrap()).exec().is_err());
+            lua.load("assert(Calls==1 and SideOwner==0)").exec()?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn restart_reload_is_a_separate_process_experiment_with_the_same_save_and_transfer() {
+        let restart = transfer_restart_probe_steps();
+        let mut expected = transfer_reload_probe_steps();
+        assert_eq!(expected[2]["action"], "exit_to_menu");
+        expected[2] = json!({"action":"restart_game","timeout":600});
+        assert_eq!(restart, expected);
+    }
+
+    #[test]
+    fn last_city_transfer_keeps_new_identity_and_issues_one_setter_after_publication() -> Result<()>
+    {
+        let steps = last_city_transfer_steps();
+        let lua = transfer_fixture_for_steps_with_count(steps.clone(), 1)?;
+        lua.load("Domain='UI'").exec()?;
+        lua.load(steps[2]["code"].as_str().unwrap()).exec()?;
+        lua.load("assert(Transfers==1 and DonorCount==0 and Setters==0);PublishTransfer()")
+            .exec()?;
+        lua.load(steps[4]["code"].as_str().unwrap()).exec()?;
+        lua.load(
+            "assert(Transfers==1 and Setters==1 and Current==95 and #Requests==2);Fire();Fire()",
+        )
+        .exec()?;
+        assert!(lua.load(steps[2]["code"].as_str().unwrap()).exec().is_err());
+        assert!(lua.load(steps[4]["code"].as_str().unwrap()).exec().is_err());
+        for step in transfer_last_city_probe_steps() {
+            if let Some(code) = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+            {
+                lua.load(format!("return function()\n{code}\nend"))
+                    .into_function()?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn reload_comparison_keeps_original_transfer_and_rejects_changed_saved_identity() -> Result<()>
     {
         let steps = transfer_reload_probe_steps();
@@ -616,6 +759,13 @@ mod tests {
     }
 
     fn transfer_fixture_for_steps(steps: Vec<Value>) -> Result<mlua::Lua> {
+        transfer_fixture_for_steps_with_count(steps, 2)
+    }
+
+    fn transfer_fixture_for_steps_with_count(
+        steps: Vec<Value>,
+        donor_count: i32,
+    ) -> Result<mlua::Lua> {
         let lua = mlua::Lua::new();
         lua.globals()
             .set("FixtureInstance", lua.create_any_userdata(())?)?;
@@ -651,7 +801,7 @@ CityManager={GetCityAt=function(x,y) assert(x==5 and y==6);return Domain=='UI' a
   assert(d.TransferIntent and d.TransferCalls==1 and not d.UIRequestIssued)
   Transfers=Transfers+1;Order[#Order+1]='transfer'
   if Reentrant then assert(not pcall(InvokeTransfer)) end
-  CoreOwner=0;CoreID=22;DonorCount=1
+  CoreOwner=0;CoreID=22;DonorCount=DonorCount-1
   if BadTransferOwner then CoreOwner=2 end
   if BadTransferCoords then CoreX=7 end
   if UnknownTransfer then error('transfer effect happened; return unknown') end
@@ -691,6 +841,7 @@ PublishTransfer=function()
  FireCity(CacheOwner,CacheID);Fire()
 end
 "#).exec()?;
+        lua.globals().set("DonorCount", donor_count)?;
         lua.load(steps[0]["code"].as_str().unwrap()).exec()?;
         lua.load("Domain='Core'").exec()?;
         lua.load(steps[1]["code"].as_str().unwrap()).exec()?;
