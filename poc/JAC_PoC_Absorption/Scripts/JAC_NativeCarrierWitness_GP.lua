@@ -31,7 +31,20 @@ local operation_order={}
 operations[8]=function()
 local A=assert(JAC_AbsorptionGameplay)
 assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))==nil,'fixture already exists')
-assert(nativeHotseat(),'hotseat required')
+-- Gameplay does not expose the UI Hotseat getters. The immediately preceding
+-- UI readiness check proves Hotseat; recheck the real living roster and reject
+-- network/unknown sessions here before creating any native asset.
+assert(type(GameConfiguration.IsNetworkMultiplayer)=='function'
+ and GameConfiguration.IsNetworkMultiplayer()==false,'non-network hotseat required')
+local humans=0
+for _,id in ipairs(PlayerManager.GetAliveIDs()) do
+ local player=assert(Players[id])
+ if player:IsHuman() then
+  assert((id==0 or id==1) and player:IsAlive(),'unexpected human slot')
+  humans=humans+1
+ end
+end
+assert(humans==2 and Players[0]:IsAlive() and Players[1]:IsAlive(),'need two living humans')
 assert(Players[0]:IsHuman() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'need human0/human1/AI2')
 local site=assert(ExposedMembers.JAC996Site,'detached UI site absent')
 local q=assert(Map.GetPlotByIndex(site.Index))

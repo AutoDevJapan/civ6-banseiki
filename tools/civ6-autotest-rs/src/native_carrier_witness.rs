@@ -167,10 +167,7 @@ fn plan() -> (String, String) {
         let action = step["action"].as_str().unwrap();
         match action {
             "ui_lua" if step["state_name"] == "JAC_Absorption_Entry" => {
-                let code = step["code"].as_str().unwrap().replace(
-                    "GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer()",
-                    "nativeHotseat()",
-                );
+                let code = step["code"].as_str().unwrap();
                 gp.push_str(&format!("operations[{n}]=function()\n{code}\nend\noperation_order[#operation_order+1]={n}\n"));
                 ui.push_str(&format!("actions[{n}]={{kind='GP'}}\n"));
             }

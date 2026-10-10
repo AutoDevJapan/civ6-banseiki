@@ -38,7 +38,20 @@ return 'selected owned empty land, nearest city distance '..site.Distance"#;
 
 const CREATE: &str = r#"local A=assert(JAC_AbsorptionGameplay)
 assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')==nil,'fixture already exists')
-assert(GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'hotseat required')
+-- Gameplay does not expose the UI Hotseat getters. The immediately preceding
+-- UI readiness check proves Hotseat; recheck the real living roster and reject
+-- network/unknown sessions here before creating any native asset.
+assert(type(GameConfiguration.IsNetworkMultiplayer)=='function'
+ and GameConfiguration.IsNetworkMultiplayer()==false,'non-network hotseat required')
+local humans=0
+for _,id in ipairs(PlayerManager.GetAliveIDs()) do
+ local player=assert(Players[id])
+ if player:IsHuman() then
+  assert((id==0 or id==1) and player:IsAlive(),'unexpected human slot')
+  humans=humans+1
+ end
+end
+assert(humans==2 and Players[0]:IsAlive() and Players[1]:IsAlive(),'need two living humans')
 assert(Players[0]:IsHuman() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'need human0/human1/AI2')
 local site=assert(ExposedMembers.JAC996Site,'detached UI site absent')
 local q=assert(Map.GetPlotByIndex(site.Index))
@@ -451,6 +464,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_city_creation_qualifies_hotseat_with_gameplay_apis() {
+        let scenario = generate();
+        let code = scenario["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|step| step["code"].as_str())
+            .find(|code| code.contains("fixture already exists"))
+            .unwrap();
+        let qualification = code.split("\nlocal site=").next().unwrap();
+        for (mutation, succeeds) in [
+            ("", true),
+            ("NETWORK=true", false),
+            ("NETWORK=nil", false),
+            ("HUMANS[1]=false", false),
+            ("ALIVE[1]=false", false),
+            ("HUMANS[2]=true", false),
+            ("HUMANS[3]=true", false),
+        ] {
+            let lua = mlua::Lua::new();
+            lua.load(r#"
+JAC_AbsorptionGameplay={Rules={Copy=function(value) return value end}}
+Game={GetProperty=function() return nil end}
+NETWORK=false;HUMANS={[0]=true,[1]=true};ALIVE={[0]=true,[1]=true,[2]=true,[3]=true}
+GameConfiguration={IsNetworkMultiplayer=function() return NETWORK end}
+PlayerManager={GetAliveIDs=function() local ids={};for id=0,3 do if ALIVE[id] then ids[#ids+1]=id end end;return ids end}
+Players={};for id=0,3 do local n=id;Players[id]={IsHuman=function() return HUMANS[n]==true end,IsAlive=function() return ALIVE[n]==true end} end
+"#).exec().unwrap();
+            lua.load(mutation).exec().unwrap();
+            assert_eq!(
+                lua.load(qualification).exec().is_ok(),
+                succeeds,
+                "Gameplay qualification with UI-only getters absent: {mutation}"
+            );
+        }
+    }
 
     #[test]
     fn fixture_plan_publishes_a_new_property_without_mutating_the_read_value() {
