@@ -43,6 +43,7 @@ PlayerConfigurations={
 }
 GameConfiguration={
   IsHotseat=function() return hotseat end,
+  IsAnyMultiplayer=function() return hotseat or network end,
   GetValue=function(key)
     if values[key]==nil then return end -- engine API returns zero values when unset
     return values[key]
@@ -162,9 +163,10 @@ fn native_witness_logs_missing_loaded_settings_without_including_or_repeating() 
     let lua = fixture_with_state(
         r#"
 hotseat=true;nativeIncludes=0;nativeSettings={}
-print=function(line) if line:find('[JAC_NATIVE_CARRIER_STAGING_SETTINGS]',1,true) then nativeSettings[#nativeSettings+1]=line end end
-local stockInclude=include
-include=function(name) if name=='JAC_NativeCarrierWitness_Staging' then nativeIncludes=nativeIncludes+1 else stockInclude(name) end end
+print=function(line)
+ if line:find('[JAC_NATIVE_CARRIER_STAGING_SETTINGS]',1,true) then nativeSettings[#nativeSettings+1]=line end
+ if line:find('[JAC_NATIVE_CARRIER_STAGING_BIND]',1,true) then nativeIncludes=nativeIncludes+1 end
+end
 "#,
     );
     exec(
@@ -189,9 +191,8 @@ fn native_witness_installs_once_when_nonce_arrives_after_frontend_creation() {
     let lua = fixture_with_state(
         r#"
 nativeIncludes=0
-local stockInclude=include
-include=function(name)
- if name=='JAC_NativeCarrierWitness_Staging' then nativeIncludes=nativeIncludes+1 else stockInclude(name) end
+print=function(line)
+ if line:find('[JAC_NATIVE_CARRIER_STAGING_BIND]',1,true) then nativeIncludes=nativeIncludes+1 end
 end
 "#,
     );
@@ -209,6 +210,33 @@ Events.GameConfigChanged.fire();ContextPtr:show();values.JAC_NATIVE_CARRIER_LOAD
 assert(nativeIncludes==1,'reused context must preserve its generation receipts')
 "#,
     );
+}
+
+#[test]
+fn native_witness_rebinds_in_each_loaded_context_even_if_include_is_cached() {
+    for generation in 0..=2 {
+        let lua = fixture_with_state(&format!(
+            r#"
+hotseat=true;values.JAC_NATIVE_CARRIER_WITNESS_NONCE='0123456789abcdef0123456789abcdef'
+values.JAC_NATIVE_CARRIER_LOAD_GENERATION={generation};bindings={{}}
+print=function(line) if line:find('[JAC_NATIVE_CARRIER_STAGING_BIND]',1,true) then bindings[#bindings+1]=line end end
+local stockInclude=include
+include=function(name)
+ if name=='JAC_NativeCarrierWitness_Staging' then return end -- cached includes do not execute again
+ return stockInclude(name)
+end
+"#
+        ));
+        exec(
+            &lua,
+            &format!(
+                r#"
+assert(#bindings==1 and bindings[1]:find('Generation={generation}',1,true))
+Events.GameConfigChanged.fire();ContextPtr:show();assert(#bindings==1)
+"#
+            ),
+        );
+    }
 }
 
 #[test]

@@ -70,10 +70,11 @@ enum Command {
 }
 
 const NONCE_KEY: &str = "JAC_NATIVE_CARRIER_WITNESS_NONCE";
-const BINDINGS: [&str; 3] = [
+const BINDINGS: [&str; 4] = [
     "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
     "poc/JAC_PoC_Absorption/UI/JAC_NativeCarrierWitness_UI.lua",
     "poc/JAC_PoC_JapanMapScale/UI/JAC_NativeCarrierWitness_Staging.lua",
+    civ6_autotest_rs::native_carrier_witness::STAGING_ROOM,
 ];
 
 #[derive(serde::Serialize, serde::Deserialize)]

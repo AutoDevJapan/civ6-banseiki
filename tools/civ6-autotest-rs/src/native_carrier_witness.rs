@@ -25,6 +25,9 @@ const UI: &str = include_str!("native_carrier_witness/ui.lua");
 const STAGING: &str = include_str!("native_carrier_witness/staging.lua");
 const RULES: &str =
     include_str!("../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua");
+pub const STAGING_ROOM: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.lua";
+const INLINE_START: &str = "-- BEGIN GENERATED NATIVE CARRIER STAGING\n";
+const INLINE_END: &str = "-- END GENERATED NATIVE CARRIER STAGING";
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EmittedWitness {
@@ -233,8 +236,25 @@ pub fn staging_binding() -> String {
 
 /// Emit repository-relative deploy files into a parent-owned staging directory.
 /// No game installation or live MOD tree is accessed by this API.
+pub fn staging_room_binding(source: &str) -> Result<String> {
+    if source.matches(INLINE_START).count() != 1 || source.matches(INLINE_END).count() != 1 {
+        return Err(Error::scenario(
+            "native staging source needs exactly one generated section",
+        ));
+    }
+    let (prefix, rest) = source.split_once(INLINE_START).unwrap();
+    let (_, suffix) = rest
+        .split_once(INLINE_END)
+        .ok_or_else(|| Error::scenario("native staging section ends before it starts"))?;
+    Ok(format!(
+        "{prefix}{INLINE_START}{}{INLINE_END}{suffix}",
+        staging_binding()
+    ))
+}
+
 pub fn emit(root: &Path, nonce: &str) -> Result<EmittedWitness> {
     let (mid_save, returned_save) = save_names(nonce)?;
+    let room = staging_room_binding(&fs::read_to_string(crate::repo_root().join(STAGING_ROOM))?)?;
     let scripts = [
         (
             "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
@@ -248,6 +268,7 @@ pub fn emit(root: &Path, nonce: &str) -> Result<EmittedWitness> {
             "poc/JAC_PoC_JapanMapScale/UI/JAC_NativeCarrierWitness_Staging.lua",
             staging_binding(),
         ),
+        (STAGING_ROOM, room),
     ];
     let mut files = Vec::new();
     for (relative, source) in scripts {

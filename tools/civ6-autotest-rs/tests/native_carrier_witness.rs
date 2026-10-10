@@ -52,7 +52,35 @@ fn generated_deploy_files_match_and_compile_lua51() {
         emitted.returned_save,
         format!("JAC-NativeCarrier-Returned-{run_id}")
     );
-    assert_eq!(emitted.files.len(), 3);
+    assert_eq!(emitted.files.len(), 4);
+    let shipped = fs::read_to_string(repo_root().join(witness::STAGING_ROOM)).unwrap();
+    assert_eq!(witness::staging_room_binding(&shipped).unwrap(), shipped);
+    assert_eq!(
+        fs::read_to_string(root.path().join(witness::STAGING_ROOM)).unwrap(),
+        shipped
+    );
+    Lua::new().load(&shipped).into_function().unwrap();
+}
+
+#[test]
+fn staging_generator_rejects_ambiguous_sections_before_deployment() {
+    let start = "-- BEGIN GENERATED NATIVE CARRIER STAGING\n";
+    let end = "-- END GENERATED NATIVE CARRIER STAGING";
+    for bad in [
+        String::new(),
+        format!("{start}{start}{end}"),
+        format!("{start}{end}{end}"),
+        format!("{end}{start}"),
+    ] {
+        assert!(witness::staging_room_binding(&bad).is_err());
+    }
+    let source = format!("before\n{start}outdated\n{end}\nafter");
+    let generated = witness::staging_room_binding(&source).unwrap();
+    assert!(generated.starts_with("before\n") && generated.ends_with("\nafter"));
+    assert_eq!(
+        witness::staging_room_binding(&generated).unwrap(),
+        generated
+    );
 }
 
 fn gp() -> Lua {
