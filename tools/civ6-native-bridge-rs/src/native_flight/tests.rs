@@ -6,7 +6,21 @@ fn deadline() -> Instant {
 }
 
 fn pending_now(closing: Closing<'_>) {
-    assert!(matches!(closing.wait(Instant::now()), Err(Error::Timeout)));
+    // Test outstanding accounting, not the independent expired-deadline path.
+    // The first observation is always before the deadline, even if the OS
+    // pauses this test before it acquires the mutex. A real Condvar timeout
+    // (or the next observation after a spurious wake) bounds this assertion.
+    let start = Instant::now();
+    let limit = start + Duration::from_millis(20);
+    let mut first = true;
+    let result = closing.wait_with_clock(limit, || {
+        if std::mem::replace(&mut first, false) {
+            start
+        } else {
+            limit
+        }
+    });
+    assert!(matches!(result, Err(Error::Timeout)));
 }
 
 #[test]
@@ -83,7 +97,16 @@ fn inner_job_completion_does_not_drain_its_outer_native_caller() {
         ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
         let closing = world.close().unwrap();
         let late_rejected = matches!(world.dispatch(), Err(Error::Closed));
-        let result = closing.wait(Instant::now() + Duration::from_millis(20));
+        let start = Instant::now();
+        let limit = start + Duration::from_millis(20);
+        let mut first = true;
+        let result = closing.wait_with_clock(limit, || {
+            if std::mem::replace(&mut first, false) {
+                start
+            } else {
+                limit
+            }
+        });
         leave_tx.send(()).unwrap();
         worker.join().unwrap();
         assert!(late_rejected);

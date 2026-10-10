@@ -414,10 +414,10 @@ D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manif
 
 共有ToDo2193の一次調査とCHAININFOを受け、既存のcapture-only観測器へ`native-outer`を追加する。4slotはCoreの4182B0（40 53）、41885F（C3）、418419（C3）とEXEのF7110（40 53）。中間fragment418427を入口にしない。4182B0から418860までの固定PEを全範囲で読み、42本の直接分岐は範囲内、正常RETは418419と41885Fの2本と照合した。418403の呼出し後は418410から早いepilogueへ進むため、後半のRETだけでは全正常復帰を観測できない。これは固定ソースの直接経路であり、間接callee、SEH退出や全発行者の寿命を証明しない。
 
-同じ15fieldのrequestでphase=`native-outer`を指定するか、既存Sessionへ`phase native-outer`を送る。通常のシナリオ操作も同じ名前を受け付ける。初期attach時にCoreがロード済みであることが必要で、Coreのbaseが変化した後はこのprofileへ切り替えられない。native観測中のCore unloadは異常として復元・回収へ進む。任意のアドレス入力、native関数の省略、未知フラグへの書込み、runtimeやAI候補e273の有効化は加えない。
+同じ15fieldのrequestでphase=`native-outer`を指定するか、既存Sessionへ`phase native-outer`を送る。通常のシナリオ操作も同じ名前を受け付ける。初期attach時にCoreがロード済みであることが必要で、Coreのbaseが変化した後はこのprofileへ切り替えられない。別phase中に旧Coreがunloadされ、同じbase・path・SHAで戻っても再利用を拒否する。native観測中のCore unloadは異常として復元・回収へ進む。任意のアドレス入力、native関数の省略、未知フラグへの書込み、runtimeやAI候補e273の有効化は加えない。
 
 EXEとCoreのRVAを混ぜず、各々の固定SHA・命令bytes・実行可能なimage pageを照合する。RET直前にRSP上の戻り先を読み、その一命令を実行した後のRIPと、解析時のRSP+8を照合する。原関数の復帰先へ勝手に分岐させず、既存のTF観測・例外転送・debug register復元・所有子回収を使う。snapshotもCoreの追加3命令を静的照合する。
 
-解析は同じarmed window・TID・RSP・戻り先で入口と各RETを対応させ、受け手候補のRCX、生のRDX、どちらのRETを通ったかを記録する。Context解放の時点で同じ窓の未復帰入口があれば記録し、別スレッド、戻り先の不一致、観測phaseの空白、片側欠落を成功へ補わない。古い8siteの記録は従来の範囲で解析し、新記録は11siteの終端目録を要求する。
+解析は同じarmed window・TID・スレッドの実追跡世代・RSP・戻り先で入口と各RETを対応させ、受け手候補のRCX、生のRDX、どちらのRETを通ったかを記録する。スレッドの追跡世代は所有debug eventごとの保持handleに採番し、同じTIDを後で使う別スレッドのRETを混ぜない。Context解放の時点で同じ窓の未復帰入口があれば記録し、別スレッド、戻り先の不一致、観測phaseの空白、片側欠落を成功へ補わない。古い8siteの記録は従来の範囲で解析し、新記録は11siteの終端目録を要求する。
 
 このprofileは外側4182B0の具体的な観測である。63E160の自然な終了、35800・35F70・36180・383E0・39650・39920、保留発行の公開と同じsetのWaitは同時には観測しない。解析結果の全発行者網羅・同set Wait・native全排出・runtime有効化は必ずfalseを維持する。観測0件、局所的な復帰、停止時のregister一致を全排出の根拠にしない。原7条件0/7と未マージを保持し、修正版の関連検査・別モデル・実機観測は次の検証に残る。

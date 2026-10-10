@@ -165,6 +165,7 @@ impl CaptureEpoch {
 #[derive(Default)]
 struct CaptureThreads {
     generations: BTreeMap<u32, u64>,
+    lifetimes: BTreeMap<u32, u64>,
     created: u64,
     exited: u64,
 }
@@ -332,7 +333,11 @@ fn arm(
         ));
     }
     install_sites(d, tid, epoch, c, threads)?;
-    threads.created += 1;
+    threads.created = threads
+        .created
+        .checked_add(1)
+        .ok_or("capture thread lifetime exhausted")?;
+    threads.lifetimes.insert(tid, threads.created);
     Ok(())
 }
 fn capture_thread_event(
@@ -382,6 +387,7 @@ fn capture_thread_event(
             d.held.remove(&tid);
             d.threads.remove(&tid);
             threads.generations.remove(&tid);
+            threads.lifetimes.remove(&tid);
             threads.exited += 1;
         }
         _ => return Ok(false),
@@ -903,6 +909,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     let mut phase = req.phase;
     let mut epoch = CaptureEpoch::new(phase, 0, exe.base, capture_core_base, &req)?;
     let mut capture_threads = CaptureThreads::default();
+    let mut native_core_unloaded = false;
     let mut desired = phase;
     let mut steps: BTreeMap<u32, Step> = BTreeMap::new();
     let mut counts: BTreeMap<String, u64> = BTreeMap::new();
@@ -955,6 +962,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                 if desired != phase && steps.is_empty() && d.attach_origin.accepted {
                     if epoch.generation >= 8 {return Err("phase change bound exceeded".into());}
                     if desired == Phase::NativeOuter {
+                        if native_core_unloaded { return Err("native capture Core lifetime ended since attach".into()); }
                         let core = core_module(req.pid)?.ok_or("native capture requires loaded Core")?;
                         if Some(core.base) != capture_core_base || !same_path(&core.path, &core_path) || sha256(&core.path)? != plan::CORE_SHA {
                             return Err("native capture Core changed since attach".into());
@@ -1024,8 +1032,13 @@ pub fn observe(req: Request) -> Result<(), String> {
                 }
                 UNLOAD_DLL_DEBUG_EVENT => {
                     let module_base=unsafe {event.u.UnloadDll.lpBaseOfDll} as u64;
-                    if phase == Phase::NativeOuter && Some(module_base) == capture_core_base {
-                        return Err("native capture Core unloaded; no lifetime certificate".into());
+                    if Some(module_base) == capture_core_base {
+                        // Reuse of base/path/SHA after unload is a new lifetime,
+                        // including when a non-native phase was armed at unload.
+                        native_core_unloaded = true;
+                        if phase == Phase::NativeOuter {
+                            return Err("native capture Core unloaded; no lifetime certificate".into());
+                        }
                     }
                     let prior_identity=module_identities.remove(&module_base);
                     mark(
@@ -1117,6 +1130,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                                         return Err("capture hit bound reached with other threads still stepping; missing completion is not success".into());
                                     }
                                     let site = sites[i];
+                                    let thread_lifetime = capture_threads.lifetimes.get(&tid).copied().ok_or("capture thread lifetime missing")?;
                                     let site_base = site.image.base(exe.base, capture_core_base)?;
                                     instruction(&d.game, site_base, site)?;
                                     let stack_return = read_pointer(&d.game, c.Rsp).ok();
@@ -1164,7 +1178,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                                     let context_slot = if matches!(site.name,"context_release"|"context_replace") {
                                         context_facts::capture(&d,&exe,site,&c,pointer.unwrap_or(0))
                                     } else {Value::Null};
-                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"stack_return":stack_return,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
+                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"thread_lifetime":thread_lifetime,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"stack_return":stack_return,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
                                     mark(&mut d, row.clone())?;
                                     steps.insert(
                                         tid,

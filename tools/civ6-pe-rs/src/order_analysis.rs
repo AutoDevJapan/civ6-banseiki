@@ -163,6 +163,9 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
             "instruction_before" => {
                 let id = positive(row, "capture_seq")?;
                 let tid = positive(row, "tid")?;
+                if phase == Phase::NativeOuter {
+                    positive(row, "thread_lifetime")?;
+                }
                 if id != next_capture {
                     return Err("capture ID is missing or repeated".into());
                 }
@@ -212,6 +215,7 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
                     "rip",
                     "pointer_candidate",
                     "stack_return",
+                    "thread_lifetime",
                 ] {
                     if row[key] != before[key] {
                         return Err(format!("completion changed captured {key}"));
@@ -317,7 +321,7 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
 // TID, stack slot and return address. No hit (or an orphan RET) proves nothing
 // about a frame admitted before attach or during an unarmed phase.
 fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
-    let mut active = BTreeMap::<(u64, u64), Vec<Value>>::new();
+    let mut active = BTreeMap::<(u64, u64, u64), Vec<Value>>::new();
     let mut window = 0;
     let mut pairs = Vec::new();
     let mut orphan_returns = Vec::new();
@@ -330,12 +334,16 @@ fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
             continue;
         }
         let tid = positive(row, "tid")?;
+        let lifetime = positive(row, "thread_lifetime")?;
         match row["site"].as_str() {
             Some("native_outer_entry") => {
-                active.entry((window, tid)).or_default().push(row.clone());
+                active
+                    .entry((window, tid, lifetime))
+                    .or_default()
+                    .push(row.clone());
             }
             Some("native_outer_return" | "native_outer_early_return") => {
-                let stack = active.entry((window, tid)).or_default();
+                let stack = active.entry((window, tid, lifetime)).or_default();
                 if stack.last().is_some_and(|entry| {
                     entry["rsp"] == row["rsp"]
                         && entry["stack_return"]
@@ -344,7 +352,7 @@ fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
                         && entry["stack_return"] == row["stack_return"]
                 }) {
                     let entry = stack.pop().unwrap();
-                    pairs.push(json!({"tid":tid,"window":window,"entry_sequence":entry["sequence"],"return_sequence":row["sequence"],"return_site":row["site"],"rsp":row["rsp"],"stack_return":row["stack_return"],"receiver_candidate":entry["rcx"],"argument2_raw":entry["rdx"]}));
+                    pairs.push(json!({"tid":tid,"thread_lifetime":lifetime,"window":window,"entry_sequence":entry["sequence"],"return_sequence":row["sequence"],"return_site":row["site"],"rsp":row["rsp"],"stack_return":row["stack_return"],"receiver_candidate":entry["rcx"],"argument2_raw":entry["rdx"]}));
                 } else {
                     orphan_returns.push(row["sequence"].clone());
                 }
@@ -352,7 +360,7 @@ fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
             Some("context_release") => {
                 let outstanding: Vec<_> = active
                     .iter()
-                    .filter(|((entry_window, _), _)| *entry_window == window)
+                    .filter(|((entry_window, _, _), _)| *entry_window == window)
                     .flat_map(|(_, entries)| entries)
                     .map(|entry| entry["sequence"].clone())
                     .collect();
@@ -438,7 +446,7 @@ mod tests {
         let ret = 0x180413b70u64;
         for (i, site) in sites.iter().enumerate() {
             let base = site.image.base(0x140000000, Some(0x180000000)).unwrap();
-            let row = json!({"type":"instruction_before","capture_seq":i+1,"tid":21,"phase":"native-outer","site":site.name,"rva":site.rva,"rip":base+site.rva,"rsp":0x99990000u64,"stack_return":ret,"rax":0,"rbx":0,"rcx":0x12340000u64,"rdx":7,"r8":0,"r9":0,"pointer_candidate":null,"original_instruction_executions":null});
+            let row = json!({"type":"instruction_before","capture_seq":i+1,"tid":21,"thread_lifetime":1,"phase":"native-outer","site":site.name,"rva":site.rva,"rip":base+site.rva,"rsp":0x99990000u64,"stack_return":ret,"rax":0,"rbx":0,"rcx":0x12340000u64,"rdx":7,"r8":0,"r9":0,"pointer_candidate":null,"original_instruction_executions":null});
             rows.push(row.clone());
             let mut after = row;
             after["type"] = json!("instruction_completed");
@@ -555,7 +563,11 @@ mod tests {
 
     #[test]
     fn another_thread_or_return_address_cannot_settle_a_native_frame() {
-        for (key, value) in [("tid", json!(22)), ("stack_return", json!(0x18041a400u64))] {
+        for (key, value) in [
+            ("tid", json!(22)),
+            ("thread_lifetime", json!(2)),
+            ("stack_return", json!(0x18041a400u64)),
+        ] {
             let mut rows = native_fixture(false);
             rows[3][key] = value.clone();
             rows[4][key] = value;
