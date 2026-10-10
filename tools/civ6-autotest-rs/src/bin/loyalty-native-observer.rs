@@ -781,6 +781,7 @@ mod policy {
         pub expected_count: Option<u32>,
         pub alive_before: Option<bool>,
         pub alive_after: Option<bool>,
+        pub exit_confirmed_after_releases: Option<bool>,
         pub thread_exited: bool,
         pub termination_phase: Option<&'static str>,
         pub ownership_retired: bool,
@@ -842,6 +843,37 @@ mod policy {
         report.runnable =
             count == 1 && report.alive_after == Some(true) && report.errors.is_empty();
         report
+    }
+
+    // Windows can discard a terminating thread's suspend count before its
+    // retained handle becomes signaled. Confirm ONLY this zero-count sample,
+    // after all other owned counts have been released. Never issue another
+    // ResumeThread, turn a live zero into success, or erase a failed wait.
+    pub fn confirm_zero_resume_exit(
+        report: &mut CleanupResume,
+        wait_for_exit: impl FnOnce() -> Result<bool>,
+    ) {
+        let count_error = format!("suspend count 0, expected {:?}", report.expected_count);
+        if report.raw_resume_count != Some(0)
+            || report.alive_before != Some(true)
+            || report.alive_after != Some(true)
+            || report.expected_count.is_none_or(|n| n == 0)
+            || report.errors != [count_error]
+        {
+            return;
+        }
+        match wait_for_exit() {
+            Ok(exited) => {
+                report.exit_confirmed_after_releases = Some(exited);
+                if exited {
+                    report.thread_exited = true;
+                    report.termination_phase = Some("after_all_releases");
+                    report.ownership_retired = true;
+                    report.errors.clear();
+                }
+            }
+            Err(error) => report.errors.push(format!("confirm thread exit: {error}")),
+        }
     }
 
     pub trait CleanupBackend {
@@ -3935,6 +3967,7 @@ mod platform {
         fn resume(&mut self) -> Vec<String> {
             let mut errors = Vec::new();
             let mut records = Vec::new();
+            let mut releases = Vec::new();
             for (&tid, thread) in &mut self.threads {
                 if !thread.suspended {
                     continue;
@@ -3951,11 +3984,36 @@ mod platform {
                         (count, error)
                     },
                 );
+                if resume.ownership_retired {
+                    thread.suspended = false;
+                }
+                releases.push((tid, resume));
+            }
+            // Release every owned suspension first: another suspended thread
+            // must not prevent the target's termination from completing.
+            // Share one finite budget across the retained handles, not one
+            // new timeout per thread. Ordinary successful resumes never wait.
+            let exit_deadline = Instant::now() + Duration::from_secs(1);
+            for (tid, mut resume) in releases {
+                let thread = self.threads.get_mut(&tid).expect("retained cleanup thread");
+                confirm_zero_resume_exit(&mut resume, || {
+                    let millis = exit_deadline
+                        .saturating_duration_since(Instant::now())
+                        .as_millis()
+                        .min(u128::from(u32::MAX - 1)) as u32;
+                    // SAFETY: same retained thread object used for the release.
+                    match unsafe { WaitForSingleObject(thread.handle.0, millis) } {
+                        WAIT_OBJECT_0 => Ok(true),
+                        WAIT_TIMEOUT => Ok(false),
+                        _ => Err(win_error("WaitForSingleObject(cleanup exit confirmation)")),
+                    }
+                });
                 records.push(json!({"event":"thread_resume","tid":tid,
                     "previous_count":resume.raw_resume_count,"raw_resume_count":resume.raw_resume_count,
                     "expected_count":resume.expected_count,"ok":resume.errors.is_empty(),
                     "runnable":resume.runnable,"thread_exited":resume.thread_exited,
                     "termination_phase":resume.termination_phase,"alive_before":resume.alive_before,
+                    "exit_confirmed_after_releases":resume.exit_confirmed_after_releases,
                     "alive_after":resume.alive_after,"errors":resume.errors}));
                 errors.extend(
                     resume
@@ -3963,9 +4021,6 @@ mod platform {
                         .iter()
                         .map(|error| format!("resume thread {tid}: {error}")),
                 );
-                if resume.ownership_retired {
-                    thread.suspended = false;
-                }
             }
             for record in records {
                 self.trace(record);
@@ -6087,6 +6142,11 @@ mod platform {
                         if record["termination_phase"] == "before_api" {
                             assert_eq!(record["alive_before"], false);
                             assert!(record["raw_resume_count"].is_null());
+                        } else if record["termination_phase"] == "after_all_releases" {
+                            assert_eq!(record["alive_before"], true);
+                            assert_eq!(record["alive_after"], true);
+                            assert_eq!(record["raw_resume_count"], 0);
+                            assert_eq!(record["exit_confirmed_after_releases"], true);
                         } else {
                             assert_eq!(record["termination_phase"], "after_api");
                             assert_eq!(record["alive_before"], true);
@@ -7900,6 +7960,80 @@ mod tests {
         assert!(report.thread_exited && report.ownership_retired);
         assert!(report.errors.is_empty());
         assert!(!report.runnable);
+    }
+
+    #[test]
+    fn cleanup_zero_count_requires_later_held_handle_exit_without_releasing_again() {
+        let calls = std::cell::Cell::new(0);
+        let mut report = cleanup_resume(
+            Some(1),
+            || Ok(true),
+            || {
+                calls.set(calls.get() + 1);
+                (0, None)
+            },
+        );
+        assert!(!report.errors.is_empty());
+        confirm_zero_resume_exit(&mut report, || Ok(true));
+        assert_eq!(calls.get(), 1);
+        assert_eq!(report.raw_resume_count, Some(0));
+        assert_eq!(report.alive_before, Some(true));
+        assert_eq!(report.alive_after, Some(true));
+        assert_eq!(report.exit_confirmed_after_releases, Some(true));
+        assert_eq!(report.termination_phase, Some("after_all_releases"));
+        assert!(report.thread_exited && report.ownership_retired && report.errors.is_empty());
+        assert!(!report.runnable);
+    }
+
+    #[test]
+    fn cleanup_zero_count_live_timeout_and_failed_confirmation_remain_errors() {
+        for result in [Ok(false), Err("WaitFailed".into())] {
+            let mut report = cleanup_resume(Some(1), || Ok(true), || (0, None));
+            confirm_zero_resume_exit(&mut report, || result.clone());
+            assert!(report.errors.iter().any(|e| e.contains("suspend count 0")));
+            assert!(!report.thread_exited && !report.runnable);
+            assert_eq!(report.termination_phase, None);
+            if result.is_err() {
+                assert!(report.errors.iter().any(|e| e.contains("WaitFailed")));
+                assert_eq!(report.exit_confirmed_after_releases, None);
+            } else {
+                assert_eq!(report.exit_confirmed_after_releases, Some(false));
+            }
+        }
+    }
+
+    #[test]
+    fn cleanup_later_exit_cannot_erase_other_api_or_wait_failures() {
+        for expected in [None, Some(0)] {
+            let mut report = cleanup_resume(expected, || Ok(true), || (0, None));
+            confirm_zero_resume_exit(&mut report, || panic!("no valid owned count"));
+            assert!(!report.errors.is_empty());
+            assert_eq!(report.exit_confirmed_after_releases, None);
+        }
+        for count in [1, 2, u32::MAX] {
+            let mut report = cleanup_resume(
+                Some(1),
+                || Ok(true),
+                || (count, Some("ResumeFailed".into())),
+            );
+            confirm_zero_resume_exit(&mut report, || {
+                panic!("not a zero-count termination sample")
+            });
+            assert_eq!(report.exit_confirmed_after_releases, None);
+            assert_eq!(report.errors.is_empty(), count == 1);
+        }
+        for (before, after) in [
+            (Err("WaitBefore".into()), Ok(true)),
+            (Ok(true), Err("WaitAfter".into())),
+        ] {
+            let mut waits = [before, after].into_iter();
+            let mut report = cleanup_resume(Some(1), || waits.next().unwrap(), || (0, None));
+            confirm_zero_resume_exit(&mut report, || {
+                panic!("failed earlier wait must remain unknown")
+            });
+            assert!(!report.errors.is_empty());
+            assert_eq!(report.exit_confirmed_after_releases, None);
+        }
     }
 
     #[test]
