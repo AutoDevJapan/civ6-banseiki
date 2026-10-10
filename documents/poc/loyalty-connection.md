@@ -136,6 +136,6 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 
 --single-setter-ai-cross-ui は107からGameplayのsetter直前にUIのReadCurrent closureを1回呼ぶ条件だけを戻す。旧native診断100に含まれていたこの処理と、正常107との差を監視無しで比べる限定診断である。製品へUI closure呼出しを追加しない。actor/owner/都市キー/実before/一回setter/二公開/ターンは107と同じ。再送や観測回数延長で通さず、結果が出るまで原因を断定しない。
 
-実機108（ae9）の元smallAI製品は27/38成功後、owner0/city196610/120,40/turn15でbefore100/target95、issuedPublication1403の後1404/1405でも100となりBLOCKEDした。物理保存2本と原本13filesをown3d27215d/live108へ保全。実機109（25a）のCore→UI getter一回を戻した対照も、14/14・ログ5/5、既存AI都市131073のUI100→95・CityEvents1・pubCounter11だった。追加したgetterだけでも旧失敗を再現せず、その境界を単独の根因にする変更は採用しない。109原11filesはown413e5cce/live109へ全SHA一致で保全。両標準chainはgame終了・profile元C234復元を確認した。
+実機108（ae9）の元smallAI製品は27/38成功後、owner0/city196610/120,40/turn15でbefore100/target95、issuedPublication1403の後1404/1405でも100となりBLOCKEDした。物理保存2本を含む原本14filesをown3d27215d/live108へ保全。実機109（25a）のCore→UI getter一回を戻した対照も、14/14・ログ5/5、既存AI都市131073のUI100→95・CityEvents1・pubCounter11だった。追加したgetterだけでも旧失敗を再現せず、その境界を単独の根因にする変更は採用しない。109原11filesはown413e5cce/live109へ全SHA一致で保全。両標準chainはgame終了・profile元C234復元を確認した。
 
 --single-setter-ai-capital-ui は107の対象選択だけを本体のGetCapitalCityへ変える。残り4手順は107と一致し、sender3/owner0/実before/一回setter/二公開/手番を維持する。移管後の失敗都市が元の首都だったことと、都市移管そのものの条件を分ける比較である。首都の変更可否や移管の根因は実機前に断定しない。
