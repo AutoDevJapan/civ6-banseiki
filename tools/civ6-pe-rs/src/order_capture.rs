@@ -204,7 +204,7 @@ pub const LOAD: [Site; 4] = [
     },
 ];
 // CHAININFO joins 418427 -> 41841a -> 4182b0. Observe the real
-// entry and its common RET, not the middle of a chained fragment.
+// entry and BOTH normal RETs, not the middle of a chained fragment.
 // Four slots cannot cover all producer domains. This profile can refute a
 // boundary contract; it cannot certify global native quiescence.
 pub const NATIVE_OUTER: [Site; 4] = [
@@ -224,10 +224,10 @@ pub const NATIVE_OUTER: [Site; 4] = [
     },
     Site {
         image: Image::Core,
-        name: "native_shutdown_entry",
-        rva: 0x63e160,
-        bytes: &[0x40, 0x53],
-        next: Next::Sequential,
+        name: "native_outer_early_return",
+        rva: 0x418419,
+        bytes: &[0xc3],
+        next: Next::StackReturn,
     },
     LOAD[0],
 ];
@@ -520,6 +520,7 @@ mod tests {
         assert_eq!(Phase::parse("native-outer").unwrap(), Phase::NativeOuter);
         assert_eq!(NATIVE_OUTER[0].rva, 0x4182b0);
         assert_eq!(NATIVE_OUTER[1].rva, 0x41885f);
+        assert_eq!(NATIVE_OUTER[2].rva, 0x418419);
         assert!(NATIVE_OUTER.iter().all(|site| site.rva != 0x418427));
         assert_eq!(NATIVE_OUTER[3].image, Image::Exe);
         assert!(Image::Core.base(0x140000000, None).is_err());

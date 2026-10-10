@@ -313,7 +313,7 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
     )
 }
 
-// The common RET only pairs with a captured entry in the SAME armed window,
+// Each normal RET only pairs with a captured entry in the SAME armed window,
 // TID, stack slot and return address. No hit (or an orphan RET) proves nothing
 // about a frame admitted before attach or during an unarmed phase.
 fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
@@ -334,7 +334,7 @@ fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
             Some("native_outer_entry") => {
                 active.entry((window, tid)).or_default().push(row.clone());
             }
-            Some("native_outer_return") => {
+            Some("native_outer_return" | "native_outer_early_return") => {
                 let stack = active.entry((window, tid)).or_default();
                 if stack.last().is_some_and(|entry| {
                     entry["rsp"] == row["rsp"]
@@ -344,12 +344,12 @@ fn native_outer_observations(rows: &[Value]) -> Result<Value, String> {
                         && entry["stack_return"] == row["stack_return"]
                 }) {
                     let entry = stack.pop().unwrap();
-                    pairs.push(json!({"tid":tid,"window":window,"entry_sequence":entry["sequence"],"return_sequence":row["sequence"],"rsp":row["rsp"],"stack_return":row["stack_return"],"receiver_candidate":entry["rcx"],"argument2_raw":entry["rdx"]}));
+                    pairs.push(json!({"tid":tid,"window":window,"entry_sequence":entry["sequence"],"return_sequence":row["sequence"],"return_site":row["site"],"rsp":row["rsp"],"stack_return":row["stack_return"],"receiver_candidate":entry["rcx"],"argument2_raw":entry["rdx"]}));
                 } else {
                     orphan_returns.push(row["sequence"].clone());
                 }
             }
-            Some("native_shutdown_entry" | "context_release") => {
+            Some("context_release") => {
                 let outstanding: Vec<_> = active
                     .iter()
                     .filter(|((entry_window, _), _)| *entry_window == window)
@@ -423,15 +423,15 @@ mod tests {
         analyze(std::io::Cursor::new(text))
     }
 
-    fn native_fixture(shutdown_before_return: bool) -> Vec<Value> {
+    fn native_fixture(release_before_return: bool) -> Vec<Value> {
         let legacy = fixture();
         let mut first = legacy[0].clone();
         first["capture_phase"] = json!("native-outer");
         first["static_proof"]["native_outer"] = json!({"core_sha256":CORE_SHA});
         let mut rows = vec![first];
         let mut sites = vec![crate::order_capture::NATIVE_OUTER[0]];
-        if shutdown_before_return {
-            sites.push(crate::order_capture::NATIVE_OUTER[2]);
+        if release_before_return {
+            sites.push(crate::order_capture::NATIVE_OUTER[3]);
         }
         sites.push(crate::order_capture::NATIVE_OUTER[1]);
         sites.push(crate::order_capture::NATIVE_OUTER[3]);
@@ -494,7 +494,7 @@ mod tests {
         );
         assert_eq!(
             report["native_outer"]["teardown_overlaps"][0]["site"],
-            "native_shutdown_entry"
+            "context_release"
         );
     }
 
@@ -516,6 +516,41 @@ mod tests {
         let mut rows = native_fixture(false);
         rows[0]["static_proof"]["native_outer"]["core_sha256"] = json!("forged");
         assert!(read(&rows).is_err());
+    }
+
+    #[test]
+    fn early_normal_ret_settles_the_same_frame_as_the_later_ret() {
+        let mut rows = native_fixture(false);
+        for row in &mut rows[3..=4] {
+            row["site"] = json!("native_outer_early_return");
+            row["rva"] = json!(0x418419);
+            row["rip"] = json!(0x180418419u64);
+        }
+        for site in rows.last_mut().unwrap()["sites"].as_array_mut().unwrap() {
+            if site["site"] == "native_outer_return" {
+                site["completed"] = json!(0);
+            }
+            if site["site"] == "native_outer_early_return" {
+                site["completed"] = json!(1);
+            }
+        }
+        let report = read(&rows).unwrap();
+        assert_eq!(
+            report["native_outer"]["paired_frames"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            report["native_outer"]["paired_frames"][0]["return_site"],
+            "native_outer_early_return"
+        );
+        assert!(report["native_outer"]["outstanding_entry_sequences"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        assert_eq!(report["native_outer"]["native_quiescence_proven"], false);
     }
 
     #[test]
