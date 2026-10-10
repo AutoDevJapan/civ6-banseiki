@@ -107,7 +107,8 @@ fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
 fn pregame_flags(nonce: &str) -> String {
     let key = scenario::lua_string(NONCE_KEY);
     let value = scenario::lua_string(nonce);
-    format!("assert(UI.IsInFrontEnd(),'frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
+    let hotseat = scenario::lua_string(civ6_autotest_rs::native_carrier_witness::HOTSEAT_KEY);
+    format!("assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'actual hotseat frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue({hotseat}, true)\nlocal confirmed=GameConfiguration.GetValue({hotseat})\nassert(confirmed==true or confirmed==1,'hotseat confirmation was not applied')\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
 }
 
 fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
@@ -458,15 +459,20 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const NONCE: &str = "0123456789abcdef0123456789abcdef";
+    fn nonce() -> &'static str {
+        static VALUE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        VALUE
+            .get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+            .as_str()
+    }
 
     #[test]
     fn pregame_flags_use_the_stock_value_api_and_verify_the_actual_mode() {
         let lua = mlua::Lua::new();
-        lua.load("local values={};UI={IsInFrontEnd=function() return true end};GameConfiguration={SetValue=function(k,v) values[k]=v end,GetValue=function(k) return values[k] end}").exec().unwrap();
+        lua.load("local values={};UI={IsInFrontEnd=function() return true end};GameConfiguration={IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,SetValue=function(k,v) values[k]=v end,GetValue=function(k) return values[k] end}").exec().unwrap();
         assert_eq!(
-            lua.load(pregame_flags(NONCE)).eval::<String>().unwrap(),
-            NONCE
+            lua.load(pregame_flags(nonce())).eval::<String>().unwrap(),
+            nonce()
         );
         assert!(lua
             .load("return GameConfiguration.GetValue('GAMEMODE_HEROES')")
@@ -475,10 +481,11 @@ mod tests {
         lua.load("GameConfiguration.SetValue=function() end")
             .exec()
             .unwrap();
-        let other = "fedcba9876543210fedcba9876543210";
-        assert!(lua.load(pregame_flags(other)).eval::<String>().is_err());
+        let other = uuid::Uuid::new_v4().simple().to_string();
+        assert_ne!(other, nonce());
+        assert!(lua.load(pregame_flags(&other)).eval::<String>().is_err());
         lua.load("local read=GameConfiguration.GetValue;GameConfiguration.GetValue=function(k) if k=='GAMEMODE_HEROES' then return false end;return read(k) end").exec().unwrap();
-        assert!(lua.load(pregame_flags(NONCE)).eval::<String>().is_err());
+        assert!(lua.load(pregame_flags(nonce())).eval::<String>().is_err());
     }
 
     #[test]
@@ -487,7 +494,7 @@ mod tests {
         let path = temp.path().join("controller.jsonl");
         let value = State {
             journal: protocol::Journal::new(
-                NONCE,
+                nonce(),
                 civ6_autotest_rs::hotseat_bridge::WindowOwner {
                     pid: 1,
                     started: 1.,
@@ -521,7 +528,7 @@ mod tests {
         let path = temp.path().join("controller.jsonl");
         let mut value = State {
             journal: protocol::Journal::new(
-                NONCE,
+                nonce(),
                 civ6_autotest_rs::hotseat_bridge::WindowOwner {
                     pid: 1,
                     started: 1.,
@@ -536,7 +543,7 @@ mod tests {
         };
         fs::write(&path, b"").unwrap();
         let frame = |serial, kind| protocol::Frame {
-            nonce: NONCE.into(),
+            nonce: nonce().into(),
             scene: "scene0".into(),
             serial,
             generation: 0,

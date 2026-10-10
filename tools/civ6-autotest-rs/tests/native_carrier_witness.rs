@@ -2,12 +2,18 @@ use civ6_autotest_rs::{native_carrier_witness as witness, repo_root};
 use mlua::Lua;
 use serde_json::Value;
 use std::fs;
-const NONCE: &str = "0123456789abcdef0123456789abcdef";
+fn nonce() -> &'static str {
+    static VALUE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VALUE
+        .get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+        .as_str()
+}
 const RULES: &str =
     include_str!("../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua");
 
 #[test]
 fn generated_deploy_files_match_and_compile_lua51() {
+    let run_id = nonce();
     for (path, code) in [
         (
             "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
@@ -35,28 +41,41 @@ fn generated_deploy_files_match_and_compile_lua51() {
         }
     }
     let root = tempfile::tempdir().unwrap();
-    assert!(witness::emit(root.path(), "invalid").is_err());
+    assert!(witness::emit(root.path(), &nonce()[..7]).is_err());
     assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
-    let emitted = witness::emit(root.path(), NONCE).unwrap();
+    let emitted = witness::emit(root.path(), nonce()).unwrap();
     assert_eq!(
         emitted.mid_save,
-        format!("JAC-NativeCarrier-MidLoan-{NONCE}")
+        format!("JAC-NativeCarrier-MidLoan-{run_id}")
     );
     assert_eq!(
         emitted.returned_save,
-        format!("JAC-NativeCarrier-Returned-{NONCE}")
+        format!("JAC-NativeCarrier-Returned-{run_id}")
     );
     assert_eq!(emitted.files.len(), 3);
 }
 
 fn gp() -> Lua {
+    gp_with_ui_getters(true)
+}
+
+fn gp_with_ui_getters(ui_getters: bool) -> Lua {
+    gp_context(ui_getters, true, true)
+}
+
+fn gp_context(ui_getters: bool, multiplayer: bool, confirmed: bool) -> Lua {
+    let run_id = nonce();
     let lua = Lua::new();
     lua.load(RULES).exec().unwrap();
+    lua.globals()
+        .set("NATIVE_MULTIPLAYER", multiplayer)
+        .unwrap();
+    lua.globals().set("HOTSEAT_CONFIRMED", confirmed).unwrap();
     lua.load(format!(r#"
 local R=JAC_AbsorptionRules
-GameConfiguration={{GetValue=function() return '{NONCE}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_HOTSEAT' then return HOTSEAT_CONFIRMED end;return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
 PROPS={{}};WRITES={{}};CREATES=0
-Game={{GetProperty=function(_,k) return R.Copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=R.Copy(v);WRITES[#WRITES+1]=R.Copy(v) end,GetCurrentGameTurn=function() return 1 end}}
+Game={{IsNetworkMultiplayer=function() return NATIVE_MULTIPLAYER end,GetProperty=function(_,k) return R.Copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=R.Copy(v);WRITES[#WRITES+1]=R.Copy(v) end,GetCurrentGameTurn=function() return 1 end}}
 local function player(id) return {{IsAlive=function() return true end,IsHuman=function() return id<2 end,IsTurnActive=function() return id==0 end}} end
 Players={{[0]=player(0),[1]=player(1),[2]=player(2)}}
 PlayerManager={{GetAliveIDs=function() return {{0,1,2}} end}}
@@ -64,17 +83,40 @@ ExposedMembers={{}}
 JAC_AbsorptionGameplay={{Rules=R,Canonical=R.Canonical,GetState=function() return {{}} end}}
 GameEvents={{JAC_NativeCarrierWitness_Operation={{Add=function(f) RECEIVE=f end}}}}
 "#)).exec().unwrap();
+    if !ui_getters {
+        lua.load("GameConfiguration.IsHotseat=nil;GameConfiguration.IsAnyMultiplayer=nil")
+            .exec()
+            .unwrap();
+    }
     lua.load(witness::gameplay_binding()).exec().unwrap();
     lua
 }
 
 #[test]
+fn gameplay_initializes_without_ui_only_session_getters() {
+    let lua = gp_with_ui_getters(false);
+    lua.load("assert(type(RECEIVE)=='function' and ExposedMembers.JAC_NativeCarrierWitness.Get().NextOperation==1 and CREATES==0)").exec().unwrap();
+}
+
+#[test]
+fn gameplay_requires_real_native_mp_and_verified_ui_hotseat_setting() {
+    for (network, confirmed) in [(false, true), (true, false), (false, false)] {
+        let lua = gp_context(false, network, confirmed);
+        lua.load("assert(RECEIVE==nil and ExposedMembers.JAC_NativeCarrierWitness==nil and #WRITES==0 and CREATES==0)").exec().unwrap();
+    }
+    let lua = gp_with_ui_getters(false);
+    lua.load(format!("HOTSEAT_CONFIRMED=false;RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
+}
+
+#[test]
 fn core_persists_attempt_before_failure_and_never_replays_it() {
+    let run_id = nonce();
     let lua = gp();
     // First fixed operation is native CREATE at protocol step 8. The missing
     // real site is an intentional failure, not a substitute city creation.
-    let packet =
-        format!("{{Version=1,Command='FIXED',Nonce='{NONCE}',Actor=0,Generation=0,Step=8,Turn=1}}");
+    let packet = format!(
+        "{{Version=1,Command='FIXED',Nonce='{run_id}',Actor=0,Generation=0,Step=8,Turn=1}}"
+    );
     lua.load(format!("RECEIVE(0,{packet});RECEIVE(0,{packet})"))
         .exec()
         .unwrap();
@@ -96,6 +138,7 @@ assert(started==1)
 
 #[test]
 fn wrong_actor_generation_and_runtime_source_fail_before_mutation() {
+    let run_id = nonce();
     for extra in [
         "Actor=1,Generation=0,Step=8",
         "Actor=0,Generation=1,Step=8",
@@ -104,7 +147,7 @@ fn wrong_actor_generation_and_runtime_source_fail_before_mutation() {
     ] {
         let lua = gp();
         lua.load(format!(
-            "RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{NONCE}',Turn=1,{extra}}})"
+            "RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{run_id}',Turn=1,{extra}}})"
         ))
         .exec()
         .unwrap();
@@ -114,9 +157,10 @@ fn wrong_actor_generation_and_runtime_source_fail_before_mutation() {
 
 #[test]
 fn staging_uses_the_guarded_official_button_once_and_frames_are_json() {
+    let run_id = nonce();
     let lua = Lua::new();
     lua.load(format!(r#"
-GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{NONCE}' else return 1 end end,
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' else return 1 end end,
  IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {{0,1,2}} end}}
 PlayerConfigurations={{[0]={{GetSlotStatus=function() return 1 end}},[1]={{GetSlotStatus=function() return 1 end}},[2]={{GetSlotStatus=function() return 2 end}}}}
 SlotStatus={{SS_TAKEN=1}};ContextPtr={{IsHidden=function() return false end}};Network={{IsGameHost=function() return true end}}
@@ -136,7 +180,7 @@ LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
         assert_eq!(fields.len(), 10);
         assert_eq!(fields[0], "JAC_NC");
         assert_eq!(fields[1], "1");
-        assert_eq!(fields[2], NONCE);
+        assert_eq!(fields[2], nonce());
         assert_eq!(fields[5], "1");
         assert_eq!(fields[7], "STAGING_READY");
         assert!(fields[9].len() <= 192);
@@ -155,7 +199,7 @@ LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
     }
     let payload: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(payload["generation"], 1);
-    assert!(payload["canonical"].as_str().unwrap().contains(NONCE));
+    assert!(payload["canonical"].as_str().unwrap().contains(nonce()));
 }
 
 #[test]
@@ -236,6 +280,7 @@ fn human_route_changes_only_fixed_roles_and_keeps_the_ai_tuner_fixture_exact() {
 }
 
 fn loaded_ui(claimed: bool) -> Lua {
+    let run_id = nonce();
     // Trusted repository-only test code uses debug upvalues to isolate the
     // save callback ordering. This VM never accepts external game packets.
     let lua = unsafe { Lua::unsafe_new() };
@@ -243,13 +288,13 @@ fn loaded_ui(claimed: bool) -> Lua {
     lua.globals().set("CLAIMED", claimed).unwrap();
     lua.load(format!(r#"
 local R=JAC_AbsorptionRules
-local b={{Version=1,Nonce='{NONCE}',Generation=1,ResumeStep=33,Receipts={{}}}}
+local b={{Version=1,Nonce='{run_id}',Generation=1,ResumeStep=33,Receipts={{}}}}
 PAUSED=true;SHOWN=true;LOGS={{}};ADD_ORDER={{}}
 UI={{GetElapsedTime=function() return 10.125 end}}
 E={{Token='fixture-native-hotseat-996',Original={{Index=99,GreatWorkType='RELIC'}},Borrowed={{ID=44,Phase='BORROWED'}},Source={{ID=2}}}}
 M={{Phase='BORROWED',Claimed=CLAIMED,Actor=0,MoveOwner=0,Loans={{{{}},{{Building=7,Owner=1}}}}}}
 NATIVE={{Recoveries={{['fixture-native-hotseat-996']={{NativeCarrier={{MP=M}}}}}}}}
-GameConfiguration={{GetValue=function() return '{NONCE}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,IsPaused=function() return PAUSED end}}
+GameConfiguration={{GetValue=function() return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,IsPaused=function() return PAUSED end}}
 Game={{GetProperty=function(_,k) if k=='JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996' then return E else return b end end,GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 1 end}}
 GameInfo={{GreatWorks={{RELIC={{Index=37}}}}}}
 ExposedMembers={{JAC_Absorption={{GetState=function() return NATIVE end,Canonical=R.Canonical}},
@@ -277,11 +322,12 @@ print=function(s) LOGS[#LOGS+1]=s end
 
 #[test]
 fn review_staging_ready_is_once_per_generation_in_the_same_context() {
+    let run_id = nonce();
     let lua = Lua::new();
     lua.load(RULES).exec().unwrap();
     lua.load(format!(r#"
 GENERATION=0
-GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{NONCE}' else return GENERATION end end,
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' else return GENERATION end end,
  IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,GetParticipatingPlayerIDs=function() return {{0,1,2}} end}}
 PlayerConfigurations={{[0]={{GetSlotStatus=function() return 1 end}},[1]={{GetSlotStatus=function() return 1 end}},[2]={{GetSlotStatus=function() return 2 end}}}}
 SlotStatus={{SS_TAKEN=1}};ContextPtr={{IsHidden=function() return false end}};Network={{IsGameHost=function() return true end}}
@@ -412,6 +458,7 @@ fn an_already_dispatched_load_never_claims_an_early_ready_receipt() {
 
 #[test]
 fn save_generation_requires_the_actual_borrowed_city_and_survives_reload() {
+    let run_id = nonce();
     for owner in [0, 1] {
         let lua = gp();
         lua.globals().set("CITY_OWNER", owner).unwrap();
@@ -422,7 +469,7 @@ Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',{Token='fixture-native-ho
 CityManager={GetCityAt=function(x,y) assert(x==3 and y==4);return {GetOwner=function() return CITY_OWNER end,GetID=function() return 44 end} end}
 JAC_AbsorptionGameplay.GetState=function() return {Recoveries={['fixture-native-hotseat-996']={NativeCarrier={MP={Phase='BORROWED',Actor=0,MoveOwner=0,Loans={{},{Owner=1,Issued=true,BorrowedID=44}}}}}}} end
 "#).exec().unwrap();
-        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{NONCE}',Actor=0,Generation=0,Step=30,Turn=1}})")).exec().unwrap();
+        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{run_id}',Actor=0,Generation=0,Step=30,Turn=1}})")).exec().unwrap();
         let b = lua
             .globals()
             .get::<mlua::Table>("ExposedMembers")
@@ -441,7 +488,7 @@ JAC_AbsorptionGameplay.GetState=function() return {Recoveries={['fixture-native-
             assert_eq!(b.get::<i64>("ResumeStep").unwrap(), 33);
             assert_eq!(
                 b.get::<String>("SaveName").unwrap(),
-                format!("JAC-NativeCarrier-MidLoan-{NONCE}")
+                format!("JAC-NativeCarrier-MidLoan-{run_id}")
             );
             lua.load(witness::gameplay_binding()).exec().unwrap();
             lua.load("local b=ExposedMembers.JAC_NativeCarrierWitness.Get();assert(b.Generation==1 and b.ResumeStep==33 and b.Receipts['0:30'].Status=='COMPLETE')").exec().unwrap();
@@ -451,13 +498,14 @@ JAC_AbsorptionGameplay.GetState=function() return {Recoveries={['fixture-native-
 
 #[test]
 fn scene_freezes_saved_generation_without_frontend_game_or_clock_apis() {
+    let run_id = nonce();
     let common = include_str!("../src/native_carrier_witness/common.lua");
     let mut scenes = Vec::new();
     for generation in [0, 1, 2] {
         let lua = Lua::new();
         lua.load(RULES).exec().unwrap();
         lua.load(format!(r#"
-GameConfiguration={{GetValue=function() return '{NONCE}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
+GameConfiguration={{GetValue=function() return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
 ContextPtr=setmetatable({{}},{{__tostring=function() return 'reusedContextAddress' end}})
 LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
 "#)).exec().unwrap();
@@ -483,6 +531,7 @@ LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
 
 #[test]
 fn synchronous_save_completion_waits_for_the_actual_api_return() {
+    let run_id = nonce();
     let lua = loaded_ui(false);
     // Isolate save transport, not native-world acceptance. The complete-world
     // reader is replaced ONLY inside this test to exercise callback ordering.
@@ -494,7 +543,7 @@ end
 local tick=up(UPDATE,'tick');SAVE=up(tick,'saveGame')
 local actions=up(tick,'actions');actions[37].run=function() return JAC_AbsorptionRules.Canonical({{CompleteWorld='保存対象'}}) end
 local oldGet=ExposedMembers.JAC_NativeCarrierWitness.Get
-ExposedMembers.JAC_NativeCarrierWitness.Get=function() local b=oldGet();b.SaveName='JAC-NativeCarrier-MidLoan-{NONCE}';return b end
+ExposedMembers.JAC_NativeCarrierWitness.Get=function() local b=oldGet();b.SaveName='JAC-NativeCarrier-MidLoan-{run_id}';return b end
 local values={{}}
 GameConfiguration.SetValue=function(k,v) values[k]=v end
 GameConfiguration.GetValue=function(k) return values[k] end

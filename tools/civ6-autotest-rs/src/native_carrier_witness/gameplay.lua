@@ -37,6 +37,7 @@ prepareSave=function(generation)
  return A.Canonical(b.Checkpoint)
 end
 local function receive(actor,p)
+ assert(nativeHotseat(),'native multiplayer or verified hotseat setting changed')
  assert(type(p)=='table' and p.Version==1 and p.Command=='FIXED' and p.Nonce==nonce,'invalid fixed witness packet')
  assert(actor==0 and p.Actor==0 and Players[0]:IsAlive() and Players[0]:IsHuman()
   and Players[0]:IsTurnActive() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'actual human0 fixture turn required')

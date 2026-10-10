@@ -359,25 +359,32 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const NONCE: &str = "0123456789abcdef0123456789abcdef";
+    fn nonce() -> &'static str {
+        static VALUE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        VALUE
+            .get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+            .as_str()
+    }
     fn packet(serial: u64, part: usize, total: usize, body: &str) -> String {
+        let run_id = nonce();
         let hex: String = body.bytes().map(|b| format!("{b:02x}")).collect();
-        format!("witness: JAC_NC|1|{NONCE}|12.5|{serial}|1|25|RESULT|{part}/{total}|{hex}")
+        format!("witness: JAC_NC|1|{run_id}|12.5|{serial}|1|25|RESULT|{part}/{total}|{hex}")
     }
 
     #[test]
     fn native_steps_above_the_unchanged_growth_limit_and_utf8_are_retained() {
-        let frames = parse_available_frames(&packet(1, 1, 1, "原本"), NONCE).unwrap();
+        let run_id = nonce();
+        let frames = parse_available_frames(&packet(1, 1, 1, "原本"), nonce()).unwrap();
         assert_eq!(frames[0].step, 25);
         assert_eq!(frames[0].body, "原本");
-        let old = format!("JAC_HS|1|{NONCE}|12.5|1|21|RESULT|1/1|e58e9fe69cac");
+        let old = format!("JAC_HS|1|{run_id}|12.5|1|21|RESULT|1/1|e58e9fe69cac");
         assert_eq!(
-            civ6_autotest_rs::hotseat_bridge::parse_frames(&old, NONCE).unwrap()[0].body,
+            civ6_autotest_rs::hotseat_bridge::parse_frames(&old, nonce()).unwrap()[0].body,
             "原本"
         );
         assert!(civ6_autotest_rs::hotseat_bridge::parse_frames(
             &old.replace("|21|", "|25|"),
-            NONCE
+            nonce()
         )
         .is_err());
     }
@@ -385,10 +392,10 @@ mod tests {
     #[test]
     fn partial_delivery_is_not_success_and_duplicates_gaps_and_interleaving_fail() {
         let first = packet(1, 1, 2, "source");
-        assert!(parse_available_frames(&first, NONCE).unwrap().is_empty());
+        assert!(parse_available_frames(&first, nonce()).unwrap().is_empty());
         let good = format!("{first}\n{}", packet(1, 2, 2, " returned"));
         assert_eq!(
-            parse_available_frames(&good, NONCE).unwrap()[0].body,
+            parse_available_frames(&good, nonce()).unwrap()[0].body,
             "source returned"
         );
         for tail in [
@@ -396,28 +403,30 @@ mod tests {
             packet(1, 3, 3, "missing"),
             packet(2, 2, 2, "interleaved"),
         ] {
-            assert!(parse_available_frames(&format!("{first}\n{tail}"), NONCE).is_err());
+            assert!(parse_available_frames(&format!("{first}\n{tail}"), nonce()).is_err());
         }
     }
 
     #[test]
     fn foreign_nonce_invalid_utf8_and_unbounded_headers_are_rejected() {
         let good = packet(1, 1, 1, "real");
+        let foreign = uuid::Uuid::new_v4().simple().to_string();
+        assert_ne!(foreign, nonce());
         for bad in [
-            good.replace(NONCE, "ffffffffffffffffffffffffffffffff"),
+            good.replace(nonce(), &foreign),
             good.replace("|1|25|", "|3|25|"),
             good.replace("|25|", "|44|"),
             good.replace("|1/1|7265616c", "|1/1|ff"),
             good.replace("|1/1|", "|1/10924|"),
         ] {
-            assert!(parse_available_frames(&bad, NONCE).is_err(), "{bad}");
+            assert!(parse_available_frames(&bad, nonce()).is_err(), "{bad}");
         }
     }
 
     #[test]
     fn receipt_exact_repoll_is_harmless_but_replays_and_body_changes_fail() {
         let mut receipts = Receipts::default();
-        let first = parse_available_frames(&packet(1, 1, 1, "one"), NONCE)
+        let first = parse_available_frames(&packet(1, 1, 1, "one"), nonce())
             .unwrap()
             .remove(0);
         assert!(receipts.accept(&first).unwrap());
@@ -425,7 +434,7 @@ mod tests {
         let mut changed = first.clone();
         changed.body = "forged".into();
         assert!(receipts.accept(&changed).is_err());
-        let second = parse_available_frames(&packet(2, 1, 1, "two"), NONCE)
+        let second = parse_available_frames(&packet(2, 1, 1, "two"), nonce())
             .unwrap()
             .remove(0);
         assert!(receipts.accept(&second).unwrap());
@@ -438,9 +447,9 @@ mod tests {
             .map(|n| packet(n as u64, 1, 1, "real"))
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(parse_available_frames(&log, NONCE).is_err());
+        assert!(parse_available_frames(&log, nonce()).is_err());
         let mut receipts = Receipts::default();
-        let mut frame = parse_available_frames(&packet(1, 1, 1, "real"), NONCE)
+        let mut frame = parse_available_frames(&packet(1, 1, 1, "real"), nonce())
             .unwrap()
             .remove(0);
         receipts.accept(&frame).unwrap();
@@ -450,7 +459,7 @@ mod tests {
 
     fn event(scene: &str, serial: u64, generation: u8, kind: &str, canonical: &str) -> Frame {
         let name = if kind.starts_with("SAVE_") {
-            Some(save_name(NONCE, generation).unwrap())
+            Some(save_name(nonce(), generation).unwrap())
         } else {
             None
         };
@@ -459,7 +468,7 @@ mod tests {
             body["name"] = name.into();
         }
         Frame {
-            nonce: NONCE.into(),
+            nonce: nonce().into(),
             scene: scene.into(),
             serial,
             generation,
@@ -471,7 +480,7 @@ mod tests {
 
     fn journal() -> Journal {
         Journal::new(
-            NONCE,
+            nonce(),
             civ6_autotest_rs::hotseat_bridge::WindowOwner {
                 pid: 1,
                 started: 1.,
