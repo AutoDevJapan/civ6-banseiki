@@ -1245,10 +1245,7 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
         peer: peer.clone(),
     };
     let error = failed_prepare_cli(&mut r, &f.p).unwrap_err();
-    assert!(
-        error.contains("ownership changed"),
-        "{error}"
-    );
+    assert!(error.contains("ownership changed"), "{error}");
     assert_eq!(read_json(&r.lock).unwrap(), peer);
     assert!(
         r.fake
