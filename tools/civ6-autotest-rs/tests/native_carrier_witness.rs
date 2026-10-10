@@ -73,9 +73,9 @@ fn gp_context(ui_getters: bool, multiplayer: bool, confirmed: bool) -> Lua {
     lua.globals().set("HOTSEAT_CONFIRMED", confirmed).unwrap();
     lua.load(format!(r#"
 local R=JAC_AbsorptionRules
-GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_HOTSEAT' then return HOTSEAT_CONFIRMED end;return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
+GameConfiguration={{IsNetworkMultiplayer=function() return NATIVE_MULTIPLAYER end,GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_HOTSEAT' then return HOTSEAT_CONFIRMED end;return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
 PROPS={{}};WRITES={{}};CREATES=0
-Game={{IsNetworkMultiplayer=function() return NATIVE_MULTIPLAYER end,GetProperty=function(_,k) return R.Copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=R.Copy(v);WRITES[#WRITES+1]=R.Copy(v) end,GetCurrentGameTurn=function() return 1 end}}
+Game={{GetProperty=function(_,k) return R.Copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=R.Copy(v);WRITES[#WRITES+1]=R.Copy(v) end,GetCurrentGameTurn=function() return 1 end}}
 local function player(id) return {{IsAlive=function() return true end,IsHuman=function() return id<2 end,IsTurnActive=function() return id==0 end}} end
 Players={{[0]=player(0),[1]=player(1),[2]=player(2)}}
 PlayerManager={{GetAliveIDs=function() return {{0,1,2}} end}}
