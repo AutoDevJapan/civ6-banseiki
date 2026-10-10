@@ -71,3 +71,29 @@ Luna093402の限定調査で、終了イベントより先に保持handleの終�
 診断生成器は、UIで作ったgetter関数をGameplayの同期ハンドラーから呼ぶ処理を除いた。観測器がreadyになった後、UI要求内で基準値を読んでから一度の変更操作を要求し、GameplayはCityの当事者・手番・再送を検査してsetterだけを呼ぶ。二公開後のgetterは元のUI手順で読む。これは呼出しコンテキストの分離で、101の終了原因を証明した修正とは扱わない。製品Luaは変更していない。
 
 生成器3件が成功・省略0。終了コードの実取得を加えたWindows子を含む観測器関連8件が成功・42件は対象外だった。この8件の任意DLL監査fixtureは環境変数を設定していないため実原本を読んでおらず、前の6件の実DLL32組照合を新しい結果へ付け替えない。切替後RIP・RF/TFの実読戻しの検証を加えた最後の所有子1件も成功・49件は対象外。この1件は8件と重複するため件数を合算しない。Clippyの初回は遅延評価の不要なclosureで失敗し、同値の`Option::and`へ直した後のClippyと両CLIビルドは終了0。原ログは`D:/CC/Work/todo995/connection-separated-ui-generator-tests-0945.log`、`connection-exit-and-context-tests-0948.log`、`connection-control-readback-child-0952.log`と同系列のClippy/buildログに保持する。
+
+## 実機102（native-1743-live09）と隠しスレッドの有限対策
+
+親`781ca2ef5868f53b138706db81a98a94e582b79b`、v6のUI分離sceneは12/16まで成功した。ready後の13番のUI要求でbefore getterを呼び、接続エラー10054で結果が不明になった。約26.403秒で対象が終了し、保持process handleのOS終了コードは2147483652（`STATUS_SINGLE_STEP`）だった。基準getter・setter・native triggerの捕捉は0。未知first/second chanceの記録も0で、復元0・終了済み1、observer終了0・chain終了1だった。原JSONLの設置数と`probe_install`の実件数は108であり、依頼要約の115とは区別する。101の欠けた終了コードは102から遡って確定しない。
+
+原本25件の保全は既存の`D:/CC/Work/todo995/native-1743-live09-copy-proof.json`（count=25）に記録されている。artifact102のLua.logは所有ID`26ca61c2797f4e083dd92d3b055921b0`の`live102/artifact/Lua.log`へ保全済みで、同記録のSHAは`CFDF3F8E3F062496CA728229CBF4DF4544ACC545EB7E561D6D4191C3AC5DFEA3`。今回、ゲーム・共有DLL・scene・保全原本は変更せず、新しい実機試行も行っていない。
+
+隠れたUIスレッドへ全スレッドのexecution/dataプローブを置いたという仮説は、終了コードと配送された例外がない結果に整合する。ただし実機102のスレッドの隠し状態は未測定で、この仮説を実機の確定原因とは呼ばない。
+
+所有Win64子で修正前の失敗を先に再現した。新しいworkerへ旧0x45計画を設置した後、worker自身が既存`NtSetInformationThread(0x11)`で隠れ、待機する。通常スレッドのmarkerで全スレッドの0x55 getter計画へ切り替えてから、隠しworkerのgetterを実行した。OS終了コードと終了イベントはともに2147483652、子の終了確認はtrue、未知first/second chance記録は0だった。親のkillや期限切れではない。`hidden-thread-red-01.log`と対応metaを成功後も保持する。
+
+照会は保持済みのローカルntdll関数だけを使い、context操作と同じthread handleへ`NtQueryInformationThread` class17を渡す。BOOLEANをRustの`u8`で受け、長さ1と返却長を照合する。所有workerの同じハンドルで、通常はstatus=0・length=1・value=0、hide後はstatus=0・length=1・value=1を実測した。`THREAD_QUERY_INFORMATION`（0x40）を持たない限定照会ハンドルは`STATUS_ACCESS_DENIED`（0xC0000022）。4バイト出力の実照会は`STATUS_INFO_LENGTH_MISMATCH`（0xC0000004）だった。初回の照会検査はfixtureがprocess pseudo handleを独立所有ハンドルとして複製しようとして失敗した。自身のprocessを独立ハンドルで開くfixtureへ直し、実照会を確認した。両方のログを保持する。class9のstart address照会は変更していない。ABIの参照は[Microsoftの関数仕様](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryinformationthread)と[phntのBOOLEAN定義](https://github.com/winsiderss/phnt/blob/master/ntpsapi.h)であり、動作の証拠は今回のOS実測である。
+
+preflight・新しいスレッドの登録・設置直前・接続計画の切替・trigger getter増設が同じ判定を使う。hiddenと、NTSTATUS失敗・返却長不一致・BOOLEAN不正によるunknownは新規設置0として理由を記録する。既設の自前プローブがあれば、同じハンドルを停止して既存のrestore経路で自前の枠だけを復元し、所有した停止回数を1回だけ戻す。以後そのスレッドへ再設置しない。後からアプリが変更した別枠・制御・未分類DR6状態を保持し、CONTROLは書き換えない。
+
+隠しgetterを捕捉できない結果からCacheCityの値を推定しない。所有子でも基準値なし・setterなしを維持し、基準値なしのsetter要求を拒否する。都市キー・同じtrigger thread・例外配送の条件、128 trace・90秒・既存標本数の上限は維持する。
+
+この対策の範囲は、照会時点でhiddenまたはunknownと判定できるスレッドへの設置を防ぎ、検出できた既設の自前プローブを外すことに限る。照会と設置の間、または設置後にスレッドがhideへ変わり、次の照会より先にプローブを踏む競合は残る。CREATEイベントではunhiddenだったworkerが設置後にhideする場合も同じ限界がある。解除・kernel flag変更・例外handler注入・追加hookで埋め合わせず、完全解決とは断定しない。
+
+これは診断による対象終了事故を防ぐ有限修正であり、Core現在値変更成功ではない。親の製品受入は候補7dの2/5・40%のままで、小国AI・大国AI・公式都市国家の3件が未達である。
+
+検査中の失敗も保全した。`hidden-thread-nextest-final-01.log`は、事前検査のfixtureを自身へ向けて自分のスレッドを停止したため、11成功・1停止失敗・46未実行だった。該当する所有検査プロセスだけを、パスと生成時刻を照合して終了した。事前検査を別の所有子へ向けた後、その隠しgetter実行とOS終了0を確認した。`hidden-thread-fixture-fixed-02.log`の復元後配送fixtureは、分類前に復元してDR6読戻し不一致となった。実経路と同じく分類を先に行う順序へ直した。`hidden-thread-queued-fixed-03.log`の残った失敗は、そのfixtureがアプリ例外の前で止まることを共通の検査条件へ反映していなかったためで、修正後の`hidden-thread-queued-fixed-04.log`は成功した。これらを実機102の原因や修正前の隠しプローブ再現とは混同しない。
+
+最終sourceで観測器の関連nextest59件が成功、独立実行をしない子fixture1件は対象外だった。事前検査、設置直前、登録時、getter増設、動的切替、実照会失敗の各経路を含む。隠しgetterを実行した全5モードと事前検査の所有子はOS終了0・終了確認trueだった。前者では別のアプリ用DR枠を保持し、RF/TFの変化0と自前プローブの復元を実読戻しで確認した。登録時の検査は既に隠れた実OSスレッドの保持handleを再登録するものであり、CREATEイベント後にhideする競合を解決した証拠ではない。基準getter・setterの捕捉はfalseのまま。元のconnection/writewatch/route/restore、復元後の保全snapshotからの自前例外配送、実DLLの32組監査も成功した。Clippy（warnings拒否）、fmt、Windows CLI buildは終了0。所有子の残存は0だった。
+
+今回の原ログとコマンド・開始終了時刻・終了コード・source SHAを含むmetaは、子の生成先`C:/Users/makhmeto/AppData/Local/Temp/codex-owned-6bfd169444d1814547e40876dbdba279/target/`に保持する。最終検査は`hidden-thread-nextest-final-02.log`、`hidden-thread-clippy-final.log`、`hidden-thread-fmt-final.log`、`hidden-thread-build-final.log`。先行失敗は`hidden-thread-red-01.log`、実照会は`hidden-thread-query-02.log`。検査済みobserver source SHA-256は`050BFCDC60AA85287210D3E6FC0F484A68F0CCF16FC561A1B2E9E58663DF461F`、Windows exe SHA-256は`F764EF495E350F5E546AFAD7DED9DF04747B19F15567E79319321F4D6C1DADF6`。親受領commit`9c9216fbc12b6d62c1759084c914e1f4f6115892`は旧e392と親781を両祖先に持ち、返却用の有限修正commitとは分けた。

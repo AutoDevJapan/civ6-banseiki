@@ -234,6 +234,35 @@ mod policy {
             }
         }
 
+        pub fn restore_owned(
+            self,
+            current: Self,
+            addresses: [u64; 4],
+            enabled: u64,
+            known_bits: u64,
+        ) -> Self {
+            let installed = self.installed(addresses, enabled);
+            let mut restored = current;
+            let mut restored_bits = 0;
+            for slot in 0..4 {
+                let mask = (3u64 << (slot * 2)) | (0xFu64 << (16 + slot * 4));
+                if enabled & (1 << (slot * 2)) != 0
+                    && current.address[slot] == installed.address[slot]
+                    && (current.dr7 & mask == installed.dr7 & mask
+                        || current.dr7 & mask == self.dr7 & mask)
+                {
+                    restored.address[slot] = self.address[slot];
+                    restored.dr7 = (restored.dr7 & !mask) | (self.dr7 & mask);
+                    restored_bits |= 1 << slot;
+                }
+            }
+            // Changed application slots/control and unclassified B/BS/BD bits
+            // survive. Only confirmed bits in slots actually restored are removed.
+            restored.dr6 =
+                (self.dr6 & !0xE00F) | (current.dr6 & 0xE00F & !(known_bits & restored_bits));
+            restored
+        }
+
         pub fn own_hit(
             self,
             addresses: [u64; 4],
@@ -521,6 +550,7 @@ mod policy {
             || record["set_context_ok"] == false
             || record["event"] == "error"
             || record["event"] == "exit"
+            || record["event"] == "probe_skip"
         {
             return 3;
         }
@@ -1603,6 +1633,33 @@ mod platform {
 
     type NtQueryThread = unsafe extern "system" fn(HANDLE, i32, *mut c_void, u32, *mut u32) -> i32;
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+    #[serde(rename_all = "snake_case")]
+    enum ThreadVisibility {
+        Unhidden,
+        Hidden,
+        Unknown,
+    }
+
+    #[derive(Debug, Clone, Copy, Serialize)]
+    struct HideQuery {
+        status: u32,
+        return_length: u32,
+        value: u8,
+    }
+
+    impl HideQuery {
+        fn visibility(self) -> ThreadVisibility {
+            if (self.status as i32) < 0 || self.return_length != 1 || self.value > 1 {
+                ThreadVisibility::Unknown
+            } else if self.value == 1 {
+                ThreadVisibility::Hidden
+            } else {
+                ThreadVisibility::Unhidden
+            }
+        }
+    }
+
     struct LocalThreadQuery {
         module: HMODULE,
         function: NtQueryThread,
@@ -1704,6 +1761,30 @@ mod platform {
                 return Err("OS thread start query returned invalid length/address".into());
             }
             Ok(start as u64)
+        }
+
+        fn hide_state(&self, handle: &Handle) -> HideQuery {
+            // BOOLEAN is one byte, not Rust bool (which cannot hold an
+            // unexpected byte) or Win32 BOOL (four bytes). Only the already
+            // held local ntdll function and this same thread handle are used.
+            let mut value = u8::MAX;
+            let mut return_length = 0;
+            // SAFETY: retained thread handle, exact BOOLEAN-sized destination
+            // and ULONG return length; class 17 is a query, never a hide change.
+            let status = unsafe {
+                (self.function)(
+                    handle.0,
+                    17,
+                    (&mut value as *mut u8).cast(),
+                    1,
+                    &mut return_length,
+                )
+            };
+            HideQuery {
+                status: status as u32,
+                return_length,
+                value,
+            }
         }
     }
 
@@ -1933,7 +2014,20 @@ mod platform {
         }
     }
 
-    fn preflight_threads(process: &Process) -> Result<BTreeSet<u32>> {
+    struct PreflightThreads {
+        tids: BTreeSet<u32>,
+        trace: Vec<Value>,
+        omitted: u64,
+        omitted_by_kind: BTreeMap<String, u64>,
+    }
+
+    fn probe_skip_record(tid: u32, phase: &str, query: HideQuery, armed: bool) -> Value {
+        json!({"event":"probe_skip","tid":tid,"phase":phase,
+            "reason":query.visibility(),"hide_query":query,"previously_armed":armed,
+            "class":17,"output_bytes":1,"new_probes":0})
+    }
+
+    fn preflight_threads(process: &Process, query: &LocalThreadQuery) -> Result<PreflightThreads> {
         // SAFETY: thread metadata only; filter ownership before opening handles.
         let snapshot = Handle::new(
             unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) },
@@ -1949,6 +2043,9 @@ mod platform {
         }
         let mut count = 0;
         let mut tids = BTreeSet::new();
+        let mut trace = Vec::new();
+        let mut omitted = 0;
+        let mut omitted_by_kind = BTreeMap::new();
         loop {
             if entry.th32OwnerProcessID == process.pinned.pid {
                 // SAFETY: only a thread reported as owned by the pinned PID.
@@ -1958,6 +2055,7 @@ mod platform {
                             THREAD_GET_CONTEXT
                                 | THREAD_SUSPEND_RESUME
                                 | THREAD_QUERY_LIMITED_INFORMATION
+                                | THREAD_QUERY_INFORMATION
                                 | THREAD_SYNCHRONIZE,
                             0,
                             entry.th32ThreadID,
@@ -1971,15 +2069,24 @@ mod platform {
                     return Err("preflight thread owner mismatch".into());
                 }
                 process.verify()?;
-                let mut suspension = Suspension::new(&thread)?;
-                let observed = context(&thread, CONTEXT_DEBUG_REGISTERS_AMD64);
-                suspension.resume()?;
-                let observed = observed?;
-                if !registers(&observed).unused() {
-                    return Err(format!(
-                        "pre-existing debug registers on thread {}",
-                        entry.th32ThreadID
+                let hide = query.hide_state(&thread);
+                if hide.visibility() != ThreadVisibility::Unhidden {
+                    omitted += u64::from(retain_trace(
+                        &mut trace,
+                        &mut omitted_by_kind,
+                        probe_skip_record(entry.th32ThreadID, "preflight", hide, false),
                     ));
+                } else {
+                    let mut suspension = Suspension::new(&thread)?;
+                    let observed = context(&thread, CONTEXT_DEBUG_REGISTERS_AMD64);
+                    suspension.resume()?;
+                    let observed = observed?;
+                    if !registers(&observed).unused() {
+                        return Err(format!(
+                            "pre-existing debug registers on thread {}",
+                            entry.th32ThreadID
+                        ));
+                    }
                 }
                 count += 1;
                 tids.insert(entry.th32ThreadID);
@@ -1997,7 +2104,12 @@ mod platform {
             return Err("pinned process has no accessible threads".into());
         }
         process.verify()?;
-        Ok(tids)
+        Ok(PreflightThreads {
+            tids,
+            trace,
+            omitted,
+            omitted_by_kind,
+        })
     }
 
     struct Thread {
@@ -2010,6 +2122,7 @@ mod platform {
         suspend_previous_count: Option<u32>,
         cleanup_snapshot: Option<ProbeSnapshot>,
         transition: Option<ProbeTransition>,
+        probe_blocked: Option<ThreadVisibility>,
     }
 
     struct Pending {
@@ -2052,7 +2165,7 @@ mod platform {
 
     impl Session {
         fn attach(process: Process, module: PinnedModule, ntdll: PinnedNtdll) -> Result<Self> {
-            let preexisting_threads = preflight_threads(&process)?;
+            let preflight = preflight_threads(&process, &ntdll.query)?;
             module.verify(&process)?;
             let mut exceptions = ExceptionPolicy::default();
             exceptions.attach.bind(ntdll.verify(&process)?);
@@ -2068,7 +2181,7 @@ mod platform {
                 process,
                 module,
                 ntdll,
-                preexisting_threads,
+                preexisting_threads: preflight.tids,
                 attach_query_error_count: 0,
                 attach_query_errors: Vec::new(),
                 breakin_query_handles: BTreeMap::new(),
@@ -2080,9 +2193,9 @@ mod platform {
                 forwarded_probe_context: false,
                 probe_resume_error: None,
                 cleanup_exception_records: Vec::new(),
-                debug_trace: Vec::new(),
-                debug_trace_omitted: 0,
-                debug_trace_omitted_by_kind: BTreeMap::new(),
+                debug_trace: preflight.trace,
+                debug_trace_omitted: preflight.omitted,
+                debug_trace_omitted_by_kind: preflight.omitted_by_kind,
                 module_event_seen: false,
                 ready: false,
                 pending: None,
@@ -2328,8 +2441,17 @@ mod platform {
                     suspend_previous_count: None,
                     cleanup_snapshot: None,
                     transition: None,
+                    probe_blocked: None,
                 },
             );
+            if !self.ready {
+                let thread = self.threads.get(&tid).ok_or("missing new thread")?;
+                let start = self.ntdll.query.start_address(&thread.handle);
+                self.register_os_start(tid, event_start, start)?;
+            }
+            if !self.probe_allowed(tid, "new_thread")? {
+                return Ok(());
+            }
             let thread = self.threads.get_mut(&tid).ok_or("missing new thread")?;
             let value = context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?;
             let original = registers(&value);
@@ -2339,17 +2461,62 @@ mod platform {
                     "pre-existing debug registers on attached/new thread {tid}"
                 ));
             }
-            if !self.ready {
-                let start = self.ntdll.query.start_address(&thread.handle);
-                self.register_os_start(tid, event_start, start)?;
-            }
             if self.ready && !self.cleaned {
                 self.install(tid)?;
             }
             Ok(())
         }
 
+        fn probe_allowed(&mut self, tid: u32, phase: &str) -> Result<bool> {
+            let thread = self.threads.get(&tid).ok_or("missing probe thread")?;
+            if thread.probe_blocked.is_some() {
+                return Ok(false);
+            }
+            let query = self.ntdll.query.hide_state(&thread.handle);
+            let visibility = query.visibility();
+            if visibility == ThreadVisibility::Unhidden {
+                return Ok(true);
+            }
+            let was_armed = thread.armed;
+            self.trace(probe_skip_record(tid, phase, query, was_armed));
+            self.threads
+                .get_mut(&tid)
+                .ok_or("missing probe thread")?
+                .probe_blocked = Some(visibility);
+            if was_armed {
+                // Existing restoration owns exactly one suspension and writes
+                // DEBUG only. A hidden thread may not share the debug-event stop.
+                self.restore(tid)?;
+                let thread = self
+                    .threads
+                    .get_mut(&tid)
+                    .ok_or("missing restored probe thread")?;
+                thread.transition = None;
+                if thread.suspended {
+                    let expected = thread.suspend_previous_count.map(|n| n.saturating_add(1));
+                    // SAFETY: release only the one suspension just acquired by restore.
+                    let previous = unsafe { ResumeThread(thread.handle.0) };
+                    if previous == u32::MAX {
+                        return Err(win_error("ResumeThread(skipped probe)"));
+                    }
+                    thread.suspended = false;
+                    self.trace(
+                        json!({"event":"thread_resume","tid":tid,"phase":"probe_skip",
+                        "previous_count":previous,"expected_previous_count":expected,
+                        "runnable":previous==1,"ok":expected==Some(previous)}),
+                    );
+                    if expected != Some(previous) {
+                        return Err("skipped probe restore suspend count changed".into());
+                    }
+                }
+            }
+            Ok(false)
+        }
+
         fn install(&mut self, tid: u32) -> Result<()> {
+            if !self.probe_allowed(tid, "install")? {
+                return Ok(());
+            }
             let thread = self
                 .threads
                 .get_mut(&tid)
@@ -2374,6 +2541,11 @@ mod platform {
         }
 
         fn enable_trigger_getter(&mut self, tid: u32) -> Result<()> {
+            if !self.probe_allowed(tid, "trigger_getter")? {
+                return Err(
+                    "trigger getter unavailable: hidden thread or unknown hide query".into(),
+                );
+            }
             // The debug event stops all threads. Only the retained setter
             // thread handle is changed; future threads still start at 0x45.
             let thread = self.threads.get_mut(&tid).ok_or("missing setter thread")?;
@@ -2422,6 +2594,18 @@ mod platform {
             let mut changed_control_state = 0u32;
             let mut context_samples = Vec::new();
             for tid in tids {
+                if !self
+                    .threads
+                    .get(&tid)
+                    .ok_or("missing trace thread")?
+                    .handle
+                    .alive()?
+                {
+                    continue;
+                }
+                if !self.probe_allowed(tid, "connection_reconfigure")? {
+                    continue;
+                }
                 let thread = self.threads.get_mut(&tid).ok_or("missing trace thread")?;
                 if !thread.armed {
                     continue;
@@ -3208,10 +3392,12 @@ mod platform {
             // Restore the addresses/control we own, retaining the application's
             // status. Confirmed probe bits were removed by the common resume
             // policy; uncertain/second-chance bits must not be guessed away.
-            let expected = DebugRegisters {
-                dr6: (thread.original.dr6 & !0xE00F) | (value.Dr6 & 0xE00F & !known_owned_bits),
-                ..thread.original
-            };
+            let expected = thread.original.restore_owned(
+                registers(&value),
+                thread.addresses,
+                thread.enabled,
+                known_owned_bits,
+            );
             replace_registers(&mut value, expected);
             let requested = ProbeSnapshot {
                 armed: false,
@@ -3783,25 +3969,139 @@ mod platform {
             fn native_getter(n: u64) -> u64;
         }
 
+        fn hide_fixture_thread() {
+            let name: Vec<u16> = "ntdll.dll\0".encode_utf16().collect();
+            // SAFETY: local loaded ntdll, no remote thread or game API.
+            let module = unsafe { GetModuleHandleW(name.as_ptr()) };
+            assert!(!module.is_null());
+            let export =
+                unsafe { GetProcAddress(module, c"NtSetInformationThread".as_ptr().cast()) }
+                    .unwrap();
+            type SetThreadInfo = unsafe extern "system" fn(HANDLE, u32, *const c_void, u32) -> i32;
+            // SAFETY: ntdll export's native ABI, current thread pseudo handle.
+            let set: SetThreadInfo = unsafe { std::mem::transmute(export) };
+            let status = unsafe { set((-2isize) as HANDLE, 0x11, std::ptr::null(), 0) };
+            assert!(status >= 0, "ThreadHideFromDebugger failed: {status:#x}");
+        }
+
         fn hidden_getter_worker() {
             std::thread::spawn(|| {
-                let name: Vec<u16> = "ntdll.dll\0".encode_utf16().collect();
-                // SAFETY: local loaded ntdll, no remote thread or game API.
-                let module = unsafe { GetModuleHandleW(name.as_ptr()) };
-                assert!(!module.is_null());
-                let export =
-                    unsafe { GetProcAddress(module, c"NtSetInformationThread".as_ptr().cast()) }
-                        .unwrap();
-                type SetThreadInfo =
-                    unsafe extern "system" fn(HANDLE, u32, *const c_void, u32) -> i32;
-                // SAFETY: ntdll export's native ABI, current thread pseudo handle.
-                let set: SetThreadInfo = unsafe { std::mem::transmute(export) };
-                let status = unsafe { set((-2isize) as HANDLE, 0x11, std::ptr::null(), 0) };
-                assert!(status >= 0, "ThreadHideFromDebugger failed: {status:#x}");
+                hide_fixture_thread();
                 assert_eq!(getter(5), 16);
             })
             .join()
             .unwrap();
+        }
+
+        #[test]
+        fn windows_hide_query_boolean_length_and_access_on_same_handle() {
+            let pinned = identity(unsafe { GetCurrentProcess() }).unwrap();
+            let handle = Handle::new(
+                unsafe {
+                    OpenProcess(
+                        PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ | PROCESS_SYNCHRONIZE,
+                        0,
+                        pinned.pid,
+                    )
+                },
+                "owned query process",
+            )
+            .unwrap();
+            let process = Process { handle, pinned };
+            let ntdll = PinnedNtdll::open(&process).unwrap();
+            let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+            let (command_tx, command_rx) = std::sync::mpsc::channel();
+            std::thread::scope(|scope| {
+                scope.spawn(move || {
+                    let tid =
+                        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+                    ready_tx.send(tid).unwrap();
+                    command_rx.recv().unwrap();
+                    hide_fixture_thread();
+                    ready_tx.send(tid).unwrap();
+                    command_rx.recv().unwrap();
+                });
+                let tid = ready_rx.recv().unwrap();
+                let full = Handle::new(
+                    unsafe { OpenThread(THREAD_QUERY_INFORMATION | THREAD_SYNCHRONIZE, 0, tid) },
+                    "query information fixture",
+                )
+                .unwrap();
+                let limited = Handle::new(
+                    unsafe {
+                        OpenThread(
+                            THREAD_QUERY_LIMITED_INFORMATION | THREAD_SYNCHRONIZE,
+                            0,
+                            tid,
+                        )
+                    },
+                    "limited query fixture",
+                )
+                .unwrap();
+                let before = ntdll.query.hide_state(&full);
+                let denied = ntdll.query.hide_state(&limited);
+                // Deliberately wrong size, with valid local storage, through
+                // the same real export. Never replace the production class 9.
+                let mut output = 0xFFFF_FFFFu32;
+                let mut length = 0;
+                let wrong_status = unsafe {
+                    (ntdll.query.function)(
+                        full.0,
+                        17,
+                        (&mut output as *mut u32).cast(),
+                        4,
+                        &mut length,
+                    )
+                };
+                command_tx.send(()).unwrap();
+                assert_eq!(ready_rx.recv().unwrap(), tid);
+                let hidden = ntdll.query.hide_state(&full);
+                // Release the worker before assertions so failure cannot strand it.
+                command_tx.send(()).unwrap();
+                println!(
+                    "HIDE_QUERY_OS={}",
+                    json!({"tid":tid,"same_handle":true,
+                    "query_information_access":THREAD_QUERY_INFORMATION,
+                    "limited_access":THREAD_QUERY_LIMITED_INFORMATION,
+                    "unhidden":before,"hidden":hidden,"limited_query":denied,
+                    "wrong_four_byte_status":wrong_status as u32,"wrong_four_byte_return_length":length})
+                );
+                assert_eq!(before.visibility(), ThreadVisibility::Unhidden);
+                assert_eq!(hidden.visibility(), ThreadVisibility::Hidden);
+                assert_eq!(before.status, 0);
+                assert_eq!(hidden.status, 0);
+                assert_eq!(denied.visibility(), ThreadVisibility::Unknown);
+                assert_eq!(denied.status, 0xC0000022);
+                assert_eq!(wrong_status as u32, 0xC0000004);
+            });
+        }
+
+        #[test]
+        fn hide_query_rejects_invalid_length_boolean_and_ntstatus() {
+            for query in [
+                HideQuery {
+                    status: 0xC0000022,
+                    return_length: 1,
+                    value: 0,
+                },
+                HideQuery {
+                    status: 0,
+                    return_length: 0,
+                    value: 0,
+                },
+                HideQuery {
+                    status: 0,
+                    return_length: 4,
+                    value: 0,
+                },
+                HideQuery {
+                    status: 0,
+                    return_length: 1,
+                    value: 2,
+                },
+            ] {
+                assert_eq!(query.visibility(), ThreadVisibility::Unknown);
+            }
         }
 
         #[test]
@@ -3823,10 +4123,68 @@ mod platform {
                 .truncate(true)
                 .open(path)
                 .unwrap();
+            if std::env::var_os("LOYALTY_OWNED_HIDDEN_PREFLIGHT").is_some() {
+                let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+                let (release_tx, release_rx) = std::sync::mpsc::channel();
+                let worker = std::thread::spawn(move || {
+                    hide_fixture_thread();
+                    let tid =
+                        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+                    ready_tx.send(tid).unwrap();
+                    release_rx.recv().unwrap();
+                    getter(5)
+                });
+                let hidden_tid = ready_rx.recv().unwrap();
+                write_json(
+                    &mut file,
+                    &json!({"identity":own,"addresses":addresses,"hidden_tid":hidden_tid}),
+                )
+                .unwrap();
+                let mut go = String::new();
+                std::io::stdin().read_line(&mut go).unwrap();
+                assert_eq!(go.trim(), "go");
+                release_tx.send(()).unwrap();
+                let result = worker.join().unwrap();
+                assert_eq!(result, 16);
+                std::fs::write(
+                    std::env::var_os("LOYALTY_OWNED_CHILD_REPORT").unwrap(),
+                    json!({"hidden_getter_result":result}).to_string(),
+                )
+                .unwrap();
+                return;
+            }
             write_json(&mut file, &json!({"identity":own,"addresses":addresses})).unwrap();
             let mut go = String::new();
             std::io::stdin().read_line(&mut go).unwrap();
             assert_eq!(go.trim(), "go");
+            if std::env::var_os("LOYALTY_OWNED_HIDDEN_CONNECTION").is_some() {
+                let (hidden_tx, hidden_rx) = std::sync::mpsc::channel();
+                let (release_tx, release_rx) = std::sync::mpsc::channel();
+                let worker = std::thread::spawn(move || {
+                    hide_fixture_thread();
+                    let tid =
+                        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+                    hidden_tx.send(tid).unwrap();
+                    release_rx.recv().unwrap();
+                    getter(5)
+                });
+                let tid = hidden_rx.recv().unwrap();
+                let report_path = std::env::var_os("LOYALTY_OWNED_CHILD_REPORT").unwrap();
+                std::fs::write(&report_path, json!({"hidden_tid":tid}).to_string()).unwrap();
+                // The marker stops an ordinary thread after the worker has
+                // hidden itself. The observer switches to its all-thread plan
+                // at this held event, then the hidden worker executes getter.
+                assert_eq!(setter(1), 2);
+                release_tx.send(()).unwrap();
+                let result = worker.join().unwrap();
+                assert_eq!(result, 16);
+                std::fs::write(
+                    report_path,
+                    json!({"hidden_tid":tid,"hidden_getter_result":result}).to_string(),
+                )
+                .unwrap();
+                return;
+            }
             // These workers execute the getter with no setter trigger. Their
             // real contexts must contain only slots 0/1/3, including new threads.
             std::thread::spawn(|| assert_eq!(getter(5), 16))
@@ -3956,6 +4314,85 @@ mod platform {
         }
 
         #[test]
+        fn windows_preflight_skips_already_hidden_owned_child_thread() {
+            let handshake = tempfile::NamedTempFile::new().unwrap();
+            let app_report = tempfile::NamedTempFile::new().unwrap();
+            let diagnostics = tempfile::NamedTempFile::new().unwrap();
+            let stdout = diagnostics.reopen().unwrap();
+            let stderr = stdout.try_clone().unwrap();
+            let exe = std::env::current_exe().unwrap();
+            let mut child = OwnedChild(
+                Command::new(&exe)
+                    .args([
+                        "--exact",
+                        "platform::live_tests::owned_hardware_child",
+                        "--ignored",
+                        "--nocapture",
+                    ])
+                    .env("LOYALTY_OWNED_HIDDEN_PREFLIGHT", "1")
+                    .env("LOYALTY_OWNED_CHILD_HANDSHAKE", handshake.path())
+                    .env("LOYALTY_OWNED_CHILD_REPORT", app_report.path())
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::from(stdout))
+                    .stderr(Stdio::from(stderr))
+                    .spawn()
+                    .unwrap(),
+            );
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let message: Value = loop {
+                if let Ok(value) = serde_json::from_slice(&std::fs::read(handshake.path()).unwrap())
+                {
+                    break value;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "hidden preflight handshake deadline"
+                );
+                assert!(
+                    child.0.try_wait().unwrap().is_none(),
+                    "preflight child exited early"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            };
+            let handle =
+                Handle::duplicate(child.0.as_raw_handle(), "owned preflight process").unwrap();
+            let pinned = identity(handle.0).unwrap();
+            assert_eq!(pinned.pid, child.0.id());
+            assert_eq!(
+                pinned.created,
+                message["identity"]["created"].as_u64().unwrap()
+            );
+            assert_eq!(
+                pinned.image_path,
+                path_key(&canonical(&exe).unwrap()).unwrap()
+            );
+            let process = Process { handle, pinned };
+            let ntdll = PinnedNtdll::open(&process).unwrap();
+            let preflight = preflight_threads(&process, &ntdll.query).unwrap();
+            let hidden_tid = message["hidden_tid"].as_u64().unwrap() as u32;
+            assert!(preflight.tids.contains(&hidden_tid));
+            assert!(preflight.trace.iter().any(|r| r["tid"] == hidden_tid
+                && r["phase"] == "preflight"
+                && r["reason"] == "hidden"
+                && r["new_probes"] == 0));
+            child.0.stdin.as_mut().unwrap().write_all(b"go\n").unwrap();
+            assert_eq!(
+                unsafe { WaitForSingleObject(process.handle.0, 3000) },
+                WAIT_OBJECT_0
+            );
+            assert!(child.0.try_wait().unwrap().unwrap().success());
+            let app: Value =
+                serde_json::from_slice(&std::fs::read(app_report.path()).unwrap()).unwrap();
+            println!(
+                "HIDDEN_PREFLIGHT_OS={}",
+                json!({"os_exit_code":process.exit_code().unwrap(),
+                "child_exit_confirmed":true,"app":app,"trace":preflight.trace})
+            );
+            assert_eq!(app["hidden_getter_result"], 16);
+        }
+
+        #[test]
         fn windows_trigger_getter_thread_and_exit() {
             run_owned_hardware(OwnedMode::Exit);
         }
@@ -3970,11 +4407,47 @@ mod platform {
             run_owned_hardware(OwnedMode::WriteWatch);
         }
 
+        #[test]
+        fn windows_hidden_getter_connection_skips_and_exits_normally() {
+            run_owned_hardware(OwnedMode::HiddenConnection);
+        }
+
+        #[test]
+        fn windows_hidden_getter_install_restores_only_owned_probes() {
+            run_owned_hardware(OwnedMode::HiddenInstall);
+        }
+
+        #[test]
+        fn windows_hidden_getter_enable_refuses_and_restores() {
+            run_owned_hardware(OwnedMode::HiddenGetterEnable);
+        }
+
+        #[test]
+        fn windows_hidden_thread_discovery_preserves_application_registers() {
+            run_owned_hardware(OwnedMode::HiddenDiscovery);
+        }
+
+        #[test]
+        fn windows_unknown_hide_query_refuses_connection_install() {
+            run_owned_hardware(OwnedMode::UnknownConnection);
+        }
+
+        #[test]
+        fn windows_queued_owned_fault_after_restore_is_not_forwarded() {
+            run_owned_hardware(OwnedMode::QueuedAfterRestore);
+        }
+
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         enum OwnedMode {
             Exit,
             Restore,
             WriteWatch,
+            HiddenConnection,
+            HiddenInstall,
+            HiddenGetterEnable,
+            HiddenDiscovery,
+            UnknownConnection,
+            QueuedAfterRestore,
             AppTfObserve,
             AppTfCleanup,
             UncertainDr7,
@@ -3988,6 +4461,17 @@ mod platform {
         }
 
         impl OwnedMode {
+            fn hidden_fixture(self) -> bool {
+                matches!(
+                    self,
+                    Self::HiddenConnection
+                        | Self::HiddenInstall
+                        | Self::HiddenGetterEnable
+                        | Self::HiddenDiscovery
+                        | Self::UnknownConnection
+                )
+            }
+
             fn tf_pending(self) -> bool {
                 matches!(
                     self,
@@ -4170,7 +4654,8 @@ mod platform {
         }
 
         fn run_owned_hardware(mode: OwnedMode) {
-            let restore_while_alive = !matches!(mode, OwnedMode::Exit | OwnedMode::BsOnly);
+            let restore_while_alive =
+                !matches!(mode, OwnedMode::Exit | OwnedMode::BsOnly) && !mode.hidden_fixture();
             let stop_at_third = !matches!(
                 mode,
                 OwnedMode::Exit | OwnedMode::Restore | OwnedMode::SecondChance | OwnedMode::BsOnly
@@ -4203,6 +4688,9 @@ mod platform {
             }
             if mode == OwnedMode::WriteWatch {
                 command.env("LOYALTY_OWNED_WRITE_WATCH", "1");
+            }
+            if mode.hidden_fixture() {
+                command.env("LOYALTY_OWNED_HIDDEN_CONNECTION", "1");
             }
             let mut child = OwnedChild(
                 command
@@ -4268,7 +4756,7 @@ mod platform {
             let addresses: [u64; 4] = serde_json::from_value(message["addresses"].clone()).unwrap();
             assert_eq!(addresses.iter().copied().collect::<BTreeSet<_>>().len(), 4);
             let ntdll = PinnedNtdll::open(&process).unwrap();
-            let preexisting_threads = preflight_threads(&process).unwrap();
+            let preflight = preflight_threads(&process, &ntdll.query).unwrap();
             let mut exceptions = ExceptionPolicy::default();
             exceptions.attach.bind(ntdll.verify(&process).unwrap());
             process.verify().unwrap();
@@ -4287,7 +4775,7 @@ mod platform {
                     addresses,
                 },
                 ntdll,
-                preexisting_threads,
+                preexisting_threads: preflight.tids,
                 attach_query_error_count: 0,
                 attach_query_errors: Vec::new(),
                 breakin_query_handles: BTreeMap::new(),
@@ -4299,9 +4787,9 @@ mod platform {
                 forwarded_probe_context: false,
                 probe_resume_error: None,
                 cleanup_exception_records: Vec::new(),
-                debug_trace: Vec::new(),
-                debug_trace_omitted: 0,
-                debug_trace_omitted_by_kind: BTreeMap::new(),
+                debug_trace: preflight.trace,
+                debug_trace_omitted: preflight.omitted,
+                debug_trace_omitted_by_kind: preflight.omitted_by_kind,
                 module_event_seen: false,
                 ready: false,
                 pending: None,
@@ -4370,6 +4858,127 @@ mod platform {
                 } else {
                     if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
                         let info = unsafe { event.u.Exception };
+                        if mode.hidden_fixture()
+                            && info.dwFirstChance != 0
+                            && info.ExceptionRecord.ExceptionAddress as u64 == addresses[0]
+                        {
+                            let app: Value =
+                                serde_json::from_slice(&std::fs::read(app_report.path()).unwrap())
+                                    .unwrap();
+                            let hidden_tid = app["hidden_tid"].as_u64().unwrap() as u32;
+                            // An application-owned slot appeared after the
+                            // initial 0x45 plan. It never targets this getter.
+                            // Skipping/restoring must keep it, not reset all DRs.
+                            let hidden_thread = session.threads.get(&hidden_tid).unwrap();
+                            let mut foreign =
+                                context(&hidden_thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)
+                                    .unwrap();
+                            foreign.Dr2 = addresses[3];
+                            foreign.Dr7 |= 0x10;
+                            set_context(&hidden_thread.handle, foreign).unwrap();
+                            match mode {
+                                OwnedMode::HiddenInstall => session.install(hidden_tid).unwrap(),
+                                OwnedMode::HiddenGetterEnable => {
+                                    assert!(session
+                                        .enable_trigger_getter(hidden_tid)
+                                        .unwrap_err()
+                                        .contains("trigger getter unavailable"));
+                                }
+                                OwnedMode::HiddenDiscovery => {
+                                    // Re-discover the same real, retained OS
+                                    // thread after removing our old bookkeeping.
+                                    // No fabricated handle or kernel hide write.
+                                    assert!(!session
+                                        .probe_allowed(hidden_tid, "fixture_retire")
+                                        .unwrap());
+                                    let retired = session.threads.remove(&hidden_tid).unwrap();
+                                    session.event_threads.remove(&hidden_tid);
+                                    session
+                                        .add_thread(hidden_tid, retired.handle.0, None)
+                                        .unwrap();
+                                }
+                                OwnedMode::UnknownConnection => {
+                                    // Keep context/restore rights on this same
+                                    // thread object, but omit QUERY_INFORMATION
+                                    // so the real class 17 query must fail.
+                                    let limited = Handle::new(
+                                        unsafe {
+                                            OpenThread(
+                                                THREAD_GET_CONTEXT
+                                                    | THREAD_SET_CONTEXT
+                                                    | THREAD_SUSPEND_RESUME
+                                                    | THREAD_QUERY_LIMITED_INFORMATION
+                                                    | THREAD_SYNCHRONIZE,
+                                                0,
+                                                hidden_tid,
+                                            )
+                                        },
+                                        "unknown hide fixture",
+                                    )
+                                    .unwrap();
+                                    assert_eq!(
+                                        unsafe { GetProcessIdOfThread(limited.0) },
+                                        session.process.pinned.pid
+                                    );
+                                    session.threads.get_mut(&hidden_tid).unwrap().handle = limited;
+                                }
+                                _ => {}
+                            }
+                            let key = connection::CityKey { owner: 7, city: 42 };
+                            let mut c = connection::Connection::new(
+                                key,
+                                json!({"scope":"owned_hidden_fixture_only"}),
+                            );
+                            c.constructor(
+                                connection::GetterOrigin {
+                                    key,
+                                    cache_city: 0x1000,
+                                    member: 0x16D8,
+                                    current_address: 0x16E0,
+                                    current_i32: 25600,
+                                },
+                                hidden_tid,
+                                0,
+                            )
+                            .unwrap();
+                            session.connection = Some(c);
+                            let thread = session.threads.get(&event.dwThreadId).unwrap();
+                            let value = context(
+                                &thread.handle,
+                                CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                            )
+                            .unwrap();
+                            let raw = RawException {
+                                tid: event.dwThreadId,
+                                code: info.ExceptionRecord.ExceptionCode as u32,
+                                first_chance: info.dwFirstChance,
+                                exception_address: info.ExceptionRecord.ExceptionAddress as u64,
+                            };
+                            let decision = session
+                                .route_exception(
+                                    raw,
+                                    Some(ProbeSnapshot {
+                                        armed: true,
+                                        registers: registers(&value),
+                                        rip: value.Rip,
+                                        flags: value.EFlags,
+                                    }),
+                                )
+                                .unwrap();
+                            assert!(matches!(decision, ExceptionDecision::Probe(_)));
+                            session.reconfigure_connection().unwrap();
+                            let thread = session.threads.get(&event.dwThreadId).unwrap();
+                            let value = context(
+                                &thread.handle,
+                                CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                            )
+                            .unwrap();
+                            session
+                                .resume_probe(raw, decision, value, "hidden_fixture_marker")
+                                .unwrap();
+                            session.continue_pending().unwrap();
+                            continue;
+                        }
                         if mode == OwnedMode::WriteWatch
                             && info.dwFirstChance != 0
                             && info.ExceptionRecord.ExceptionAddress as u64 == addresses[0]
@@ -4409,6 +5018,45 @@ mod platform {
                                         | CONTEXT_INTEGER_AMD64,
                                 )
                                 .unwrap();
+                                if mode == OwnedMode::QueuedAfterRestore {
+                                    // A real owned event was queued before the
+                                    // DRs were restored. Cleanup must still use
+                                    // the captured ownership, never forward it.
+                                    session
+                                        .threads
+                                        .get_mut(&event.dwThreadId)
+                                        .unwrap()
+                                        .cleanup_snapshot = Some(ProbeSnapshot {
+                                        armed: true,
+                                        registers: registers(&value),
+                                        rip: value.Rip,
+                                        flags: value.EFlags,
+                                    });
+                                    // As in production freeze, classify the
+                                    // held event before restoring its known B
+                                    // bit. Re-routing below must still work
+                                    // from the queued pre-restore snapshot.
+                                    let raw = RawException {
+                                        tid: event.dwThreadId,
+                                        code: EXCEPTION_SINGLE_STEP as u32,
+                                        first_chance: 1,
+                                        exception_address: addresses[2],
+                                    };
+                                    let captured =
+                                        session.threads[&event.dwThreadId].cleanup_snapshot;
+                                    assert!(matches!(
+                                        session.route_exception(raw, captured).unwrap(),
+                                        ExceptionDecision::Probe(_)
+                                    ));
+                                    session.restore(event.dwThreadId).unwrap();
+                                    assert!(!session.threads[&event.dwThreadId].armed);
+                                    assert!(!session.cleanup_exception(&event).unwrap());
+                                    assert_eq!(
+                                        session.pending.as_ref().unwrap().status,
+                                        DBG_CONTINUE
+                                    );
+                                    break;
+                                }
                                 if mode.tf_pending() {
                                     println!(
                                         "OWNED_FAULT_CONTEXT_BEFORE_TF_SETTING={}",
@@ -4542,6 +5190,92 @@ mod platform {
                 }
             }
             let report = session.finish();
+            if mode.hidden_fixture() {
+                let app: Value =
+                    serde_json::from_slice(&std::fs::read(app_report.path()).unwrap()).unwrap();
+                let os_exit = session.process.exit_code().unwrap();
+                println!(
+                    "HIDDEN_CONNECTION_TRACE={}",
+                    json!({
+                        "mode":format!("{mode:?}"),"process_exit_event":process_exit,"os_exit_code":os_exit,
+                        "child_exit_confirmed":child.0.try_wait().unwrap().is_some(),
+                        "app":app,"exceptions":session.exceptions,
+                        "cleanup":report,"plan":session.connection.as_ref().unwrap().plan(addresses),
+                        "capture":session.connection.as_ref().unwrap().completion(),
+                        "trace":session.debug_trace,
+                    })
+                );
+                assert_eq!(os_exit, 0, "hidden getter terminated owned child");
+                assert_eq!(process_exit, Some(0));
+                assert!(report.complete() && report.process_exited, "{report:?}");
+                assert_eq!(app["hidden_getter_result"], 16);
+                assert_eq!(session.exceptions.unknown_first_chance_count, 0);
+                assert_eq!(session.exceptions.second_chance_count, 0);
+                let hidden_tid = app["hidden_tid"].as_u64().unwrap();
+                let phase = match mode {
+                    OwnedMode::HiddenInstall => "install",
+                    OwnedMode::HiddenGetterEnable => "trigger_getter",
+                    OwnedMode::HiddenDiscovery => "new_thread",
+                    _ => "connection_reconfigure",
+                };
+                let skip = session
+                    .debug_trace
+                    .iter()
+                    .find(|r| {
+                        r["event"] == "probe_skip" && r["tid"] == hidden_tid && r["phase"] == phase
+                    })
+                    .unwrap();
+                assert_eq!(
+                    skip["reason"],
+                    if mode == OwnedMode::UnknownConnection {
+                        "unknown"
+                    } else {
+                        "hidden"
+                    }
+                );
+                assert_eq!(
+                    skip["hide_query"]["return_length"],
+                    if mode == OwnedMode::UnknownConnection {
+                        0
+                    } else {
+                        1
+                    }
+                );
+                assert_eq!(
+                    skip["hide_query"]["status"],
+                    if mode == OwnedMode::UnknownConnection {
+                        0xC0000022u32
+                    } else {
+                        0
+                    }
+                );
+                assert_eq!(skip["new_probes"], 0);
+                let skipped_at = session
+                    .debug_trace
+                    .iter()
+                    .position(|r| std::ptr::eq(r, skip))
+                    .unwrap();
+                assert!(!session.debug_trace[skipped_at..]
+                    .iter()
+                    .any(|r| r["event"] == "probe_install" && r["tid"] == hidden_tid));
+                let restore = session
+                    .debug_trace
+                    .iter()
+                    .find(|r| r["event"] == "probe_restore" && r["tid"] == hidden_tid)
+                    .unwrap();
+                assert_eq!(restore["readback_ok"], true);
+                assert_eq!(restore["actual"]["address"], json!([0, 0, addresses[3], 0]));
+                assert_eq!(restore["actual"]["dr7"].as_u64().unwrap() & !0x400, 0x10);
+                assert_eq!(
+                    restore["actual"]["eflags"].as_u64().unwrap() & 0x10100,
+                    restore["control_before"]["eflags"].as_u64().unwrap() & 0x10100
+                );
+                let c = session.connection.as_mut().unwrap();
+                assert!(c.baseline.is_none());
+                assert!(c.setter(0x2000, c.target).is_err());
+                assert!(c.native_city.is_none());
+                return;
+            }
             if mode == OwnedMode::UncertainDr7 {
                 // The current event has no trustworthy ownership proof. Keep
                 // its original NOT_HANDLED continuation. API restoration alone
@@ -4985,7 +5719,7 @@ mod platform {
                 record["event"] == "debug_continue"
                     && record["continue_status"] == DBG_EXCEPTION_NOT_HANDLED
             });
-            if mode.context_error() || mode.tf_pending() {
+            if mode.context_error() || mode.tf_pending() || mode == OwnedMode::QueuedAfterRestore {
                 assert!(forwarded.is_none()); // the handled fault is the final debugger event
             } else {
                 let forwarded = forwarded.unwrap();
@@ -4994,7 +5728,10 @@ mod platform {
             }
             assert_eq!(
                 session.exceptions.unknown_first_chance_count,
-                if mode.context_error() || mode.tf_pending() {
+                if mode.context_error()
+                    || mode.tf_pending()
+                    || mode == OwnedMode::QueuedAfterRestore
+                {
                     0
                 } else if mode == OwnedMode::BsOnly {
                     2
@@ -5195,6 +5932,26 @@ mod tests {
             RVAS.map(|rva| base + rva)
         );
         assert_eq!(MODULE_SHA256.len(), 64);
+    }
+
+    #[test]
+    fn restore_owned_preserves_changed_application_slots_control_and_status() {
+        let original = DebugRegisters {
+            address: [0; 4],
+            dr6: 0xFFFF0FF0,
+            dr7: 0x400,
+        };
+        let addresses = [0x100, 0x200, 0x300, 0x400];
+        let mut current = original.installed(addresses, 0x45);
+        current.address[1] = 0x999;
+        current.address[2] = 0x444;
+        current.dr7 = (current.dr7 & !0xC) | 0xC | (5 << 20) | 0x20 | 0x2000;
+        current.dr6 |= 0xE00F;
+        let restored = original.restore_owned(current, addresses, 0x45, 0xF);
+        assert_eq!(restored.address, [0, 0x999, 0x444, 0]);
+        assert_eq!(restored.dr7, 0x400 | 0xC | (5 << 20) | 0x20 | 0x2000);
+        assert_eq!(restored.dr6 & 0xE00F, 0xE006);
+        assert_eq!(restored.dr6 & !0xE00F, original.dr6 & !0xE00F);
     }
 
     #[test]
