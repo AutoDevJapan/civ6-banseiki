@@ -36,5 +36,9 @@
   "new_candidate_checks_passed": 191,
   "prior_skipped": 4,
   "deployed": false,
-  "live_runs": 0
+  "live_runs": 0,
+  "latest_source_status": "通常実行の隔離先を各回の成果物へ分ける追加修正は未検査",
+  "last_built_source": "60d918f72bca5bd53a428d5be9cdd31c0c5f3dc5",
+  "last_built_exe_sha256": "88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782",
+  "last_built_candidate_is_current": false
 }

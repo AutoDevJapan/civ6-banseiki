@@ -4834,3 +4834,50 @@ fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
         }
     }
 }
+
+#[test]
+fn ordinary_runs_keep_distinct_test_archives_and_original_bytes() {
+    let f = Fixture::new();
+    f.json(
+        "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+        json!("fixture source"),
+    );
+    fs::write(
+        f.p.live()
+            .join("tools/target/release/civ6-save-isolation.exe"),
+        "fixture binary",
+    )
+    .unwrap();
+    let original =
+        f.p.profile
+            .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+    fs::create_dir_all(&original).unwrap();
+    fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+    let mut r = ReliabilityRunner::new(&f, vec![0; 2]);
+    r.expect_fifo = false;
+    r.running = false;
+    for _ in 0..2 {
+        assert_eq!(cli(&mut r, &f.p, &args(&["main:cycle.json"])).unwrap(), 0);
+        assert_eq!(
+            fs::read(original.join("owner-save")).unwrap(),
+            b"owner original bytes"
+        );
+    }
+    let begins: Vec<_> = r
+        .isolation_calls
+        .iter()
+        .filter(|call| call.args[1] == "--begin")
+        .collect();
+    assert_eq!(begins.len(), 2);
+    assert_ne!(begins[0].args[5], begins[1].args[5]);
+    for (begin, artifact) in begins.iter().zip(&r.artifacts) {
+        assert_eq!(&begin.args[5], artifact);
+        assert_eq!(
+            fs::read(PathBuf::from(artifact).join("test-auto/test-save")).unwrap(),
+            b"test autosave bytes"
+        );
+    }
+    assert_eq!(r.restore_calls, 2);
+    assert!(!f.p.here.join("reliability-auto-state.json").exists());
+    assert!(!f.p.here.join("civ6.lock").exists());
+}

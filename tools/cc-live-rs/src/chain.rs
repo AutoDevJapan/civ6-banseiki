@@ -1567,9 +1567,16 @@ fn main_owned(
                 .live()
                 .join("tools/target/release/civ6-save-isolation.exe");
             let state = p.here.join("reliability-auto-state.json");
-            let archive = Path::new(&artifacts)
-                .parent()
-                .ok_or("autosave isolation artifact parent missing")?;
+            let archive = if options.reliability {
+                Path::new(&artifacts)
+                    .parent()
+                    .ok_or("autosave isolation artifact parent missing")?
+            } else {
+                // Each ordinary run retains its own test autosaves. Sharing
+                // the parent would collide with a previous run's test-auto.
+                fs::create_dir_all(&artifacts).map_err(|e| e.to_string())?;
+                Path::new(&artifacts)
+            };
             let out = r.run(
                 Call::new(args(&[
                     &path(auto),
