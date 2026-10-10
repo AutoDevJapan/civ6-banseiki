@@ -195,6 +195,14 @@ pub struct Connection {
 }
 
 impl Connection {
+    pub fn completion(&self) -> Value {
+        json!({"baseline_captured":self.baseline.is_some(),
+            "same_city_setter_captured":self.native_city.is_some(),
+            "setter_return_captured":self.returned,
+            "capture_complete":self.baseline.is_some() && self.native_city.is_some() && self.returned,
+            "scope":"capture_completeness_only_not_product_or_core_update_success"})
+    }
+
     pub fn new(target: CityKey, audit: Value) -> Self {
         Self {
             target,
@@ -311,6 +319,13 @@ impl Connection {
 // decoded independently so a copied displacement cannot certify a wrong edge.
 pub const WITNESSES: &[(u32, &[u8])] = &[
     (0x713E15, &[0xE8, 0x26, 0x12, 0x91, 0xFF]),
+    (0x713E22, &[0x48, 0x8B, 0xD8]),
+    (0x713E2D, &[0x48, 0x8D, 0x8B, 0x30, 0x16, 0, 0]),
+    (0x713E3D, &[0xE8, 0xCE, 0x13, 0xA0, 0xFF]),
+    (0x11521A, &[0x48, 0x8B, 0xD9]),
+    (0x11531A, &[0x48, 0x8B, 0x83, 0x90, 0, 0, 0]),
+    (0x115332, &[0x8B, 0x88, 0xA8, 0, 0, 0]),
+    (0x115338, &[0x0F, 0xB7, 0x80, 0xD8, 0, 0, 0]),
     (0x02506A, &[0x4C, 0x8D, 0x05, 0x77, 0x86, 0x99, 0]),
     (0x710FE1, &[0xE8, 0x0A, 0x3F, 0x91, 0xFF]),
     (0x024F1A, &[0x4C, 0x8D, 0x05, 0xE7, 0x87, 0x99, 0]),
@@ -419,6 +434,7 @@ pub fn audit(bytes: &[u8], expected_sha: &str) -> Result<Value> {
     }
     for (from, prefix, target) in [
         (0x713E15, &[0xE8][..], 0x025040),
+        (0x713E3D, &[0xE8][..], 0x115210),
         (0x710FE1, &[0xE8][..], 0x024EF0),
         (0x710FF0, &[0xE8][..], 0x710980),
         (0x70AF41, &[0xE8][..], 0x707E60),
@@ -482,6 +498,10 @@ mod tests {
         use sha2::{Digest, Sha256};
         let sha = format!("{:X}", Sha256::digest(&bytes));
         audit(&bytes, &sha).unwrap();
+        let mut wrong_identity = bytes.clone();
+        wrong_identity[0x115338 - 0xC00 + 3] = 0xDC;
+        let wrong_sha = format!("{:X}", Sha256::digest(&wrong_identity));
+        assert!(audit(&wrong_identity, &wrong_sha).is_err());
         relative(&bytes, 0x2CA1FB, &[0xE8], 0x03F2F0).unwrap(); // signed negative edge
         assert!(relative(&bytes, 0x2CA1FB, &[0xE8], 0x03F2F1).is_err());
         assert!(rva(&bytes, 0xA3FFFF, 2).is_err());
@@ -507,6 +527,7 @@ mod tests {
         };
         let origin = getter_origin(&mut read, 0x16D8).unwrap();
         let mut state = Connection::new("3:65536".parse().unwrap(), Value::Null);
+        assert_eq!(state.completion()["capture_complete"], false);
         assert!(!state
             .getter(
                 GetterOrigin {
@@ -563,11 +584,13 @@ mod tests {
             ([0x100, 0x200, 0x16E0, 0x400], 0xD000055)
         );
         state.setter(0x2000, state.target).unwrap();
+        assert_eq!(state.completion()["capture_complete"], false);
         assert_eq!(
             state.plan(execution),
             ([0x36D8, 0x200, 0x16E0, 0x400], 0xD0D0055)
         );
         state.returned = true;
+        assert_eq!(state.completion()["capture_complete"], true);
         assert_eq!(
             state.plan(execution).0,
             [0x36D8, 0x200, 0x16E0, 0x300 + CONSTRUCTOR_FROM_GETTER]

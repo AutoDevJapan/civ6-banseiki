@@ -2515,6 +2515,14 @@ mod platform {
                     "registration":native.map(|city|connection::registry_fields(|a,n|self.process.read_short(a,n),city+0x1630)),
                     "scope":"after_write_trap_not_instruction_start_or_authoritative_role"}))
             } else if source.slot == 0 {
+                // Audited wrapper: City resolver RAX -> RBX, RCX = RBX+1630.
+                // Audited callee packet: receiver+90 -> identity object,
+                // then +D8 u16 / +A8 u32. Require the live pointers to agree.
+                if value.Rbx.checked_add(0x1630) != Some(value.Rcx)
+                    || self.process.u64_at(value.Rcx, 0x90)? != value.Rbx
+                {
+                    return Err("City wrapper and notification identity pointer mismatch".into());
+                }
                 let key = connection::CityKey {
                     owner: self.process.u16_at(value.Rbx, 0xD8)?,
                     city: u32::from_le_bytes(
@@ -3592,6 +3600,7 @@ mod platform {
             "probe_resume_error":session.as_ref().and_then(|s| s.probe_resume_error.as_ref()),
             "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
             "connection":session.as_ref().and_then(|s| s.connection.as_ref()),
+            "connection_capture":session.as_ref().and_then(|s| s.connection.as_ref()).map(connection::Connection::completion),
             "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
             "exceptions":session.as_ref().map(|s| &s.exceptions),
             "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
@@ -3805,6 +3814,7 @@ mod platform {
                 cache[0x16E8..0x16F0].copy_from_slice(&(raw.as_ptr() as u64).to_le_bytes());
                 cache[0x16F0..0x16F4].copy_from_slice(&42i32.to_le_bytes());
                 let base = cache.as_ptr() as u64;
+                cache[0x16C0..0x16C8].copy_from_slice(&base.to_le_bytes());
                 // SAFETY: local fixture calls, valid cache allocation, Win64
                 // shadow space/alignment and saved RBX. Production setter /
                 // return matching and raw memory reads use actual trap context.
