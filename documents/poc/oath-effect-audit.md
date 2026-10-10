@@ -657,3 +657,7 @@ EXEの`F7956`はglobal `22D6070`から補助オブジェクトをRBXへ取り、
 traceはversion=1、magic=`0x4C433134`、総サイズ32816byte。先頭はmagic/version（各u32）、next/dropped/flight/completed/unwound/stopped（各u32）、deadline_ms（u64）、expired/detached（各u32）の48byte。stoppedは1=設置済み、0=記録中、2=停止。末尾に64byteのrowが512件続き、満杯では既存prefixを上書きせずdroppedを増やす。rowはstate/kind/thread/depth（各u32）、root_or_this/rcx/rdx/caller/rax（各u64）、completion_order/reserved（各u32）。kindは0=root設定、1=本体破棄。stateは0=未公開、1=入口、2=正常復帰、3=unwind。RAXはstate=2のときだけ元戻り値として解釈する。同じOSスレッドで両入口を合算した深度を採る。コピー中のstateとflightも確認し、未完了・欠落・unwindを正常終了へ替えない。
 
 合成Win64検査は整数4引数と浮動小数点4引数の転送、RAX/XMM0の戻り値、元関数の一度の実行、同スレッド再入、別OSスレッド、有限prefix、期限、実行中の停止と停止後の先行取得を確認する。Windows上のRust panicが元関数と観測callbackからgatewayをunwindする経路、および`RtlVirtualUnwind`による復帰先・RSP・非volatileレジスターの復元を検査する。実ゲームの設置、初回root設定の採取、終了直前の取得、任意のnative SEH例外と全callerは未確認である。全workspace・Lua・シナリオ・実機の既存結果をこの新実装の合格へ付け替えず、通常38/66・残28件と製品Must3群は未解消のまま維持する。
+
+driverは`capture:"lifecycle"`を明示した設置だけで新APIを使う。既存の所有プロセス・万世紀ルールセット・単独プレイ・期限の確認を保ち、二つのrawコピーと観測件数を保存する。整合していても空の記録を対象呼出しの成功へ替えず、参照設定と本体破棄それぞれの診断を`observed`・`not_observed`・`unknown`で示す。参照設定は正常復帰した非null rootだけを`observed`へ数え、初回起動や参照寿命の保証はfalseを維持する。
+
+[再初期化シナリオ](../../tools/civ6-autotest/scenarios/oath-native-lifecycle-observation-134.json)は、最初のゲームを始めてから設置・開始し、公式のメニュー遷移と同じ設定のゲーム開始を経て記録を読み、停止・再読取する。初回rootより前の設置は保証しない。本体終了後にもtraceを回収する経路はまだないため、停止で本体破棄のslotを復元してから共有実行器がCiv6を閉じる。このシナリオの完走は本体破棄の採取成功ではない。

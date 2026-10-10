@@ -59,6 +59,9 @@ pub(crate) fn project(first: &[u8], second: &[u8]) -> Result<Value, String> {
     let mut normal = 0;
     let mut unwound = 0;
     let mut unknown = 0;
+    let mut roots = 0;
+    let mut nonnull_roots = 0;
+    let mut teardowns = 0;
     let mut completion_orders = Vec::new();
     let records: Vec<Value> = (0..count)
         .map(|i| {
@@ -70,6 +73,14 @@ pub(crate) fn project(first: &[u8], second: &[u8]) -> Result<Value, String> {
                 return json!({"index":i,"state":"unknown"});
             }
             normal += usize::from(state == 2);
+            if state == 2 {
+                if u32_at(row, 4) == Some(0) {
+                    roots += 1;
+                    nonnull_roots += usize::from(u64_at(row, 16) != Some(0));
+                } else {
+                    teardowns += 1;
+                }
+            }
             if state == 2 {
                 completion_orders.push(u32_at(row, 56).unwrap());
             }
@@ -99,6 +110,10 @@ pub(crate) fn project(first: &[u8], second: &[u8]) -> Result<Value, String> {
         "in_flight":u32_at(second,16),"completed":u32_at(second,20),"unwound":u32_at(second,24),
         "dropped":u32_at(second,12),"stopped":u32_at(second,28),"expired":u32_at(second,40),
         "detached":u32_at(second,44),"unknown_rows":unknown,
+        "completed_context_root_calls":roots,"completed_nonnull_context_root_calls":nonnull_roots,
+        "completed_application_teardown_calls":teardowns,
+        "context_root_diagnostic":if nonnull_roots>0 {"observed"} else if unknown>0 {"unknown"} else {"not_observed"},
+        "application_teardown_diagnostic":if teardowns>0 {"observed"} else if unknown>0 {"unknown"} else {"not_observed"},
         "record_consistent_at_read":consistent,"permanent_drain_proved":false,
         "first_root_observed":false,"native_lifetime_proved":false,
         "quantity_accepted":false,"product_accepted":false,
@@ -151,6 +166,9 @@ mod tests {
         let p = project(&b, &b).unwrap();
         assert_eq!(p["records"][0]["kind"], "context_root");
         assert_eq!(p["record_consistent_at_read"], true);
+        assert_eq!(p["completed_context_root_calls"], 1);
+        assert_eq!(p["context_root_diagnostic"], "not_observed");
+        assert_eq!(p["application_teardown_diagnostic"], "not_observed");
         for key in [
             "permanent_drain_proved",
             "first_root_observed",
@@ -159,6 +177,28 @@ mod tests {
         ] {
             assert_eq!(p[key], false);
         }
+    }
+
+    #[test]
+    fn absent_null_or_teardown_only_records_do_not_report_root_reinitialization() {
+        let mut b = fixture();
+        for at in [HEADER + 16, HEADER + 32] {
+            b[at..at + 8].copy_from_slice(&0x1234u64.to_le_bytes());
+        }
+        assert_eq!(
+            project(&b, &b).unwrap()["context_root_diagnostic"],
+            "observed"
+        );
+        put(&mut b, HEADER + 4, 1);
+        b[HEADER + 24..HEADER + 32].copy_from_slice(&0x1234u64.to_le_bytes());
+        let p = project(&b, &b).unwrap();
+        assert_eq!(p["context_root_diagnostic"], "not_observed");
+        assert_eq!(p["application_teardown_diagnostic"], "observed");
+        put(&mut b, 8, 0);
+        put(&mut b, 20, 0);
+        let p = project(&b, &b).unwrap();
+        assert_eq!(p["context_root_diagnostic"], "not_observed");
+        assert_eq!(p["application_teardown_diagnostic"], "not_observed");
     }
     #[test]
     fn changed_unpublished_entered_or_missing_completion_is_not_complete() {
