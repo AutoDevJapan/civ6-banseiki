@@ -182,16 +182,49 @@ UI.RequestPlayerOperation(d.Owner,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_
 return 'one native setter requested'
 "#;
 
+const SINGLE_REQUEST_UI: &str = r#"
+local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe)
+assert(not d.UIRequestIssued and not d.MutationIssued,'single UI request already issued')
+d.ImmediateBefore=d.ReadCurrent('before-setter')
+assert(type(d.ImmediateBefore)=='number' and d.ImmediateBefore==d.Before,'UI baseline changed')
+d.Publications=0
+d.UIRequestIssued=true
+UI.RequestPlayerOperation(d.Owner,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyNativeProbe_Operation',Tag='native-probe'})
+return 'one synchronized setter requested; no native observer'
+"#;
+
 fn native_probe_steps(handoff: &std::path::Path) -> Vec<Value> {
-    vec![
-        ui("InGame", NATIVE_UI),
-        ui("JAC_Absorption_Entry", NATIVE_CORE),
-        json!({"action":"native_observer_ready","timeout":240,"handoff":handoff}),
-        ui("InGame", NATIVE_REQUEST_UI),
+    loyalty_probe_steps(Some(handoff))
+}
+
+fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
+    let core = if handoff.is_some() {
+        NATIVE_CORE.to_owned()
+    } else {
+        NATIVE_CORE.replace("assert(d.ObserverReady,'native observer is not ready')",
+            "assert(d.UIRequestIssued and type(d.ImmediateBefore)=='number' and d.ImmediateBefore==d.Before,'UI baseline request is not ready')")
+    };
+    let arm = if handoff.is_some() {
+        NATIVE_UI.to_owned()
+    } else {
+        NATIVE_UI.replace(
+            "single setter probe armed; waiting for verified native observer",
+            "single UI setter probe armed; no native observer requested",
+        )
+    };
+    let mut steps = vec![ui("InGame", &arm), ui("JAC_Absorption_Entry", &core)];
+    if let Some(handoff) = handoff {
+        steps.push(json!({"action":"native_observer_ready","timeout":240,"handoff":handoff}));
+    }
+    steps.extend([
+        ui("InGame", if handoff.is_some() { NATIVE_REQUEST_UI } else { SINGLE_REQUEST_UI }),
         json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_LoyaltyNativeProbe;return d and d.Issued and d.Publications>=2"}}),
         ui("InGame", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);assert(Game.GetCurrentGameTurn()==d.Turn,'native probe turn changed');local c=assert(CityManager.GetCityAt(d.X,d.Y));assert(c:GetOwner()==d.Owner and c:GetID()==d.ID,'native probe city replaced');d.After=c:GetCulturalIdentity():GetLoyalty();print('JAC_LOYALTY_NATIVE_RESULT owner='..d.Owner..' city='..d.ID..' before='..d.Before..' after='..d.After..' cityEvents='..d.Events..' publications='..d.Publications);return 'raw comparison recorded, not a product acceptance'"),
-        json!({"action":"native_observer_finish","handoff":handoff,"timeout":120}),
-    ]
+    ]);
+    if let Some(handoff) = handoff {
+        steps.push(json!({"action":"native_observer_finish","handoff":handoff,"timeout":120}));
+    }
+    steps
 }
 
 fn run() -> Result<()> {
@@ -202,6 +235,7 @@ fn run() -> Result<()> {
         .as_deref()
         .is_some_and(|v| v == "--operation-context");
     let native_mode = option.as_deref().is_some_and(|v| v == "--native-observer");
+    let single_mode = option.as_deref().is_some_and(|v| v == "--single-setter-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -211,9 +245,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui]"
     );
     ensure!(
         !output.exists(),
@@ -229,6 +263,8 @@ fn run() -> Result<()> {
     let mut steps = setup[..8].to_vec();
     if native_mode {
         steps.extend(native_probe_steps(handoff.as_ref().unwrap()));
+    } else if single_mode {
+        steps.extend(loyalty_probe_steps(None));
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -285,6 +321,58 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn single_ui_operation_reads_in_ui_and_mutates_once_without_observer() -> Result<()> {
+        let lua = mlua::Lua::new();
+        lua.load(
+            r#"
+Domain='UI';Reads=0;Calls=0;Requests=0;local handler
+local d={Owner=3,ID=8,X=5,Y=6,Turn=1,Before=100,Publications=9,
+ ReadCurrent=function() assert(Domain=='UI');Reads=Reads+1;return 100 end}
+ExposedMembers={JAC_LoyaltyNativeProbe=d}
+Players={[3]={IsTurnActive=function() return true end}}
+Game={GetCurrentGameTurn=function() return 1 end}
+CityManager={GetCityAt=function(x,y)
+ assert(Domain=='Core' and x==5 and y==6)
+ return {GetOwner=function() return 3 end,GetID=function() return 8 end,
+ ChangeLoyalty=function(_,v) assert(v==-5 and Domain=='Core');Calls=Calls+1 end}
+end}
+GameEvents={JAC_LoyaltyNativeProbe_Operation={Add=function(f) handler=f end}}
+PlayerOperations={EXECUTE_SCRIPT=19}
+UI={RequestPlayerOperation=function(owner,op,params)
+ assert(owner==3 and op==19 and d.UIRequestIssued and d.ImmediateBefore==100 and d.Publications==0)
+ Requests=Requests+1;Domain='Core';handler(owner,params);Domain='UI'
+end}
+Invoke=function() handler(3,{Tag='native-probe'}) end
+"#,
+        )
+        .exec()?;
+        let steps = loyalty_probe_steps(None);
+        assert_eq!(steps.len(), 5);
+        for step in &steps {
+            assert!(!step["action"]
+                .as_str()
+                .unwrap()
+                .starts_with("native_observer"));
+            if let Some(code) = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+            {
+                lua.load(format!("return function()\n{code}\nend"))
+                    .into_function()?;
+            }
+        }
+        lua.load(steps[1]["code"].as_str().unwrap()).exec()?;
+        lua.load("Domain='Core';assert(not pcall(Invoke));assert(Calls==0);Domain='UI'")
+            .exec()?;
+        lua.load(SINGLE_REQUEST_UI).exec()?;
+        lua.load("assert(Calls==1 and Reads==1 and Requests==1 and ExposedMembers.JAC_LoyaltyNativeProbe.Issued);assert(ExposedMembers.JAC_LoyaltyNativeProbe.ObserverReady==nil)").exec()?;
+        assert!(lua.load(SINGLE_REQUEST_UI).exec().is_err());
+        lua.load("assert(Calls==1 and Reads==1 and Requests==1)")
+            .exec()?;
+        Ok(())
+    }
+
     #[test]
     fn native_ui_identity_metadata_without_rawget_does_not_abort_or_mutate() -> Result<()> {
         let lua = mlua::Lua::new();

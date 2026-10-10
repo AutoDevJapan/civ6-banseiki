@@ -117,3 +117,9 @@ preflight・新しいスレッドの登録・設置直前・接続計画の切�
 pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更、RW/LEN変更、LENだけの変更、制御変更後の無効化、元制御への無効化、別アドレスを区別する。未分類DR6と追加アプリ枠を保持することも固定値で確認した。Gのみ・L/G両方・RWだけの変更・無効化の全ケースを実OSで測ったとは主張しない。実測はLのみの安全なdata watchとLEN変更であり、非zeroのアプリDR6保持はpolicy検査の範囲である。ゲームや実機には接続せず、設置後hideと保留execution例外の配送の限界を解決した修正とは呼ばない。Core現在値の変更成功・製品受入の更新ではなく、製品2/5・40%・残り3件は維持する。
 
 最終検査は`restore-control-green-03.log`（4成功・60対象外）、`restore-control-clippy.log`（warnings拒否、終了0）、`restore-control-build.log`（Windows CLI、終了0）。それぞれのmetaにコマンド・開始終了時刻・実行元commitとsource SHAを保存した。場所は既存の子生成先`C:/Users/makhmeto/AppData/Local/Temp/codex-owned-6bfd169444d1814547e40876dbdba279/target/`。最終observer source SHA-256は`CBA9E5C3DCBB7BB262C9B720324726675FFA62EC996706C05714B21DA8591B08`。旧hidden-thread系列の原ログ、102の`D:/CC/Work/todo995/native-1743-live09-copy-proof.json`と保全25件にも触れていない。
+
+## 監視に依存しないUI・Gameplayの単発比較
+
+実機103はUIにrawgetがないため情報記録で失敗した。実機104は通常のtable field lookupへ修正後、10/10手順とログ5/5が成功した。identityの実型はtable、__instanceの実型はuserdata、getmetatableはfunction、metatableとcustom formatterはnilだった。表示文字列は保全するが、これだけをメモリアドレスや正本の根拠にしない。両実機はsetter・操作要求・観測器が0で、忠誠心変更の受入ではない。ゲーム終了・描画設定の元SHA一致を標準chainで確認した。
+
+生成器の --single-setter-ui は、UIで実値の基準を読んでから同期操作を一度要求する。Gameplayは基準の取得と当事者・手番・再送を検査し、変更命令だけを実行する。UI getterのclosureをGameplayから呼ばない。観測器のreadyを偽に用意する処理はなく、この方式は観測器を起動しない。二公開後の実getterと都市通知数を記録し、ターン・公開回数・停止条件を延長しない。元の --native-observer の検証付きready/finishは維持する。この追加方式も診断であり、Core正本の更新や製品成功をCLI完走で代用しない。
