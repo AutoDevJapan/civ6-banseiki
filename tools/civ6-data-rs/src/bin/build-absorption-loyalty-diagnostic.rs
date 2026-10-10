@@ -140,11 +140,11 @@ d.Before=identity:GetLoyalty()
 assert(type(d.Before)=='number' and d.Before>=0 and d.Before<=100,'invalid native probe baseline')
 print('JAC_LOYALTY_NATIVE_IDENTITY kind='..type(identity)..' text='..tostring(identity))
 if type(identity)=='table' then
- local instance=rawget(identity,'__instance')
+ local instance=identity.__instance
  d.BaselineInstance=instance
- local mt=instance and getmetatable(instance)
- local custom=type(mt)=='table' and rawget(mt,'__tostring') or nil
- print('JAC_LOYALTY_NATIVE_INSTANCE kind='..type(instance)..' text='..tostring(instance)..' mtKind='..type(mt)..' customFormatterKind='..type(custom))
+ local mt=instance and type(getmetatable)=='function' and getmetatable(instance) or nil
+ local custom=type(mt)=='table' and mt.__tostring or nil
+ print('JAC_LOYALTY_NATIVE_INSTANCE kind='..type(instance)..' text='..tostring(instance)..' access=field getmetatableKind='..type(getmetatable)..' mtKind='..type(mt)..' customFormatterKind='..type(custom))
 end
 print('JAC_LOYALTY_NATIVE_EVENT_HASH '..tostring(DB.MakeHash('CityLoyaltyChanged')))
 print('JAC_LOYALTY_NATIVE_ARMED owner='..d.Owner..' city='..d.ID..' x='..d.X..' y='..d.Y..' turn='..d.Turn..' before='..d.Before)
@@ -285,6 +285,36 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_ui_identity_metadata_without_rawget_does_not_abort_or_mutate() -> Result<()> {
+        let lua = mlua::Lua::new();
+        lua.load(
+            r#"
+rawget=nil
+local instance=setmetatable({}, {__tostring=function() return 'metadata fixture' end})
+local identity={__instance=instance,GetLoyalty=function() return 100 end}
+local capital={GetID=function() return 1 end}
+local city={GetID=function() return 8 end,GetX=function() return 5 end,
+ GetY=function() return 6 end,GetOwner=function() return 3 end,
+ GetCulturalIdentity=function() return identity end,
+ ChangeLoyalty=function() error('metadata must not mutate') end}
+local cities={GetCapitalCity=function() return capital end,
+ Members=function() return ipairs({capital,city}) end}
+Players={[3]={IsTurnActive=function() return true end,GetCities=function() return cities end}}
+Game={GetLocalPlayer=function() return 3 end,GetCurrentGameTurn=function() return 1 end}
+ExposedMembers={}
+Events={CityLoyaltyChanged={Add=function() end},GameCoreEventPublishComplete={Add=function() end}}
+DB={MakeHash=function() return 19 end}
+Lines={};print=function(line) Lines[#Lines+1]=line end
+ExpectedIdentity=identity;ExpectedInstance=instance
+"#,
+        )
+        .exec()?;
+        lua.load(NATIVE_UI).exec()?;
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.Before==100 and d.BaselineIdentity==ExpectedIdentity and d.BaselineInstance==ExpectedInstance);assert(not d.MutationIssued);local found=false;for _,line in ipairs(Lines) do if line:find('JAC_LOYALTY_NATIVE_INSTANCE',1,true) then found=true end end;assert(found)").exec()?;
+        Ok(())
+    }
+
     #[test]
     fn native_probe_arms_without_mutation_and_rejects_replay_and_replaced_city() -> Result<()> {
         let lua = mlua::Lua::new();
