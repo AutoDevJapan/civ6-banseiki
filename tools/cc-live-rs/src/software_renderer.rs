@@ -105,11 +105,14 @@ pub(crate) struct Profile {
     backup: PathBuf,
 }
 impl Profile {
-    pub(crate) fn recover(paths: &Paths, token: &str) -> Result<(), String> {
+    pub(crate) fn recover(paths: &Paths, token: &str) -> Result<Option<Self>, String> {
         let backup = paths.here.join("software-renderer-original.bin");
         match fs::read(&backup) {
-            Ok(original) => {
-                options(&original)?;
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            // Any other read failure also needs a retained recovery guard.
+            // The caller owns it BEFORE trying restoration, so an error cannot
+            // drop protection and accidentally permit normal lock release.
+            _ => {
                 let mut open = OpenOptions::new();
                 open.read(true);
                 #[cfg(windows)]
@@ -128,10 +131,8 @@ impl Profile {
                     backup,
                 };
                 profile.validate_lease()?;
-                profile.restore()
+                Ok(Some(profile))
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.to_string()),
         }
     }
     // The caller has closed Civ6 while owning the standard lock. A read handle
@@ -157,7 +158,6 @@ impl Profile {
         profile.validate_lease()?;
         // An interrupted prior CPU run keeps its original bytes. Restore them
         // first under this newly acquired lease, with the game already absent.
-        Self::recover(paths, token)?;
         let original = fs::read(&profile.settings).map_err(|e| e.to_string())?;
         let modified = options(&original)?;
         publish_backup(&profile.backup, &original)?;
@@ -185,6 +185,7 @@ impl Profile {
     pub(crate) fn restore(&mut self) -> Result<(), String> {
         self.validate_lease()?;
         let original = fs::read(&self.backup).map_err(|e| e.to_string())?;
+        options(&original)?;
         replace(&self.settings, &original)?;
         if fs::read(&self.settings).map_err(|e| e.to_string())? != original {
             return Err("software renderer restoration bytes differ".into());
@@ -235,7 +236,9 @@ mod tests {
         let interrupted = Profile::apply(&paths, "fixture").unwrap();
         assert_eq!(fs::read(&settings).unwrap(), options(original).unwrap());
         drop(interrupted); // simulate process termination; retain original.
-        Profile::recover(&paths, "fixture").unwrap();
+        let mut recovery = Profile::recover(&paths, "fixture").unwrap().unwrap();
+        recovery.restore().unwrap();
+        drop(recovery);
         assert_eq!(fs::read(&settings).unwrap(), original);
         let mut recovered = Profile::apply(&paths, "fixture").unwrap();
         #[cfg(windows)]

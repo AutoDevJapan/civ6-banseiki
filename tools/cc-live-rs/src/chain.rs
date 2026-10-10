@@ -1329,7 +1329,13 @@ fn main_owned(
         if software_profile.is_none() {
             if let Some(token) = token {
                 // Recover an interrupted CPU run even for an ordinary next run.
-                crate::software_renderer::Profile::recover(p, token)?;
+                *software_profile = crate::software_renderer::Profile::recover(p, token)?;
+                if let Some(profile) = software_profile.as_mut() {
+                    profile
+                        .restore()
+                        .map_err(|e| format!("software renderer recovery pending: {e}"))?;
+                    *software_profile = None;
+                }
             }
         }
         let ship = std::env::var("CC_LIVE_SHIP").unwrap_or_else(|_| path(p.here.join("ship.exe")));
@@ -1366,6 +1372,15 @@ fn main_owned(
             }
             if first_failure == 0 {
                 first_failure = code;
+            }
+            // Preparation never launched the driver and the owned game is
+            // still closed. Release our read protection before the next
+            // iteration tries to open the lease with DELETE access again.
+            if let Some(profile) = software_profile.as_mut() {
+                profile
+                    .restore()
+                    .map_err(|e| format!("software renderer restoration pending: {e}"))?;
+                *software_profile = None;
             }
             continue;
         }

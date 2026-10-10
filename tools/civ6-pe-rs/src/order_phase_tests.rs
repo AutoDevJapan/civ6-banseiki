@@ -77,9 +77,10 @@ fn fixed_thread_lifecycle(erase_registers: bool) {
                 // The owned fixture has no GameCore. Exercise the actual
                 // stopped rearm path, not a mocked module lookup: it must
                 // reject before changing even the first thread's registers.
-                let prior: Vec<_> = d.threads.iter().filter_map(|(tid,state)| {
-                    (unsafe{WaitForSingleObject(state.handle.0,0)}==WAIT_TIMEOUT).then(||(*tid,Registers::from(&context(&state.handle).unwrap())))
-                }).collect();
+                let prior: Vec<_> = d.threads.iter()
+                    .filter(|(_,state)| (unsafe{WaitForSingleObject(state.handle.0,0)})==WAIT_TIMEOUT)
+                    .map(|(tid,state)|(*tid,Registers::from(&context(&state.handle).unwrap())))
+                    .collect();
                 let missing_core=CaptureEpoch { phase:Phase::NativeOuter,generation:1,
                     sites:[Some(0x1804182b0),Some(0x18041885f),Some(0x180418419),Some(0x1400f7110)] };
                 let rejected=rearm_frozen_threads(&mut d,&steps,epoch,missing_core,&mut ledger);
