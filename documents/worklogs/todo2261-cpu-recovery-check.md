@@ -10,7 +10,14 @@
 - 現候補のcc-liveは161件成功、ignored2。恒久収録の8回帰を含む。旧候補の153件は加算しない。全target Clippyとedition2021のfmtも成功した。
 - native-probe bootstrap-orderは指定された所有OS検査2件のみ成功。停止後のCore不在拒否で5threadのDRが不変であることを2ケースで確認。関連probe/autotest全target Clippyと変更fixtureのRust2021fmtも成功した。
 - 独立追審はMust0、Suggestion0、Nit0。旧Must3件は解消。復元guardはcallerへ渡してから復元し、失敗時はbackupとlease記録を保持する。prepare失敗後は元bytesへ戻してから次シナリオへ進む。
-- 次の作業は同候補のrelease observer/diagnostics/autotest/bridge cdylib/live_chainのビルド、artifact SHA保存、標準path配備可否の再確認、最終結果JSON保存。稼働中なら配備を行わず原artifactを保持して有限検査を完了する。
+- 同候補のrelease observer/diagnostics/autotest/bridge cdylib/live_chainの5ファイルをビルドし、全件終了0。原artifactとSHAは証拠フォルダの `artifacts/` と `artifacts.json` に保存した。標準live_chain候補のSHA256は `11dd558c9ec8110b70c560d71bc4bfd6d5334c71af4ea1c93d566964210e7beb`。
+- 配備時に標準pathの実行中chainと `civ6.lock` を確認したため、標準exeを変更しなかった。判定時刻、PID、旧exeと候補のSHAは `deployment.json` に保存した。稼働中の他担当を待たずに、この有限検査は完了した。
+- `result.json` と `review.txt` に固定source、旧Mustの解消、コマンド・原ログ・終了コード・SHA、配備未実施を保存した。元2258の8fixtureは書式整形と改行の差を除き恒久収録版と一致した。実行結果は現在sourceだけで163件成功（cc-live161件とnative2件）。
+- 生成先は約1.64GiB。主担当の次の有限CPU観測で同じsourceの成果物とシンボルを使うため、上記所有IDと理由を `retention.json` に記録して保持する。fixtureファイルの残存は0件。後続観測後は所有IDに対するsafe-deleteの手順で片付ける。
+
+## 主担当へ返す結果
+
+Must0で、この固定候補を有限CPU観測へ進める検査条件は満たした。配備は稼働中の標準chain/lockがなくなった正常な時間帯に行う必要がある。旧exeを保持して通常の置換を行い、上記候補SHAとの一致を確認する。今回の独立担当による追加の親待ち、PR作成、マージはない。
 
 ## 範囲
 
