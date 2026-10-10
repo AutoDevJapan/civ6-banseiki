@@ -151,20 +151,27 @@ fn admitted_outer_caller_can_reenter_after_seal_without_changing_generation() {
 
 #[test]
 fn unpublished_and_published_jobs_are_both_required_to_settle() {
-    let world = WorldFlights::new(1).unwrap();
-    let caller = world.dispatch().unwrap().enter().unwrap();
-    let pending = caller.issue().unwrap();
-    let published = caller.issue().unwrap().publish().unwrap();
-    drop(caller);
-    pending_now(world.close().unwrap());
-    // Pending-only and the publication transition are covered above. Here,
-    // cancel the unsubmitted work first to isolate outstanding published work;
-    // a missing published counter must not be hidden by the pending counter.
-    pending.cancel_before_submission().unwrap();
-    pending_now(world.close().unwrap());
-    published.complete_after_native_join().unwrap();
-    let drained = world.close().unwrap().wait(deadline()).unwrap();
-    assert_eq!(world.rebuild(drained), Ok(2));
+    // Keep the original settlement order and exercise its reverse too: either
+    // category must independently keep the same old generation sealed.
+    for cancel_pending_first in [false, true] {
+        let world = WorldFlights::new(1).unwrap();
+        let caller = world.dispatch().unwrap().enter().unwrap();
+        let pending = caller.issue().unwrap();
+        let published = caller.issue().unwrap().publish().unwrap();
+        drop(caller);
+        pending_now(world.close().unwrap());
+        if cancel_pending_first {
+            pending.cancel_before_submission().unwrap();
+            pending_now(world.close().unwrap());
+            published.complete_after_native_join().unwrap();
+        } else {
+            published.complete_after_native_join().unwrap();
+            pending_now(world.close().unwrap());
+            pending.cancel_before_submission().unwrap();
+        }
+        let drained = world.close().unwrap().wait(deadline()).unwrap();
+        assert_eq!(world.rebuild(drained), Ok(2));
+    }
 }
 
 #[test]
