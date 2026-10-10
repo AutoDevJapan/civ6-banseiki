@@ -260,6 +260,132 @@ fn cross_context_probe_steps() -> Vec<Value> {
     steps
 }
 
+// This comparison changes one donor capital's ownership before the ordinary
+// UI -> synchronized Core setter. Core never invokes the UI getter closure.
+const TRANSFER_CORE: &str = r#"
+local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe)
+assert(not d.HandlerRegistered,'transfer handlers already registered')
+local function validate(actor,params,tag,owner,id)
+ assert(actor==d.Actor and Players[actor]:IsTurnActive(),'wrong transfer probe actor')
+ assert(params.Tag==tag and params.Owner==owner and params.ID==id and params.X==d.X and params.Y==d.Y and params.Turn==d.Turn,'transfer probe request identity mismatch')
+ assert(Game.GetCurrentGameTurn()==d.Turn,'transfer probe turn changed')
+ local c=assert(CityManager.GetCityAt(d.X,d.Y),'transfer probe city missing')
+ assert(c:GetOwner()==owner and c:GetID()==id and c:GetX()==d.X and c:GetY()==d.Y,'transfer probe city replaced')
+ return c
+end
+GameEvents.JAC_LoyaltyTransferProbe_Operation.Add(function(actor,params)
+ assert(d.TransferRequestIssued and not d.TransferIntent and not d.MutationIssued,'transfer probe replay or unrequested transfer')
+ local c=validate(actor,params,d.Tag,d.OriginalOwner,d.OriginalID)
+ assert(d.OriginalOwner==1 and d.Recipient==0 and not Players[d.Recipient]:IsHuman(),'transfer recipient changed')
+ local cities=Players[d.OriginalOwner]:GetCities()
+ local capital=assert(cities:GetCapitalCity(),'donor capital missing')
+ assert(cities:GetCount()>1 and capital:GetID()==d.OriginalID,'donor no longer has capital and another city')
+ d.TransferIntent={Owner=c:GetOwner(),ID=c:GetID(),X=c:GetX(),Y=c:GetY(),Turn=d.Turn,Actor=actor,Recipient=d.Recipient,Tag=params.Tag}
+ d.TransferCalls=1
+ print('JAC_LOYALTY_TRANSFER_INTENT actor='..actor..' active='..tostring(Players[actor]:IsTurnActive())..' owner='..c:GetOwner()..' city='..c:GetID()..' x='..d.X..' y='..d.Y..' turn='..d.Turn..' tag='..params.Tag)
+ CityManager.TransferCity(c,d.Recipient)
+ local moved=assert(CityManager.GetCityAt(d.X,d.Y),'transferred Core city missing')
+ assert(moved:GetOwner()==d.Recipient and moved:GetX()==d.X and moved:GetY()==d.Y,'transferred Core identity mismatch')
+ assert(Game.GetCurrentGameTurn()==d.Turn and Players[actor]:IsTurnActive() and cities:GetCount()>0,'transfer changed turn or eliminated donor')
+ d.CoreTransferredID=moved:GetID()
+ d.TransferComplete=true
+ print('JAC_LOYALTY_TRANSFER_RETURN actor='..actor..' oldOwner='..d.OriginalOwner..' oldCity='..d.OriginalID..' newOwner='..moved:GetOwner()..' newCity='..d.CoreTransferredID..' x='..d.X..' y='..d.Y..' turn='..d.Turn)
+end)
+GameEvents.JAC_LoyaltyNativeProbe_Operation.Add(function(actor,params)
+ assert(d.TransferComplete and d.TransferUIReady and d.TransferCalls==1,'transfer not published to UI')
+ assert(d.UIRequestIssued and type(d.ImmediateBefore)=='number' and d.ImmediateBefore==d.Before,'fresh UI baseline request is not ready')
+ assert(not d.MutationIssued,'transfer setter replay')
+ assert(d.Owner==d.Recipient and d.ID==d.CoreTransferredID,'transferred setter key mismatch')
+ local c=validate(actor,params,'native-probe',d.Recipient,d.CoreTransferredID)
+ d.MutationIssued=true;d.SetterCalls=1
+ print('JAC_LOYALTY_NATIVE_CALL actor='..actor..' active='..tostring(Players[actor]:IsTurnActive())..' owner='..c:GetOwner()..' city='..c:GetID()..' x='..d.X..' y='..d.Y..' turn='..d.Turn)
+ c:ChangeLoyalty(-5)
+ d.Issued=true
+ print('JAC_LOYALTY_NATIVE_RETURN')
+end)
+d.HandlerRegistered=true
+return 'one transfer and one post-publication setter registered; neither issued'
+"#;
+
+const TRANSFER_REQUEST_UI: &str = r#"
+local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe)
+assert(d.HandlerRegistered and not d.TransferRequestIssued and not d.TransferIntent and not d.UIRequestIssued,'transfer request replay')
+assert(Game.GetLocalPlayer()==d.Actor and Players[d.Actor]:IsTurnActive(),'transfer sender changed')
+assert(Game.GetCurrentGameTurn()==d.Turn and d.Owner==d.OriginalOwner and d.ID==d.OriginalID,'original transfer key changed')
+d.TransferBefore=d.ReadCurrent('before-transfer')
+assert(type(d.TransferBefore)=='number' and d.TransferBefore==d.OriginalBefore,'original UI baseline changed')
+d.TransferRequestIssued=true
+UI.RequestPlayerOperation(d.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyTransferProbe_Operation',Tag=d.Tag,Owner=d.OriginalOwner,ID=d.OriginalID,X=d.X,Y=d.Y,Turn=d.Turn})
+return 'one transfer requested; unknown response never retried'
+"#;
+
+const TRANSFER_SETTER_UI: &str = r#"
+local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe)
+assert(d.TransferComplete and d.TransferUIReady and d.TransferCalls==1,'transfer UI publication absent')
+assert(not d.UIRequestIssued and not d.MutationIssued,'transfer setter request replay')
+assert(Game.GetLocalPlayer()==d.Actor and Players[d.Actor]:IsTurnActive(),'setter sender changed')
+d.ImmediateBefore=d.ReadCurrent('before-setter')
+assert(type(d.ImmediateBefore)=='number' and d.ImmediateBefore>=0 and d.ImmediateBefore<=100,'invalid fresh UI baseline')
+d.Before=d.ImmediateBefore
+d.Events=0;d.Publications=0
+d.UIRequestIssued=true
+UI.RequestPlayerOperation(d.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyNativeProbe_Operation',Tag='native-probe',Owner=d.Owner,ID=d.ID,X=d.X,Y=d.Y,Turn=d.Turn})
+return 'one setter requested after transferred CacheCity publication and fresh UI getter'
+"#;
+
+fn transfer_probe_steps() -> Vec<Value> {
+    let selection = "local target\nfor _,c in Players[actor]:GetCities():Members() do\n if c:GetID()~=capital:GetID() and (not target or c:GetID()<target:GetID()) then target=c end\nend\nassert(target,'human noncapital missing')";
+    let arm = NATIVE_UI
+        .replace("local capital=assert(Players[actor]:GetCities():GetCapitalCity())",
+            "assert(Players[actor]:IsHuman() and not Players[0]:IsHuman(),'expected human sender and AI recipient')\nlocal donor=1\nassert(Players[donor]:GetCities():GetCount()>1,'donor needs another city')\nlocal capital=assert(Players[donor]:GetCities():GetCapitalCity())")
+        .replace(selection, "local target=capital\nassert(target:GetOwner()==donor,'wrong donor capital')")
+        .replace("local d={Owner=actor,", "local d={Actor=actor,Owner=donor,Recipient=0,Tag='transfer-probe',TransferCalls=0,SetterCalls=0,TransferPublications=0,")
+        .replace("ExposedMembers.JAC_LoyaltyNativeProbe=d",
+            "d.OriginalOwner=d.Owner;d.OriginalID=d.ID\nExposedMembers.JAC_LoyaltyNativeProbe=d")
+        .replace("c:GetOwner()==d.Owner and c:GetID()==d.ID,'native getter city replaced'",
+            "c:GetOwner()==d.Owner and c:GetID()==d.ID and c:GetX()==d.X and c:GetY()==d.Y,'native getter city replaced'")
+        .replace("if owner==d.Owner and id==d.ID then d.Events=d.Events+1 end",
+            "if d.UIRequestIssued and d.MutationIssued and owner==d.Owner and id==d.ID then d.Events=d.Events+1 end")
+        .replace("Events.GameCoreEventPublishComplete.Add(function() d.Publications=d.Publications+1 end)", r#"Events.GameCoreEventPublishComplete.Add(function()
+ if d.UIRequestIssued then
+  if d.Issued then d.Publications=d.Publications+1 end
+  return
+ end
+ if not d.TransferComplete or d.TransferUIReady then return end
+ assert(Game.GetCurrentGameTurn()==d.Turn and Game.GetLocalPlayer()==d.Actor and Players[d.Actor]:IsTurnActive(),'transfer UI turn or sender changed')
+ local c=assert(CityManager.GetCityAt(d.X,d.Y),'transferred UI city missing')
+ assert(c:GetOwner()==d.Recipient and c:GetID()==d.CoreTransferredID and c:GetX()==d.X and c:GetY()==d.Y,'transferred CacheCity identity mismatch')
+ d.Owner=c:GetOwner();d.ID=c:GetID()
+ local identity=c:GetCulturalIdentity()
+ d.TransferIdentity=identity
+ print('JAC_LOYALTY_TRANSFER_IDENTITY kind='..type(identity)..' text='..tostring(identity))
+ if type(identity)=='table' then
+  local instance=identity.__instance
+  d.TransferInstance=instance
+  local mt=instance and type(getmetatable)=='function' and getmetatable(instance) or nil
+  local custom=type(mt)=='table' and mt.__tostring or nil
+  print('JAC_LOYALTY_TRANSFER_INSTANCE kind='..type(instance)..' text='..tostring(instance)..' access=field getmetatableKind='..type(getmetatable)..' mtKind='..type(mt)..' customFormatterKind='..type(custom))
+ end
+ d.TransferAfter=d.ReadCurrent('after-transfer-publication')
+ assert(type(d.TransferAfter)=='number' and d.TransferAfter>=0 and d.TransferAfter<=100,'invalid transfer UI value')
+ d.TransferPublications=d.TransferPublications+1
+ d.TransferUIReady=true
+ print('JAC_LOYALTY_TRANSFER_UI actor='..d.Actor..' oldOwner='..d.OriginalOwner..' oldCity='..d.OriginalID..' newOwner='..d.Owner..' newCity='..d.ID..' x='..d.X..' y='..d.Y..' turn='..d.Turn..' before='..d.TransferBefore..' after='..d.TransferAfter..' publications='..d.TransferPublications)
+end)"#)
+        .replace("d.Before=identity:GetLoyalty()", "d.Before=identity:GetLoyalty()\nd.OriginalBefore=d.Before")
+        .replace("single setter probe armed; waiting for verified native observer",
+            "donor capital transfer probe armed; no native observer");
+    vec![
+        ui("InGame", &arm),
+        ui("JAC_Absorption_Entry", TRANSFER_CORE),
+        ui("InGame", TRANSFER_REQUEST_UI),
+        json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_LoyaltyNativeProbe;return d and d.TransferComplete and d.TransferUIReady and d.TransferPublications>=1"}}),
+        ui("InGame", TRANSFER_SETTER_UI),
+        json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_LoyaltyNativeProbe;return d and d.Issued and d.Publications>=2"}}),
+        ui("InGame", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);assert(d.TransferCalls==1 and d.SetterCalls==1 and d.TransferUIReady and d.Issued and d.Publications>=2,'finite transfer comparison incomplete');d.After=d.ReadCurrent('after-setter-publication');print('JAC_LOYALTY_TRANSFER_RESULT actor='..d.Actor..' active='..tostring(Players[d.Actor]:IsTurnActive())..' oldOwner='..d.OriginalOwner..' oldCity='..d.OriginalID..' owner='..d.Owner..' city='..d.ID..' x='..d.X..' y='..d.Y..' turn='..d.Turn..' transferBefore='..d.TransferBefore..' transferAfter='..d.TransferAfter..' before='..d.Before..' after='..d.After..' cityEvents='..d.Events..' publications='..d.Publications..' transferPublications='..d.TransferPublications..' transfers='..d.TransferCalls..' setters='..d.SetterCalls);return 'raw transfer comparison recorded; not a product acceptance or root cause'"),
+    ]
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -311,6 +437,9 @@ fn run() -> Result<()> {
     let capital_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-ai-capital-ui");
+    let transfer_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-transfer-ui");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -320,9 +449,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui]"
     );
     ensure!(
         !output.exists(),
@@ -348,6 +477,8 @@ fn run() -> Result<()> {
         steps.extend(cross_context_probe_steps());
     } else if capital_mode {
         steps.extend(capital_probe_steps());
+    } else if transfer_mode {
+        steps.extend(transfer_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -404,6 +535,308 @@ fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn transfer_fixture() -> Result<mlua::Lua> {
+        let lua = mlua::Lua::new();
+        lua.globals()
+            .set("FixtureInstance", lua.create_any_userdata(())?)?;
+        lua.load(r#"
+Domain='UI';Turn=1;Local=3;Active=true;DonorCount=2
+CoreOwner=1;CoreID=11;CoreX=5;CoreY=6
+CacheOwner=1;CacheID=11;CacheX=5;CacheY=6;Current=100
+Transfers=0;Setters=0;Reads=0;Requests={};Order={};Lines={}
+local handlers={};local publications={};local cityEvents={}
+local identity={__instance=FixtureInstance,GetLoyalty=function() assert(Domain=='UI');Reads=Reads+1;return Current end}
+OriginalIdentity=identity
+local cache={GetOwner=function() return CacheOwner end,GetID=function() return CacheID end,
+ GetX=function() return CacheX end,GetY=function() return CacheY end,
+ GetCulturalIdentity=function() assert(Domain=='UI');return identity end}
+local core={GetOwner=function() return CoreOwner end,GetID=function() return CoreID end,
+ GetX=function() return CoreX end,GetY=function() return CoreY end,
+ GetCulturalIdentity=function() error('Core must never read UI getter') end,
+ ChangeLoyalty=function(_,v)
+  assert(Domain=='Core' and v==-5 and Transfers==1 and ExposedMembers.JAC_LoyaltyNativeProbe.TransferUIReady)
+  Setters=Setters+1;Order[#Order+1]='setter';Current=Current+v
+  if Reentrant then assert(not pcall(InvokeSetter)) end
+ end}
+local cities={GetCapitalCity=function() return Domain=='UI' and cache or core end,
+ GetCount=function() return DonorCount end,Members=function() error('capital must use GetCapitalCity') end}
+Players={[1]={GetCities=function() return cities end,IsHuman=function() return false end},
+ [0]={IsHuman=function() return false end},
+ [3]={IsHuman=function() return true end,IsTurnActive=function() return Active end}}
+Game={GetLocalPlayer=function() return Local end,GetCurrentGameTurn=function() return Turn end}
+CityManager={GetCityAt=function(x,y) assert(x==5 and y==6);return Domain=='UI' and cache or core end,
+ TransferCity=function(c,owner)
+  assert(Domain=='Core' and c==core and owner==0)
+  local d=ExposedMembers.JAC_LoyaltyNativeProbe
+  assert(d.TransferIntent and d.TransferCalls==1 and not d.UIRequestIssued)
+  Transfers=Transfers+1;Order[#Order+1]='transfer'
+  if Reentrant then assert(not pcall(InvokeTransfer)) end
+  CoreOwner=0;CoreID=22;DonorCount=1
+  if BadTransferOwner then CoreOwner=2 end
+  if BadTransferCoords then CoreX=7 end
+  if UnknownTransfer then error('transfer effect happened; return unknown') end
+ end}
+ExposedMembers={};DB={MakeHash=function() return 19 end};rawget=nil
+print=function(line) Lines[#Lines+1]=line end
+Events={CityLoyaltyChanged={Add=function(f) cityEvents[#cityEvents+1]=f end},
+ GameCoreEventPublishComplete={Add=function(f) publications[#publications+1]=f end}}
+GameEvents={JAC_LoyaltyTransferProbe_Operation={Add=function(f) handlers.transfer=f end},
+ JAC_LoyaltyNativeProbe_Operation={Add=function(f) handlers.setter=f end}}
+PlayerOperations={EXECUTE_SCRIPT=19}
+TransferParams=function() return {Tag='transfer-probe',Owner=1,ID=11,X=5,Y=6,Turn=1} end
+SetterParams=function() return {Tag='native-probe',Owner=0,ID=22,X=5,Y=6,Turn=1} end
+InvokeTransfer=function(actor,params) handlers.transfer(actor or 3,params or TransferParams()) end
+InvokeSetter=function(actor,params) handlers.setter(actor or 3,params or SetterParams()) end
+Dispatch=function(actor,params)
+ local old=Domain;Domain='Core'
+ local f=params.OnStart=='JAC_LoyaltyTransferProbe_Operation' and InvokeTransfer or InvokeSetter
+ local ok,err=pcall(f,actor,params);Domain=old;assert(ok,err)
+end
+UI={RequestPlayerOperation=function(actor,op,params)
+ assert(Domain=='UI' and actor==3 and op==19)
+ Requests[#Requests+1]=params
+ local d=ExposedMembers.JAC_LoyaltyNativeProbe
+ if params.OnStart=='JAC_LoyaltyNativeProbe_Operation' then
+  assert(d.TransferUIReady and d.ImmediateBefore==Current and d.Events==0 and d.Publications==0)
+ end
+ if Reentrant then assert(not pcall(RepeatRequest,params.OnStart)) end
+ if not DelayDispatch then Dispatch(actor,params) end
+ if UnknownRequest==params.OnStart then error('request sent; response unknown') end
+end}
+FireCity=function(owner,id) assert(Domain=='UI');for _,f in ipairs(cityEvents) do f(owner,id) end end
+Fire=function() assert(Domain=='UI');for _,f in ipairs(publications) do f() end end
+PublishTransfer=function()
+ assert(Domain=='UI');CacheOwner=CoreOwner;CacheID=CoreID;CacheX=CoreX;CacheY=CoreY
+ identity={__instance=FixtureInstance,GetLoyalty=OriginalIdentity.GetLoyalty}
+ FireCity(CacheOwner,CacheID);Fire()
+end
+"#).exec()?;
+        let steps = transfer_probe_steps();
+        lua.load(steps[0]["code"].as_str().unwrap()).exec()?;
+        lua.load("Domain='Core'").exec()?;
+        lua.load(TRANSFER_CORE).exec()?;
+        lua.load("Domain='UI'").exec()?;
+        let repeat = lua.create_function(|lua, name: String| {
+            lua.load(if name == "JAC_LoyaltyTransferProbe_Operation" {
+                TRANSFER_REQUEST_UI
+            } else {
+                TRANSFER_SETTER_UI
+            })
+            .exec()
+        })?;
+        lua.globals().set("RepeatRequest", repeat)?;
+        Ok(lua)
+    }
+
+    #[test]
+    fn transfer_probe_executes_core_callbacks_after_ui_barrier_once() -> Result<()> {
+        let lua = transfer_fixture()?;
+        lua.load("Reentrant=true;local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.Actor==3 and d.Owner==1 and d.ID==11 and d.BaselineIdentity==OriginalIdentity and type(d.BaselineInstance)=='userdata');assert(Transfers==0 and Setters==0 and #Requests==0);FireCity(1,11);Fire();assert(d.Events==0 and d.Publications==0)").exec()?;
+        assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+        lua.load(TRANSFER_REQUEST_UI).exec()?;
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(Transfers==1 and Setters==0 and #Requests==1 and d.CoreTransferredID==22 and d.Owner==1 and d.ID==11);Domain='Core';assert(not pcall(InvokeSetter));Domain='UI'").exec()?;
+        assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+        // Core completion alone must not accept the old CacheCity at publication.
+        lua.load("assert(not pcall(Fire));assert(#Requests==1 and Setters==0);PublishTransfer();local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.TransferUIReady and d.Owner==0 and d.ID==22 and d.TransferAfter==100 and d.Events==0 and d.Publications==0 and d.BaselineIdentity==OriginalIdentity)").exec()?;
+        // A fresh getter after publication is the setter baseline, not donor's 100.
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.TransferIdentity~=d.BaselineIdentity and type(d.TransferInstance)=='userdata');Domain='Core';assert(not pcall(InvokeSetter));Domain='UI';assert(Setters==0 and #Requests==1 and d.ImmediateBefore==nil);FireCity(0,22);Fire();assert(d.Events==0 and d.Publications==0);Current=99").exec()?;
+        lua.load(TRANSFER_SETTER_UI).exec()?;
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(d.Before==99 and d.ImmediateBefore==99 and Current==94 and d.OriginalBefore==100);FireCity(1,11);FireCity(0,999);FireCity(0,22);Fire();Fire();assert(d.Events==1 and d.Publications==2 and d.TransferPublications==1);assert(Transfers==1 and Setters==1 and #Requests==2 and Order[1]=='transfer' and Order[2]=='setter' and #Order==2);assert(d.ObserverReady==nil);Domain='Core';assert(not pcall(InvokeTransfer));assert(not pcall(InvokeSetter));Domain='UI'").exec()?;
+        let steps = transfer_probe_steps();
+        assert!(lua
+            .load(steps[5]["condition"]["code"].as_str().unwrap())
+            .eval::<bool>()?);
+        lua.load(steps[6]["code"].as_str().unwrap()).exec()?;
+        assert!(lua.load(TRANSFER_REQUEST_UI).exec().is_err());
+        assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+        lua.load("assert(Transfers==1 and Setters==1 and #Requests==2)")
+            .exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn transfer_probe_unknown_transfer_and_requests_cannot_replay() -> Result<()> {
+        for (fault, setter) in [
+            ("UnknownTransfer=true", false),
+            ("UnknownRequest='JAC_LoyaltyTransferProbe_Operation'", false),
+            (
+                "DelayDispatch=true;UnknownRequest='JAC_LoyaltyTransferProbe_Operation'",
+                false,
+            ),
+            ("UnknownRequest='JAC_LoyaltyNativeProbe_Operation'", true),
+            (
+                "DelayDispatch=true;UnknownRequest='JAC_LoyaltyNativeProbe_Operation'",
+                true,
+            ),
+        ] {
+            let lua = transfer_fixture()?;
+            if setter {
+                lua.load(TRANSFER_REQUEST_UI).exec()?;
+                lua.load("PublishTransfer()").exec()?;
+                lua.load(fault).exec()?;
+                assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+                assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+                lua.load("assert(#Requests==2 and Transfers==1);if DelayDispatch then assert(Setters==0);Dispatch(3,Requests[2]) end;assert(Setters==1);Domain='Core';assert(not pcall(InvokeSetter));Domain='UI'").exec()?;
+            } else {
+                lua.load(fault).exec()?;
+                assert!(lua.load(TRANSFER_REQUEST_UI).exec().is_err());
+                assert!(lua.load(TRANSFER_REQUEST_UI).exec().is_err());
+                lua.load("assert(#Requests==1 and Setters==0);if DelayDispatch then assert(Transfers==0);Dispatch(3,Requests[1]) end;assert(Transfers==1);Domain='Core';assert(not pcall(InvokeTransfer));Domain='UI'").exec()?;
+                if fault == "UnknownTransfer=true" {
+                    assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+                    lua.load("Fire();assert(not ExposedMembers.JAC_LoyaltyNativeProbe.TransferComplete and #Requests==1 and Setters==0)").exec()?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transfer_probe_rejects_wrong_original_and_setter_callback_identity() -> Result<()> {
+        for setter in [false, true] {
+            for fault in [
+                "CoreOwner=2",
+                "CoreID=99",
+                "CoreX=7",
+                "CoreY=7",
+                "Turn=2",
+                "Active=false",
+                "params.Tag='wrong'",
+                "params.Owner=2",
+                "params.ID=99",
+                "params.X=7",
+                "params.Y=7",
+                "params.Turn=2",
+                "actor=0",
+            ] {
+                let lua = transfer_fixture()?;
+                if setter {
+                    lua.load(TRANSFER_REQUEST_UI).exec()?;
+                    lua.load("PublishTransfer()").exec()?;
+                    lua.load("DelayDispatch=true").exec()?;
+                    lua.load(TRANSFER_SETTER_UI).exec()?;
+                } else {
+                    lua.load("DelayDispatch=true").exec()?;
+                    lua.load(TRANSFER_REQUEST_UI).exec()?;
+                }
+                lua.load(format!("local params=Requests[#Requests];local actor=3;{fault};Domain='Core';assert(not pcall({},actor,params));Domain='UI';assert(Transfers=={} and Setters==0)",
+                    if setter { "InvokeSetter" } else { "InvokeTransfer" }, usize::from(setter))).exec()?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transfer_probe_rejects_bad_reacquisition_donor_and_ui_keys() -> Result<()> {
+        for fault in [
+            "BadTransferOwner=true",
+            "BadTransferCoords=true",
+            "DonorCount=1",
+        ] {
+            let lua = transfer_fixture()?;
+            lua.load(fault).exec()?;
+            assert!(lua.load(TRANSFER_REQUEST_UI).exec().is_err());
+            assert!(lua.load(TRANSFER_REQUEST_UI).exec().is_err());
+            assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+            lua.load("assert(Setters==0 and #Requests==1);Fire();assert(not ExposedMembers.JAC_LoyaltyNativeProbe.TransferUIReady)").exec()?;
+        }
+        for fault in [
+            "CacheOwner=1",
+            "CacheID=11",
+            "CacheX=7",
+            "CacheY=7",
+            "Turn=2",
+            "Local=0",
+            "Active=false",
+        ] {
+            let lua = transfer_fixture()?;
+            lua.load(TRANSFER_REQUEST_UI).exec()?;
+            lua.load(format!("CacheOwner=0;CacheID=22;{fault};assert(not pcall(Fire));assert(not ExposedMembers.JAC_LoyaltyNativeProbe.TransferUIReady and Setters==0 and #Requests==1)")).exec()?;
+            assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+        }
+        // The getter closure follows the new key and rejects a stale donor city.
+        for fault in [
+            "CacheOwner=1",
+            "CacheID=11",
+            "CacheX=7",
+            "CacheY=7",
+            "Turn=2",
+            "Local=0",
+            "Active=false",
+        ] {
+            let lua = transfer_fixture()?;
+            lua.load(TRANSFER_REQUEST_UI).exec()?;
+            lua.load("PublishTransfer()").exec()?;
+            lua.load(fault).exec()?;
+            assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+            lua.load("assert(Setters==0 and #Requests==1)").exec()?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transfer_probe_generated_scene_is_finite_and_lua51_compiles() -> Result<()> {
+        let lua = mlua::Lua::new();
+        assert_eq!(lua.load("return _VERSION").eval::<String>()?, "Lua 5.1");
+        let steps = transfer_probe_steps();
+        assert_eq!(steps.len(), 7);
+        for step in &steps {
+            assert!(matches!(
+                step["action"].as_str(),
+                Some("ui_lua" | "wait_for")
+            ));
+            let code = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+                .unwrap();
+            lua.load(format!("return function()\n{code}\nend"))
+                .into_function()?;
+            for forbidden in [
+                "ObserverReady=",
+                "rawget",
+                "AttachModifierByID",
+                "UnitManager",
+                "ReadProcessMemory",
+            ] {
+                assert!(!code.contains(forbidden));
+            }
+            if step["action"] == "wait_for" {
+                assert_eq!(step["timeout"], 60);
+            }
+        }
+        assert_eq!(
+            steps[1]["code"]
+                .as_str()
+                .unwrap()
+                .matches("CityManager.TransferCity(")
+                .count(),
+            1
+        );
+        assert_eq!(
+            steps[1]["code"]
+                .as_str()
+                .unwrap()
+                .matches("c:ChangeLoyalty(-5)")
+                .count(),
+            1
+        );
+        assert!(!steps[1]["code"].as_str().unwrap().contains("ReadCurrent("));
+        let base: Value = serde_json::from_str(include_str!(
+            "../../../civ6-autotest/scenarios/absorption-product-small-ai.json"
+        ))?;
+        // Check the actual unchanged setup chunks too, without running a game.
+        for step in &base["steps"].as_array().unwrap()[..8] {
+            if let Some(code) = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+            {
+                lua.load(format!("return function()\n{code}\nend"))
+                    .into_function()?;
+            }
+        }
+        Ok(())
+    }
     #[test]
     fn capital_probe_selects_engine_capital_without_searching_noncapitals() -> Result<()> {
         let lua = mlua::Lua::new();

@@ -139,3 +139,18 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 実機108（ae9）の元smallAI製品は27/38成功後、owner0/city196610/120,40/turn15でbefore100/target95、issuedPublication1403の後1404/1405でも100となりBLOCKEDした。物理保存2本を含む原本14filesをown3d27215d/live108へ保全。実機109（25a）のCore→UI getter一回を戻した対照も、14/14・ログ5/5、既存AI都市131073のUI100→95・CityEvents1・pubCounter11だった。追加したgetterだけでも旧失敗を再現せず、その境界を単独の根因にする変更は採用しない。109原11filesはown413e5cce/live109へ全SHA一致で保全。両標準chainはgame終了・profile元C234復元を確認した。
 
 --single-setter-ai-capital-ui は107の対象選択だけを本体のGetCapitalCityへ変える。残り4手順は107と一致し、sender3/owner0/実before/一回setter/二公開/手番を維持する。移管後の失敗都市が元の首都だったことと、都市移管そのものの条件を分ける比較である。首都の変更可否や移管の根因は実機前に断定しない。
+
+
+## 移管して公開した都市への一回のsetter（実機前の有限対照）
+
+実機110の既存AI0首都への比較は14/14手順・ログ5/5成功、UI100→95・対象CityEvents1、CALL/RETURN各1、観測器0だった。105の通常UI送信、106の公開callback送信、107の既存AI0非首都、109のCoreからUI getterを一回呼ぶ比較も同じ陽性結果だった。既存都市の送信者・AI所有・非手番・首都・VM境界だけを失敗の原因とする仮説は採用しない。
+
+実機108の元smallAI製品は27/38成功後、移管都市owner0/id196610/120,40/turn15でbefore100/target95、発行公開1403の後1404/1405も100となりBLOCKEDした。保存2本を含む原14filesは保全済みで、この結果を110の成功へ付け替えない。
+
+新しい内部CLI `--single-setter-transfer-ui` は原8手順の場面準備を維持し、owner1（ODA）の本体GetCapitalCityだけをAI0へ移す。送信者はactive human3のまま、送信者と対象所有者を別に保持する。元都市owner/id/座標/turn/Tag、手番、未発行、元所有者に他都市があることを同期callbackで検査し、TransferIntentを記録してからCityManager.TransferCityを一度だけ呼ぶ。Coreで座標から再取得し、owner0・座標・同turnを照合して新IDを保存する。移管や要求の応答が不明でも再送せず、他の資産・部隊・通常admission・費用には操作を加えない。
+
+移管完了後の実GameCoreEventPublishCompleteで、UIが新owner/ID/座標のCacheCityと実getterを照合する。その後のUI要求で新キーを参照するgetter closureから実値を読み直し、これを忠誠心の基準にしてCoreのChangeLoyalty(-5)を一度だけ要求する。CoreはUI getter closureを呼ばない。元のBaselineIdentityを保持し、移管後のidentityも通常のtable field lookupで型と__instanceの型を記録する。文字列からポインターを推定せず、メモリを読まない。忠誠心の都市通知・公開カウンターはsetter要求時に初期化し、移管通知を成功数へ加えない。setter後は元と同じ実二公開条件でUI値と都市通知・手番を記録して終える。移管直後のsetterを同じgameで追加せず、ターン進行・待機延長・保存・再送・観測器のready偽造はない。
+
+これは移管と移管後の公開を条件に加えた未実機の対照であり、根因の断定や製品修正ではない。実Lua 5.1 fixtureでは登録callbackを動かし、Actor3・Owner1→0・ID変更、UIだけのgetter、Coreだけの移管、副作用1+1の順序、応答不明・再入の再送拒否、キーや手番の不一致拒否、UI公開基準前のsetter要求0を検査する。旧Native observer、製品Lua、受入37手順は変更せず、旧4件・59件の検査は再実行しない。人間製品と移管save-onceは未達のまま、親の製品2/5・40%・残3件を維持する。次の製品修正は親が実機結果に基づいて決める。
+
+生成器に限定した14件は成功・省略0だった。Coreでの登録と公開後の基準未取得をfixtureで明示した後は、新5件だけを再検査して成功・旧9件は対象外とした。最終Clippy（warnings拒否）・build・15手順の生成JSONに対する既存CLIのcheckは終了0。新旧の原ログと時刻・コマンド・source SHAを記録したmeta、生成JSONとexeのSHAは既存6bfdのtarget内の`transfer-generator-*`に保全する。Lua 5.1構文検査は新7手順と原8手順内のLuaを対象にした。game・公開push・製品の受付は親だけが実行する。
