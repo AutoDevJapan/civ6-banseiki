@@ -71,6 +71,33 @@ fn replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
     result
 }
 
+fn publish_backup(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    // Publish only complete synced bytes. A process crash during write must
+    // not leave a truncated original which a later ordinary run could restore.
+    let temporary = path.with_extension(format!(
+        "cpu-original-{}-{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_nanos()
+    ));
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|e| e.to_string())?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| e.to_string())?;
+    drop(file);
+    // Create-new atomic publication on the same filesystem; no overwrite of
+    // an already published recovery record. The settings are still untouched.
+    let published = fs::hard_link(&temporary, path).map_err(|e| e.to_string());
+    let _ = fs::remove_file(&temporary);
+    published
+}
+
 pub(crate) struct Profile {
     lock: File,
     token: String,
@@ -133,16 +160,7 @@ impl Profile {
         Self::recover(paths, token)?;
         let original = fs::read(&profile.settings).map_err(|e| e.to_string())?;
         let modified = options(&original)?;
-        let mut backup = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&profile.backup)
-            .map_err(|e| e.to_string())?;
-        backup
-            .write_all(&original)
-            .and_then(|_| backup.sync_all())
-            .map_err(|e| e.to_string())?;
-        drop(backup);
+        publish_backup(&profile.backup, &original)?;
         replace(&profile.settings, &modified)?;
         Ok(profile)
     }
@@ -241,6 +259,10 @@ mod tests {
         drop(recovered);
         assert_eq!(fs::read(&settings).unwrap(), original);
         assert!(!paths.here.join("software-renderer-original.bin").exists());
+        let backup = paths.here.join("complete-original.bin");
+        publish_backup(&backup, original).unwrap();
+        assert!(publish_backup(&backup, b"must not replace complete original").is_err());
+        assert_eq!(fs::read(backup).unwrap(), original);
         fs::remove_dir_all(root).unwrap();
     }
 }
