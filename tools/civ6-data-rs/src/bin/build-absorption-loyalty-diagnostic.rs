@@ -152,16 +152,25 @@ GameEvents.JAC_LoyaltyNativeProbe_Operation.Add(function(actor,params)
  assert(Game.GetCurrentGameTurn()==d.Turn,'native probe turn changed')
  local c=assert(CityManager.GetCityAt(d.X,d.Y),'native probe city missing')
  assert(c:GetOwner()==d.Owner and c:GetID()==d.ID,'native probe city replaced')
- d.ImmediateBefore=d.ReadCurrent('before-setter')
  d.MutationIssued=true
  print('JAC_LOYALTY_NATIVE_CALL owner='..d.Owner..' city='..d.ID..' x='..d.X..' y='..d.Y)
  c:ChangeLoyalty(-5)
  d.Issued=true
  print('JAC_LOYALTY_NATIVE_RETURN')
- d.ImmediateAfter=d.ReadCurrent('after-setter')
 end)
 d.HandlerRegistered=true
 return 'one synchronized setter registered; mutation not issued yet'
+"#;
+
+// Keep CacheCity reads in their UI context. The Gameplay operation only
+// resolves its City and issues the one mutation; it never calls a UI closure.
+const NATIVE_REQUEST_UI: &str = r#"
+local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe)
+assert(d.ObserverReady and not d.MutationIssued,'native probe is not ready or already issued')
+d.ImmediateBefore=d.ReadCurrent('before-setter')
+d.Publications=0
+UI.RequestPlayerOperation(d.Owner,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyNativeProbe_Operation',Tag='native-probe'})
+return 'one native setter requested'
 "#;
 
 fn native_probe_steps(handoff: &std::path::Path) -> Vec<Value> {
@@ -169,7 +178,7 @@ fn native_probe_steps(handoff: &std::path::Path) -> Vec<Value> {
         ui("InGame", NATIVE_UI),
         ui("JAC_Absorption_Entry", NATIVE_CORE),
         json!({"action":"native_observer_ready","timeout":240,"handoff":handoff}),
-        ui("InGame", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);d.Publications=0;UI.RequestPlayerOperation(d.Owner,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyNativeProbe_Operation',Tag='native-probe'});return 'one native setter requested'"),
+        ui("InGame", NATIVE_REQUEST_UI),
         json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_LoyaltyNativeProbe;return d and d.Issued and d.Publications>=2"}}),
         ui("InGame", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);assert(Game.GetCurrentGameTurn()==d.Turn,'native probe turn changed');local c=assert(CityManager.GetCityAt(d.X,d.Y));assert(c:GetOwner()==d.Owner and c:GetID()==d.ID,'native probe city replaced');d.After=c:GetCulturalIdentity():GetLoyalty();print('JAC_LOYALTY_NATIVE_RESULT owner='..d.Owner..' city='..d.ID..' before='..d.Before..' after='..d.After..' cityEvents='..d.Events..' publications='..d.Publications);return 'raw comparison recorded, not a product acceptance'"),
         json!({"action":"native_observer_finish","handoff":handoff,"timeout":120}),
@@ -279,7 +288,7 @@ Calls=0
 AddCount=0
 Reads=0
 ExposedMembers={JAC_LoyaltyNativeProbe={Owner=3,ID=8,X=5,Y=6,Turn=1,
- ReadCurrent=function(label) Reads=Reads+1;return 100 end}}
+ ReadCurrent=function(label) Reads=Reads+1;error('UI closure must not run in Gameplay') end}}
 Players={[3]={IsTurnActive=function() return true end}}
 Game={GetCurrentGameTurn=function() return 1 end}
 CityManager={GetCityAt=function(x,y) assert(x==5 and y==6);return city end}
@@ -295,7 +304,31 @@ Replace=function() city.GetID=function() return 9 end end
             .exec()?;
         // Use a fresh binding for the successful once-only case.
         lua.load("CityManager.GetCityAt=function() return {GetOwner=function() return 3 end,GetID=function() return 8 end,ChangeLoyalty=function(_,v) assert(v==-5);Calls=Calls+1 end} end").exec()?;
-        lua.load("Invoke();assert(Calls==1 and Reads==2 and ExposedMembers.JAC_LoyaltyNativeProbe.Issued);assert(not pcall(Invoke));assert(Calls==1 and Reads==2)").exec()?;
+        lua.load("Invoke();assert(Calls==1 and Reads==0 and ExposedMembers.JAC_LoyaltyNativeProbe.Issued);assert(not pcall(Invoke));assert(Calls==1 and Reads==0)").exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn native_ui_request_requires_its_baseline_before_the_one_operation() -> Result<()> {
+        let lua = mlua::Lua::new();
+        lua.load(r#"
+Reads=0;Requests=0
+local d={Owner=3,ObserverReady=true,Publications=7,
+ ReadCurrent=function() error('cache not ready') end}
+ExposedMembers={JAC_LoyaltyNativeProbe=d}
+PlayerOperations={EXECUTE_SCRIPT=19}
+UI={RequestPlayerOperation=function(owner,op,params)
+ assert(owner==3 and op==19 and params.OnStart=='JAC_LoyaltyNativeProbe_Operation' and params.Tag=='native-probe')
+ assert(Reads==1 and d.ImmediateBefore==100 and d.Publications==0)
+ Requests=Requests+1
+end}
+"#).exec()?;
+        assert!(lua.load(NATIVE_REQUEST_UI).exec().is_err());
+        lua.load("assert(Requests==0);ExposedMembers.JAC_LoyaltyNativeProbe.ReadCurrent=function() Reads=Reads+1;return 100 end").exec()?;
+        lua.load(NATIVE_REQUEST_UI).exec()?;
+        lua.load("assert(Requests==1 and Reads==1);ExposedMembers.JAC_LoyaltyNativeProbe.MutationIssued=true").exec()?;
+        assert!(lua.load(NATIVE_REQUEST_UI).exec().is_err());
+        lua.load("assert(Requests==1 and Reads==1)").exec()?;
         Ok(())
     }
 

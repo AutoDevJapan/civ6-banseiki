@@ -1156,10 +1156,10 @@ mod platform {
             },
             SystemInformation::GetSystemDirectoryW,
             Threading::{
-                GetProcessId, GetProcessIdOfThread, GetProcessTimes, IsWow64Process, OpenProcess,
-                OpenThread, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
-                WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-                PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
+                GetExitCodeProcess, GetProcessId, GetProcessIdOfThread, GetProcessTimes,
+                IsWow64Process, OpenProcess, OpenThread, QueryFullProcessImageNameW, ResumeThread,
+                SuspendThread, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+                PROCESS_SYNCHRONIZE, PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
                 THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
                 THREAD_SYNCHRONIZE,
             },
@@ -1296,6 +1296,16 @@ mod platform {
     }
 
     impl Process {
+        fn exit_code(&self) -> Result<u32> {
+            let mut code = 0;
+            // SAFETY: retained process handle has query access. Callers first
+            // establish process exit, so even exit code 259 is an actual code.
+            if unsafe { GetExitCodeProcess(self.handle.0, &mut code) } == 0 {
+                return Err(win_error("GetExitCodeProcess"));
+            }
+            Ok(code)
+        }
+
         fn open(args: &Args) -> Result<Self> {
             // SAFETY: only the specified PID, read/query/synchronize access;
             // deliberately no VM_WRITE, VM_OPERATION, or injection rights.
@@ -2408,6 +2418,9 @@ mod platform {
                 .ok_or("connection transition requires a held event")?
                 .event
                 .dwThreadId;
+            let mut checked_contexts = 0u32;
+            let mut changed_control_state = 0u32;
+            let mut context_samples = Vec::new();
             for tid in tids {
                 let thread = self.threads.get_mut(&tid).ok_or("missing trace thread")?;
                 if !thread.armed {
@@ -2432,6 +2445,10 @@ mod platform {
                 if thread.addresses == addresses && thread.enabled == control {
                     continue;
                 }
+                let old_addresses = thread.addresses;
+                let old_control = thread.enabled;
+                let before_rip = value.Rip;
+                let before_flags = value.EFlags;
                 // Preserve any owned trap already queued on another thread.
                 // Its old execution B bit must not become a new write sample.
                 if tid != held_tid
@@ -2463,12 +2480,32 @@ mod platform {
                 // changing the plan must not normalize the saved flags/RIP.
                 value.ContextFlags = CONTEXT_DEBUG_REGISTERS_AMD64;
                 set_context(&thread.handle, value)?;
-                let actual = registers(&context(&thread.handle, CONTEXT_DEBUG_REGISTERS_AMD64)?);
+                let actual_context = context(
+                    &thread.handle,
+                    CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64,
+                )?;
+                let actual = registers(&actual_context);
                 if actual.address != expected.address || actual.dr7 & !0x400 != control {
                     return Err("connection reconfigure readback mismatch".into());
                 }
+                checked_contexts += 1;
+                let changed = before_rip != actual_context.Rip
+                    || (before_flags ^ actual_context.EFlags) & 0x10100 != 0;
+                changed_control_state += u32::from(changed);
+                // One held-thread sample plus at most 15 other threads. Keep
+                // the existing trace-record cap and make omitted samples explicit.
+                if tid == held_tid || context_samples.len() < 15 {
+                    context_samples.push(json!({"tid":tid,"held":tid==held_tid,
+                        "old_addresses":old_addresses,"old_control":old_control,
+                        "before":{"rip":before_rip,"eflags":before_flags,"registers":before},
+                        "actual":{"rip":actual_context.Rip,"eflags":actual_context.EFlags,"registers":actual},
+                        "rf_tf_or_rip_changed":changed}));
+                }
             }
-            self.trace(json!({"event":"connection_plan","addresses":addresses,"control":control}));
+            self.trace(json!({"event":"connection_plan","addresses":addresses,"control":control,
+                "checked_contexts":checked_contexts,"changed_control_state":changed_control_state,
+                "omitted_context_samples":checked_contexts.saturating_sub(context_samples.len() as u32),
+                "context_samples":context_samples}));
             Ok(())
         }
 
@@ -3591,6 +3628,13 @@ mod platform {
         let delivery_unverified = session.as_ref().is_some_and(|s| s.forwarded_probe_context)
             && !cleanup_report.as_ref().is_some_and(|r| r.process_exited);
         let complete = api_complete && !delivery_unverified;
+        // EXIT_PROCESS can race the timeout path's held-handle exit check.
+        // Keep the OS result even when no target_exit event was dispatched.
+        let target_exit_status = cleanup_report
+            .as_ref()
+            .filter(|report| report.process_exited)
+            .and(session.as_ref())
+            .map(|s| raw_read(s.process.exit_code()));
         let exit = json!({"event":"exit", "pid":args.pid, "created":args.created,
             "reason":outcome.as_ref().copied().unwrap_or("error"), "error":outcome.as_ref().err(),
             "ready_reached":session.as_ref().is_some_and(|s| s.ready),
@@ -3601,6 +3645,7 @@ mod platform {
             "cleanup":cleanup_report, "observation":session.as_ref().map(|s| &s.observation),
             "connection":session.as_ref().and_then(|s| s.connection.as_ref()),
             "connection_capture":session.as_ref().and_then(|s| s.connection.as_ref()).map(connection::Connection::completion),
+            "target_exit_status":target_exit_status,
             "threads_installed_total":session.as_ref().map_or(0, |s| s.installed_total),
             "exceptions":session.as_ref().map(|s| &s.exceptions),
             "cleanup_exception_records":session.as_ref().map(|s| &s.cleanup_exception_records),
@@ -4532,6 +4577,7 @@ mod platform {
                     session.exceptions.second_chance_count,
                     u64::from(mode == OwnedMode::SecondChance)
                 );
+                assert_eq!(session.process.exit_code().unwrap(), 0x80000004);
             } else if restore_while_alive {
                 assert_eq!(process_exit, None);
                 assert!(!report.process_exited);
@@ -4605,6 +4651,28 @@ mod platform {
                 assert!(writes.iter().all(|r| r["after_i32"] == 24320
                     && r["raw_after_instruction_rip"] != r["watched_address"]));
                 assert_eq!(session.connection.as_ref().unwrap().writes, 2);
+                let plans: Vec<_> = session
+                    .debug_trace
+                    .iter()
+                    .filter(|r| r["event"] == "connection_plan")
+                    .collect();
+                assert!(!plans.is_empty());
+                assert!(plans
+                    .iter()
+                    .any(|r| r["checked_contexts"].as_u64().unwrap() >= 2));
+                for plan in plans {
+                    assert_eq!(plan["changed_control_state"], 0);
+                    let samples = plan["context_samples"].as_array().unwrap();
+                    assert!(samples.len() <= 16);
+                    assert!(samples.iter().any(|s| s["held"] == true));
+                    for sample in samples {
+                        assert_eq!(sample["before"]["rip"], sample["actual"]["rip"]);
+                        assert_eq!(
+                            sample["before"]["eflags"].as_u64().unwrap() & 0x10100,
+                            sample["actual"]["eflags"].as_u64().unwrap() & 0x10100
+                        );
+                    }
+                }
                 assert_eq!(session.exceptions.unknown_first_chance_count, 0);
                 assert_eq!(session.exceptions.second_chance_count, 0);
                 assert!(session
