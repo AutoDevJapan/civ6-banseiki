@@ -161,6 +161,36 @@ impl CaptureEpoch {
             sites,
         })
     }
+
+    fn validate_native_image(&self, d: &Debugger) -> Result<(), String> {
+        if self.phase != Phase::NativeOuter {
+            return Ok(());
+        }
+        let core = core_module(d.pid)?.ok_or("stopped native capture Core missing")?;
+        let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
+        let expected_core = self.sites[0]
+            .and_then(|address| address.checked_sub(plan::NATIVE_OUTER[0].rva))
+            .ok_or("native capture entry missing")?;
+        let expected_exe = self.sites[3]
+            .and_then(|address| address.checked_sub(plan::NATIVE_OUTER[3].rva))
+            .ok_or("native capture release missing")?;
+        // Called only with an outstanding debug event or the complete phase
+        // freeze. GO/attach preparation is not a stopped module snapshot.
+        if core.base != expected_core
+            || !same_path(&core.path, &core_path)
+            || sha256(&core.path)? != plan::CORE_SHA
+        {
+            return Err("stopped native capture Core identity differs".into());
+        }
+        for site in plan::NATIVE_OUTER {
+            instruction(
+                &d.game,
+                site.image.base(expected_exe, Some(core.base))?,
+                site,
+            )?;
+        }
+        Ok(())
+    }
 }
 #[derive(Default)]
 struct CaptureThreads {
@@ -303,6 +333,9 @@ fn arm(
     if d.threads.contains_key(&tid) {
         return Err("duplicate capture thread create event".into());
     }
+    // All attach-snapshot/create events stop the process. Validate before
+    // publishing even the first native DR, after any GO wait/module change.
+    epoch.validate_native_image(d)?;
     let handle = thread_handle(tid)?;
     if unsafe { GetProcessIdOfThread(handle.0) } != d.pid || unsafe { GetThreadId(handle.0) } != tid
     {
@@ -409,6 +442,9 @@ fn phase_barrier(
     if !steps.is_empty() || d.cleanup_event.is_some() {
         return Ok(PhaseBarrier::Deferred);
     }
+    // The pre-freeze check can race module reload. Validate again inside the
+    // existing complete freeze before touching any thread's new DR set.
+    to.validate_native_image(d)?;
     if to.generation
         != from
             .generation
@@ -1029,6 +1065,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                             return Err("loaded GameCore identity differs".into());
                         }
                     }
+                    epoch.validate_native_image(&d)?;
                 }
                 UNLOAD_DLL_DEBUG_EVENT => {
                     let module_base=unsafe {event.u.UnloadDll.lpBaseOfDll} as u64;

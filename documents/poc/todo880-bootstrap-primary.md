@@ -416,6 +416,8 @@ D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manif
 
 同じ15fieldのrequestでphase=`native-outer`を指定するか、既存Sessionへ`phase native-outer`を送る。通常のシナリオ操作も同じ名前を受け付ける。初期attach時にCoreがロード済みであることが必要で、Coreのbaseが変化した後はこのprofileへ切り替えられない。別phase中に旧Coreがunloadされ、同じbase・path・SHAで戻っても再利用を拒否する。native観測中のCore unloadは異常として復元・回収へ進む。任意のアドレス入力、native関数の省略、未知フラグへの書込み、runtimeやAI候補e273の有効化は加えない。
 
+Lunaの固定8cレビューはMust1を指摘した。接続前に取得したCoreのbaseは、GO待ちの間に変化できる。そこでnative観測点の設定前に、所有debug eventでプロセスが停止した状態の現在のCore・base・path/SHA・全4命令を照合する。attachの最初のthread設定を含め、thread作成eventとDLL snapshotで照合し、不在や不一致ならdebug registerを書く前に拒否する。phase切替も、既存の全thread停止とpending event排出が成立した後にもう一度照合し、停止前の確認だけで設定を許可しない。これは実装した再照合であり、実ゲームのGO待ち中reload検査は未実施である。
+
 EXEとCoreのRVAを混ぜず、各々の固定SHA・命令bytes・実行可能なimage pageを照合する。RET直前にRSP上の戻り先を読み、その一命令を実行した後のRIPと、解析時のRSP+8を照合する。原関数の復帰先へ勝手に分岐させず、既存のTF観測・例外転送・debug register復元・所有子回収を使う。snapshotもCoreの追加3命令を静的照合する。
 
 解析は同じarmed window・TID・スレッドの実追跡世代・RSP・戻り先で入口と各RETを対応させ、受け手候補のRCX、生のRDX、どちらのRETを通ったかを記録する。スレッドの追跡世代は所有debug eventごとの保持handleに採番し、同じTIDを後で使う別スレッドのRETを混ぜない。Context解放の時点で同じ窓の未復帰入口があれば記録し、別スレッド、戻り先の不一致、観測phaseの空白、片側欠落を成功へ補わない。古い8siteの記録は従来の範囲で解析し、新記録は11siteの終端目録を要求する。
