@@ -149,6 +149,7 @@ grep -rn '^| CYP-N |' documents/spec/ssot/
 ## 起動・ロード境界の調査
 
 - [通常起動とロード前閉鎖のPE一次資料、Rust候補照合と不足条件](poc/todo880-bootstrap-primary.md)
+- [標準CPU描画と停止後再照合の独立検査（ToDo2258）](poc/todo2258-cpu-stop-check.txt)
 
 ## 現在の状態（2026-09-28 時点）
 

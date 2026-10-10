@@ -1,0 +1,16 @@
+固定source ff7bce0b875cfbdacedab09399f9f2a9248239ad。base 404e4318。
+初期clean・分岐のため初期branchを保持し専用check branchへcheckout済み。
+ルールと指定Skill読込済み。コード変更なし、GPU/Civ6/Steam/profile操作なし。
+証跡: D:/CC/Work/todo880/cpu-stop-330a998b-2258-ff7bce0b-20261010
+残り: 関連native/autotest検査・cc-live有限全crate・Clippy・fmt・独立review。
+Must0かつchecks成功時だけ固定source release buildと任意標準chain配備。
+最後にresult.json/review.txtを保存し親880へ返す。親の修正完了は待たない。
+
+検査途中（2026-10-10）:
+- cc-live: nextest 153成功、ignored2。Clippy成功。manifestのedition2021でfmt成功。
+- native: 関連47成功（owned OS phase/lifecycle/name/step・CLI）。新missing Core拒否fixtureのDR不変を記録。
+- autotest: native_order/bootstrap関連22成功。
+- 対象2crate全target Clippy: exit101。order_phase_tests.rs:80-82のfilter_map内bool::thenをfilterとmapへ分ける必要あり。
+- 2254の18管理部検査とpublished変異REDは404e4318時点の原ログで確認。2ファイルのblobは今回と一致。再実行なし。
+- 追加CPU試験を所有tempの独立fixture crateから実施中。製品ソースを変更せずpublic chain::cliを呼ぶ。ゲーム操作は注入Runnerのみ。
+- チェック不合格のためreleaseビルド・配備は実施しない。残りは追加試験、レビュー、結果返却、所有temp整理。
