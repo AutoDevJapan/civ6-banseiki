@@ -9,6 +9,9 @@ use std::collections::BTreeSet;
 pub const PROPERTY_KEY: &str = "JAC_OATH_NATIVE_CONTRIBUTIONS_V1";
 const PREFIX: &str = "JAC-OATH-LEDGER-1:";
 const MAX_BYTES: usize = 4 * 1024 * 1024;
+/// Maximum ASCII property length, including the format prefix and hex body.
+/// Native storage must allow this many bytes plus its terminating NUL.
+pub const MAX_PROPERTY_BYTES: usize = PREFIX.len() + MAX_BYTES * 2;
 const MAGIC: &[u8; 4] = b"JOAL";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,7 +285,7 @@ impl Reader<'_> {
 /// Decodes only into pointer-free DTOs. Current native addresses and instance
 /// incarnations must come from the restoring runtime, never from this value.
 pub fn decode(text: &str, limits: Limits, expected_world: &str) -> Result<Checkpoint> {
-    if text.len() > PREFIX.len() + MAX_BYTES * 2 {
+    if text.len() > MAX_PROPERTY_BYTES {
         return Err(SaveError::Bounds);
     }
     let body = text.strip_prefix(PREFIX).ok_or(SaveError::Unsupported)?;

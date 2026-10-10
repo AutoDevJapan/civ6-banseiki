@@ -5,7 +5,7 @@
 //! This module is not called by the diagnostic exports. A normal bootstrap,
 //! save/load callback and native holding/lifecycle admission are still needed.
 
-use crate::contribution_save::{OfficialGameProperty, SaveError, PROPERTY_KEY};
+use crate::contribution_save::{OfficialGameProperty, SaveError, MAX_PROPERTY_BYTES, PROPERTY_KEY};
 use crate::native::{c_void, copy_current};
 use crate::preflight::{ImageMemory, PropertySourcePlan};
 use std::ffi::CString;
@@ -16,7 +16,7 @@ use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 const GAME_GLOBAL: u64 = 0xb8aa68;
 const PROPERTY_OFFSET: u64 = 0x1b8;
 const PROPERTY_TABLE: u64 = 0xabf080;
-const MAX_VALUE: usize = 8 * 1024 * 1024;
+const MAX_VALUE: usize = MAX_PROPERTY_BYTES;
 
 type Key = unsafe extern "system" fn(*mut c_void, *const i8) -> u32;
 type Lookup = unsafe extern "system" fn(*mut c_void, u32) -> *const c_void;
@@ -255,6 +255,17 @@ mod tests {
         let mut changed = header;
         changed[8..16].fill(0);
         assert_eq!(string_layout(&changed), Err(SaveError::Corrupt));
+    }
+
+    #[test]
+    fn complete_codec_envelope_fits_the_native_owned_string_width() {
+        // The codec's maximum hex body alone already occupies 8 MiB. Its
+        // prefix and the native NUL must fit too, without consuming body space.
+        let width = MAX_PROPERTY_BYTES as u32 + 1;
+        assert_eq!(
+            string_layout(&string_header(width)),
+            Ok((0x1000, width as usize))
+        );
     }
 
     #[test]
