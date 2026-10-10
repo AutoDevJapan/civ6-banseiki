@@ -157,9 +157,12 @@ fn unpublished_and_published_jobs_are_both_required_to_settle() {
     let published = caller.issue().unwrap().publish().unwrap();
     drop(caller);
     pending_now(world.close().unwrap());
-    published.complete_after_native_join().unwrap();
-    pending_now(world.close().unwrap());
+    // Pending-only and the publication transition are covered above. Here,
+    // cancel the unsubmitted work first to isolate outstanding published work;
+    // a missing published counter must not be hidden by the pending counter.
     pending.cancel_before_submission().unwrap();
+    pending_now(world.close().unwrap());
+    published.complete_after_native_join().unwrap();
     let drained = world.close().unwrap().wait(deadline()).unwrap();
     assert_eq!(world.rebuild(drained), Ok(2));
 }
