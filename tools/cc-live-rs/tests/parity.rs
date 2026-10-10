@@ -471,17 +471,60 @@ fn live_chain_waiter_rejects_a_reused_pid_owned_by_another_program() {
 #[cfg(windows)]
 #[test]
 fn live_chain_waiter_rejects_mismatched_process_creation_time() {
+    use std::os::windows::process::CommandExt;
+    struct Child(std::process::Child);
+    impl Drop for Child {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
     let f = Fixture::new();
-    let pid = std::process::id();
+    // Suspended: no shell instructions or descendants execute. The name is
+    // a real live_chain image, rather than a fabricated tasklist response.
+    let executable = f.root.join("live_chain_identity_test.exe");
+    fs::copy(std::env::var_os("COMSPEC").unwrap(), &executable).unwrap();
+    let mut child = Child(
+        std::process::Command::new(&executable)
+            .creation_flags(CREATE_NO_WINDOW | 0x4)
+            .spawn()
+            .unwrap(),
+    );
+    let pid = child.0.id();
     let actual = process_created_filetime(pid).unwrap().unwrap();
     assert!(actual > 0);
-    let output = format!("\"live_chain.exe\",\"{pid}\"");
-    let mut matching = Fake::outputs(&[(&output, "", 0)]);
+    let mut matching = Fake::success();
+    matching.replies.push_back(Err("command timed out".into()));
     let owner = json!({"live_chain":true,"pid":pid,"pid_created_filetime":actual});
     assert!(holder_alive(&mut matching, &f.p, &owner).unwrap());
-    let mut r = Fake::outputs(&[(&output, "", 0)]);
+    assert!(matching.calls.is_empty(), "must not launch tasklist");
+    f.json("here/queue/waiter.json", owner.clone());
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","acquired_at":0}),
+    );
+    let limit = process::LeaseLimit::new(&f.p, "owned", 120.0);
+    assert_eq!(
+        process::observe_lease(&mut matching, &limit).unwrap(),
+        process::LeaseProbe::Contended(1800.0)
+    );
+    assert!(
+        matching.calls.is_empty(),
+        "two-second probe must not spawn a command"
+    );
+    let mut r = Fake::success();
     let owner = json!({"live_chain":true,"pid":pid,"pid_created_filetime":0});
     assert!(!holder_alive(&mut r, &f.p, &owner).unwrap());
+    // A correct creation time must not qualify an unrelated executable.
+    let current = std::process::id();
+    let owner = json!({"live_chain":true,"pid":current,"pid_created_filetime":process_created_filetime(current).unwrap().unwrap()});
+    assert!(!holder_alive(&mut r, &f.p, &owner).unwrap());
+    // A retained PID with a terminated process is not a live waiter.
+    child.0.kill().unwrap();
+    child.0.wait().unwrap();
+    let owner = json!({"live_chain":true,"pid":pid,"pid_created_filetime":actual});
+    assert!(!holder_alive(&mut r, &f.p, &owner).unwrap());
+    assert!(r.calls.is_empty());
 }
 
 #[test]
@@ -1203,7 +1246,7 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
     };
     let error = failed_prepare_cli(&mut r, &f.p).unwrap_err();
     assert!(
-        error.contains("ownership changed before cleanup"),
+        error.contains("ownership changed"),
         "{error}"
     );
     assert_eq!(read_json(&r.lock).unwrap(), peer);

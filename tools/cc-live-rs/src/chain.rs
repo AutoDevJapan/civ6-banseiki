@@ -18,6 +18,85 @@ fn live_chain_image(image: &str) -> bool {
     image == "live_chain.exe" || (image.starts_with("live_chain_") && image.ends_with(".exe"))
 }
 
+/// Poll live waiters without starting tasklist inside the two-second lease
+/// budget. Check image, creation time and liveness through the same handle.
+#[cfg(windows)]
+fn native_live_chain_alive(pid: u32, expected: u64) -> Result<bool, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+    };
+    let handle = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        )
+    };
+    if handle.is_null() {
+        let error = std::io::Error::last_os_error();
+        return if error.raw_os_error() == Some(87) {
+            Ok(false)
+        } else {
+            Err(format!("inspect live chain {pid}: {error}"))
+        };
+    }
+    let result = (|| {
+        match unsafe { WaitForSingleObject(handle, 0) } {
+            WAIT_TIMEOUT => {}
+            0 => return Ok(false),
+            _ => {
+                return Err(format!(
+                    "inspect live chain {pid} liveness: {}",
+                    std::io::Error::last_os_error()
+                ))
+            }
+        }
+        let mut created = FILETIME::default();
+        let mut exited = created;
+        let mut kernel = created;
+        let mut user = created;
+        if unsafe { GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user) }
+            == 0
+        {
+            return Err(format!(
+                "inspect live chain {pid} creation: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let actual = (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
+        if actual != expected {
+            return Ok(false);
+        }
+        let mut image = vec![0u16; 32768];
+        let mut length = image.len() as u32;
+        if unsafe { QueryFullProcessImageNameW(handle, 0, image.as_mut_ptr(), &mut length) } == 0 {
+            let error = std::io::Error::last_os_error();
+            if unsafe { WaitForSingleObject(handle, 0) } == 0 {
+                return Ok(false);
+            }
+            return Err(format!("inspect live chain {pid} image: {error}"));
+        }
+        let image = String::from_utf16_lossy(&image[..length as usize]);
+        if !live_chain_image(image.rsplit(['\\', '/']).next().unwrap_or(&image)) {
+            return Ok(false);
+        }
+        match unsafe { WaitForSingleObject(handle, 0) } {
+            WAIT_TIMEOUT => Ok(true),
+            0 => Ok(false),
+            _ => Err(format!(
+                "inspect live chain {pid} liveness: {}",
+                std::io::Error::last_os_error()
+            )),
+        }
+    })();
+    unsafe { CloseHandle(handle) };
+    result
+}
+
 #[cfg(windows)]
 pub fn process_created_filetime(pid: u32) -> Result<Option<u64>, String> {
     use windows_sys::Win32::{
@@ -468,6 +547,12 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
     else {
         return Ok(false);
     };
+    #[cfg(windows)]
+    if info["live_chain"] == true {
+        if let Some(expected) = info["pid_created_filetime"].as_u64() {
+            return native_live_chain_alive(pid as u32, expected);
+        }
+    }
     let out = r.run(
         Call::new(args(&[
             "tasklist",
@@ -507,12 +592,6 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
     });
     if !image_matches {
         return Ok(false);
-    }
-    #[cfg(windows)]
-    if info["live_chain"] == true {
-        if let Some(expected) = info["pid_created_filetime"].as_u64() {
-            return Ok(process_created_filetime(pid as u32)? == Some(expected));
-        }
     }
     Ok(true)
 }
@@ -713,6 +792,57 @@ fn open_owned_lock(
             }
         }
     }
+}
+
+/// Steam/autosave helpers also pin read-only handles denying write/delete.
+/// Keep the cleanup owner protected with compatible read access, then acquire
+/// deletion rights and recheck ownership after all helpers have exited.
+#[cfg(windows)]
+fn open_owned_cleanup_lock(
+    _r: &mut impl Runner,
+    path: &Path,
+    token: &str,
+) -> Result<Option<OwnedLock>, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let mut file = match OpenOptions::new().read(true).share_mode(1).open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "open owned lock {} for cleanup: {error}",
+                path.display()
+            ))
+        }
+    };
+    if file_is_owned(&mut file, path, token)? {
+        Ok(Some(OwnedLock { file }))
+    } else {
+        Ok(None)
+    }
+}
+
+#[cfg(not(windows))]
+fn open_owned_cleanup_lock(
+    r: &mut impl Runner,
+    path: &Path,
+    token: &str,
+) -> Result<Option<OwnedLock>, String> {
+    open_owned_lock(r, path, token)
+}
+
+fn delete_cleanup_handle(
+    lock: OwnedLock,
+    path: &Path,
+    r: &mut impl Runner,
+    token: &str,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    let lock = {
+        drop(lock);
+        open_owned_lock(r, path, token)?
+            .ok_or("Civ6 lock ownership changed after cleanup; refusing deletion")?
+    };
+    delete_owned_handle(lock, path, r, token)
 }
 
 /// A persistent read-only inspector can block DELETE access. The chain still
@@ -1714,7 +1844,7 @@ fn cli_once(
             deadline: cleanup_end,
         };
         let r = &mut budget;
-        let file = match open_owned_lock(r, &path, &token) {
+        let file = match open_owned_cleanup_lock(r, &path, &token) {
             Ok(file) => file,
             Err(release_error) => {
                 if game_closed {
@@ -1773,7 +1903,7 @@ fn cli_once(
         } else {
             Ok(())
         };
-        let released = delete_owned_handle(file, &path, r, &token);
+        let released = delete_cleanup_handle(file, &path, r, &token);
         lock_released = released.is_ok();
         match (closed.and(restored), released) {
             (Err(close), Err(release)) => Err(format!("{close}; release failed: {release}")),
@@ -1815,6 +1945,42 @@ pub fn python_cli_exit(code: i32) -> i32 {
 #[cfg(test)]
 mod queue_entry_tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn cleanup_pin_accepts_helper_readers_and_denies_mutation_until_release() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = std::env::temp_dir().join(format!("cc-live-cleanup-{}", new_lock_token()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("civ6.lock");
+        let token = "cleanup-test";
+        write_json(
+            &path,
+            &json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":token}),
+        )
+        .unwrap();
+        let mut runner = process::RealRunner;
+        let pin = open_owned_cleanup_lock(&mut runner, &path, token)
+            .unwrap()
+            .unwrap();
+        let helper = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        assert_eq!(
+            fs::write(&path, "other owner").unwrap_err().raw_os_error(),
+            Some(32)
+        );
+        assert_eq!(
+            open_for_owned_delete(&path).unwrap_err().raw_os_error(),
+            Some(32)
+        );
+        drop(helper);
+        delete_cleanup_handle(pin, &path, &mut runner, token).unwrap();
+        assert!(!path.exists());
+        fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn same_pid_registrations_have_distinct_paths_and_old_cleanup_keeps_new_entry() {
