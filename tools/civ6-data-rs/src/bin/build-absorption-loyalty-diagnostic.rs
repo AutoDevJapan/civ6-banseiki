@@ -135,8 +135,17 @@ Events.CityLoyaltyChanged.Add(function(owner,id)
 end)
 Events.GameCoreEventPublishComplete.Add(function() d.Publications=d.Publications+1 end)
 local identity=target:GetCulturalIdentity()
+d.BaselineIdentity=identity
 d.Before=identity:GetLoyalty()
 assert(type(d.Before)=='number' and d.Before>=0 and d.Before<=100,'invalid native probe baseline')
+print('JAC_LOYALTY_NATIVE_IDENTITY kind='..type(identity)..' text='..tostring(identity))
+if type(identity)=='table' then
+ local instance=rawget(identity,'__instance')
+ d.BaselineInstance=instance
+ local mt=instance and getmetatable(instance)
+ local custom=type(mt)=='table' and rawget(mt,'__tostring') or nil
+ print('JAC_LOYALTY_NATIVE_INSTANCE kind='..type(instance)..' text='..tostring(instance)..' mtKind='..type(mt)..' customFormatterKind='..type(custom))
+end
 print('JAC_LOYALTY_NATIVE_EVENT_HASH '..tostring(DB.MakeHash('CityLoyaltyChanged')))
 print('JAC_LOYALTY_NATIVE_ARMED owner='..d.Owner..' city='..d.ID..' x='..d.X..' y='..d.Y..' turn='..d.Turn..' before='..d.Before)
 return 'single setter probe armed; waiting for verified native observer'
