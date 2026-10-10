@@ -386,6 +386,25 @@ end)"#)
     ]
 }
 
+fn transfer_direct_core_probe_steps() -> Vec<Value> {
+    let mut steps = transfer_probe_steps();
+    let core = steps[1]["code"].as_str().unwrap();
+    let setter_open = "GameEvents.JAC_LoyaltyNativeProbe_Operation.Add(function(actor,params)";
+    let setter_close = "end)\nd.HandlerRegistered=true";
+    assert_eq!(core.matches(setter_open).count(), 1);
+    assert_eq!(core.matches(setter_close).count(), 1);
+    let core = core.replace(setter_open, "local function directDiagnosticSetter(actor,params)")
+        .replace(setter_close, "end\nd.DirectDiagnosticSetter=directDiagnosticSetter\nGameEvents.JAC_LoyaltyNativeProbe_Operation.Add(directDiagnosticSetter)\nd.HandlerRegistered=true");
+    steps[1] = ui("JAC_Absorption_Entry", &core);
+    let request = "UI.RequestPlayerOperation(d.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LoyaltyNativeProbe_Operation',Tag='native-probe',Owner=d.Owner,ID=d.ID,X=d.X,Y=d.Y,Turn=d.Turn})";
+    let prepare = TRANSFER_SETTER_UI.replace(request, "d.DirectDiagnosticParams={Tag='native-probe',Owner=d.Owner,ID=d.ID,X=d.X,Y=d.Y,Turn=d.Turn}")
+        .replace("one setter requested after transferred CacheCity publication and fresh UI getter", "direct Core comparison armed from fresh UI baseline; setter not issued");
+    assert!(!prepare.contains("UI.RequestPlayerOperation"));
+    steps[4] = ui("InGame", &prepare);
+    steps.insert(5, ui("JAC_Absorption_Entry", "local d=assert(ExposedMembers.JAC_LoyaltyNativeProbe);assert(d.TransferUIReady and d.UIRequestIssued and d.DirectDiagnosticParams and not d.DirectDiagnosticInvocation,'direct Core diagnostic not armed or already invoked');d.DirectDiagnosticInvocation=true;d.DirectDiagnosticSetter(d.Actor,d.DirectDiagnosticParams);return 'one direct Core diagnostic call; no native observer or synchronized setter request'"));
+    steps
+}
+
 fn loyalty_probe_steps(handoff: Option<&std::path::Path>) -> Vec<Value> {
     let core = if handoff.is_some() {
         NATIVE_CORE.to_owned()
@@ -440,6 +459,9 @@ fn run() -> Result<()> {
     let transfer_mode = option
         .as_deref()
         .is_some_and(|v| v == "--single-setter-transfer-ui");
+    let direct_core_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--single-setter-transfer-direct-core");
     let handoff = if native_mode {
         Some(PathBuf::from(
             args.next()
@@ -449,9 +471,9 @@ fn run() -> Result<()> {
         None
     };
     ensure!(
-        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode) && args.next().is_none()
+        output.is_absolute() && (option.is_none() || operation_mode || native_mode || single_mode || publish_mode || ai_mode || cross_mode || capital_mode || transfer_mode || direct_core_mode) && args.next().is_none()
             && handoff.as_ref().is_none_or(|p| p.is_absolute()),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui]"
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context|--native-observer <absolute-new-handoff-path>|--single-setter-ui|--single-setter-publish-ui|--single-setter-ai-ui|--single-setter-ai-cross-ui|--single-setter-ai-capital-ui|--single-setter-transfer-ui|--single-setter-transfer-direct-core]"
     );
     ensure!(
         !output.exists(),
@@ -479,6 +501,8 @@ fn run() -> Result<()> {
         steps.extend(capital_probe_steps());
     } else if transfer_mode {
         steps.extend(transfer_probe_steps());
+    } else if direct_core_mode {
+        steps.extend(transfer_direct_core_probe_steps());
     } else {
         steps.push(ui("InGame", UI));
         let core = CORE.replace(
@@ -537,6 +561,10 @@ mod tests {
     use super::*;
 
     fn transfer_fixture() -> Result<mlua::Lua> {
+        transfer_fixture_for_steps(transfer_probe_steps())
+    }
+
+    fn transfer_fixture_for_steps(steps: Vec<Value>) -> Result<mlua::Lua> {
         let lua = mlua::Lua::new();
         lua.globals()
             .set("FixtureInstance", lua.create_any_userdata(())?)?;
@@ -612,10 +640,9 @@ PublishTransfer=function()
  FireCity(CacheOwner,CacheID);Fire()
 end
 "#).exec()?;
-        let steps = transfer_probe_steps();
         lua.load(steps[0]["code"].as_str().unwrap()).exec()?;
         lua.load("Domain='Core'").exec()?;
-        lua.load(TRANSFER_CORE).exec()?;
+        lua.load(steps[1]["code"].as_str().unwrap()).exec()?;
         lua.load("Domain='UI'").exec()?;
         let repeat = lua.create_function(|lua, name: String| {
             lua.load(if name == "JAC_LoyaltyTransferProbe_Operation" {
@@ -627,6 +654,50 @@ end
         })?;
         lua.globals().set("RepeatRequest", repeat)?;
         Ok(lua)
+    }
+
+    #[test]
+    fn transfer_direct_core_comparison_does_not_send_a_setter_operation_or_replay() -> Result<()> {
+        let steps = transfer_direct_core_probe_steps();
+        let lua = transfer_fixture_for_steps(steps.clone())?;
+        assert!(lua.load(steps[4]["code"].as_str().unwrap()).exec().is_err());
+        lua.load(TRANSFER_REQUEST_UI).exec()?;
+        lua.load("PublishTransfer();Reentrant=true").exec()?;
+        lua.load(steps[4]["code"].as_str().unwrap()).exec()?;
+        lua.load("assert(Transfers==1 and Setters==0 and #Requests==1);Domain='Core'")
+            .exec()?;
+        lua.load(steps[5]["code"].as_str().unwrap()).exec()?;
+        assert!(lua.load(steps[5]["code"].as_str().unwrap()).exec().is_err());
+        lua.load("assert(Setters==1 and #Requests==1 and Current==95);Domain='UI';FireCity(0,22);Fire();Fire();assert(ExposedMembers.JAC_LoyaltyNativeProbe.Events==1 and ExposedMembers.JAC_LoyaltyNativeProbe.Publications==2)").exec()?;
+        lua.load(steps[7]["code"].as_str().unwrap()).exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn transfer_direct_core_unknown_outcome_and_wrong_key_are_never_reissued() -> Result<()> {
+        for wrong_key in [false, true] {
+            let steps = transfer_direct_core_probe_steps();
+            let lua = transfer_fixture_for_steps(steps.clone())?;
+            lua.load(TRANSFER_REQUEST_UI).exec()?;
+            lua.load("PublishTransfer()").exec()?;
+            lua.load(steps[4]["code"].as_str().unwrap()).exec()?;
+            if wrong_key {
+                lua.load("ExposedMembers.JAC_LoyaltyNativeProbe.DirectDiagnosticParams.ID=999")
+                    .exec()?;
+            } else {
+                lua.load("Domain='Core';local c=CityManager.GetCityAt(5,6);local old=c.ChangeLoyalty;c.ChangeLoyalty=function(self,v) old(self,v);error('effect happened; result unknown') end").exec()?;
+            }
+            lua.load("Domain='Core'").exec()?;
+            assert!(lua.load(steps[5]["code"].as_str().unwrap()).exec().is_err());
+            assert!(lua.load(steps[5]["code"].as_str().unwrap()).exec().is_err());
+            lua.load(if wrong_key {
+                "assert(Setters==0 and Transfers==1 and #Requests==1)"
+            } else {
+                "assert(Setters==1 and Transfers==1 and #Requests==1)"
+            })
+            .exec()?;
+        }
+        Ok(())
     }
 
     #[test]

@@ -160,3 +160,7 @@ pure policyの9条件は、未変更、Gのみ、L/G両方、LのみのRW変更�
 Windows job 114150730563の失敗原本は `D:/CC/Work/todo995/ci-6c79-windows-failed.log`。UncertainDr7のresumeでcount 0が2件あり、DR復元・continue・detachは成功、競合履歴は空だった。原本には保持スレッドの終了確認がなく、終了競合が原CIの原因とは断定しない。親6c79b814のmerge後、旧検査を1回実行すると成功した。旧判定を抽出した新しい所有子の回帰検査では、子自身の終了後に同じ保持ハンドルがcount 0を返し、旧判定のエラーを再現した。
 
 修正は同じ保持ハンドルのWaitForSingleObjectをAPI前後に使う。終了確認時は時点・raw count・期待値を残し、生存中の0・不正count・Wait失敗はエラーのままにする。追加resumeは行わない。新4件と旧関連4件はnextestで8成功・60選外、CIに合わせた同一プロセス内の並列libtestも8成功・60選外だった。元のignored入口は通常検査の成功数に含めず、新回帰の所有子として起動し、終了0を別に確認した。DR競合履歴がある場合のcleanup未完了は維持した。Clippy・build・書式確認は終了0。原ログと指紋は既存6bfdのtarget内の `resume-race-*` に残す。未知GETTERのoriginal context配送は未証明のまま。generator・ゲーム・製品の受入・共有ToDo・公開pushは変更していない。
+
+実機111（6c）の最小移管対照は16/16手順・ログ5/5成功。AI1のcapital65536/120,40をAI0の196610へ正式な同期要求で一度移し、実UIでowner0/newIDを確認した後の一度のsetterで100→95・CityEvents1・setter後pubCounter11を得た。transferPublications1、TransferCalls1、SetterCalls1、observer0、turn1を維持。原11filesownca8c/live111へ全SHA一致、standardclose/profile元C234復元。製品108のturn15・資産処理・保存再開との組合せは未確認で、製品成功へ付け替えない。
+
+--single-setter-transfer-direct-core は転送とUI公開まで111と同じにし、setterだけGameplayへの直接呼出しへ替える。UIでfresh before/キーを採り、同じ検査・同じsetterを一回だけ実行する。同期setter要求を送らず、観測器やNativeReadyを偽造しない。診断の直接呼出しは発行前に一回の呼出し印を保持し、不正キーや応答不明でも再送しない。原2publications/turn/実getter/都市通知を維持し、結果が出るまでシナリオ側の直接呼出しを根因とは呼ばない。製品コードを変更する追加ではない。
