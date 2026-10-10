@@ -575,30 +575,12 @@ pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String
         {
             return Ok(false);
         }
-        // A starting/running dispatch must reach live_chain before a yielding
-        // chain resumes. A session queued for an execution slot has not started
-        // its work; its actual live_chain queue/lock is protected above instead.
-        if item["status"] == "doing"
-            && fairness::needs_civ6(&item)
-            && chain_job_active(p, &item["scheduler"]["job"])?
-        {
-            return Ok(false);
-        }
+        // An assigned job may spend hours reviewing or building without using
+        // Civ6. Only its actual chain queue/lock can reserve the game; treating
+        // starting/running sessions as reservations leaves the game idle and
+        // can make two assigned jobs block each other indefinitely.
     }
     Ok(true)
-}
-fn chain_job_active(p: &Paths, job: &Value) -> Result<bool, String> {
-    let Some(job) = job.as_str() else {
-        return Ok(false);
-    };
-    let path = p.jobs.join(job).join("job.json");
-    if !path.exists() {
-        return Ok(false);
-    }
-    Ok(matches!(
-        read_json(path)?["status"].as_str(),
-        Some("starting" | "running")
-    ))
 }
 fn remove_if_exists(p: &Path) -> Result<(), String> {
     match fs::remove_file(p) {

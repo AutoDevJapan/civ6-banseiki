@@ -3652,38 +3652,40 @@ fn ready_scheduler_item_counts_as_competitor_and_blocks_requeued_chain() {
 }
 
 #[test]
-fn queued_session_without_a_chain_does_not_reserve_the_game() {
+fn session_without_a_chain_does_not_reserve_the_game() {
     let f = Fixture::new();
     f.json("todo/todo.json", json!({"items":[{"id":995,"status":"doing","needs":["civ6"],"scheduler":{"job":"waiting"}}]}));
     let me = f.json(
         "here/queue/me.json",
         json!({"job":"mine","long":0,"since":2}),
     );
-    for (status, can_start) in [("queued", true), ("starting", false), ("running", false)] {
+    for status in ["queued", "starting", "running"] {
         f.json("jobs/waiting/job.json", json!({"status":status}));
         let mut r = Fake::success();
-        assert_eq!(my_turn(&mut r, &f.p, &me).unwrap(), can_start, "{status}");
+        assert!(my_turn(&mut r, &f.p, &me).unwrap(), "{status}");
         assert!(r.calls.is_empty());
     }
 }
 
 #[test]
-fn queued_session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
+fn session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
     let f = Fixture::new();
-    f.json("jobs/waiting/job.json", json!({"status":"queued"}));
     let me = f.json(
         "here/queue/me.json",
         json!({"job":"mine","long":0,"since":2}),
     );
     let owner = json!({"job":"waiting","live_chain":true,"pid":123,"long":0,"since":1});
     let other = f.json("here/queue/other.json", owner.clone());
-    let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
-    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
-    assert!(other.exists());
-    assert_eq!(r.calls.len(), 1);
-    let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
-    assert!(holder_alive(&mut r, &f.p, &owner).unwrap());
-    assert_eq!(r.calls.len(), 1);
+    for status in ["queued", "starting", "running"] {
+        f.json("jobs/waiting/job.json", json!({"status":status}));
+        let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+        assert!(!my_turn(&mut r, &f.p, &me).unwrap(), "{status}");
+        assert!(other.exists());
+        assert_eq!(r.calls.len(), 1);
+        let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+        assert!(holder_alive(&mut r, &f.p, &owner).unwrap(), "{status}");
+        assert_eq!(r.calls.len(), 1);
+    }
 }
 
 #[test]
