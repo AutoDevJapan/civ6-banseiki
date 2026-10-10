@@ -424,7 +424,7 @@ d2ea3fbbの実機56は97/147手順まで成功し、98手順目の待機中に�
 
 ## Modifier読取のホストロック
 
-配布DLLのホストサービスGUID`27ce99c2-78a8-41d5-91a2-567c083e47af`を、配布EXE（SHA256 `e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63`）のQueryInterface RVA`1c99e0`と仮想表`fc79d0`へ追跡した。仮想表の取得`+40`は`1c96f0→f4be0`でhost`+460`のTryEnterCriticalSection、必要時のEnterCriticalSectionを呼ぶ。解放`+38`は`1c9a80→f7170`で同じ対象のLeaveCriticalSectionを呼ぶ。インポート表のRVA`f96730`はTryEnterCriticalSection、`f96720`はEnterCriticalSection、`f96728`はLeaveCriticalSectionに対応する。`f96988`のGetCurrentThreadIdとhost`+4a0/+4a4`の所有スレッド・再入数も、取得側`f4c2b/f4c39`と解放側`f717e/f7186`で照合した。
+配布DLLのホストサービスGUID`27ce99c2-78a8-41d5-91a2-567c083e47af`を、配布EXE（SHA256 `e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63`）のQueryInterface RVA`1c99e0`と仮想表`fc79d0`へ追跡した。仮想表の取得`+40`は`1c96f0→f4990→f4be0`で、`f4990`が返す補助オブジェクトの`+460`のTryEnterCriticalSection、必要時のEnterCriticalSectionを呼ぶ。解放`+38`は`1c9a80→f4990→f7170`で同じ取得経路の対象にLeaveCriticalSectionを呼ぶ。両入口は受信したinterfaceのRCXをロック対象として使わない。インポート表のRVA`f96730`はTryEnterCriticalSection、`f96720`はEnterCriticalSection、`f96728`はLeaveCriticalSectionに対応する。`f96988`のGetCurrentThreadIdと補助オブジェクト`+4a0/+4a4`の所有スレッド・再入数も、取得側`f4c2b/f4c39`と解放側`f717e/f7186`で照合した。補助オブジェクトとinterfaceの寿命は別であり、末尾の「ロック対象とinterfaceの寿命」を参照する。
 
 同一スレッドからのCriticalSection再入はWindowsの契約に従い、取得回数ごとの解放を要求する。[Microsoftの一次資料](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-entercriticalsection)。これは静的な呼出し先の確認であり、native補正の実行や他スレッドとの待機関係の安全性を証明しない。Instanceの対象公開とApply/Removeの順序、Cityラッパーの同一性・所有者移管・保存後の寿命は残る。
 
@@ -535,7 +535,7 @@ callee v4は、元の軍事calleeへ渡されたCityの生産配列を、入口�
 
 ## 保存済み寄与の読取と本体の同期
 
-固定GameCoreのGameEffects読取は、B8AA80のinterfaceを介して取得と解放を行う。EXEの同じGUIDに対応する実表と命令から、slot+40/+38が共通CriticalSectionの取得・解放であり、同じスレッドの再帰取得に対応すると確認した。これは参照保持、都市の寿命、寄与成立の判定とは別である。interfaceの交換との排他、Quantity経路の到達、関連更新が同じロックを持つことは未確定であり、この時点で追加呼出しや製品への数量補正は行っていない。
+固定GameCoreのGameEffects読取は、B8AA80のinterfaceを介して取得と解放を行う。EXEの同じGUIDに対応する実表と命令から、slot+40/+38が補助オブジェクトのCriticalSectionの取得・解放であり、同じスレッドの再帰取得に対応すると確認した。これはinterface自身のロックや参照保持、都市の寿命、寄与成立の判定とは別である。補助オブジェクトの破棄・再生成とinterfaceの交換との排他、Quantity経路の到達、関連更新が同じロックを持つことは未確定であり、この時点で追加呼出しや製品への数量補正は行っていない。
 
 GetModifierSubjectsの元の実装956A40はInstance+188/+190の対象vectorを複製する。対象は949820からApply前に追加されるため、同じスレッドの再帰取得ではその一時状態を遮断できない。名前、Active、対象一覧だけを数量補正の権限にしない。976880と944FD0を追った別の経路は文字列と診断ログの処理を含んでおり、適用済み寄与台帳として扱わない。保存からの再構成には、同じ同期の内側で安定した適用状態を読む経路と、Quantityからの再入境界を確定する必要がある。
 
@@ -614,9 +614,19 @@ GetModifierSubjectsの元の実装956A40はInstance+188/+190の対象vectorを�
 
 | 対象 | 照合した命令と条件 |
 | --- | --- |
-| archiveを保持するcallback | `166050`は入口RCXをRSI、EDXをEBP、R8DをEBX、R9をRDIへ保存する。`16606F..16607C`はR8Dが0、RCXとR9が非nullの場合だけ保持へ進む。`16607E..166091`は既存のglobal `22D7D18`が非nullなら表のslot0を引数1で呼ぶ。`166093..1660A0`は入力archiveを同じglobalへ、入力EDXを`22D7D20`へ保存し、R9が指すbyteを1にする。slot0の呼出しだけから、新しいarchiveの参照保持や破棄との排他は断定しない。 |
+| archiveポインターをglobalへ設定するcallback | `166050`は入口RCXをRSI、EDXをEBP、R8DをEBX、R9をRDIへ保存する。`16606F..16607C`はR8Dが0、RCXとR9が非nullの場合だけ設定へ進む。`16607E..166091`は既存のglobal `22D7D18`が非nullなら表のslot0を引数1で呼ぶ。`166093..1660A0`は入力archiveを同じglobalへ、入力EDXを`22D7D20`へ保存し、R9が指すbyteを1にする。slot0の呼出しだけから、新しいarchiveの参照保持や破棄との排他は断定しない。 |
 | callbackの引数変換 | `1693E0..169403`は入口RCXを呼出先として保持し、入口RDXを次のRCX、入口R8Dを次のEDX、入口R9Dを次のR8D、第5引数を次のR9へ渡してtailする。`169A30..169A5B`は`166050`と`1693E0`の組を`16B6B0`へ渡す。`16B6B0`の値4の枝では、`16B981..16B9AC`が第1callbackをRCX、第2callbackを呼出先、globalのarchiveをRDXとして渡す。値1と3の枝は別の処理へcallbackの組を渡すため、この枝と同じ到達や完了を仮定しない。 |
 | 後段の読込呼出元 | `86439..86447`はEDXとECXを0にし、`16DB40`を呼ぶ。`16DB40..16DB5A`は入力RDXが0ならglobal `22D7D18`と値`22D7D20`を取得し、archiveも0ならEAX=5で復帰する。archiveが非nullなら`16DB5B..16DB67`でその値が4のときは`16F530`、それ以外はarchiveをRCXとして`16E340`へtailする。 |
 | Core読込まで同じ引数を渡す辺 | 上記の非4の枝は、前節の`16E340`入口でR12に保持され、`16EADB`で`169A90`へ渡されるarchiveにつながる。globalからこの呼出しまでの引数の対応は確認したが、先行分岐の成功、globalの交換が起きない保持区間、正式Load要求との全経路は未確定である。 |
 
 `166050`はGameの復元完了callbackではなく、後段へ渡すarchiveを保存する処理である。ここで台帳を公開しない。次に確定するのは、要求種別2からこの保持callbackを呼ぶ枝の全経路、`86447`を含む呼出元の保持と実行位相、Game・都市の復元成功後に数量読取を再開できる地点である。都市poolの読込・再構築・領域解放も同じ保持区間に含める必要がある。通常数量と正式保存・新プロセス読込・通常起動の呼出元は未実装であり、製品受入とマージ条件は未達のまま保持する。
+
+## ロック対象とinterfaceの寿命
+
+固定EXE/Coreの命令を調べ、interfaceの保持だけで既存ロックの寿命も延長できるという保持案の前提を訂正した。slot`+40/+38`は入力RCXを使わず、`F4990`で取得した別の補助オブジェクトを取得側`F4BE0`と解放側`F7170`へ渡す。取得と解放の間で同じ補助オブジェクトが存続する条件は未確定である。
+
+EXEの`F7956`はglobal `22D6070`から補助オブジェクトをRBXへ取り、非nullの枝で`F7972..F7979`がその`+460`を`F607E0`へ渡してCriticalSectionを削除する。`F7990..F7998`は同じRBXとサイズ`4B0`を解放処理へ渡し、`F799D`でglobalを0にする。破棄処理との排他や上流の実行条件は未確認であり、この補助オブジェクトをプロセス寿命中ずっと固定されたロックとして扱わない。
+
+一方、Coreの`45050`は入力rootをRBXへ保持する。`45059..45068`は既存`B8AA80`が非nullならそのslot`08`でReleaseする。入力rootが非nullの枝では、`45070..45087`がGUIDとrootをrootのslot0へ渡し、`45089`が返ったinterfaceを`B8AA80`へ保存する。対応するEXEのQueryInterfaceは同じGUIDの枝で参照数を増やしてinterfaceを返す。この参照が保持するinterfaceと、前段で破棄される補助オブジェクトは別の対象である。globalの読み取り値だけから安全な参照を取得できるとは扱わない。
+
+次の保持設計は、実際のroot設定の呼出し内で取得したinterfaceの参照と、DLL自身が持つ入口・処理中件数の管理を分ける。読込・数量・効果更新・都市の生成と破棄・格納領域の解放に加え、本体側の破棄開始を同じ管理で覆う必要がある。破棄が同じスレッドから再入したときに処理中の自分を待つ設計にはせず、延期可能な実callbackか再入しない実行位相を確定する。root設定の呼出しスレッド、破棄の上流、全対象経路の網羅が未確認のため、この案を製品へ設置したり、保持や通常数量の合格へ数えたりしない。
