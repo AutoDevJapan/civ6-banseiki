@@ -739,8 +739,29 @@ if Controls then
   Controls.ReadyButton:RegisterCallback(Mouse.eLClick, OnReadyButton)
   Controls.ReadyCheck:RegisterCallback(Mouse.eLClick, OnReadyButton)
   local nativeWitnessInstalled=false
+  local nativeWitnessDiagnostic
   local function installNativeWitness()
     local nativeWitnessNonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+    -- Saved metadata can replace settings before the lobby is shown. Record
+    -- the actual values even when a missing nonce prevents witness inclusion.
+    -- Keep the exact scope checks and avoid repeating unchanged observations.
+    if scoped() and GameConfiguration.IsHotseat() then
+      local generation=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')
+      local ruleset=GameConfiguration.GetValue('RULESET')
+      local map=MapConfiguration.GetValue('MAP_SCRIPT')
+      local multiplayer
+      if type(GameConfiguration.IsAnyMultiplayer)=='function' then
+        local ok,value=pcall(GameConfiguration.IsAnyMultiplayer)
+        if ok then multiplayer=value end
+      end
+      local observed='Nonce='..tostring(nativeWitnessNonce)..' Generation='..tostring(generation)
+        ..' Ruleset='..tostring(ruleset)..' Map='..tostring(map)
+        ..' Hotseat=true AnyMultiplayer='..tostring(multiplayer)
+      if observed~=nativeWitnessDiagnostic then
+        nativeWitnessDiagnostic=observed
+        print('[JAC_NATIVE_CARRIER_STAGING_SETTINGS] '..observed)
+      end
+    end
     if not nativeWitnessInstalled and scoped() and GameConfiguration.IsHotseat()
       and type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
       nativeWitnessInstalled=true -- never retry an unknown include in this context

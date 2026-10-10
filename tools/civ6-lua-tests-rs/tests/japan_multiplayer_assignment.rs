@@ -158,6 +158,33 @@ end
 }
 
 #[test]
+fn native_witness_logs_missing_loaded_settings_without_including_or_repeating() {
+    let lua = fixture_with_state(
+        r#"
+hotseat=true;nativeIncludes=0;nativeSettings={}
+print=function(line) if line:find('[JAC_NATIVE_CARRIER_STAGING_SETTINGS]',1,true) then nativeSettings[#nativeSettings+1]=line end end
+local stockInclude=include
+include=function(name) if name=='JAC_NativeCarrierWitness_Staging' then nativeIncludes=nativeIncludes+1 else stockInclude(name) end end
+"#,
+    );
+    exec(
+        &lua,
+        r#"
+assert(nativeIncludes==0 and #nativeSettings==1)
+assert(nativeSettings[1]:find('Nonce=nil Generation=nil',1,true))
+Events.GameConfigChanged.fire();ContextPtr:show();assert(#nativeSettings==1 and nativeIncludes==0)
+values.JAC_NATIVE_CARRIER_WITNESS_NONCE='0123456789abcdef0123456789abcdef'
+values.JAC_NATIVE_CARRIER_LOAD_GENERATION=1
+Events.GameConfigChanged.fire();assert(nativeIncludes==1 and #nativeSettings==2)
+values.JAC_NATIVE_CARRIER_WITNESS_NONCE=nil;values.JAC_NATIVE_CARRIER_LOAD_GENERATION=nil
+Events.GameConfigChanged.fire();assert(nativeIncludes==1 and #nativeSettings==3)
+assert(nativeSettings[3]:find('Nonce=nil Generation=nil',1,true))
+Events.GameConfigChanged.fire();ContextPtr:show();assert(#nativeSettings==3 and nativeIncludes==1)
+"#,
+    );
+}
+
+#[test]
 fn native_witness_installs_once_when_nonce_arrives_after_frontend_creation() {
     let lua = fixture_with_state(
         r#"
