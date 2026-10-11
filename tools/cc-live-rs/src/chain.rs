@@ -185,6 +185,76 @@ struct ExitGenerationRunner<'a, R> {
     runner: &'a mut R,
     games: &'a GameGeneration,
 }
+
+#[cfg(test)]
+mod exit_generation_deadline_tests {
+    use super::*;
+    struct Model {
+        time: f64,
+        query_cost: f64,
+        termination_entries: usize,
+    }
+    impl Runner for Model {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert_eq!(call.args[0], "tasklist");
+            self.time += self.query_cost.min(call.timeout.unwrap());
+            Ok(Output {
+                stdout: if call.args[2].ends_with("CivilizationVI.exe") {
+                    "\"CivilizationVI.exe\",\"11\"".into()
+                } else {
+                    String::new()
+                },
+                ..Output::default()
+            })
+        }
+        fn process_identity(
+            &mut self,
+            _: u32,
+            _: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            Ok(Some(process::ProcessIdentity {
+                image: "CivilizationVI.exe".into(),
+                created_filetime: Some(1),
+            }))
+        }
+        fn terminate_game(
+            &mut self,
+            _: u32,
+            _: &str,
+            _: u64,
+            deadline: f64,
+        ) -> Result<Output, String> {
+            self.termination_entries += 1;
+            assert!(self.time < deadline);
+            Ok(Output::default())
+        }
+        fn now(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.time += seconds;
+            Ok(())
+        }
+    }
+    #[test]
+    fn generation_expiry_blocks_api_entry_with_a_positive_nonexpired_control() {
+        let games = vec![("CivilizationVI.exe".into(), 11, 1)];
+        for query_cost in [0.1, 1.0] {
+            let mut model = Model {
+                time: 0.0,
+                query_cost,
+                termination_entries: 0,
+            };
+            let result = ExitGenerationRunner {
+                runner: &mut model,
+                games: &games,
+            }
+            .run(Call::new(args(&["taskkill", "/IM", "CivilizationVI.exe", "/F"])).timeout(1.0));
+            assert_eq!(result.is_ok(), query_cost == 0.1);
+            assert_eq!(model.termination_entries, usize::from(query_cost == 0.1));
+        }
+    }
+}
 impl<R: Runner> Runner for ExitGenerationRunner<'_, R> {
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
         // An old cursor may never close a game that appeared after its mark.

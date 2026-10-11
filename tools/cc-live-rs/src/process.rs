@@ -560,6 +560,15 @@ mod native_identity_tests {
     use std::os::windows::process::CommandExt;
 
     #[test]
+    fn real_runner_does_not_start_even_a_fast_child_after_absolute_deadline() {
+        let mut call = Call::new(crate::args(&["cmd.exe", "/d", "/c", "exit 0"]))
+            .timeout(10.0)
+            .managed();
+        call.deadline = Some(RealRunner.monotonic() - 1.0);
+        assert_eq!(RealRunner.run(call).unwrap_err(), "command timed out");
+    }
+
+    #[test]
     fn pinned_termination_rejects_changed_creation_and_expired_deadline_before_owned_child_exit() {
         struct OwnedChild(std::process::Child);
         impl Drop for OwnedChild {
@@ -729,6 +738,22 @@ impl Runner for RealRunner {
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;
+        // Preparation and spawn consume the same budget as waiting. Never
+        // reset a relative timeout after creating the child/readers.
+        let started = self.monotonic();
+        let deadline = match (call.deadline, call.timeout) {
+            (Some(deadline), Some(timeout)) => Some(deadline.min(started + timeout)),
+            (Some(deadline), None) => Some(deadline),
+            (None, Some(timeout)) => Some(started + timeout),
+            (None, None) => None,
+        };
+        let before_spawn = |runner: &mut Self| {
+            if deadline.is_some_and(|deadline| runner.monotonic() >= deadline) {
+                Err("command timed out".to_owned())
+            } else {
+                Ok(())
+            }
+        };
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
         cmd.args(&call.args[1..])
             .envs(&call.env)
@@ -744,6 +769,7 @@ impl Runner for RealRunner {
             let (mut source, sink) = std::io::pipe().map_err(|e| e.to_string())?;
             cmd.stdout(Stdio::from(sink.try_clone().map_err(|e| e.to_string())?))
                 .stderr(Stdio::from(sink));
+            before_spawn(self)?;
             let (mut child, mut tree) =
                 crate::process_tree::Tree::spawn(&mut cmd, call.creationflags, call.kill_tree)?;
             drop(cmd);
@@ -751,7 +777,7 @@ impl Runner for RealRunner {
                 let mut b = Vec::new();
                 source.read_to_end(&mut b).map(|_| b)
             });
-            let status = wait(&mut child, &mut tree, call.timeout, call.lease.as_ref());
+            let status = wait(&mut child, &mut tree, deadline, call.lease.as_ref());
             if let (false, Err(error)) = (call.kill_tree, &status) {
                 return Err(error.clone());
             }
@@ -768,6 +794,7 @@ impl Runner for RealRunner {
             });
         }
         cmd.stderr(Stdio::piped());
+        before_spawn(self)?;
         let (mut child, mut tree) =
             crate::process_tree::Tree::spawn(&mut cmd, call.creationflags, call.kill_tree)?;
         let mut stdout = child.stdout.take().unwrap();
@@ -780,7 +807,7 @@ impl Runner for RealRunner {
             let mut b = Vec::new();
             stderr.read_to_end(&mut b).map(|_| b)
         });
-        let status = wait(&mut child, &mut tree, call.timeout, call.lease.as_ref());
+        let status = wait(&mut child, &mut tree, deadline, call.lease.as_ref());
         if let (false, Err(error)) = (call.kill_tree, &status) {
             return Err(error.clone());
         }
@@ -838,12 +865,17 @@ fn decode(b: &[u8]) -> String {
 fn wait(
     child: &mut std::process::Child,
     tree: &mut crate::process_tree::Tree,
-    timeout: Option<f64>,
+    deadline: Option<f64>,
     lease: Option<&LeaseLimit>,
 ) -> Result<i32, String> {
-    let start = Instant::now();
-    let mut next_probe = start;
+    let mut next_probe = Instant::now();
     loop {
+        if deadline.is_some_and(|deadline| RealRunner.monotonic() >= deadline) {
+            tree.stop(child)?;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("command timed out".into());
+        }
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
             tree.stop(child)?;
             return Ok(s.code().unwrap_or(1));
@@ -877,7 +909,7 @@ fn wait(
         }
         if lease_error.is_some()
             || interrupted().is_err()
-            || timeout.is_some_and(|t| start.elapsed().as_secs_f64() >= t)
+            || deadline.is_some_and(|deadline| RealRunner.monotonic() >= deadline)
         {
             tree.stop(child)?;
             let _ = child.kill();
