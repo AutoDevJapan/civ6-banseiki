@@ -1,0 +1,197 @@
+{
+  "todo": 2317,
+  "parent_todo": 134,
+  "recorded_at": "2026-10-12T00:07:24.2713752+09:00",
+  "pr": "https://github.com/AutoDevJapan/civ6-banseiki/pull/143",
+  "public_code_commit": "bec82e7208484a85f504a2e0c7fed7488b2357ea",
+  "public_tree": "2f5bdda9894da7256165dbeabb86ea6c3f8b20e6",
+  "candidate_source": "e5853efd34a4a5d649028907876982a3a81670eb",
+  "candidate_tree": "289c1488472778fb10080493bc818e634b0051bd",
+  "chain_input_source": "9b122181124bcfe66adc2d4c77459907f974e533",
+  "installed_standard_exe_sha256": "49B70D8B5833694F2C25B5410270FD78AB554284572A6674E6504461D4FEEDC6",
+  "installed_exe_reverified_sha256": "49B70D8B5833694F2C25B5410270FD78AB554284572A6674E6504461D4FEEDC6",
+  "compiler_artifact_record": "proof-renderer-path-build.jsonl",
+  "compiler_artifact_sha256": "8E156357CC04824A70369059530DE3D5A15E6D4729E6D2BD68D04498C118A447",
+  "run_id": "todo-2317-civ6-02",
+  "chain_pid": 562196,
+  "chain_created_filetime": 134362041289018957,
+  "scenario_runs": 1,
+  "scenario_steps_passed": 7,
+  "scenario_judgments_passed": 6,
+  "driver_exit_code": 0,
+  "proof_exit_code": 0,
+  "successful_game_runs": 1,
+  "prior_failed_invocation": {
+    "run_id": "todo-2317-civ6-01",
+    "chain_pid": 232540,
+    "driver_exit_code": 2,
+    "error": "output directory already exists (os error 183)",
+    "game_launches": 0,
+    "counted_as_success": false,
+    "originals_restored": true
+  },
+  "reliability_rounds_per_invocation": 10,
+  "original_autosaves_before": [
+    {
+      "relative": "AutoConfigGame_01.Civ6Cfg",
+      "bytes": 39076,
+      "sha256": "F379BE4B40FDDD021AACE26C2781B487BCD2B5AC3C7FBF1F5F6D39F2108AEEBB"
+    },
+    {
+      "relative": "AutoSave_0001.Civ6Save",
+      "bytes": 1052681,
+      "sha256": "7711678E6888DA17698C3707615028B38F57FFE97D337AA1D806BD12D934741C"
+    },
+    {
+      "relative": "prev/AutoConfigGame_01.Civ6Cfg",
+      "bytes": 39076,
+      "sha256": "04373B8B90580A1EE643A60A99FFE362C9CFA8628D75D375F6B41D36F957D31A"
+    },
+    {
+      "relative": "prev/AutoSave_0001.Civ6Save",
+      "bytes": 1052308,
+      "sha256": "28EDDD62D32AEC0A43043A165658AFE7EF953D0573621A5AC6163F25DB8E11C9"
+    }
+  ],
+  "original_autosaves_after": [
+    {
+      "relative": "AutoConfigGame_01.Civ6Cfg",
+      "bytes": 39076,
+      "sha256": "F379BE4B40FDDD021AACE26C2781B487BCD2B5AC3C7FBF1F5F6D39F2108AEEBB"
+    },
+    {
+      "relative": "AutoSave_0001.Civ6Save",
+      "bytes": 1052681,
+      "sha256": "7711678E6888DA17698C3707615028B38F57FFE97D337AA1D806BD12D934741C"
+    },
+    {
+      "relative": "prev/AutoConfigGame_01.Civ6Cfg",
+      "bytes": 39076,
+      "sha256": "04373B8B90580A1EE643A60A99FFE362C9CFA8628D75D375F6B41D36F957D31A"
+    },
+    {
+      "relative": "prev/AutoSave_0001.Civ6Save",
+      "bytes": 1052308,
+      "sha256": "28EDDD62D32AEC0A43043A165658AFE7EF953D0573621A5AC6163F25DB8E11C9"
+    }
+  ],
+  "original_autosave_total_bytes": 2183141,
+  "appoptions_before_sha256": "C234884BD45BCD371F0D5DC263A61FAA3C4C5BF84B1185FFDED12413A0C647D8",
+  "appoptions_after_sha256": "C234884BD45BCD371F0D5DC263A61FAA3C4C5BF84B1185FFDED12413A0C647D8",
+  "seed_before_sha256": "2743EDA28F37819DACD125B60F5D12B319AB2D21775C4DAD407B09CDAA55A8D3",
+  "seed_after_sha256": "2743EDA28F37819DACD125B60F5D12B319AB2D21775C4DAD407B09CDAA55A8D3",
+  "isolated_samples": 183,
+  "post_profile_restore_isolated_samples": 12,
+  "observation_errors": [],
+  "cpu_renderer": {
+    "fresh_log": true,
+    "selected_device": "Microsoft Basic Render Driver",
+    "selected_device_id": "8c",
+    "hardware_renderer_selected": false
+  },
+  "steam_terminal_phase": "steam_released_without_new_sync_request",
+  "steam_terminal_time": "2026-10-11T14:59:44.117570200Z",
+  "game_absent": true,
+  "lease_absent": true,
+  "autosave_receipt_absent": true,
+  "appoptions_receipt_absent": true,
+  "test_autosaves_preserved": [
+    {
+      "relative": "test-auto/AutoSave_0003.Civ6Save",
+      "bytes": 294609,
+      "sha256": "1C953C6FA474AE20EB23B5CF182C3024347B714488CA8EE4CEF2496FA6534E5D"
+    }
+  ],
+  "checks": {
+    "public_cc_live_passed": 137,
+    "public_cc_live_prior_skipped": 2,
+    "candidate_passed": 197,
+    "candidate_prior_skipped": 4,
+    "product_workspace_passed": 1786,
+    "product_workspace_skipped": 0,
+    "lua_all": true,
+    "doc_exit": 0,
+    "clippy_exit": 0,
+    "scenario_checks_passed": 137
+  },
+  "reviews": [
+    {
+      "todo": 2398,
+      "job": "20261011-231729-todo-2398",
+      "model": "gpt-6-luna",
+      "must1": "persistent restoration implemented"
+    },
+    {
+      "todo": 2399,
+      "job": "20261011-233316-todo-2399",
+      "model": "gpt-6-luna",
+      "suggestion": "PID/FILETIME/token and fresh journal generation implemented",
+      "nit": "PID fixture naming: no runtime impact; retained"
+    },
+    {
+      "todo": 2402,
+      "job": "20261011-235125-todo-2402",
+      "model": "gpt-6-luna",
+      "source": "e5853efd34a4a5d649028907876982a3a81670eb",
+      "code_must": 0,
+      "suggestion": 0,
+      "nit": 0,
+      "acceptance_must": "closed by this recorded successful standard run and selected CPU renderer"
+    }
+  ],
+  "raw_evidence_owner": "5b12637e44767ffd1c50982c55773956",
+  "raw_evidence": [
+    {
+      "file": "baseline.json",
+      "bytes": 1153,
+      "sha256": "3AFD721623EE668915F31F3E2F7E2871AD5213E3576C1E633A8C66358BA499BA"
+    },
+    {
+      "file": "one-run-isolation.json",
+      "bytes": 1254,
+      "sha256": "4D882AEBB8C90B43D13C097B0C8B25FE0F99BB30E303480F164261EF2A54B00E"
+    },
+    {
+      "file": "one-run-result.json",
+      "bytes": 1661,
+      "sha256": "436ED98D0FBE603EF061087DEED7BC97EDCE739D4A9F8C96D4E0BE3D90D8B3D7"
+    },
+    {
+      "file": "one-run-observations.json",
+      "bytes": 339769,
+      "sha256": "2460F173FB0E20A23EE3C7085F608B0DF1954EE01C271A7343F0FC33FEC42EB9"
+    },
+    {
+      "file": "isolation-state.raw",
+      "bytes": 418,
+      "sha256": "99844E45BDA4C1D3CB824A39C211309B69454920365482A1D1E1888B08FC89EE"
+    },
+    {
+      "file": "profile-state.raw",
+      "bytes": 403,
+      "sha256": "A6DA441524E60B2DB82B0BC0304A827146D92EC29F66FC53AD32CD3527F77430"
+    },
+    {
+      "file": "Renderer.log",
+      "bytes": 2924,
+      "sha256": "5A2D1FA4FD8A3F3F0B0371BF03F6414CA599441DA363FE36A1AFB0C3B67F3BDC"
+    },
+    {
+      "file": "one-run.stdout.log",
+      "bytes": 2260,
+      "sha256": "09C38EA13D7442B580469654491466A1E2EA923CBC9A9FD2B2A5D369EAE1396A"
+    },
+    {
+      "file": "one-run.stderr.log",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "file": "civ6-steam-exit-562196-1791730754732657900-1.jsonl",
+      "bytes": 4156,
+      "sha256": "471591A85F7BA8B0FE923BDFAB0095CB7AFB56BA50B9DA15BFBF3FB3D5671730"
+    }
+  ],
+  "parent_product_conditions": "unchanged; parent134 not completed",
+  "ci_and_merge": "pending; tracked in PR143"
+}

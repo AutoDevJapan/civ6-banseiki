@@ -33,12 +33,14 @@
   "binary_name": "live_chain.exe",
   "baseline_artifacts_copied": false,
   "common_executor_checks": "173 common checks retained plus existing CPU profile checks",
-  "new_candidate_checks_passed": 191,
+  "new_candidate_checks_passed": 197,
   "prior_skipped": 4,
-  "deployed": false,
-  "live_runs": 0,
-  "latest_source_status": "通常実行の隔離先を各回の成果物へ分ける追加修正は未検査",
-  "last_built_source": "60d918f72bca5bd53a428d5be9cdd31c0c5f3dc5",
-  "last_built_exe_sha256": "88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782",
-  "last_built_candidate_is_current": false
+  "deployed": true,
+  "live_runs": 1,
+  "latest_source_status": "e5853efdの197件/Clippy/doc/release成功、標準一回7手順6判定成功、原本SHA一致で復元",
+  "last_built_source": "e5853efd34a4a5d649028907876982a3a81670eb",
+  "last_built_exe_sha256": "49B70D8B5833694F2C25B5410270FD78AB554284572A6674E6504461D4FEEDC6",
+  "last_built_candidate_is_current": true,
+  "acceptance_record": "documents/tooling/civ6-single-run-isolation-20261012.json",
+  "real_run_id": "todo-2317-civ6-02"
 }
