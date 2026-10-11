@@ -478,6 +478,9 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
         let Some(identity) = result? else {
             return Ok(false);
         };
+        if info["live_chain"] == true && info["pid_created_filetime"].as_u64().is_none() {
+            return Err("live_chain creation time missing; process ownership is unknown".into());
+        }
         let image = identity.image;
         return Ok((info["live_chain"] != true || live_chain_image(&image))
             && !CIV_EXECUTABLES
@@ -771,6 +774,7 @@ fn close_owned_after_release_error(
     p: &Paths,
     path: &Path,
     token: &str,
+    evidence: &mut Value,
 ) -> Result<bool, String> {
     let mut opts = OpenOptions::new();
     opts.read(true);
@@ -784,9 +788,10 @@ fn close_owned_after_release_error(
     if !file_is_owned(&mut file, path, token)? {
         return Ok(false);
     }
-    let closed =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| close_civ6_with_paths(r, p)))
-            .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
+    let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        close_civ6_with_evidence(r, p, evidence)
+    }))
+    .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
     drop(file);
     closed?;
     Ok(true)
@@ -1082,7 +1087,7 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
     if options.reliability {
         return cli(r, p, a);
     }
-    main_owned(r, p, &options, None, None, &mut false, &mut None)
+    main_owned(r, p, &options, None, None, &mut RunCleanup::default())
 }
 
 struct Reliability {
@@ -1296,15 +1301,26 @@ fn time_left(r: &mut impl Runner, deadline: f64) -> Result<f64, String> {
     }
 }
 
+#[derive(Default)]
+struct RunCleanup {
+    game_closed: bool,
+    deadline: Option<f64>,
+    artifacts: Option<std::path::PathBuf>,
+}
+
 fn main_owned(
     r: &mut impl Runner,
     p: &Paths,
     options: &Options,
     token: Option<&str>,
     mut reliability: Option<&mut Reliability>,
-    game_closed: &mut bool,
-    cleanup_deadline: &mut Option<f64>,
+    cleanup: &mut RunCleanup,
 ) -> Result<i32, String> {
+    let RunCleanup {
+        game_closed,
+        deadline: cleanup_deadline,
+        artifacts: cleanup_artifacts,
+    } = cleanup;
     if options.cleanup_only {
         if civ6_running(r)? {
             return Err(
@@ -1317,6 +1333,7 @@ fn main_owned(
     }
     let mut first_failure = 0;
     for item in &options.items {
+        *cleanup_artifacts = None;
         *game_closed = false;
         if let Some(token) = token {
             yield_if_expired(r, p, token)?;
@@ -1427,6 +1444,7 @@ fn main_owned(
         } else {
             artifacts.into()
         };
+        *cleanup_artifacts = Some(Path::new(&artifacts).to_path_buf());
         r.print(&format!(
             "START {name} {scenario} civ6=closed-before-prepare"
         ))?;
@@ -1551,8 +1569,8 @@ fn main_owned(
         if let Some(state) = reliability.as_deref_mut() {
             state.round()["exit"] = exit_evidence;
         }
+        *game_closed = closed.is_ok();
         exit_result(windows_exit_code(run.code), closed, saved)?;
-        *game_closed = true;
         for line in run.stdout.lines().filter(|s| {
             ["[OK]", "[FAIL]", "PASS", "FAIL"]
                 .iter()
@@ -1605,9 +1623,33 @@ pub fn exit_result(
 
 #[doc(hidden)]
 pub fn save_exit_evidence(artifacts: &Path, evidence: &mut Value) -> Result<(), String> {
+    save_exit_evidence_named(
+        artifacts,
+        evidence,
+        "steam-exit.jsonl",
+        "exit-evidence.json",
+    )
+}
+
+#[doc(hidden)]
+pub fn save_cleanup_exit_evidence(artifacts: &Path, evidence: &mut Value) -> Result<(), String> {
+    save_exit_evidence_named(
+        artifacts,
+        evidence,
+        "steam-exit-cleanup.jsonl",
+        "exit-evidence-cleanup.json",
+    )
+}
+
+fn save_exit_evidence_named(
+    artifacts: &Path,
+    evidence: &mut Value,
+    journal_name: &str,
+    evidence_name: &str,
+) -> Result<(), String> {
     let mut errors = Vec::new();
     if let Some(journal) = evidence["sync_journal"].as_str() {
-        let target = artifacts.join("steam-exit.jsonl");
+        let target = artifacts.join(journal_name);
         let saved = (|| -> Result<(), String> {
             let mut source = File::open(journal).map_err(|e| format!("read exit journal: {e}"))?;
             fs::create_dir_all(artifacts).map_err(|e| format!("prepare exit artifacts: {e}"))?;
@@ -1633,7 +1675,7 @@ pub fn save_exit_evidence(artifacts: &Path, evidence: &mut Value) -> Result<(), 
         let mut out = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(artifacts.join("exit-evidence.json"))
+            .open(artifacts.join(evidence_name))
             .map_err(|e| format!("reserve exit evidence: {e}"))?;
         serde_json::to_writer_pretty(&mut out, evidence)
             .map_err(|e| format!("write exit evidence: {e}"))?;
@@ -1815,8 +1857,7 @@ fn cli_once(
     let token = new_lock_token();
     owner["lock_token"] = json!(token);
     acquire(r, p, &owner, 6.0 * 3600.0, is_long(&options.items))?;
-    let mut game_closed = false;
-    let mut cleanup_deadline = None;
+    let mut cleanup_state = RunCleanup::default();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         main_owned(
             r,
@@ -1824,11 +1865,15 @@ fn cli_once(
             options,
             Some(&token),
             reliability.as_deref_mut(),
-            &mut game_closed,
-            &mut cleanup_deadline,
+            &mut cleanup_state,
         )
     }))
     .unwrap_or_else(|_| Err("live chain panicked".into()));
+    let RunCleanup {
+        mut game_closed,
+        deadline: cleanup_deadline,
+        artifacts: cleanup_artifacts,
+    } = cleanup_state;
     process::clear_interrupt_for_cleanup();
     // Also after a crash or failure of the chain itself. Release even when cleanup raises an error.
     let path = p.here.join("civ6.lock");
@@ -1836,7 +1881,8 @@ fn cli_once(
     let cleanup_started = r.monotonic();
     let mut cleanup_exit = json!(null);
     let cleanup_end = cleanup_deadline.unwrap_or_else(|| r.monotonic() + CLEANUP_RESERVE_SECONDS);
-    let cleanup = (|| {
+    let cleanup_needed = !game_closed;
+    let mut cleanup = (|| {
         let mut budget = WithinDeadline {
             runner: r,
             deadline: cleanup_end,
@@ -1850,7 +1896,13 @@ fn cli_once(
                 }
                 #[cfg(windows)]
                 {
-                    return match close_owned_after_release_error(r, p, &path, &token) {
+                    return match close_owned_after_release_error(
+                        r,
+                        p,
+                        &path,
+                        &token,
+                        &mut cleanup_exit,
+                    ) {
                         Ok(true) => Err(release_error),
                         Ok(false) => Err(format!(
                             "{release_error}; lock ownership changed before fallback close"
@@ -1909,6 +1961,18 @@ fn cli_once(
             _ => Ok(()),
         }
     })();
+    if cleanup_needed {
+        if let Some(artifacts) = cleanup_artifacts {
+            cleanup_exit["primary_chain_error"] = json!(result.as_ref().err());
+            cleanup_exit["cleanup_error"] = json!(cleanup.as_ref().err());
+            if let Err(save) = save_cleanup_exit_evidence(&artifacts, &mut cleanup_exit) {
+                cleanup = Err(match cleanup {
+                    Ok(()) => format!("cleanup evidence save failed: {save}"),
+                    Err(error) => format!("{error}; cleanup evidence save failed: {save}"),
+                });
+            }
+        }
+    }
     process::finish_cleanup();
     if let Some(state) = reliability {
         state.round()["cleanup"] = json!({"game_closed":game_closed,"lock_released":lock_released,

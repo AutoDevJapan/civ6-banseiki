@@ -588,6 +588,17 @@ fn native_waiter_identity_preserves_image_creation_and_job_authority() {
     let mut gone = native_proof(Ok(None));
     assert!(!holder_alive(&mut gone, &f.p, &owner).unwrap());
     assert_eq!(gone.queried, [123]);
+    let mut missing_stamp = native_proof(Ok(Some(process::ProcessIdentity {
+        image: "live_chain.exe".into(),
+        created_filetime: 41,
+    })));
+    assert!(holder_alive(
+        &mut missing_stamp,
+        &f.p,
+        &json!({"live_chain":true,"pid":123})
+    )
+    .unwrap_err()
+    .contains("creation time missing"));
     let mut denied = native_proof(Err("access denied".into()));
     assert!(holder_alive(&mut denied, &f.p, &owner).is_err());
     assert_eq!(denied.queried, [123]);
@@ -2248,6 +2259,11 @@ fn driver_timeout_keeps_failure_log_and_releases_lock() {
         .contains("partial startup diagnostic"));
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 1);
     assert!(!f.p.here.join("civ6.lock").exists());
+    let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
+    assert!(evidence["primary_chain_error"]
+        .as_str()
+        .unwrap()
+        .contains("partial startup diagnostic"));
 }
 
 #[test]
@@ -2260,6 +2276,15 @@ fn driver_and_cleanup_errors_are_both_reported() {
     assert!(error.contains("driver failed"));
     assert!(error.contains("cleanup failed"));
     assert!(!f.p.here.join("civ6.lock").exists());
+    let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
+    assert!(evidence["primary_chain_error"]
+        .as_str()
+        .unwrap()
+        .contains("driver failed"));
+    assert!(evidence["cleanup_error"]
+        .as_str()
+        .unwrap()
+        .contains("cleanup failed"));
 }
 
 #[test]
@@ -4105,6 +4130,10 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
     };
     let error = cli(&mut r, &f.p, &["a:s.json".into(), "b:s.json".into()]).unwrap_err();
     assert!(error.contains("ownership changed"), "{error}");
+    assert!(
+        !f.root.join("artifacts/exit-evidence-cleanup.json").exists(),
+        "a second preparation failure must not be saved as the first run's exit"
+    );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
     assert_eq!(
         r.fake
