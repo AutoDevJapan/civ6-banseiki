@@ -247,20 +247,25 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
         fs::remove_file(state)?;
         return Ok(());
     }
-    // The immutable original path already identifies the saved session. Old
-    // Single receipts retain their format; never trust an arbitrary parent.
-    let session =
-        if s.original.parent().and_then(Path::file_name) == Some(std::ffi::OsStr::new("Hotseat")) {
-            SessionType::Hotseat
-        } else {
-            SessionType::SinglePlayer
-        };
-    let expected = profile
-        .join("Documents/My Games/Sid Meier's Civilization VI/Saves")
-        .join(session.save_folder())
-        .canonicalize()?
-        .join("auto");
-    if s.original != expected {
+    // Resolve the allowed profile paths themselves: a parent's canonical name
+    // can differ from its session name (for example an owner junction).
+    // The receipt format remains compatible with older Single recoveries.
+    let mut matches_profile = false;
+    for session in [SessionType::SinglePlayer, SessionType::Hotseat] {
+        let parent = profile
+            .join("Documents/My Games/Sid Meier's Civilization VI/Saves")
+            .join(session.save_folder());
+        match parent.canonicalize() {
+            Ok(parent) if parent.join("auto") == s.original => {
+                matches_profile = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    if !matches_profile {
         return Err(Error::input(
             "autosave recovery path differs from the profile",
         ));
@@ -343,6 +348,52 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hotseat_parent_alias_recovers_with_single_player_directory_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let saves = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves");
+        fs::create_dir_all(&saves).unwrap();
+        let actual = p.join("owner-hotseat-storage");
+        fs::create_dir_all(actual.join("auto")).unwrap();
+        fs::write(actual.join("auto/save"), b"owner hotseat bytes").unwrap();
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            assert!(std::process::Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(saves.join("Hotseat"))
+                .arg(&actual)
+                .creation_flags(0x08000000)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap()
+                .success());
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&actual, saves.join("Hotseat")).unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin_for_session(p, &archive, &state, SessionType::Hotseat).unwrap();
+        fs::write(actual.join("auto/save"), b"test hotseat bytes").unwrap();
+        restore(p, &state).unwrap();
+        assert_eq!(
+            fs::read(actual.join("auto/save")).unwrap(),
+            b"owner hotseat bytes"
+        );
+        assert_eq!(
+            fs::read(archive.join("test-auto/save")).unwrap(),
+            b"test hotseat bytes"
+        );
+        assert!(!state.exists());
+        assert!(!saves.join("Single").exists());
+        #[cfg(windows)]
+        fs::remove_dir(saves.join("Hotseat")).unwrap();
+        #[cfg(unix)]
+        fs::remove_file(saves.join("Hotseat")).unwrap();
+    }
     #[test]
     fn hotseat_isolation_preserves_other_sessions_and_recovers_from_saved_path() {
         let dir = tempfile::tempdir().unwrap();
