@@ -764,15 +764,14 @@ mod tests {
         let text = exit + hello;
         assert_eq!(frontend_after_exit(&text, nonce(), 1), Some("Context.fe1"));
         assert_eq!(frontend_after_exit(&text, nonce(), 2), None);
-        assert_eq!(
-            frontend_after_exit(&text, "00000000000000000000000000000000", 1),
-            None
-        );
+        let other = uuid::Uuid::new_v4().simple().to_string();
+        assert_ne!(other, nonce());
+        assert_eq!(frontend_after_exit(&text, &other, 1), None);
         let keys = frontend_keys(nonce(), 1).unwrap();
         assert_eq!(keys.len(), 39);
         assert_eq!(keys[0], 0x83);
         assert_eq!(keys[38], 0x84);
-        assert!(frontend_keys("short", 1).is_err());
+        assert!(frontend_keys(&nonce()[..7], 1).is_err());
         assert!(frontend_keys(nonce(), 3).is_err());
     }
 }
