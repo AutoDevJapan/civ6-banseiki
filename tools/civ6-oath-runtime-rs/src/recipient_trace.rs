@@ -5,10 +5,25 @@
 use crate::holding_candidate::{HelperProbe, ProbeSnapshot};
 use crate::native::*;
 use crate::oath_record::{OathCall, OathEffectFamily};
+use windows_sys::Win32::Foundation::{GetLastError, SetLastError};
 
 const CAPACITY: usize = 1024;
 const COUNTED: u64 = 1 << 63;
 const MASK: u64 = 0xffff_ffff;
+
+// Observer-only thread state. No allocation or lock; restoration covers every
+// return and Rust unwind from begin/settle, including metadata/production RPM.
+struct LastErrorGuard(u32);
+impl LastErrorGuard {
+    fn new() -> Self {
+        Self(unsafe { GetLastError() })
+    }
+}
+impl Drop for LastErrorGuard {
+    fn drop(&mut self) {
+        unsafe { SetLastError(self.0) };
+    }
+}
 
 #[repr(C)]
 struct ProductionRow {
@@ -300,6 +315,9 @@ unsafe extern "system-unwind" fn begin(
     rbp: u64,
     rdi: u64,
 ) {
+    let _last_error = LastErrorGuard::new();
+    #[cfg(test)]
+    tests::perturb_last_error(0);
     let Some(trace) = (unsafe { TRACE.load(Ordering::Acquire).as_ref() }) else {
         return;
     };
@@ -376,6 +394,9 @@ unsafe extern "system-unwind" fn begin(
     row.state.store(1, Ordering::Release);
 }
 unsafe fn settle(token: *mut u64, rax: Option<u64>) {
+    let _last_error = LastErrorGuard::new();
+    #[cfg(test)]
+    tests::perturb_last_error(1);
     let claim = unsafe { ptr::read_volatile(token) };
     unsafe { ptr::write_volatile(token, 0) };
     if claim & COUNTED == 0 {
@@ -638,11 +659,32 @@ mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
     static CALLS: AtomicU32 = AtomicU32::new(0);
+    const INCOMING_ERROR: u32 = 0x12345678;
+    const ORIGINAL_ERROR: u32 = 0x23456789;
+    static OBSERVED_INCOMING: AtomicU32 = AtomicU32::new(0);
+    static INJECT_RPM_FAILURE: AtomicU32 = AtomicU32::new(0);
+    static RPM_ERRORS: [AtomicU32; 2] = [const { AtomicU32::new(0) }; 2];
+    // Force the same failure class inside both real callbacks so these tests
+    // would fail without the guard. Never assert/panic in this FFI callback.
+    pub(super) fn perturb_last_error(boundary: usize) {
+        if INJECT_RPM_FAILURE.load(Ordering::Acquire) != 0 {
+            let mut bytes = [0u8; 8];
+            let _ = crate::holding_candidate::ReadInto::read_into(&mut Current, 1, &mut bytes);
+            let _ = crate::call_identity::Memory::copy(&mut Current, 1, &mut bytes);
+            RPM_ERRORS[boundary].store(unsafe { GetLastError() }, Ordering::Release);
+        }
+    }
     unsafe extern "system-unwind" fn original(effect: u64, city: u64, r8: u64) -> u64 {
+        OBSERVED_INCOMING.store(unsafe { GetLastError() }, Ordering::Release);
         CALLS.fetch_add(1, Ordering::SeqCst);
-        effect ^ city ^ r8
+        let result = effect ^ city ^ r8;
+        unsafe { SetLastError(ORIGINAL_ERROR) };
+        result
     }
     unsafe extern "system-unwind" fn throwing(_: u64, _: u64, _: u64) -> u64 {
+        OBSERVED_INCOMING.store(unsafe { GetLastError() }, Ordering::Release);
+        CALLS.fetch_add(1, Ordering::SeqCst);
+        unsafe { SetLastError(ORIGINAL_ERROR) };
         panic!("synthetic callee unwind");
     }
     #[test]
@@ -665,14 +707,33 @@ mod tests {
         trace.start().unwrap();
         let f: unsafe extern "system-unwind" fn(u64, u64, u64) -> u64 =
             unsafe { std::mem::transmute(slot.load(Ordering::Acquire)) };
+        INJECT_RPM_FAILURE.store(1, Ordering::Release);
         if case == "overflow" {
             for _ in 0..=CAPACITY {
-                assert_eq!(unsafe { f(7, 0x12340000, 91) }, 7 ^ 0x12340000 ^ 91);
+                unsafe { SetLastError(INCOMING_ERROR) };
+                let value = unsafe { f(7, 0x12340000, 91) };
+                let error = unsafe { GetLastError() };
+                assert_eq!(value, 7 ^ 0x12340000 ^ 91);
+                assert_eq!(error, ORIGINAL_ERROR);
+                assert_eq!(OBSERVED_INCOMING.load(Ordering::Acquire), INCOMING_ERROR);
             }
         } else if case == "unwind" {
+            unsafe { SetLastError(INCOMING_ERROR) };
             assert!(std::panic::catch_unwind(|| unsafe { f(7, 0x12340000, 91) }).is_err());
         } else {
-            assert_eq!(unsafe { f(7, 0x12340000, 91) }, 7 ^ 0x12340000 ^ 91);
+            unsafe { SetLastError(INCOMING_ERROR) };
+            let value = unsafe { f(7, 0x12340000, 91) };
+            let error = unsafe { GetLastError() };
+            assert_eq!(value, 7 ^ 0x12340000 ^ 91);
+            assert_eq!(error, ORIGINAL_ERROR);
+        }
+        INJECT_RPM_FAILURE.store(0, Ordering::Release);
+        assert_eq!(OBSERVED_INCOMING.load(Ordering::Acquire), INCOMING_ERROR);
+        for error in &RPM_ERRORS {
+            let error = error.load(Ordering::Acquire);
+            assert_ne!(error, 0, "RPM failure was actually observed");
+            assert_ne!(error, INCOMING_ERROR);
+            assert_ne!(error, ORIGINAL_ERROR);
         }
         trace.stop();
         let records = trace.records();
@@ -706,16 +767,14 @@ mod tests {
         unsafe { uninstall().unwrap() };
         assert_eq!(slot.load(Ordering::Acquire), target);
         assert!(unsafe { install_at(index, slot as *const _ as usize, target, trace) }.is_err());
-        if case != "unwind" {
-            assert_eq!(
-                CALLS.load(Ordering::Acquire),
-                if case == "overflow" {
-                    CAPACITY as u32 + 1
-                } else {
-                    1
-                }
-            );
-        }
+        assert_eq!(
+            CALLS.load(Ordering::Acquire),
+            if case == "overflow" {
+                CAPACITY as u32 + 1
+            } else {
+                1
+            }
+        );
     }
     #[test]
     fn recipient_gateway_completion_and_unwind_run_in_owned_children() {
