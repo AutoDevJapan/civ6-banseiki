@@ -904,21 +904,25 @@ impl OwnedReader {
             .env("CC_LIVE_TEST_RELEASE", release)
             .env("CC_LIVE_TEST_SHARE", share.to_string())
             .creation_flags(CREATE_NO_WINDOW)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             .spawn()
             .unwrap();
-        let reader = Self {
+        let mut reader = Self {
             child: Some(child),
             release: release.into(),
         };
-        for _ in 0..200 {
-            if ready.exists() {
-                break;
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while !ready.exists() {
+            if let Some(status) = reader.child.as_mut().unwrap().try_wait().unwrap() {
+                panic!("test reader exited before opening the lock: {status}");
             }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "test reader did not open the lock before the startup deadline"
+            );
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(ready.exists(), "test reader did not open the lock");
         reader
     }
 
@@ -933,7 +937,17 @@ impl OwnedReader {
 #[cfg(windows)]
 impl Drop for OwnedReader {
     fn drop(&mut self) {
-        self.finish();
+        if let Some(mut child) = self.child.take() {
+            let _ = fs::write(&self.release, "release");
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while matches!(child.try_wait(), Ok(None)) && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if !matches!(child.try_wait(), Ok(Some(_))) {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
     }
 }
 
@@ -1109,18 +1123,12 @@ fn delete_pending_access_denied_is_bounded_and_preserves_the_reader() {
 #[cfg(windows)]
 #[test]
 fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
-    use std::{
-        os::windows::process::CommandExt,
-        process::{Child, Command, Stdio},
-        thread,
-        time::Duration,
-    };
     struct Blocked {
         fake: Fake,
         lock: PathBuf,
         ready: PathBuf,
         release: PathBuf,
-        child: Option<Child>,
+        reader: Option<OwnedReader>,
     }
     impl Runner for Blocked {
         fn run(&mut self, c: Call) -> Result<Output, String> {
@@ -1144,31 +1152,18 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
         }
         fn sleep(&mut self, s: f64) -> Result<(), String> {
             assert_eq!(s, 0.05);
-            fs::write(&self.release, "release").unwrap();
-            assert!(self.child.take().unwrap().wait().unwrap().success());
+            self.reader.as_mut().unwrap().finish();
             self.fake.sleep(s)
         }
         fn print(&mut self, s: &str) -> Result<(), String> {
             self.fake.print(s)?;
             if s.starts_with("RESULT fixture s.json prepare-failed") {
-                let child = Command::new(std::env::current_exe().unwrap())
-                    .args(["--ignored", "--exact", "release_reader_child"])
-                    .env("CC_LIVE_TEST_LOCK", &self.lock)
-                    .env("CC_LIVE_TEST_READY", &self.ready)
-                    .env("CC_LIVE_TEST_RELEASE", &self.release)
-                    .creation_flags(CREATE_NO_WINDOW)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .unwrap();
-                self.child = Some(child);
-                for _ in 0..200 {
-                    if self.ready.exists() {
-                        break;
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                assert!(self.ready.exists(), "test reader did not open the lock");
+                self.reader = Some(OwnedReader::spawn(
+                    &self.lock,
+                    &self.ready,
+                    &self.release,
+                    1,
+                ));
                 assert_eq!(
                     fs::remove_file(&self.lock).unwrap_err().raw_os_error(),
                     Some(32)
@@ -1183,7 +1178,7 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
         lock: f.p.here.join("civ6.lock"),
         ready: f.root.join("reader-ready"),
         release: f.root.join("reader-release"),
-        child: None,
+        reader: None,
     };
     assert_eq!(failed_prepare_cli(&mut r, &f.p).unwrap(), 1);
     assert_normal_closes(&r.fake.calls, 1);
