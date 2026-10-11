@@ -1,11 +1,14 @@
 local A=assert(JAC_AbsorptionGameplay);local R=A.Rules
+local sourceOwner=route=='AI2_PALACE_TO_HUMAN0_TEMPLE' and 2 or 0
+local recipientOwner=route=='AI2_PALACE_TO_HUMAN0_TEMPLE' and 0 or 1
 local function fresh()
- return {Version=1,Nonce=nonce,Generation=0,ResumeStep=6,NextOperation=1,Receipts={},NetworkMultiplayer=GameConfiguration.IsNetworkMultiplayer(),HotseatQualification='UI_VERIFIED_SETTING_AND_ACTUAL_TWO_LIVING_HUMANS'}
+ return {Version=1,Nonce=nonce,Route=route,Generation=0,ResumeStep=6,NextOperation=1,Receipts={},NetworkMultiplayer=GameConfiguration.IsNetworkMultiplayer(),HotseatQualification='UI_VERIFIED_SETTING_AND_ACTUAL_TWO_LIVING_HUMANS'}
 end
 local function read()
  local b=Game:GetProperty(bridgeKey)
  if not b then return fresh() end
  assert(b.Version==1 and b.Nonce==nonce,'saved witness identity changed')
+ assert(b.Route==route or (b.Route==nil and route=='HUMAN0_PALACE_TO_HUMAN1_TEMPLE'),'saved witness route changed')
  return b
 end
 local function box() return R.Copy(read()) end
@@ -19,11 +22,11 @@ prepareSave=function(generation)
  if generation==1 then
   assert(c.MP.Phase=='BORROWED' and not c.MP.Claimed,'mid-loan checkpoint already advanced')
   local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y));local l=assert(c.MP.Loans[2])
-  assert(c.MP.Actor==0 and c.MP.MoveOwner==0 and l.Owner==1 and l.Issued and city:GetOwner()==0 and city:GetID()==l.BorrowedID,'mid-loan actual human-source city changed')
+  assert(c.MP.Actor==0 and c.MP.MoveOwner==sourceOwner and l.Owner==recipientOwner and l.Issued and city:GetOwner()==sourceOwner and city:GetID()==l.BorrowedID,'mid-loan actual source city changed')
  else
   assert(r.Status=='COMPLETE' and c.MP.Phase=='DONE','returned checkpoint incomplete')
   local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))
-  assert(city:GetOwner()==1 and city:GetID()==c.MP.Loans[2].FinalID,'actual returned city changed')
+  assert(city:GetOwner()==recipientOwner and city:GetID()==c.MP.Loans[2].FinalID,'actual returned city changed')
  end
  b.Generation=generation;b.ResumeStep=generation==1 and 33 or 41
  if generation==2 then
@@ -39,6 +42,9 @@ end
 local function receive(actor,p)
  assert(nativeHotseat(),'actual two-human roster or verified hotseat setting changed')
  assert(type(p)=='table' and p.Version==1 and p.Command=='FIXED' and p.Nonce==nonce,'invalid fixed witness packet')
+ assert(p.Route==route,'fixed witness packet route changed')
+ local currentRoute=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_ROUTE')
+ assert(currentRoute==nil or currentRoute==route,'live witness route changed')
  assert(actor==0 and p.Actor==0 and Players[0]:IsAlive() and Players[0]:IsHuman()
   and Players[0]:IsTurnActive() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'actual human0 fixture turn required')
  local humans=0
@@ -75,7 +81,7 @@ end)
 ExposedMembers.JAC_NativeCarrierWitness={Get=function() return R.Copy(box()) end}
 ExposedMembers.JAC_NativeCarrierWitness.GetHeader=function()
  local b=read()
- return {Version=b.Version,Nonce=b.Nonce,Generation=b.Generation,ResumeStep=b.ResumeStep,
+ return {Version=b.Version,Nonce=b.Nonce,Route=b.Route,Generation=b.Generation,ResumeStep=b.ResumeStep,
   NextOperation=b.NextOperation,SaveName=b.SaveName,Failure=b.Failure,
   NetworkMultiplayer=b.NetworkMultiplayer,HotseatQualification=b.HotseatQualification}
 end

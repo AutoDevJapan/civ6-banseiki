@@ -25,9 +25,192 @@ if not nativeHotseat() then return end
 local bridgeKey='JAC_NATIVE_CARRIER_WITNESS_V1'
 local fixtureKey='JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'
 
+local configuredRoute=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_ROUTE')
+assert(configuredRoute==nil or configuredRoute=='HUMAN0_PALACE_TO_HUMAN1_TEMPLE' or configuredRoute=='AI2_PALACE_TO_HUMAN0_TEMPLE','unknown native witness route')
+local savedRoute=Game:GetProperty(bridgeKey)
+local route=(savedRoute and savedRoute.Route) or configuredRoute or 'HUMAN0_PALACE_TO_HUMAN1_TEMPLE'
+assert(route=='HUMAN0_PALACE_TO_HUMAN1_TEMPLE' or route=='AI2_PALACE_TO_HUMAN0_TEMPLE','unknown native witness route')
+assert(configuredRoute==nil or configuredRoute==route,'native witness route changed')
+
 local prepareSave
-local operations={}
-local operation_order={}
+local operations,operation_order
+if route=='AI2_PALACE_TO_HUMAN0_TEMPLE' then
+operations={}
+operation_order={}
+operations[8]=function()
+local A=assert(JAC_AbsorptionGameplay)
+assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))==nil,'fixture already exists')
+-- Gameplay does not expose the UI Hotseat getters. The immediately preceding
+-- UI readiness check proves Hotseat; recheck the real living roster and reject
+-- network/unknown sessions here before creating any native asset.
+assert(type(GameConfiguration.IsNetworkMultiplayer)=='function'
+ and GameConfiguration.IsNetworkMultiplayer()==false,'non-network hotseat required')
+local humans=0
+for _,id in ipairs(PlayerManager.GetAliveIDs()) do
+ local player=assert(Players[id])
+ if player:IsHuman() then
+  assert((id==0 or id==1) and player:IsAlive(),'unexpected human slot')
+  humans=humans+1
+ end
+end
+assert(humans==2 and Players[0]:IsAlive() and Players[1]:IsAlive(),'need two living humans')
+assert(Players[0]:IsHuman() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'need human0/human1/AI2')
+local site=assert(ExposedMembers.JAC996Site,'detached UI site absent')
+local q=assert(Map.GetPlotByIndex(site.Index))
+assert(q:GetX()==site.X and q:GetY()==site.Y and q:GetOwner()==0 and not q:IsCity()
+ and not q:IsWater() and not q:IsMountain() and not q:IsImpassable()
+ and q:GetDistrictType()==-1 and q:GetImprovementType()==-1,'selected city plot changed')
+local range=assert(tonumber(GlobalParameters.CITY_MIN_RANGE))
+for _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do
+ assert(Map.GetPlotDistance(site.X,site.Y,city:GetX(),city:GetY())>range,'selected plot violates city spacing')
+end end
+local cities=Players[0]:GetCities();local capital=assert(cities:GetCapitalCity());local n=cities:GetCount()
+local source=assert(Players[2]:GetCities():GetCapitalCity())
+-- Stock TunerMapPanel.lua:111-121 uses player:GetCities():Create(x,y).
+-- Do not guess a CityManager.InitCity signature or synthesize a city/slot.
+assert(type(cities.Create)=='function','missing stock native city creation: Cities:Create(x,y)')
+cities:Create(site.X,site.Y)
+local target=assert(CityManager.GetCityAt(site.X,site.Y),'native city creation rejected owned land')
+assert(target:GetOwner()==0 and cities:GetCount()==n+1 and target:GetID()~=capital:GetID(),'native noncapital creation failed')
+assert(cities:GetCapitalCity():GetID()==capital:GetID(),'recipient capital changed')
+local function identity(c) return {Owner=c:GetOwner(),ID=c:GetID(),X=c:GetX(),Y=c:GetY()} end
+local e={Label='DEDICATED_EXISTING_ORIGINAL_ARCHIVE_SEED_NOT_ADMISSION_OR_FLOW',Recipient=0,Donor=2,
+ Token='fixture-native-hotseat-996',Source=identity(source),Target=identity(target),Capital=identity(capital),
+ FreeCity=assert(PlayerManager.GetFreeCitiesPlayerID()),Fixtures={}}
+Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)
+return 'created genuine extra recipient city; fixture archive seed is separate from normal admission'
+end
+operation_order[#operation_order+1]=8
+operations[11]=function()
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
+local plan=assert(ExposedMembers.JAC996TemplePlan)
+local c=assert(CityManager.GetCityAt(plan.X,plan.Y))
+assert(c:GetOwner()==0 and c:GetID()==e.Target.ID and plan.ID==e.Target.ID,'detached Temple plan changed')
+e.Fixtures.carrier=A.Rules.Copy(plan)
+-- Use the existing registered governance property to make restoration non-vacuous.
+assert(c:GetProperty(A.Rules.GOVERNANCE_KEY)==nil,'fresh city has unexpected governance')
+c:SetProperty(A.Rules.GOVERNANCE_KEY,{ID='fixture-native-hotseat-996',From=2,To=0,FrictionPerTurn=0,
+ Fixture='DEDICATED_ARCHIVE_SEED',Nested={Original=true,Value=996}})
+Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)
+return 'persisted detached stock Temple plan and registered city property sentinel'
+end
+operation_order[#operation_order+1]=11
+operations[12]=function()
+-- Mutations run in Gameplay; never enumerate UI-only city district members here.
+local function requestTemple(label,stage)
+ local t=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
+ local target=assert(t.Fixtures[label])
+ local token=label..':'..stage
+ local r=assert(ExposedMembers.JAC_NativeTempleObservation[label],label..': UI temple observation missing')
+ assert(r.Token==token and r.Owner==target.Owner and r.ID==target.ID and r.X==target.X and r.Y==target.Y and r.Plot==target.Plot,
+  label..': mismatched temple observation')
+ assert(type(r.Read)=='number' and (not target.Request or r.Read>target.Request.Read),label..': stale UI temple observation')
+ assert(not target.Request or target.Request.Stage~=stage,label..': duplicate temple request')
+ assert(stage=='Holy' or stage=='Shrine' or stage=='Temple','unknown temple stage')
+ if stage~='Holy' then assert(r.Holy,label..': completed exact-city Holy Site not published') end
+ if stage=='Temple' then assert(r.Shrine,label..': completed shrine not published') end
+ local city=assert(CityManager.GetCityAt(target.X,target.Y))
+ assert(city:GetOwner()==target.Owner and city:GetID()==target.ID,label..': Gameplay city identity changed')
+ assert(r[stage] or not r[stage..'Present'],
+  label..': existing '..stage..' is incomplete, pillaged, or in another plot; refusing duplicate construction')
+ target.Request={Stage=stage,Token=token,Read=r.Read}
+ Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',t)
+ if not r[stage] then
+  local queue=city:GetBuildQueue()
+  local ok,value=pcall(function()
+   if stage=='Holy' then
+    queue:CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index,target.Plot,100)
+   else
+    local kind=stage=='Shrine' and 'BUILDING_SHRINE' or 'BUILDING_TEMPLE'
+    queue:CreateIncompleteBuilding(assert(GameInfo.Buildings[kind]).Index,target.Plot,100)
+   end
+  end)
+  assert(ok,label..':'..stage..' request failed: '..tostring(value))
+ end
+ print('[JAC_NATIVE_TEMPLE_REQUEST] fixture='..label..' stage='..stage..' token='..token..' beforeRead='..r.Read..' city='..target.ID..' plot='..target.Plot..' alreadyComplete='..tostring(r[stage]))
+ return 'requested '..label..' '..stage..'; fresh UI publication required'
+end
+ExposedMembers.JAC_NativeTempleRequest=requestTemple
+end
+operation_order[#operation_order+1]=12
+operations[14]=function()
+return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Holy')
+end
+operation_order[#operation_order+1]=14
+operations[17]=function()
+return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Shrine')
+end
+operation_order[#operation_order+1]=17
+operations[20]=function()
+return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Temple')
+end
+operation_order[#operation_order+1]=20
+operations[24]=function()
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
+local p=assert(ExposedMembers.JAC996GrantPlan);local c=assert(CityManager.GetCityAt(p.X,p.Y))
+local r=assert(ExposedMembers.JAC_NativeTempleObservation.carrier);local req=assert(e.Fixtures.carrier.Request)
+assert(req.Stage=='Temple' and r.Token=='carrier:grant' and r.Read>req.Read and r.Temple and r.SlotValue==-1,'fresh stock Temple publication missing')
+assert(p.Owner==2 and c:GetOwner()==2 and c:GetID()==e.Source.ID and p.City==e.Source.ID,'Palace grant plan changed')
+assert(not e.GrantIssued,'official modifier may be used exactly once')
+e.GrantIssued=true;e.Before=A.Rules.Copy(p.Before);e.Palace=p.Palace;e.CityBefore=A.Rules.Copy(assert(ExposedMembers.JAC996CityBefore))
+e.RecipientUnits=A.Rules.Copy(assert(ExposedMembers.JAC996RecipientUnits))
+Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)
+Players[2]:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')
+return 'issued exactly one official relic grant to AI2, without creating any Great Work'
+end
+operation_order[#operation_order+1]=24
+operations[27]=function()
+local A=assert(JAC_AbsorptionGameplay);local R=A.Rules
+local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
+local original=assert(ExposedMembers.JAC996Original,'actual original UI observation absent')
+assert(e.GrantIssued and original.Owner==2 and original.CityID==e.Source.ID and not e.Before[original.Index],'fixture original changed')
+e.Original=R.Copy(original);e.AssetID='native-work:'..original.Index
+local s=A.GetState();assert(not s.Archive[e.AssetID] and not s.Recoveries[e.Token],'fixture identity already admitted')
+-- Dedicated fixture archive seed of an EXISTING native original. This is not
+-- normal admission, a scatter outcome, or evidence that full Flow succeeded.
+s.Archive[e.AssetID]={ID=e.AssetID,Kind='ITEM',Owner=-1,NativeOwnerMoves=0,NativeWork=R.Copy(original),
+ FixtureSeed=e.Label}
+Game:SetProperty(R.STATE_KEY,s);Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)
+local r=A.RecoverArchived(e.AssetID,0,e.Token)
+assert(r.Status=='WAITING_UI' and r.ObservationToken==e.Token..':inventory','public recovery did not request synchronized NativeInventory')
+assert(not A.GetState().Recoveries[e.Token] or not A.GetState().Recoveries[e.Token].NativeCarrier,'initial inventory bypassed synchronized publication')
+return 'public RecoverArchived waiting for product NativeInventory; no Gameplay UI fallback'
+end
+operation_order[#operation_order+1]=27
+operations[29]=function()
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
+local b=assert(ExposedMembers.JAC996Borrowed,'fresh actual borrowed observation absent')
+local r=assert(A.GetState().Recoveries[e.Token]);local m=assert(r.NativeCarrier.MP)
+local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))
+assert(m.Phase=='BORROWED' and b.Phase==m.Phase and b.Nonce==m.Nonce and city:GetOwner()==b.Owner
+ and city:GetID()==b.ID and b.Owner==2 and not m.Claimed,'borrowed checkpoint changed')
+e.Borrowed=A.Rules.Copy(b)
+Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)
+return A.Canonical({Borrowed=e.Borrowed,Recovery=r})
+end
+operation_order[#operation_order+1]=29
+operations[30]=function() return prepareSave(1) end
+operation_order[#operation_order+1]=30
+operations[34]=function()
+local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))
+local before=assert(A.GetState().Recoveries[e.Token]);assert(before.NativeCarrier.MP.Phase=='DONE','unmodified executor did not finish')
+local events=assert(ExposedMembers.JAC996MoveEvents,'native MOVE event observer absent')
+assert(#events==1,'expected exactly one real native GreatWorkMoved event, observed '..#events)
+e.NativeMoveEvents=A.Rules.Copy(events);e.NativeMoveCount=#events
+Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)
+-- Finalize the public recovery after automatic MP executor completion.
+-- No direct MP.Advance, TransferCity, MOVE request, or record patching.
+local r=A.RecoverArchived(e.AssetID,0,e.Token)
+assert(r.Status=='COMPLETE' and r.NativePhysicalMoved and r.NativeMoveEvidenceKind=='SYNCHRONIZED_ACTOR_OBSERVATION','public native recovery incomplete')
+return 'public recovery complete, with one observed native move event'
+end
+operation_order[#operation_order+1]=34
+operations[38]=function() return prepareSave(2) end
+operation_order[#operation_order+1]=38
+
+else
+operations={}
+operation_order={}
 operations[8]=function()
 local A=assert(JAC_AbsorptionGameplay)
 assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))==nil,'fixture already exists')
@@ -199,14 +382,19 @@ operation_order[#operation_order+1]=34
 operations[38]=function() return prepareSave(2) end
 operation_order[#operation_order+1]=38
 
+end
+
 local A=assert(JAC_AbsorptionGameplay);local R=A.Rules
+local sourceOwner=route=='AI2_PALACE_TO_HUMAN0_TEMPLE' and 2 or 0
+local recipientOwner=route=='AI2_PALACE_TO_HUMAN0_TEMPLE' and 0 or 1
 local function fresh()
- return {Version=1,Nonce=nonce,Generation=0,ResumeStep=6,NextOperation=1,Receipts={},NetworkMultiplayer=GameConfiguration.IsNetworkMultiplayer(),HotseatQualification='UI_VERIFIED_SETTING_AND_ACTUAL_TWO_LIVING_HUMANS'}
+ return {Version=1,Nonce=nonce,Route=route,Generation=0,ResumeStep=6,NextOperation=1,Receipts={},NetworkMultiplayer=GameConfiguration.IsNetworkMultiplayer(),HotseatQualification='UI_VERIFIED_SETTING_AND_ACTUAL_TWO_LIVING_HUMANS'}
 end
 local function read()
  local b=Game:GetProperty(bridgeKey)
  if not b then return fresh() end
  assert(b.Version==1 and b.Nonce==nonce,'saved witness identity changed')
+ assert(b.Route==route or (b.Route==nil and route=='HUMAN0_PALACE_TO_HUMAN1_TEMPLE'),'saved witness route changed')
  return b
 end
 local function box() return R.Copy(read()) end
@@ -220,11 +408,11 @@ prepareSave=function(generation)
  if generation==1 then
   assert(c.MP.Phase=='BORROWED' and not c.MP.Claimed,'mid-loan checkpoint already advanced')
   local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y));local l=assert(c.MP.Loans[2])
-  assert(c.MP.Actor==0 and c.MP.MoveOwner==0 and l.Owner==1 and l.Issued and city:GetOwner()==0 and city:GetID()==l.BorrowedID,'mid-loan actual human-source city changed')
+  assert(c.MP.Actor==0 and c.MP.MoveOwner==sourceOwner and l.Owner==recipientOwner and l.Issued and city:GetOwner()==sourceOwner and city:GetID()==l.BorrowedID,'mid-loan actual source city changed')
  else
   assert(r.Status=='COMPLETE' and c.MP.Phase=='DONE','returned checkpoint incomplete')
   local city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))
-  assert(city:GetOwner()==1 and city:GetID()==c.MP.Loans[2].FinalID,'actual returned city changed')
+  assert(city:GetOwner()==recipientOwner and city:GetID()==c.MP.Loans[2].FinalID,'actual returned city changed')
  end
  b.Generation=generation;b.ResumeStep=generation==1 and 33 or 41
  if generation==2 then
@@ -240,6 +428,9 @@ end
 local function receive(actor,p)
  assert(nativeHotseat(),'actual two-human roster or verified hotseat setting changed')
  assert(type(p)=='table' and p.Version==1 and p.Command=='FIXED' and p.Nonce==nonce,'invalid fixed witness packet')
+ assert(p.Route==route,'fixed witness packet route changed')
+ local currentRoute=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_ROUTE')
+ assert(currentRoute==nil or currentRoute==route,'live witness route changed')
  assert(actor==0 and p.Actor==0 and Players[0]:IsAlive() and Players[0]:IsHuman()
   and Players[0]:IsTurnActive() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'actual human0 fixture turn required')
  local humans=0
@@ -276,7 +467,7 @@ end)
 ExposedMembers.JAC_NativeCarrierWitness={Get=function() return R.Copy(box()) end}
 ExposedMembers.JAC_NativeCarrierWitness.GetHeader=function()
  local b=read()
- return {Version=b.Version,Nonce=b.Nonce,Generation=b.Generation,ResumeStep=b.ResumeStep,
+ return {Version=b.Version,Nonce=b.Nonce,Route=b.Route,Generation=b.Generation,ResumeStep=b.ResumeStep,
   NextOperation=b.NextOperation,SaveName=b.SaveName,Failure=b.Failure,
   NetworkMultiplayer=b.NetworkMultiplayer,HotseatQualification=b.HotseatQualification}
 end

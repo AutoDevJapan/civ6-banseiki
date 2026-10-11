@@ -15,6 +15,7 @@ use std::{
 };
 
 use civ6_autotest_rs::hotseat_native_carrier as protocol;
+use civ6_autotest_rs::native_carrier_witness::WitnessRoute;
 
 #[derive(Parser)]
 #[command(about = "Validate the fixed native-carrier hotseat log protocol")]
@@ -29,6 +30,8 @@ enum Command {
         output: PathBuf,
         #[arg(long)]
         repo: PathBuf,
+        #[arg(long, value_enum, default_value = "human")]
+        route: WitnessRoute,
     },
     Pregame {
         output: PathBuf,
@@ -86,6 +89,7 @@ const BINDINGS: [&str; 5] = [
 struct Bundle {
     version: u8,
     nonce: String,
+    route: WitnessRoute,
     bindings: std::collections::BTreeMap<String, String>,
 }
 
@@ -96,7 +100,7 @@ fn file_hash(path: &Path) -> Result<String> {
 
 fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
     let b: Bundle = serde_json::from_slice(&fs::read(output.join("bundle.json"))?)?;
-    if b.version != 3 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
+    if b.version != 4 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
         return Err(Error::scenario("invalid fixed witness bundle"));
     }
     for relative in BINDINGS {
@@ -109,18 +113,20 @@ fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
     Ok(b)
 }
 
-fn pregame_flags(nonce: &str) -> String {
+fn pregame_flags(nonce: &str, route: WitnessRoute) -> String {
     let key = scenario::lua_string(NONCE_KEY);
     let value = scenario::lua_string(nonce);
     let hotseat = scenario::lua_string(civ6_autotest_rs::native_carrier_witness::HOTSEAT_KEY);
-    format!("assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'actual hotseat frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue({hotseat}, true)\nlocal confirmed=GameConfiguration.GetValue({hotseat})\nassert(confirmed==true or confirmed==1,'hotseat confirmation was not applied')\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
+    let route_key = scenario::lua_string(civ6_autotest_rs::native_carrier_witness::ROUTE_KEY);
+    let route_value = scenario::lua_string(route.identifier());
+    format!("assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'actual hotseat frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue({route_key}, {route_value})\nassert(GameConfiguration.GetValue({route_key})=={route_value},'witness route was not applied')\nGameConfiguration.SetValue({hotseat}, true)\nlocal confirmed=GameConfiguration.GetValue({hotseat})\nassert(confirmed==true or confirmed==1,'hotseat confirmation was not applied')\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
 }
 
 fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
     verify_lease()?;
     let b = bundle(output, repo)?;
     let state = state(&output.join("controller.jsonl"))?;
-    if state.journal.nonce != b.nonce || state.processed != 0 {
+    if state.journal.nonce != b.nonce || state.route != b.route || state.processed != 0 {
         return Err(Error::scenario(
             "pregame requires this new initialized controller",
         ));
@@ -148,7 +154,7 @@ fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> 
             verify_owner(&mut io, &state)
         })?;
     }
-    let flag = pregame_flags(&b.nonce);
+    let flag = pregame_flags(&b.nonce, b.route);
     writeln!(receipt, "nonce")?;
     receipt.sync_all()?;
     let deadline = io.now() + 30.;
@@ -170,6 +176,7 @@ fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct State {
     journal: protocol::Journal,
+    route: WitnessRoute,
     baseline: serde_json::Value,
     processed: usize,
     prefix_hash: String,
@@ -203,6 +210,15 @@ fn state(path: &Path) -> Result<State> {
 fn digest(frames: &[protocol::Frame]) -> Result<String> {
     use sha2::{Digest, Sha256};
     Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(frames)?)))
+}
+
+fn verify_boot_route(frame: &protocol::Frame, route: WitnessRoute) -> Result<()> {
+    if frame.kind == "BOOT" && frame.payload()?.code.as_deref() != Some(route.identifier()) {
+        return Err(Error::scenario(
+            "observed witness route differs from prepared route",
+        ));
+    }
+    Ok(())
 }
 
 fn verify_owner(io: &mut SystemTransport<'_>, state: &State) -> Result<()> {
@@ -251,7 +267,8 @@ fn drive(
     lock.try_lock()
         .map_err(|_| Error::scenario("native carrier controller is already active"))?;
     let mut state = state(&path)?;
-    if bundle(output, repo)?.nonce != state.journal.nonce {
+    let prepared = bundle(output, repo)?;
+    if prepared.nonce != state.journal.nonce || prepared.route != state.route {
         return Err(Error::scenario("controller bundle nonce differs"));
     }
     if state.journal.complete {
@@ -290,6 +307,7 @@ fn drive(
             return Err(Error::scenario("consumed log frames changed"));
         }
         for frame in &frames[state.processed..] {
+            verify_boot_route(frame, state.route)?;
             let action = state.journal.consume(frame)?;
             state.processed += 1;
             state.prefix_hash = digest(&frames[..state.processed])?;
@@ -377,7 +395,11 @@ fn drive(
 
 fn run(args: Args) -> Result<()> {
     match args.command {
-        Command::Prepare { output, repo } => {
+        Command::Prepare {
+            output,
+            repo,
+            route,
+        } => {
             if fs::read_dir(&output)?.next().is_some() {
                 return Err(Error::scenario(
                     "prepared output must be an empty owned directory",
@@ -388,8 +410,9 @@ fn run(args: Args) -> Result<()> {
                 bindings.insert(relative.to_owned(), file_hash(&repo.join(relative))?);
             }
             let value = Bundle {
-                version: 3,
+                version: 4,
                 nonce: uuid::Uuid::new_v4().simple().to_string(),
+                route,
                 bindings,
             };
             let mut file = OpenOptions::new()
@@ -424,7 +447,8 @@ fn run(args: Args) -> Result<()> {
             saves,
         } => {
             verify_lease()?;
-            if bundle(&output, &repo)?.nonce != nonce {
+            let prepared = bundle(&output, &repo)?;
+            if prepared.nonce != nonce {
                 return Err(Error::scenario("init bundle nonce differs"));
             }
             for generation in [1, 2] {
@@ -445,6 +469,7 @@ fn run(args: Args) -> Result<()> {
                 .open(&path)?;
             let value = State {
                 journal,
+                route: prepared.route,
                 baseline: judge::snapshot_logs(&logs)?,
                 processed: 0,
                 prefix_hash: digest(&[])?,
@@ -485,11 +510,67 @@ mod tests {
     }
 
     #[test]
+    fn ai_route_is_selected_explicitly_and_boot_matches_the_frozen_bundle() {
+        let args = Args::try_parse_from([
+            "controller",
+            "prepare",
+            "out",
+            "--repo",
+            "repo",
+            "--route",
+            "ai",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Command::Prepare {
+                route: WitnessRoute::Ai,
+                ..
+            }
+        ));
+        assert!(Args::try_parse_from([
+            "controller",
+            "prepare",
+            "out",
+            "--repo",
+            "repo",
+            "--route",
+            "unknown"
+        ])
+        .is_err());
+        let lua = mlua::Lua::new();
+        lua.load("VALUES={};UI={IsInFrontEnd=function() return true end};GameConfiguration={IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,SetValue=function(k,v) VALUES[k]=v end,GetValue=function(k) return VALUES[k] end}").exec().unwrap();
+        lua.load(format!("local observed=(function() {} end)();assert(observed=={} and VALUES.JAC_NATIVE_CARRIER_WITNESS_ROUTE=={})",pregame_flags(nonce(),WitnessRoute::Ai),scenario::lua_string(nonce()),scenario::lua_string(WitnessRoute::Ai.identifier()))).exec().unwrap();
+        for code in [
+            None,
+            Some(WitnessRoute::Human.identifier()),
+            Some(WitnessRoute::Ai.identifier()),
+        ] {
+            let frame = protocol::Frame {
+                nonce: nonce().into(),
+                scene: "scene0".into(),
+                serial: 1,
+                generation: 0,
+                step: 0,
+                kind: "BOOT".into(),
+                body: serde_json::json!({"generation":0,"canonical":"actual","code":code})
+                    .to_string(),
+            };
+            assert_eq!(
+                verify_boot_route(&frame, WitnessRoute::Ai).is_ok(),
+                code == Some(WitnessRoute::Ai.identifier())
+            );
+        }
+    }
+
+    #[test]
     fn pregame_flags_use_the_stock_value_api_and_verify_the_actual_mode() {
         let lua = mlua::Lua::new();
         lua.load("local values={};UI={IsInFrontEnd=function() return true end};GameConfiguration={IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,SetValue=function(k,v) values[k]=v end,GetValue=function(k) return values[k] end}").exec().unwrap();
         assert_eq!(
-            lua.load(pregame_flags(nonce())).eval::<String>().unwrap(),
+            lua.load(pregame_flags(nonce(), WitnessRoute::Human))
+                .eval::<String>()
+                .unwrap(),
             nonce()
         );
         assert!(lua
@@ -501,9 +582,15 @@ mod tests {
             .unwrap();
         let other = uuid::Uuid::new_v4().simple().to_string();
         assert_ne!(other, nonce());
-        assert!(lua.load(pregame_flags(&other)).eval::<String>().is_err());
+        assert!(lua
+            .load(pregame_flags(&other, WitnessRoute::Human))
+            .eval::<String>()
+            .is_err());
         lua.load("local read=GameConfiguration.GetValue;GameConfiguration.GetValue=function(k) if k=='GAMEMODE_HEROES' then return false end;return read(k) end").exec().unwrap();
-        assert!(lua.load(pregame_flags(nonce())).eval::<String>().is_err());
+        assert!(lua
+            .load(pregame_flags(nonce(), WitnessRoute::Human))
+            .eval::<String>()
+            .is_err());
     }
 
     #[test]
@@ -520,6 +607,7 @@ mod tests {
                 },
             )
             .unwrap(),
+            route: WitnessRoute::Human,
             baseline: serde_json::json!({}),
             processed: 0,
             prefix_hash: digest(&[]).unwrap(),
@@ -554,6 +642,7 @@ mod tests {
                 },
             )
             .unwrap(),
+            route: WitnessRoute::Human,
             baseline: serde_json::json!({}),
             processed: 0,
             prefix_hash: digest(&[]).unwrap(),
@@ -599,8 +688,9 @@ fn current_bundle_requires_five_matching_files_and_refuses_legacy_version() {
         fs::write(file, b"deployed bytes").unwrap();
     }
     let mut value = Bundle {
-        version: 3,
+        version: 4,
         nonce: run_nonce.clone(),
+        route: WitnessRoute::Human,
         bindings: std::collections::BTreeMap::new(),
     };
     for relative in BINDINGS {
@@ -614,7 +704,7 @@ fn current_bundle_requires_five_matching_files_and_refuses_legacy_version() {
     value.version = 1;
     fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(bundle(&output, &repo).is_err());
-    value.version = 3;
+    value.version = 4;
     value.bindings.remove(BINDINGS[4]);
     fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(bundle(&output, &repo).is_err());

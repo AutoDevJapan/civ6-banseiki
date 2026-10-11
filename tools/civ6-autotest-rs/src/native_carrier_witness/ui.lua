@@ -1,6 +1,7 @@
 local api=assert(ExposedMembers.JAC_Absorption,'product Gameplay must initialize before native witness UI')
 local bridge=assert(ExposedMembers.JAC_NativeCarrierWitness,'fixed Gameplay witness entry missing')
 local loaded=bridge.Get();assert(loaded.Nonce==nonce)
+assert(loaded.Route==route or (loaded.Route==nil and route=='HUMAN0_PALACE_TO_HUMAN1_TEMPLE'),'UI witness route changed')
 local generation=loaded.Generation
 local step=loaded.ResumeStep
 local booted=false
@@ -63,7 +64,7 @@ local function send(n)
  pending={Step=n,Generation=generation}
  -- Gameplay validates the actual actor, fixed order and save generation.
  UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_NativeCarrierWitness_Operation',
-  Version=1,Command='FIXED',Nonce=nonce,Actor=0,Generation=generation,Step=n,Turn=Game.GetCurrentGameTurn()})
+  Version=1,Command='FIXED',Nonce=nonce,Route=route,Actor=0,Generation=generation,Step=n,Turn=Game.GetCurrentGameTurn()})
 end
 local function saveGame(n)
  local b=bridge.Get();generation=b.Generation
@@ -144,7 +145,7 @@ end
 -- before Begin. The importing script has not yet subscribed normal HeroKeys
 -- or inventory observers. Actual listener registration precedes these frames.
 local construction=bridge.GetHeader()
-emit('BOOT',generation,0,canonical({Bridge=construction,Fixture=Game:GetProperty(fixtureKey),State=api.GetState()}))
+emit('BOOT',generation,0,canonical({Bridge=construction,Fixture=Game:GetProperty(fixtureKey),State=api.GetState()}),{code=route})
 assert(generation~=1 or earlyArmed)
 emit('LOAD_READY',generation,0,canonical({EarlyMoveListenerRegistered=earlyArmed,LoadScreenCloseReceived=loadClosed,Bridge=construction}))
 booted=true

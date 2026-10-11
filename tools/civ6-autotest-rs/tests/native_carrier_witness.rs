@@ -267,6 +267,15 @@ fn gp_with_ui_getters(ui_getters: bool) -> Lua {
 }
 
 fn gp_context(ui_getters: bool, multiplayer: bool, confirmed: bool) -> Lua {
+    gp_context_for_route(ui_getters, multiplayer, confirmed, None)
+}
+
+fn gp_context_for_route(
+    ui_getters: bool,
+    multiplayer: bool,
+    confirmed: bool,
+    route: Option<&str>,
+) -> Lua {
     let run_id = nonce();
     let lua = Lua::new();
     lua.load(RULES).exec().unwrap();
@@ -274,9 +283,10 @@ fn gp_context(ui_getters: bool, multiplayer: bool, confirmed: bool) -> Lua {
         .set("NATIVE_MULTIPLAYER", multiplayer)
         .unwrap();
     lua.globals().set("HOTSEAT_CONFIRMED", confirmed).unwrap();
+    lua.globals().set("WITNESS_ROUTE", route).unwrap();
     lua.load(format!(r#"
 local R=JAC_AbsorptionRules
-GameConfiguration={{IsNetworkMultiplayer=function() return NATIVE_MULTIPLAYER end,GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_HOTSEAT' then return HOTSEAT_CONFIRMED end;return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
+GameConfiguration={{IsNetworkMultiplayer=function() return NATIVE_MULTIPLAYER end,GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_HOTSEAT' then return HOTSEAT_CONFIRMED elseif k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' elseif k=='JAC_NATIVE_CARRIER_WITNESS_ROUTE' then return WITNESS_ROUTE end end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
 PROPS={{}};WRITES={{}};CREATES=0
 Game={{GetProperty=function(_,k) return R.Copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=R.Copy(v);WRITES[#WRITES+1]=R.Copy(v) end,GetCurrentGameTurn=function() return 1 end}}
 local function player(id) return {{IsAlive=function() return true end,IsHuman=function() return id<2 end,IsTurnActive=function() return id==0 end}} end
@@ -314,7 +324,7 @@ fn gameplay_requires_actual_two_humans_and_verified_ui_hotseat_setting() {
         lua.load("assert(RECEIVE==nil and ExposedMembers.JAC_NativeCarrierWitness==nil and #WRITES==0 and CREATES==0)").exec().unwrap();
     }
     let lua = gp_with_ui_getters(false);
-    lua.load(format!("HOTSEAT_CONFIRMED=false;RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
+    lua.load(format!("HOTSEAT_CONFIRMED=false;RECEIVE(0,{{Version=1,Command='FIXED',Route='HUMAN0_PALACE_TO_HUMAN1_TEMPLE',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
     for change in [
         "NATIVE_MULTIPLAYER=true",
         "Players[1].IsHuman=function() return false end",
@@ -323,7 +333,7 @@ fn gameplay_requires_actual_two_humans_and_verified_ui_hotseat_setting() {
     ] {
         let lua = gp_context(false, false, true);
         lua.load(change).exec().unwrap();
-        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
+        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Route='HUMAN0_PALACE_TO_HUMAN1_TEMPLE',Nonce='{}',Actor=0,Generation=0,Step=8,Turn=1}});assert(CREATES==0 and next(ExposedMembers.JAC_NativeCarrierWitness.Get().Receipts)==nil and ExposedMembers.JAC_NativeCarrierWitness.Get().Failure)",nonce())).exec().unwrap();
     }
 }
 
@@ -348,7 +358,7 @@ fn core_persists_attempt_before_failure_and_never_replays_it() {
     // First fixed operation is native CREATE at protocol step 8. The missing
     // real site is an intentional failure, not a substitute city creation.
     let packet = format!(
-        "{{Version=1,Command='FIXED',Nonce='{run_id}',Actor=0,Generation=0,Step=8,Turn=1}}"
+        "{{Version=1,Command='FIXED',Route='HUMAN0_PALACE_TO_HUMAN1_TEMPLE',Nonce='{run_id}',Actor=0,Generation=0,Step=8,Turn=1}}"
     );
     lua.load(format!("RECEIVE(0,{packet});RECEIVE(0,{packet})"))
         .exec()
@@ -380,7 +390,7 @@ fn wrong_actor_generation_and_runtime_source_fail_before_mutation() {
     ] {
         let lua = gp();
         lua.load(format!(
-            "RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{run_id}',Turn=1,{extra}}})"
+            "RECEIVE(0,{{Version=1,Command='FIXED',Route='HUMAN0_PALACE_TO_HUMAN1_TEMPLE',Nonce='{run_id}',Turn=1,{extra}}})"
         ))
         .exec()
         .unwrap();
@@ -518,11 +528,88 @@ fn human_route_changes_only_fixed_roles_and_keeps_the_ai_tuner_fixture_exact() {
     assert_eq!(actual, original);
 }
 
+#[test]
+fn ai_log_plan_keeps_the_original_42_steps_and_native_roles_exact() {
+    let ai = witness::fixture_for_route(witness::WitnessRoute::Ai);
+    assert_eq!(ai, witness::fixture());
+    assert_eq!(ai["steps"].as_array().unwrap().len(), 42);
+    for (index, step) in ai["steps"].as_array().unwrap().iter().enumerate().skip(4) {
+        let code = step["code"]
+            .as_str()
+            .or_else(|| step["condition"]["code"].as_str());
+        if let Some(code) = code {
+            let binding = if step["state_name"] == "JAC_Absorption_Entry" {
+                witness::gameplay_binding()
+            } else {
+                witness::ui_binding()
+            };
+            assert!(
+                binding.contains(code),
+                "original command missing at stage {}",
+                index + 2
+            );
+        }
+    }
+    let lua = loaded_ui_for_route(false, witness::WitnessRoute::Ai);
+    lua.load("assert(ADD_ORDER[1]=='MOVE' and ADD_ORDER[2]=='CLOSE');MOVE(0,2,0,44,7,99);MOVE(2,2,2,44,7,37);assert(#ExposedMembers.JAC996MoveEvents==0);MOVE(2,2,2,44,7,99);assert(#ExposedMembers.JAC996MoveEvents==1)").exec().unwrap();
+}
+
+#[test]
+fn ai_checkpoint_preserves_roles_and_survives_frontend_setting_reset() {
+    for owner in [0, 2] {
+        let lua = gp_context_for_route(false, false, true, Some(witness::AI_ROUTE));
+        lua.globals().set("CITY_OWNER", owner).unwrap();
+        lua.load(r#"
+local R=JAC_AbsorptionRules
+local b=ExposedMembers.JAC_NativeCarrierWitness.Get();b.NextOperation=10;Game:SetProperty('JAC_NATIVE_CARRIER_WITNESS_V1',b)
+Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',{Token='fixture-native-hotseat-996',Target={X=3,Y=4}})
+CityManager={GetCityAt=function() return {GetOwner=function() return CITY_OWNER end,GetID=function() return 44 end} end}
+JAC_AbsorptionGameplay.GetState=function() return {Recoveries={['fixture-native-hotseat-996']={NativeCarrier={MP={Phase='BORROWED',Actor=0,MoveOwner=2,Loans={{},{Owner=0,Issued=true,BorrowedID=44}}}}}}} end
+local nonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+RECEIVE(0,{Version=1,Command='FIXED',Route=WITNESS_ROUTE,Nonce=nonce,Actor=0,Generation=0,Step=30,Turn=1})
+local observed=ExposedMembers.JAC_NativeCarrierWitness.Get()
+assert(observed.Route==WITNESS_ROUTE)
+if CITY_OWNER==2 then assert(observed.Generation==1 and observed.Receipts['0:30'].Status=='COMPLETE')
+else assert(observed.Generation==0 and observed.Receipts['0:30'].Status=='FAIL') end
+WITNESS_ROUTE=nil
+"#).exec().unwrap();
+        lua.load(witness::gameplay_binding()).exec().unwrap();
+        lua.load("assert(ExposedMembers.JAC_NativeCarrierWitness.GetHeader().Route=='AI2_PALACE_TO_HUMAN0_TEMPLE');BEFORE=#WRITES;WITNESS_ROUTE='HUMAN0_PALACE_TO_HUMAN1_TEMPLE'").exec().unwrap();
+        let error = lua.load(witness::gameplay_binding()).exec().unwrap_err();
+        assert!(error.to_string().contains("native witness route changed"));
+        lua.load("assert(#WRITES==BEFORE)").exec().unwrap();
+    }
+}
+
+#[test]
+fn wrong_or_unknown_route_cannot_issue_a_native_operation() {
+    let lua = gp_context_for_route(false, false, true, Some(witness::AI_ROUTE));
+    lua.load(r#"
+local nonce=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+RECEIVE(0,{Version=1,Command='FIXED',Route='HUMAN0_PALACE_TO_HUMAN1_TEMPLE',Nonce=nonce,Actor=0,Generation=0,Step=8,Turn=1})
+local b=ExposedMembers.JAC_NativeCarrierWitness.Get()
+assert(b.Failure and next(b.Receipts)==nil and CREATES==0)
+BEFORE=#WRITES;WITNESS_ROUTE='unknown'
+"#).exec().unwrap();
+    let error = lua.load(witness::gameplay_binding()).exec().unwrap_err();
+    assert!(error.to_string().contains("unknown native witness route"));
+    lua.load("assert(#WRITES==BEFORE and CREATES==0)")
+        .exec()
+        .unwrap();
+}
+
 fn loaded_ui(claimed: bool) -> Lua {
+    loaded_ui_for_route(claimed, witness::WitnessRoute::Human)
+}
+
+fn loaded_ui_for_route(claimed: bool, route: witness::WitnessRoute) -> Lua {
     let run_id = nonce();
     // Trusted repository-only test code uses debug upvalues to isolate the
     // save callback ordering. This VM never accepts external game packets.
     let lua = unsafe { Lua::unsafe_new() };
+    lua.globals()
+        .set("WITNESS_ROUTE", route.identifier())
+        .unwrap();
     lua.load(RULES).exec().unwrap();
     lua.globals().set("CLAIMED", claimed).unwrap();
     lua.load(format!(r#"
@@ -533,7 +620,7 @@ UI={{GetElapsedTime=function() return 10.125 end}}
 E={{Token='fixture-native-hotseat-996',Original={{Index=99,GreatWorkType='RELIC'}},Borrowed={{ID=44,Phase='BORROWED'}},Source={{ID=2}}}}
 M={{Phase='BORROWED',Claimed=CLAIMED,Actor=0,MoveOwner=0,Loans={{{{}},{{Building=7,Owner=1}}}}}}
 NATIVE={{Recoveries={{['fixture-native-hotseat-996']={{NativeCarrier={{MP=M}}}}}}}}
-GameConfiguration={{GetValue=function() return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,IsPaused=function() return PAUSED end}}
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' elseif k=='JAC_NATIVE_CARRIER_WITNESS_ROUTE' then return WITNESS_ROUTE end end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,IsPaused=function() return PAUSED end}}
 Game={{GetProperty=function(_,k) if k=='JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996' then return E else return b end end,GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 1 end}}
 GameInfo={{GreatWorks={{RELIC={{Index=37}}}}}}
 ExposedMembers={{JAC_Absorption={{GetState=function() return NATIVE end,Canonical=R.Canonical}},
@@ -548,6 +635,9 @@ Events={{GreatWorkMoved={{Add=function(f) MOVE=f;ADD_ORDER[#ADD_ORDER+1]='MOVE' 
  LoadScreenClose={{Add=function(f) CLOSE=f;ADD_ORDER[#ADD_ORDER+1]='CLOSE' end}}}}
 print=function(s) LOGS[#LOGS+1]=s end
 "#)).exec().unwrap();
+    if route == witness::WitnessRoute::Ai {
+        lua.load("M.MoveOwner=2;M.Loans[2].Owner=0;local oldGet=ExposedMembers.JAC_NativeCarrierWitness.Get;ExposedMembers.JAC_NativeCarrierWitness.Get=function() local b=oldGet();b.Route=WITNESS_ROUTE;return b end").exec().unwrap();
+    }
     lua.load(
         fs::read_to_string(
             repo_root().join("poc/JAC_PoC_Absorption/UI/JAC_NativeCarrierWitness_UI.lua"),
@@ -833,7 +923,7 @@ Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',{Token='fixture-native-ho
 CityManager={GetCityAt=function(x,y) assert(x==3 and y==4);return {GetOwner=function() return CITY_OWNER end,GetID=function() return 44 end} end}
 JAC_AbsorptionGameplay.GetState=function() return {Recoveries={['fixture-native-hotseat-996']={NativeCarrier={MP={Phase='BORROWED',Actor=0,MoveOwner=0,Loans={{},{Owner=1,Issued=true,BorrowedID=44}}}}}}} end
 "#).exec().unwrap();
-        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Nonce='{run_id}',Actor=0,Generation=0,Step=30,Turn=1}})")).exec().unwrap();
+        lua.load(format!("RECEIVE(0,{{Version=1,Command='FIXED',Route='HUMAN0_PALACE_TO_HUMAN1_TEMPLE',Nonce='{run_id}',Actor=0,Generation=0,Step=30,Turn=1}})")).exec().unwrap();
         let b = lua
             .globals()
             .get::<mlua::Table>("ExposedMembers")
@@ -869,7 +959,7 @@ fn scene_freezes_saved_generation_without_frontend_game_or_clock_apis() {
         let lua = Lua::new();
         lua.load(RULES).exec().unwrap();
         lua.load(format!(r#"
-GameConfiguration={{GetValue=function() return '{run_id}' end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
+GameConfiguration={{GetValue=function(k) if k=='JAC_NATIVE_CARRIER_WITNESS_NONCE' then return '{run_id}' end end,IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end}}
 ContextPtr=setmetatable({{}},{{__tostring=function() return 'reusedContextAddress' end}})
 LOGS={{}};print=function(s) LOGS[#LOGS+1]=s end
 "#)).exec().unwrap();
