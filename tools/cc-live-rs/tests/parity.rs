@@ -529,6 +529,205 @@ fn holder_inspection_failure_is_not_treated_as_a_dead_owner() {
     fs::write(f.p.jobs.join("partial/job.json"), "{").unwrap();
     assert!(holder_alive(&mut r, &f.p, &json!({"job":"partial"})).is_err());
 }
+
+struct NativeProof {
+    inner: Fake,
+    identity: Result<Option<process::ProcessIdentity>, String>,
+    queried: Vec<u32>,
+    elapsed: f64,
+}
+impl Runner for NativeProof {
+    fn run(&mut self, call: Call) -> Result<Output, String> {
+        self.inner.run(call)
+    }
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        _timeout: f64,
+    ) -> Result<Option<process::ProcessIdentity>, String> {
+        self.queried.push(pid);
+        self.inner.time += self.elapsed;
+        self.identity.clone()
+    }
+    fn now(&mut self) -> f64 {
+        self.inner.now()
+    }
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.inner.sleep(seconds)
+    }
+}
+fn native_proof(identity: Result<Option<process::ProcessIdentity>, String>) -> NativeProof {
+    NativeProof {
+        inner: Fake::success(),
+        identity,
+        queried: vec![],
+        elapsed: 0.0,
+    }
+}
+
+#[test]
+fn native_waiter_identity_preserves_image_creation_and_job_authority() {
+    let f = Fixture::new();
+    f.json("jobs/active/job.json", json!({"status":"running"}));
+    let owner = json!({"job":"active","live_chain":true,"pid":123,"pid_created_filetime":41});
+    for (image, created, expected) in [
+        ("live_chain.exe", 41, true),
+        ("LIVE_CHAIN_PR86.EXE", 41, true),
+        ("live_chain.exe", 42, false),
+        ("codex.exe", 41, false),
+        ("CivilizationVI.exe", 41, false),
+        ("steam.exe", 41, false),
+    ] {
+        let mut r = native_proof(Ok(Some(process::ProcessIdentity {
+            image: image.into(),
+            created_filetime: Some(created),
+        })));
+        assert_eq!(holder_alive(&mut r, &f.p, &owner).unwrap(), expected);
+        assert_eq!(r.queried, [123], "native proof must actually be consulted");
+        assert!(r.inner.calls.is_empty());
+    }
+    let mut gone = native_proof(Ok(None));
+    assert!(!holder_alive(&mut gone, &f.p, &owner).unwrap());
+    assert_eq!(gone.queried, [123]);
+    let mut missing_stamp = native_proof(Ok(Some(process::ProcessIdentity {
+        image: "live_chain.exe".into(),
+        created_filetime: Some(41),
+    })));
+    assert!(holder_alive(
+        &mut missing_stamp,
+        &f.p,
+        &json!({"live_chain":true,"pid":123})
+    )
+    .unwrap_err()
+    .contains("creation time missing"));
+    let mut denied = native_proof(Err("access denied".into()));
+    assert!(holder_alive(&mut denied, &f.p, &owner).is_err());
+    assert_eq!(denied.queried, [123]);
+    f.json("jobs/active/job.json", json!({"status":"succeeded"}));
+    let mut ended = native_proof(Err("must not query an ended job".into()));
+    assert!(!holder_alive(&mut ended, &f.p, &owner).unwrap());
+    assert!(ended.queried.is_empty());
+    // A positive fallback control proves that the command boundary is wired.
+    let mut legacy = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+    assert!(holder_alive(&mut legacy, &f.p, &json!({"live_chain":true,"pid":123})).unwrap());
+    assert_eq!(legacy.calls.len(), 1);
+}
+
+#[test]
+fn native_waiter_probe_is_forwarded_and_keeps_the_absolute_observation_deadline() {
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json(
+        "here/queue/waiter.json",
+        json!({"pid":123,"live_chain":true,"pid_created_filetime":41,"since":1000}),
+    );
+    let identity = Ok(Some(process::ProcessIdentity {
+        image: "live_chain.exe".into(),
+        created_filetime: Some(41),
+    }));
+    let mut r = native_proof(identity);
+    r.inner.time = 1000.0;
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    assert_eq!(
+        process::observe_lease(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Contended(2800.0)
+    );
+    assert_eq!(r.queried, [123]);
+    assert!(r.inner.calls.is_empty());
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    r.elapsed = 2.5;
+    assert_eq!(
+        process::observe_lease(&mut r, &limit).unwrap(),
+        process::LeaseProbe::TimedOut
+    );
+    assert_eq!(limit.observation_deadline(), Some(1005.0));
+    assert!(process::observe_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.inner.time, 1005.0);
+}
+
+#[cfg(windows)]
+#[test]
+fn native_waiter_query_reads_current_process_from_one_handle() {
+    let id = std::process::id();
+    let identity = process::native_process_identity(id).unwrap().unwrap();
+    assert_eq!(
+        identity.created_filetime,
+        process_created_filetime(id).unwrap()
+    );
+    assert_eq!(
+        identity.image,
+        std::env::current_exe()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+    );
+    assert!(process::native_process_identity(u32::MAX)
+        .unwrap()
+        .is_none());
+}
+#[cfg(windows)]
+#[test]
+#[ignore = "only spawned by native_waiter_real_runner_rejects_an_exited_259_process"]
+fn native_identity_exit_259_helper() {
+    let Some(root) = std::env::var_os("CC_LIVE_NATIVE_EXIT_TEST") else {
+        return;
+    };
+    let root = PathBuf::from(root);
+    fs::write(root.join("ready"), "ready").unwrap();
+    let started = std::time::Instant::now();
+    while !root.join("exit").exists() {
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    std::process::exit(259);
+}
+
+#[cfg(windows)]
+#[test]
+fn native_waiter_real_runner_rejects_an_exited_259_process() {
+    use std::os::windows::process::CommandExt;
+    struct OwnedChild(std::process::Child);
+    impl Drop for OwnedChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let f = Fixture::new();
+    let mut child = OwnedChild(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "native_identity_exit_259_helper"])
+            .env("CC_LIVE_NATIVE_EXIT_TEST", &f.root)
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let started = std::time::Instant::now();
+    while !f.root.join("ready").exists() {
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        assert!(child.0.try_wait().unwrap().is_none());
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let owner = json!({"pid":child.0.id()});
+    assert!(holder_alive(&mut process::RealRunner, &f.p, &owner).unwrap());
+    fs::write(f.root.join("exit"), "exit").unwrap();
+    assert_eq!(child.0.wait().unwrap().code(), Some(259));
+    // Keep Child's process handle open: this is a signalled handle, not merely
+    // an invalid PID. A STILL_ACTIVE/259 comparison would falsely accept it.
+    assert!(process::native_process_identity(child.0.id())
+        .unwrap()
+        .is_none());
+    assert!(!holder_alive(&mut process::RealRunner, &f.p, &owner).unwrap());
+}
+
 #[test]
 fn short_waiter_precedes_older_long_waiter() {
     let f = Fixture::new();
@@ -588,6 +787,32 @@ fn same_priority_is_first_come_first_served() {
         json!({"job":"other","long":0,"since":1}),
     );
     f.json("jobs/other/job.json", json!({"status":"running"}));
+    assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+}
+#[test]
+fn dispatched_job_in_queue_uses_arrival_order_instead_of_blocking_earlier_waiter() {
+    let f = Fixture::new();
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":1}),
+    );
+    let peer = f.json(
+        "here/queue/peer.json",
+        json!({"job":"peer","long":0,"since":2}),
+    );
+    for job in ["mine", "peer"] {
+        f.json(&format!("jobs/{job}/job.json"), json!({"status":"running"}));
+    }
+    f.json(
+        "todo/todo.json",
+        json!({"items":[{
+            "status":"doing","needs":["civ6"],"scheduler":{"job":"peer"}
+        }]}),
+    );
+    assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+    assert!(!my_turn(&mut Fake::success(), &f.p, &peer).unwrap());
+    // Until the dispatched job registers, its reservation is still honoured.
+    fs::remove_file(peer).unwrap();
     assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
 }
 #[test]
@@ -1423,7 +1648,16 @@ fn default_chain_retains_failure_even_after_a_later_success() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 7);
     // Two normal closes (6 commands each), preparation and scenario = 14 calls.
-    r.replies.extend(ready_chain(&f, 0).replies);
+    let mut second = ready_chain(&f, 0);
+    second.replies[READY_PREPARE_REPLY] = Ok(Output {
+        stdout: format!(
+            "{}\n{}\n",
+            path(f.root.join("scenario.json")),
+            path(f.root.join("artifacts-second"))
+        ),
+        ..Output::default()
+    });
+    r.replies.extend(second.replies);
     assert_eq!(
         cli(&mut r, &f.p, &args(&["a:s.json", "b:s.json"])).unwrap(),
         7
@@ -1431,6 +1665,8 @@ fn default_chain_retains_failure_even_after_a_later_success() {
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 2);
     assert_eq!(r.printed.last().unwrap(), "CHAIN FAILED");
     assert!(!r.printed.iter().any(|s| s == "CHAIN DONE"));
+    assert!(f.root.join("artifacts/exit-evidence.json").is_file());
+    assert!(f.root.join("artifacts-second/exit-evidence.json").is_file());
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 
@@ -2127,6 +2363,11 @@ fn driver_timeout_keeps_failure_log_and_releases_lock() {
         .contains("partial startup diagnostic"));
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 1);
     assert!(!f.p.here.join("civ6.lock").exists());
+    let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
+    assert!(evidence["primary_chain_error"]
+        .as_str()
+        .unwrap()
+        .contains("partial startup diagnostic"));
 }
 
 #[test]
@@ -2139,6 +2380,15 @@ fn driver_and_cleanup_errors_are_both_reported() {
     assert!(error.contains("driver failed"));
     assert!(error.contains("cleanup failed"));
     assert!(!f.p.here.join("civ6.lock").exists());
+    let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
+    assert!(evidence["primary_chain_error"]
+        .as_str()
+        .unwrap()
+        .contains("driver failed"));
+    assert!(evidence["cleanup_error"]
+        .as_str()
+        .unwrap()
+        .contains("cleanup failed"));
 }
 
 #[test]
@@ -4270,6 +4520,10 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
     };
     let error = cli(&mut r, &f.p, &["a:s.json".into(), "b:s.json".into()]).unwrap_err();
     assert!(error.contains("ownership changed"), "{error}");
+    assert!(
+        !f.root.join("artifacts/exit-evidence-cleanup.json").exists(),
+        "a second preparation failure must not be saved as the first run's exit"
+    );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
     assert_eq!(
         r.fake
@@ -4573,5 +4827,154 @@ fn ordinary_hotseat_selects_its_autosaves_and_preserves_single_player() {
         }
         assert!(!f.p.here.join("reliability-auto-state.json").exists());
         assert!(!f.p.here.join("civ6.lock").exists());
+    }
+}
+
+#[test]
+fn renderer_bytes_are_saved_before_cleanup_for_driver_exit_error_and_panic() {
+    struct Capture {
+        fake: Fake,
+        p: Paths,
+        artifacts: PathBuf,
+        dispatched: bool,
+        panic_driver: bool,
+        missing_log: bool,
+        inspected_cleanup: bool,
+    }
+    impl Runner for Capture {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            if is_driver(&call) {
+                assert!(!self.artifacts.exists(), "driver owns its CREATE_NEW leaf");
+                fs::create_dir_all(&self.artifacts).unwrap();
+                let owner = read_json(self.p.here.join("civ6.lock")).unwrap();
+                write_json(
+                    self.artifacts.join("capture.driver-request.json"),
+                    &json!({"pid":4242,"created_filetime":116_444_736_000_000_001u64,
+                        "chain_pid":owner["chain_pid"],
+                        "chain_created_filetime":owner["pid_created_filetime"]}),
+                )
+                .unwrap();
+                if !self.missing_log {
+                    let log = self.p.profile.join(
+                        "AppData/Local/Firaxis Games/Sid Meier's Civilization VI/Logs/Renderer.log",
+                    );
+                    fs::create_dir_all(log.parent().unwrap()).unwrap();
+                    fs::write(log, b"CPU renderer raw\r\n\xff\0").unwrap();
+                }
+                self.dispatched = true;
+                let result = self.fake.run(call);
+                if self.panic_driver {
+                    panic!("driver panic after log creation");
+                }
+                return result;
+            }
+            if self.dispatched && call.args[0] == "tasklist" && !self.inspected_cleanup {
+                assert!(self.p.here.join("civ6.lock").exists());
+                let stage = if self.panic_driver {
+                    "outer-before-close"
+                } else {
+                    "driver-return"
+                };
+                let saved = read_json(
+                    self.artifacts
+                        .join("renderer-evidence")
+                        .join(format!("{stage}.json")),
+                )
+                .unwrap();
+                assert_eq!(saved["renderer_selection_verified"], false);
+                if self.missing_log {
+                    assert_eq!(saved["capture_status"], "failed");
+                } else {
+                    assert_eq!(
+                        fs::read(saved["raw_path"].as_str().unwrap()).unwrap(),
+                        b"CPU renderer raw\r\n\xff\0"
+                    );
+                }
+                self.inspected_cleanup = true;
+            }
+            let closing = self.dispatched && is_tuner(&call) && call.args[1] == "lua";
+            let result = self.fake.run(call);
+            if closing && !self.missing_log {
+                fs::write(
+                    self.p.profile.join(
+                        "AppData/Local/Firaxis Games/Sid Meier's Civilization VI/Logs/Renderer.log",
+                    ),
+                    b"CPU renderer raw\r\n\xff\0shutdown appended",
+                )
+                .unwrap();
+            }
+            result
+        }
+        fn process_identity(
+            &mut self,
+            pid: u32,
+            timeout: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            if pid == 4242 {
+                assert!(self.p.here.join("civ6.lock").exists());
+                return Ok(Some(process::ProcessIdentity {
+                    image: "CivilizationVI.exe".into(),
+                    created_filetime: Some(116_444_736_000_000_001),
+                }));
+            }
+            self.fake.process_identity(pid, timeout)
+        }
+        fn now(&mut self) -> f64 {
+            self.fake.now()
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.fake.sleep(seconds)
+        }
+        fn print(&mut self, text: &str) -> Result<(), String> {
+            self.fake.print(text)
+        }
+        fn error(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    for outcome in ["success", "nonzero", "error", "panic", "missing-nonzero"] {
+        let f = Fixture::new();
+        let code = if outcome.contains("nonzero") { 37 } else { 0 };
+        let mut fake = ready_chain(&f, code);
+        if outcome == "error" {
+            fake.replies[READY_DRIVER_REPLY] = Err("original driver failure".into());
+        }
+        let mut r = Capture {
+            fake,
+            p: f.p.clone(),
+            artifacts: f.root.join("artifacts"),
+            dispatched: false,
+            panic_driver: outcome == "panic",
+            missing_log: outcome == "missing-nonzero",
+            inspected_cleanup: false,
+        };
+        let result = cli(&mut r, &f.p, &args(&["--stop-on-failure", "a:s.json"]));
+        match outcome {
+            "error" => assert!(result.unwrap_err().contains("original driver failure")),
+            "panic" => assert!(result.unwrap_err().contains("live chain panicked")),
+            _ => assert_eq!(result.unwrap(), code),
+        }
+        assert!(r.inspected_cleanup, "{outcome}");
+        assert!(!f.p.here.join("civ6.lock").exists(), "{outcome}");
+        if !r.missing_log {
+            let stage = if outcome == "error" || outcome == "panic" {
+                "outer-after-close"
+            } else {
+                "after-close"
+            };
+            assert_eq!(
+                fs::read(
+                    r.artifacts
+                        .join("renderer-evidence")
+                        .join(format!("{stage}.Renderer.log"))
+                )
+                .unwrap(),
+                b"CPU renderer raw\r\n\xff\0shutdown appended",
+                "{outcome}"
+            );
+        }
+        if outcome == "error" || outcome == "panic" {
+            assert!(r.artifacts.join("exit-evidence-cleanup.json").is_file());
+        }
     }
 }
