@@ -1275,6 +1275,9 @@ struct Debugger {
     game: Handle,
     module_base: u64,
     module_size: u64,
+    // Verified before attach; deny file writes/deletion until debugger cleanup.
+    #[cfg(feature = "bootstrap-order")]
+    order_core_pin: Option<File>,
     mode: ProbeMode,
     attached_at: Instant,
     event_ordinal: u64,
@@ -1425,6 +1428,8 @@ impl Debugger {
             terminal: TerminalKind::Attached,
             ready: false,
             attach_ready_deadline: None,
+            #[cfg(feature = "bootstrap-order")]
+            order_core_pin: None,
             attach_origin,
             query_thread_start,
             ntdll_evidence,

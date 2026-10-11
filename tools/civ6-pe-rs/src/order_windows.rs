@@ -20,6 +20,9 @@ fn approved_chain_image(path: &Path) -> Result<&'static str, String> {
         .ok_or_else(|| "order observer chain image is not approved".into())
 }
 fn pin_hashed_chain_file(path: &Path, expected_sha: &str) -> Result<File, String> {
+    pin_hashed_image_file(path, expected_sha, "AMD chain")
+}
+fn pin_hashed_image_file(path: &Path, expected_sha: &str, purpose: &str) -> Result<File, String> {
     use std::os::windows::fs::OpenOptionsExt;
     // Keep the approved on-disk image immutable through GO, observation and
     // recovery. Hash once while denying writes/deletes, not on every event.
@@ -27,20 +30,20 @@ fn pin_hashed_chain_file(path: &Path, expected_sha: &str) -> Result<File, String
         .read(true)
         .share_mode(1)
         .open(path)
-        .map_err(|e| format!("AMD chain image pin failed: {e}"))?;
+        .map_err(|e| format!("{purpose} image pin failed: {e}"))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
         let n = pin
             .read(&mut buffer)
-            .map_err(|e| format!("AMD chain image read failed: {e}"))?;
+            .map_err(|e| format!("{purpose} image read failed: {e}"))?;
         if n == 0 {
             break;
         }
         hasher.update(&buffer[..n]);
     }
     if format!("{:x}", hasher.finalize()) != expected_sha {
-        return Err("order observer AMD chain SHA mismatch".into());
+        return Err(format!("order observer {purpose} SHA mismatch"));
     }
     Ok(pin)
 }
@@ -178,6 +181,9 @@ impl CaptureEpoch {
             );
         }
         let core = core_module(d.pid)?.ok_or("stopped native capture Core missing")?;
+        if d.order_core_pin.is_none() {
+            return Err("native capture lacks retained Core identity".into());
+        }
         let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
         let expected_core = self.sites[0]
             .and_then(|address| address.checked_sub(self.phase.sites()[0].rva))
@@ -193,10 +199,7 @@ impl CaptureEpoch {
             .ok_or("native capture EXE site missing")?;
         // Called only with an outstanding debug event or the complete phase
         // freeze. GO/attach preparation is not a stopped module snapshot.
-        if core.base != expected_core
-            || !same_path(&core.path, &core_path)
-            || sha256(&core.path)? != plan::CORE_SHA
-        {
+        if core.base != expected_core || !same_path(&core.path, &core_path) {
             return Err("stopped native capture Core identity differs".into());
         }
         for site in *self.phase.sites() {
@@ -880,9 +883,10 @@ pub fn observe(req: Request) -> Result<(), String> {
     let disk = fs::read(&exe.path).map_err(|e| e.to_string())?;
     let mut static_proof = plan::disk_sites(&disk)?;
     let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
-    if sha256(&core_path)? != plan::CORE_SHA {
-        return Err("GameCore disk hash differs".into());
-    }
+    // Validate once while denying writes/deletion. Rehashing the complete PE
+    // on every attach thread/DLL event can exhaust the fixed readiness budget.
+    let core_pin = pin_hashed_image_file(&core_path, plan::CORE_SHA, "Core")?;
+    static_proof["core_file_pinned"] = json!(true);
     static_proof["native_outer"] =
         plan::disk_native_sites(&fs::read(&core_path).map_err(|e| e.to_string())?)?;
     static_proof["native_shutdown"] =
@@ -951,6 +955,7 @@ pub fn observe(req: Request) -> Result<(), String> {
         )
     })?;
     d.mode = ProbeMode::Property; // existing restoration walks our pinned threads
+    d.order_core_pin = Some(core_pin);
     d.attach_ready_deadline = Some(Instant::now() + ATTACH_READY_BUDGET);
     let initial_context = read_pointer(&d.game, exe.base + 0x22d60c0)?;
     let mut module_identities = BTreeMap::new();
@@ -1020,7 +1025,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                     if desired.is_native() {
                         if native_core_unloaded { return Err("native capture Core lifetime ended since attach".into()); }
                         let core = core_module(req.pid)?.ok_or("native capture requires loaded Core")?;
-                        if Some(core.base) != capture_core_base || !same_path(&core.path, &core_path) || sha256(&core.path)? != plan::CORE_SHA {
+                        if Some(core.base) != capture_core_base || !same_path(&core.path, &core_path) || d.order_core_pin.is_none() {
                             return Err("native capture Core changed since attach".into());
                         }
                     }
@@ -1080,7 +1085,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                     )?;
                     if let Some(core) = core_module(req.pid)? {
                         if !same_path(&core.path, &core_path)
-                            || sha256(&core.path)? != plan::CORE_SHA
+                            || d.order_core_pin.is_none()
                         {
                             return Err("loaded GameCore identity differs".into());
                         }
@@ -1600,25 +1605,29 @@ mod tests {
             // A refusal must release its handle as well.
             drop(fs::OpenOptions::new().write(true).open(&owned.0).unwrap());
         }
-        let pin = pin_hashed_chain_file(
-            &owned.0,
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-        )
-        .unwrap();
-        assert_eq!(
-            fs::OpenOptions::new()
-                .write(true)
-                .open(&owned.0)
-                .unwrap_err()
-                .raw_os_error(),
-            Some(32)
-        );
-        assert_eq!(
-            fs::remove_file(&owned.0).unwrap_err().raw_os_error(),
-            Some(32)
-        );
-        assert_eq!(fs::read(&owned.0).unwrap(), b"abc");
-        drop(pin);
+        for purpose in ["AMD chain", "Core"] {
+            let pin = pin_hashed_image_file(
+                &owned.0,
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                purpose,
+            )
+            .unwrap();
+            assert_eq!(
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(&owned.0)
+                    .unwrap_err()
+                    .raw_os_error(),
+                Some(32)
+            );
+            assert_eq!(
+                fs::remove_file(&owned.0).unwrap_err().raw_os_error(),
+                Some(32)
+            );
+            assert_eq!(fs::read(&owned.0).unwrap(), b"abc");
+            drop(pin);
+            drop(fs::OpenOptions::new().write(true).open(&owned.0).unwrap());
+        }
         fs::write(&owned.0, b"released").unwrap();
         fs::remove_file(&owned.0).unwrap();
         assert!(!owned.0.exists());
