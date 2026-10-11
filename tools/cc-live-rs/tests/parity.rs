@@ -778,6 +778,32 @@ fn same_priority_is_first_come_first_served() {
     assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
 }
 #[test]
+fn dispatched_job_in_queue_uses_arrival_order_instead_of_blocking_earlier_waiter() {
+    let f = Fixture::new();
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":1}),
+    );
+    let peer = f.json(
+        "here/queue/peer.json",
+        json!({"job":"peer","long":0,"since":2}),
+    );
+    for job in ["mine", "peer"] {
+        f.json(&format!("jobs/{job}/job.json"), json!({"status":"running"}));
+    }
+    f.json(
+        "todo/todo.json",
+        json!({"items":[{
+            "status":"doing","needs":["civ6"],"scheduler":{"job":"peer"}
+        }]}),
+    );
+    assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+    assert!(!my_turn(&mut Fake::success(), &f.p, &peer).unwrap());
+    // Until the dispatched job registers, its reservation is still honoured.
+    fs::remove_file(peer).unwrap();
+    assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+}
+#[test]
 fn stale_waiter_removed_and_broken_waiter_ignored() {
     let f = Fixture::new();
     let me = f.json("here/queue/me.json", json!({"long":1,"since":2}));
