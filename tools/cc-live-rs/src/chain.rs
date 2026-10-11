@@ -62,7 +62,13 @@ pub const REPORTER_COMMAND: &str = r#"
         if ($_.ExecutablePath -eq $expected) {
             $parent = Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue
             if (-not $parent -or $parent.ProcessName -notin @('CivilizationVI','CivilizationVI_DX12')) {
-                Stop-Process -Id $_.ProcessId -ErrorAction Stop
+                try {
+                    Stop-Process -Id $_.ProcessId -ErrorAction Stop
+                } catch {
+                    # The reporter can exit between enumeration and termination.
+                    # Keep access failures and other errors visible.
+                    if ($_.FullyQualifiedErrorId -notlike 'NoProcessFoundForGivenId,*') { throw }
+                }
             }
         }
     }
@@ -468,6 +474,21 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
     else {
         return Ok(false);
     };
+    if let Some(result) = r.process_identity(pid as u32) {
+        let Some(identity) = result? else {
+            return Ok(false);
+        };
+        let image = identity.image;
+        return Ok((info["live_chain"] != true || live_chain_image(&image))
+            && !CIV_EXECUTABLES
+                .iter()
+                .chain(["FiraxisBugReporter.exe", "steam.exe"].iter())
+                .any(|excluded| image.eq_ignore_ascii_case(excluded))
+            && (info["live_chain"] != true
+                || info["pid_created_filetime"]
+                    .as_u64()
+                    .is_none_or(|expected| identity.created_filetime == expected)));
+    }
     let out = r.run(
         Call::new(args(&[
             "tasklist",
@@ -1149,6 +1170,19 @@ pub(crate) struct WithinDeadline<'a, R> {
     pub(crate) deadline: f64,
 }
 impl<R: Runner> Runner for WithinDeadline<'_, R> {
+    fn process_identity(
+        &mut self,
+        pid: u32,
+    ) -> Option<Result<Option<crate::process::ProcessIdentity>, String>> {
+        if let Err(error) = time_left(self.runner, self.deadline) {
+            return Some(Err(error));
+        }
+        let result = self.runner.process_identity(pid);
+        if let Err(error) = time_left(self.runner, self.deadline) {
+            return Some(Err(error));
+        }
+        result
+    }
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
         let left = time_left(self.runner, self.deadline)?;
         call.timeout = Some(call.timeout.unwrap_or(left).min(left));
@@ -1411,7 +1445,7 @@ fn main_owned(
         let timeout = scenario_timeout;
         let lease = token.map(|token| process::LeaseLimit::new(p, token, CLEANUP_RESERVE_SECONDS));
         if let Some(limit) = &lease {
-            process::observe_lease(r, limit)?;
+            process::monitor_lease(r, limit)?;
             if let Some(deadline) = limit.work_deadline() {
                 if r.monotonic() >= deadline {
                     return Err(format!(
@@ -1513,25 +1547,11 @@ fn main_owned(
             p,
             &mut exit_evidence,
         );
+        let saved = save_exit_evidence(Path::new(&artifacts), &mut exit_evidence);
         if let Some(state) = reliability.as_deref_mut() {
-            if let Some(journal) = exit_evidence["sync_journal"].as_str() {
-                if Path::new(journal).is_file() {
-                    let copy = Path::new(&artifacts).join("steam-exit.jsonl");
-                    fs::create_dir_all(&artifacts)
-                        .map_err(|e| format!("prepare exit evidence directory: {e}"))?;
-                    fs::copy(journal, &copy)
-                        .map_err(|e| format!("retain round exit evidence: {e}"))?;
-                    exit_evidence["artifact_journal"] = json!(path(copy));
-                }
-            }
             state.round()["exit"] = exit_evidence;
         }
-        if let Err(error) = closed {
-            return Err(format!(
-                "driver exit {}; Civ6 close failed: {error}",
-                windows_exit_code(run.code)
-            ));
-        }
+        exit_result(windows_exit_code(run.code), closed, saved)?;
         *game_closed = true;
         for line in run.stdout.lines().filter(|s| {
             ["[OK]", "[FAIL]", "PASS", "FAIL"]
@@ -1560,6 +1580,77 @@ fn main_owned(
     Ok(first_failure)
 }
 /// Called only at a scenario boundary; never revoke a running chain from tick.
+#[doc(hidden)]
+pub fn exit_result(
+    driver_code: u32,
+    closed: Result<(), String>,
+    saved: Result<(), String>,
+) -> Result<(), String> {
+    let mut failures = Vec::new();
+    if let Err(error) = closed {
+        failures.push(format!("Civ6 close failed: {error}"));
+    }
+    if let Err(error) = saved {
+        failures.push(format!("evidence save failed: {error}"));
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "driver exit {driver_code}; {}",
+            failures.join("; ")
+        ))
+    }
+}
+
+#[doc(hidden)]
+pub fn save_exit_evidence(artifacts: &Path, evidence: &mut Value) -> Result<(), String> {
+    let mut errors = Vec::new();
+    if let Some(journal) = evidence["sync_journal"].as_str() {
+        let target = artifacts.join("steam-exit.jsonl");
+        let saved = (|| -> Result<(), String> {
+            let mut source = File::open(journal).map_err(|e| format!("read exit journal: {e}"))?;
+            fs::create_dir_all(artifacts).map_err(|e| format!("prepare exit artifacts: {e}"))?;
+            let mut out = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)
+                .map_err(|e| format!("reserve exit journal: {e}"))?;
+            std::io::copy(&mut source, &mut out).map_err(|e| format!("copy exit journal: {e}"))?;
+            out.sync_all()
+                .map_err(|e| format!("sync exit journal: {e}"))
+        })();
+        match saved {
+            Ok(()) => evidence["artifact_journal"] = json!(path(target)),
+            Err(error) => {
+                evidence["artifact_journal_error"] = json!(error);
+                errors.push(error);
+            }
+        }
+    }
+    let saved = (|| -> Result<(), String> {
+        fs::create_dir_all(artifacts).map_err(|e| format!("prepare exit artifacts: {e}"))?;
+        let mut out = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(artifacts.join("exit-evidence.json"))
+            .map_err(|e| format!("reserve exit evidence: {e}"))?;
+        serde_json::to_writer_pretty(&mut out, evidence)
+            .map_err(|e| format!("write exit evidence: {e}"))?;
+        out.sync_all()
+            .map_err(|e| format!("sync exit evidence: {e}"))
+    })();
+    if let Err(error) = saved {
+        evidence["artifact_evidence_error"] = json!(error);
+        errors.push(error);
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
 pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<bool, String> {
     let path = p.here.join("civ6.lock");
     let mut first_conflict = None;

@@ -8,6 +8,65 @@ use std::{
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 
+#[test]
+fn ordinary_exit_evidence_preserves_journal_bytes_and_never_overwrites() {
+    let f = Fixture::new(false);
+    let artifacts = f.paths.here.join("exit-artifacts");
+    let journal = f.paths.here.join("original.jsonl");
+    let original = b"{\"phase\":\"exit_sync_no_events\"}\r\n\x00";
+    fs::write(&journal, original).unwrap();
+    let mut evidence = json!({"sync_journal":cc_live::path(&journal),"sync_result":"failed"});
+    chain::save_exit_evidence(&artifacts, &mut evidence).unwrap();
+    assert_eq!(
+        fs::read(artifacts.join("steam-exit.jsonl")).unwrap(),
+        original
+    );
+    let saved = fs::read(artifacts.join("exit-evidence.json")).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&saved).unwrap()["sync_result"],
+        "failed"
+    );
+    fs::write(&journal, b"new bytes").unwrap();
+    assert!(chain::save_exit_evidence(&artifacts, &mut evidence).is_err());
+    assert!(evidence["artifact_evidence_error"].is_string());
+    assert!(evidence["artifact_journal_error"].is_string());
+    assert_eq!(
+        fs::read(artifacts.join("steam-exit.jsonl")).unwrap(),
+        original
+    );
+    assert_eq!(
+        fs::read(artifacts.join("exit-evidence.json")).unwrap(),
+        saved
+    );
+}
+
+#[test]
+fn missing_requested_exit_journal_retains_failure_in_evidence() {
+    let f = Fixture::new(false);
+    let artifacts = f.paths.here.join("exit-artifacts");
+    let mut evidence = json!({"sync_journal":cc_live::path(f.paths.here.join("missing.jsonl")),"sync_result":"failed"});
+    assert!(chain::save_exit_evidence(&artifacts, &mut evidence).is_err());
+    assert!(!artifacts.join("steam-exit.jsonl").exists());
+    let saved: serde_json::Value =
+        serde_json::from_slice(&fs::read(artifacts.join("exit-evidence.json")).unwrap()).unwrap();
+    assert!(saved["artifact_journal_error"].is_string());
+    assert!(saved["artifact_journal"].is_null());
+    let mut absent = json!({"sync_phase":"not_needed_game_absent"});
+    chain::save_exit_evidence(&f.paths.here.join("absent"), &mut absent).unwrap();
+}
+
+#[test]
+fn exit_error_combines_driver_close_and_preservation_failures() {
+    let error =
+        chain::exit_result(3, Err("Steam timeout".into()), Err("disk failure".into())).unwrap_err();
+    assert!(error.contains("driver exit 3"));
+    assert!(error.contains("Civ6 close failed: Steam timeout"));
+    assert!(error.contains("evidence save failed: disk failure"));
+    assert!(chain::exit_result(0, Ok(()), Ok(())).is_ok());
+    assert!(chain::exit_result(3, Err("timeout".into()), Ok(())).is_err());
+    assert!(chain::exit_result(3, Ok(()), Err("disk".into())).is_err());
+}
+
 struct Fixture {
     root: PathBuf,
     paths: Paths,
