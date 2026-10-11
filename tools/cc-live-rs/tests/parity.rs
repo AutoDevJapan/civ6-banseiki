@@ -869,13 +869,25 @@ impl OwnedReader {
             child: Some(child),
             release: release.into(),
         };
-        for _ in 0..200 {
-            if ready.exists() {
-                break;
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while !ready.exists() {
+            if let Some(status) = reader.child.as_mut().unwrap().try_wait().unwrap() {
+                use std::io::Read;
+                let mut reason = String::new();
+                fs::File::open(&error_path)
+                    .unwrap()
+                    .take(4096)
+                    .read_to_string(&mut reason)
+                    .unwrap();
+                reader.child = None;
+                panic!("test reader exited before acquiring its handle: {status}: {reason}");
             }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "test reader did not open the lock before the startup deadline"
+            );
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(ready.exists(), "test reader did not open the lock");
         reader
     }
 
@@ -890,7 +902,17 @@ impl OwnedReader {
 #[cfg(windows)]
 impl Drop for OwnedReader {
     fn drop(&mut self) {
-        self.finish();
+        if let Some(mut child) = self.child.take() {
+            let _ = fs::write(&self.release, "release");
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while matches!(child.try_wait(), Ok(None)) && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if !matches!(child.try_wait(), Ok(Some(_))) {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
     }
 }
 
@@ -1066,18 +1088,12 @@ fn delete_pending_access_denied_is_bounded_and_preserves_the_reader() {
 #[cfg(windows)]
 #[test]
 fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
-    use std::{
-        os::windows::process::CommandExt,
-        process::{Child, Command, Stdio},
-        thread,
-        time::Duration,
-    };
     struct Blocked {
         fake: Fake,
         lock: PathBuf,
         ready: PathBuf,
         release: PathBuf,
-        child: Option<Child>,
+        reader: Option<OwnedReader>,
     }
     impl Runner for Blocked {
         fn run(&mut self, c: Call) -> Result<Output, String> {
@@ -1101,31 +1117,18 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
         }
         fn sleep(&mut self, s: f64) -> Result<(), String> {
             assert_eq!(s, 0.05);
-            fs::write(&self.release, "release").unwrap();
-            assert!(self.child.take().unwrap().wait().unwrap().success());
+            self.reader.as_mut().unwrap().finish();
             self.fake.sleep(s)
         }
         fn print(&mut self, s: &str) -> Result<(), String> {
             self.fake.print(s)?;
             if s.starts_with("RESULT fixture s.json prepare-failed") {
-                let child = Command::new(std::env::current_exe().unwrap())
-                    .args(["--ignored", "--exact", "release_reader_child"])
-                    .env("CC_LIVE_TEST_LOCK", &self.lock)
-                    .env("CC_LIVE_TEST_READY", &self.ready)
-                    .env("CC_LIVE_TEST_RELEASE", &self.release)
-                    .creation_flags(CREATE_NO_WINDOW)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .unwrap();
-                self.child = Some(child);
-                for _ in 0..200 {
-                    if self.ready.exists() {
-                        break;
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                assert!(self.ready.exists(), "test reader did not open the lock");
+                self.reader = Some(OwnedReader::spawn(
+                    &self.lock,
+                    &self.ready,
+                    &self.release,
+                    1,
+                ));
                 assert_eq!(
                     fs::remove_file(&self.lock).unwrap_err().raw_os_error(),
                     Some(32)
@@ -1140,7 +1143,7 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
         lock: f.p.here.join("civ6.lock"),
         ready: f.root.join("reader-ready"),
         release: f.root.join("reader-release"),
-        child: None,
+        reader: None,
     };
     assert_eq!(failed_prepare_cli(&mut r, &f.p).unwrap(), 1);
     assert_normal_closes(&r.fake.calls, 1);
@@ -4514,3 +4517,39 @@ fn already_ready_pr_skips_conversion_and_pending_merge_is_not_success() {
         }
     }
 }
+
+#[test]
+fn assigned_session_without_a_chain_does_not_reserve_the_game() {
+    let f = Fixture::new();
+    f.json("todo/todo.json", json!({"items":[{"id":995,"status":"doing","needs":["civ6"],"scheduler":{"job":"waiting"}}]}));
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":2}),
+    );
+    for (status, can_start) in [("queued", true), ("starting", true), ("running", true)] {
+        f.json("jobs/waiting/job.json", json!({"status":status}));
+        let mut r = Fake::success();
+        assert_eq!(my_turn(&mut r, &f.p, &me).unwrap(), can_start, "{status}");
+        assert!(r.calls.is_empty());
+    }
+}
+
+#[test]
+fn queued_session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
+    let f = Fixture::new();
+    f.json("jobs/waiting/job.json", json!({"status":"queued"}));
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":2}),
+    );
+    let owner = json!({"job":"waiting","live_chain":true,"pid":123,"long":0,"since":1});
+    let other = f.json("here/queue/other.json", owner.clone());
+    let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+    assert!(other.exists());
+    assert_eq!(r.calls.len(), 1);
+    let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+    assert!(holder_alive(&mut r, &f.p, &owner).unwrap());
+    assert_eq!(r.calls.len(), 1);
+}
+
