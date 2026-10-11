@@ -14,29 +14,30 @@
     "元4自動保存・2183141bytesとAppOptionsの原本を所有23d09へ複製しSHA照合",
     "初回配備候補191成功（従来skip4）・Clippy/doc/release成功",
     "Rustの一回観測器を作成・Clippy/release成功",
-    "通常の各回が成果物ごとに検査保存を保持する追加修正を発見・両branchへ実装"
+    "通常の各回が成果物ごとに検査保存を保持する追加修正を発見・両branchへ実装",
+    "追加回帰2件成功・候補cc-live194成功（従来skip4）・Clippy/doc/release成功",
+    "公開cc-live137成功（従来skip2）・Clippy/doc成功、同headの必須CI7件成功"
   ],
   "pending": [
-    "空きメモリ回復後に最新cc-liveのnextest・Clippy・doc・fmtを再検査（直近の追加修正は未検査）",
-    "配備候補も同じ追加修正をnextest・Clippy/doc/Releaseで再検査し、compiler-artifactのsource/EXE SHAを再記録",
-    "ToDo2321の別モデルレビューを受領しMust解消、最新ソースへ必要なら追審",
-    "PR143の最新ソースの必須CI成功・自己レビュー後のマージ",
-    "他担当の標準chain/shipと既存gameが不在の自然な窓で標準EXEをバックアップ後配備、SHA照合",
-    "標準窓口から一回用7手順をCPU描画で一度実行、state原本・archive SHA・Steam終端・原4autosave/AppOptions/seedの復元を観測例で確認",
-    "完了時にsource/tree/EXE SHA/実機ID/復元証拠をPR/ToDoへ記録"
+    "公開8248c397の最新全workspace/Lua・doc終了確認",
+    "別モデル2398の追審結果を反映",
+    "標準窓口の自然な終了を待ってfb67候補を配備し一回原本復元実証",
+    "PR143のレビュー記録とマージ、source/tree/EXE SHA/実機証拠を記録"
   ],
   "live_runs": 0,
   "deployed": false,
   "merged": false,
-  "review_todo": 2321,
+  "review_todo": 2398,
   "pr": "https://github.com/AutoDevJapan/civ6-banseiki/pull/143",
   "candidate_worktree": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-71c9ea96a42df7e7ed922a9cf0deb370/wt",
   "candidate_branch": "scheduler/todo-2317-deployment",
-  "candidate_exe_sha256": "88C0AC798A98FCA032BD1D05CDA254D56BA65735983378BF035A909323694782",
+  "candidate_exe_sha256": "AD937028E461CAA2059388B626E506D19450FDE54BFBB1922FB71857D9222A43",
   "one_run_scenario": "C:/Users/makhmeto/AppData/Local/Temp/codex-owned-23d09feb6b95a5d1afeef82294b574d8/one-run-isolation.json",
   "scenario_checks": 136,
-  "latest_extra_changes_tested": false,
-  "candidate_binary_is_current": false,
-  "resource_condition": "共有ゲートが空きメモリ不足でCargoを待機、scheduler RAM below 8 GiB・枠0",
-  "review_status": "2321受付済み・未開始・結果未受領"
+  "latest_extra_changes_tested": true,
+  "candidate_binary_is_current": true,
+  "resource_condition": "Cargo枠は利用可能、共有ゲートを使用",
+  "review_status": "2321受領済みMust1を永続復旧で修正、Must2は実機未達。2398で最新fb67追審を受付",
+  "candidate_source": "fb67c41d771305c7ef5c15a7b256e54f8e05399e",
+  "candidate_tree": "83c14ca04f2fa57f72040d7e57cdc7ad141d29b8"
 }
