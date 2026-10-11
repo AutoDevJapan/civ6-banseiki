@@ -1,5 +1,6 @@
 //! Temporarily give the minimal reliability run an empty autosave directory.
 //! Original files are renamed intact, never overwritten or deleted.
+use crate::session::SessionType;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::{fs, io::Write, path::Path};
@@ -146,7 +147,18 @@ fn no_links(path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn begin(profile: &Path, archive: &Path, state: &Path) -> Result<()> {
-    let original = profile.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+    begin_for_session(profile, archive, state, SessionType::SinglePlayer)
+}
+pub fn begin_for_session(
+    profile: &Path,
+    archive: &Path,
+    state: &Path,
+    session: SessionType,
+) -> Result<()> {
+    let original = profile
+        .join("Documents/My Games/Sid Meier's Civilization VI/Saves")
+        .join(session.save_folder())
+        .join("auto");
     let original = original
         .parent()
         .ok_or_else(|| Error::input("autosave parent missing"))?
@@ -235,11 +247,25 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
         fs::remove_file(state)?;
         return Ok(());
     }
-    let expected = profile
-        .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single")
-        .canonicalize()?
-        .join("auto");
-    if s.original != expected {
+    // Resolve the allowed profile paths themselves: a parent's canonical name
+    // can differ from its session name (for example an owner junction).
+    // The receipt format remains compatible with older Single recoveries.
+    let mut matches_profile = false;
+    for session in [SessionType::SinglePlayer, SessionType::Hotseat] {
+        let parent = profile
+            .join("Documents/My Games/Sid Meier's Civilization VI/Saves")
+            .join(session.save_folder());
+        match parent.canonicalize() {
+            Ok(parent) if parent.join("auto") == s.original => {
+                matches_profile = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    if !matches_profile {
         return Err(Error::input(
             "autosave recovery path differs from the profile",
         ));
@@ -322,6 +348,95 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hotseat_parent_alias_recovers_with_single_player_directory_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let saves = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves");
+        fs::create_dir_all(&saves).unwrap();
+        let actual = p.join("owner-hotseat-storage");
+        fs::create_dir_all(actual.join("auto")).unwrap();
+        fs::write(actual.join("auto/save"), b"owner hotseat bytes").unwrap();
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            assert!(std::process::Command::new("cmd")
+                .args(["/c", "mklink", "/J"])
+                .arg(saves.join("Hotseat"))
+                .arg(&actual)
+                .creation_flags(0x08000000)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap()
+                .success());
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&actual, saves.join("Hotseat")).unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin_for_session(p, &archive, &state, SessionType::Hotseat).unwrap();
+        fs::write(actual.join("auto/save"), b"test hotseat bytes").unwrap();
+        restore(p, &state).unwrap();
+        assert_eq!(
+            fs::read(actual.join("auto/save")).unwrap(),
+            b"owner hotseat bytes"
+        );
+        assert_eq!(
+            fs::read(archive.join("test-auto/save")).unwrap(),
+            b"test hotseat bytes"
+        );
+        assert!(!state.exists());
+        assert!(!saves.join("Single").exists());
+        #[cfg(windows)]
+        fs::remove_dir(saves.join("Hotseat")).unwrap();
+        #[cfg(unix)]
+        fs::remove_file(saves.join("Hotseat")).unwrap();
+    }
+    #[test]
+    fn hotseat_isolation_preserves_other_sessions_and_recovers_from_saved_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let saves = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves");
+        for folder in ["Single", "Hotseat", "Multi"] {
+            fs::create_dir_all(saves.join(folder).join("auto/prev")).unwrap();
+            fs::write(saves.join(folder).join("auto/save"), folder.as_bytes()).unwrap();
+            fs::write(saves.join(folder).join("auto/prev/save"), b"previous").unwrap();
+        }
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin_for_session(p, &archive, &state, SessionType::Hotseat).unwrap();
+        assert_eq!(fs::read_dir(saves.join("Hotseat/auto")).unwrap().count(), 0);
+        for folder in ["Single", "Multi"] {
+            assert_eq!(
+                fs::read(saves.join(folder).join("auto/save")).unwrap(),
+                folder.as_bytes()
+            );
+        }
+        fs::write(saves.join("Hotseat/auto/save"), b"test hotseat save").unwrap();
+        restore(p, &state).unwrap();
+        assert!(!state.exists());
+        assert_eq!(
+            fs::read(saves.join("Hotseat/auto/save")).unwrap(),
+            b"Hotseat"
+        );
+        assert_eq!(
+            fs::read(saves.join("Hotseat/auto/prev/save")).unwrap(),
+            b"previous"
+        );
+        assert_eq!(
+            fs::read(archive.join("test-auto/save")).unwrap(),
+            b"test hotseat save"
+        );
+        for folder in ["Single", "Multi"] {
+            assert_eq!(
+                fs::read(saves.join(folder).join("auto/save")).unwrap(),
+                folder.as_bytes()
+            );
+        }
+    }
     #[derive(Default)]
     struct RetryClock(std::sync::Mutex<f64>);
     impl crate::time::Clock for RetryClock {

@@ -10,6 +10,8 @@ struct Args {
     state: std::path::PathBuf,
     #[arg(long)]
     archive: Option<std::path::PathBuf>,
+    #[arg(long, value_parser = ["single_player", "hotseat"], default_value = "single_player")]
+    session_type: String,
 }
 fn run(a: Args) -> Result<()> {
     let mut lease = civ6_autotest_rs::startup::RecoveryLease::acquire()?;
@@ -21,10 +23,13 @@ fn run(a: Args) -> Result<()> {
         std::env::var_os("USERPROFILE").ok_or_else(|| Error::input("USERPROFILE unavailable"))?,
     );
     match (a.begin, a.restore) {
-        (true, false) => civ6_autotest_rs::save_isolation::begin(
+        (true, false) => civ6_autotest_rs::save_isolation::begin_for_session(
             &profile,
             &a.archive.ok_or_else(|| Error::input("archive required"))?,
             &a.state,
+            civ6_autotest_rs::session::SessionType::from_scenario(
+                &serde_json::json!({"session_type":a.session_type}),
+            )?,
         ),
         (false, true) => civ6_autotest_rs::save_isolation::retry_recovery_with(
             &civ6_autotest_rs::time::SystemClock,
