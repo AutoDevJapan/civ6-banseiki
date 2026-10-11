@@ -1,6 +1,6 @@
 //! Receipt of the deferred Install/Start held at the fixed loader return.
 //! It is a diagnostic code/phase receipt, not City lifetime or quantity proof.
-#![cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
+#![allow(dead_code)]
 use crate::oath_wire::{u32_at, u64_at};
 use serde_json::{json, Value};
 

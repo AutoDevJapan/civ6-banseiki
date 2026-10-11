@@ -166,6 +166,13 @@ extern "system-unwind" fn loader_wrapper(
     ret: usize,
 ) -> usize {
     let incoming_error = unsafe { GetLastError() };
+    // Publication is one-shot. Later native loads (including a Base-menu
+    // transition while the pinned XP2 module still exists) are original calls,
+    // not another cold activation. Preserve the successful first receipt.
+    if RECEIPT.state.load(Ordering::Acquire) == READY {
+        unsafe { SetLastError(incoming_error) };
+        return unsafe { cold_original(a, b, c, d) };
+    }
     if FLIGHT
         .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
         .is_err()

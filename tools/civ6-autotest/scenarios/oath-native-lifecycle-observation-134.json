@@ -154,11 +154,11 @@
       "code": "GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',0); BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~=\"CIVILIZATION_JAC_ODA\" then error('human house mismatch') end; HideGameSetup(); return 'audit setup built'"
     },
     {
-      "dll": "D:/CC/Work/todo134/civ6-oath-runtime-fdd2361912b3ef46777b8f03b4b9a1fdbdabda78b4f956a0738d6bd6ec1c6338.dll",
+      "dll": "D:/CC/Work/todo134/civ6-oath-runtime-81583b5d29f112988c801494eeda3d1268143eac1919fe4bc75761237a11ddb7.dll",
       "timeout": 60,
       "action": "oath_trace_prepare",
       "max_seconds": 300,
-      "dll_sha256": "fdd2361912b3ef46777b8f03b4b9a1fdbdabda78b4f956a0738d6bd6ec1c6338",
+      "dll_sha256": "81583b5d29f112988c801494eeda3d1268143eac1919fe4bc75761237a11ddb7",
       "capture": "cold_lifecycle"
     },
     {

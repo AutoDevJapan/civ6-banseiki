@@ -30,10 +30,19 @@ const RESULT: usize = 0x12345678_abcd0001;
 const ARGS: [usize; 4] = [0x1000_0001, 0x2000_0002, 0x3000_0003, 0x4000_0004];
 unsafe extern "system-unwind" fn original(a: usize, b: usize, c: usize, d: usize) -> usize {
     let t = SYNTHETIC.get().unwrap();
-    t.calls.fetch_add(1, Ordering::SeqCst);
+    let invocation = t.calls.fetch_add(1, Ordering::SeqCst);
     assert_eq!([a, b, c, d], ARGS);
-    assert_eq!(RECEIPT.state.load(Ordering::Acquire), PREPARED);
-    assert_eq!(t.installs.load(Ordering::Acquire), 0);
+    if invocation == 0 {
+        assert_eq!(RECEIPT.state.load(Ordering::Acquire), PREPARED);
+        assert_eq!(t.installs.load(Ordering::Acquire), 0);
+    } else {
+        assert_eq!(RECEIPT.state.load(Ordering::Acquire), READY);
+        assert_eq!(
+            t.installs.load(Ordering::Acquire),
+            1,
+            "later load never reinstalls"
+        );
+    }
     assert_eq!(
         unsafe { GetLastError() },
         1234,
@@ -421,6 +430,19 @@ fn child() {
             before.deadline_tick
         );
         assert_eq!(t.installs.load(Ordering::Acquire), 1);
+        // A second loader call from another native return site must keep the
+        // original semantics while XP2 remains pinned. It is not a rearm.
+        let later: Call = unsafe { std::mem::transmute(base + LOADER) };
+        unsafe { SetLastError(1234) };
+        assert_eq!(unsafe { later(ARGS[0], ARGS[1], ARGS[2], ARGS[3]) }, RESULT);
+        assert_eq!(unsafe { GetLastError() }, 5678);
+        assert_eq!(t.calls.load(Ordering::Acquire), 2);
+        assert_eq!(t.installs.load(Ordering::Acquire), 1);
+        assert_eq!(receipt().state.load(Ordering::Acquire), READY);
+        assert_eq!(
+            receipt().ready_tick.load(Ordering::Acquire),
+            read.ready_tick.load(Ordering::Acquire)
+        );
         assert_eq!(
             trace.next.load(Ordering::Acquire),
             0,
