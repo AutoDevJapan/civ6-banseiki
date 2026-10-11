@@ -191,7 +191,7 @@ fn game_generation(r: &mut impl Runner) -> Result<GameGeneration, String> {
                 let _ = r.error(&format!("process_candidates={}", json!(candidates)));
                 continue;
             };
-            candidates.push(json!({"pid":pid,"snapshot_image":image,"image":identity.image,
+            candidates.push(json!({"pid":pid,"snapshot_image":image,"image_matches_snapshot":identity.image.eq_ignore_ascii_case(image),
                 "exit_state":if identity.created_filetime.is_some(){"not_signaled"}else{"unknown"},
                 "created_filetime":identity.created_filetime,
                 "inspection_error":if identity.created_filetime.is_some(){None}else{Some("creation FILETIME unavailable; name-only snapshot is not live identity")}}));

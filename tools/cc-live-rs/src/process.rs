@@ -528,7 +528,7 @@ fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String>
                 "process_identity_diagnostic={}",
                 serde_json::json!({
                     "pid":pid,"native_query_os_error":os_error,"exited":null,
-                    "image":result.as_ref().ok().and_then(|v|v.as_ref()).map(|v|&v.image),
+                    "game_image_approved":result.as_ref().ok().and_then(|v|v.as_ref()).map(|v|crate::chain::CIV_EXECUTABLES.iter().any(|image|v.image.eq_ignore_ascii_case(image))),
                     "created_filetime":result.as_ref().ok().and_then(|v|v.as_ref()).and_then(|v|v.created_filetime),
                     "inspection_error":result.as_ref().err()
                 })

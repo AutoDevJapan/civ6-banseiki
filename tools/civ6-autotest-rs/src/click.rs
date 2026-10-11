@@ -209,7 +209,10 @@ mod win {
     struct ProcessCandidate {
         pid: u32,
         snapshot_image: String,
+        // A reused PID can belong to an unrelated app. Keep its name private.
+        #[serde(skip_serializing)]
         image: Option<String>,
+        image_matches_snapshot: Option<bool>,
         created_filetime: Option<u64>,
         exited: Option<bool>,
         absent: bool,
@@ -222,6 +225,7 @@ mod win {
                 pid,
                 snapshot_image,
                 image: None,
+                image_matches_snapshot: None,
                 created_filetime: None,
                 exited: None,
                 absent: false,
@@ -452,6 +456,10 @@ mod win {
             Ok(path) => {
                 // The inspected path is never included in diagnostics.
                 row.image = path.rsplit(['\\', '/']).next().map(str::to_owned);
+                row.image_matches_snapshot = row
+                    .image
+                    .as_ref()
+                    .map(|image| image.eq_ignore_ascii_case(&row.snapshot_image));
             }
             Err(_) => row.error("QueryFullProcessImageNameW"),
         }
