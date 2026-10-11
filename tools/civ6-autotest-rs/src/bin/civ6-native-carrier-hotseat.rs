@@ -49,6 +49,8 @@ enum Command {
     Init {
         output: PathBuf,
         #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
         nonce: String,
         #[arg(long)]
         logs: PathBuf,
@@ -57,6 +59,8 @@ enum Command {
     },
     Drive {
         output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
         #[arg(long)]
         logs: PathBuf,
         #[arg(long)]
@@ -226,7 +230,14 @@ fn completed_lines(text: &str) -> &str {
     text.rfind('\n').map_or("", |end| &text[..=end])
 }
 
-fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, _port: u16) -> Result<()> {
+fn drive(
+    output: &Path,
+    repo: &Path,
+    logs: &Path,
+    saves: &Path,
+    timeout: f64,
+    _port: u16,
+) -> Result<()> {
     if !timeout.is_finite() || !(1.0..=1200.).contains(&timeout) {
         return Err(Error::input("drive timeout must be 1..1200 seconds"));
     }
@@ -240,6 +251,9 @@ fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, _port: u16) -> 
     lock.try_lock()
         .map_err(|_| Error::scenario("native carrier controller is already active"))?;
     let mut state = state(&path)?;
+    if bundle(output, repo)?.nonce != state.journal.nonce {
+        return Err(Error::scenario("controller bundle nonce differs"));
+    }
     if state.journal.complete {
         return Err(Error::scenario(
             "completed controller will not execute again",
@@ -385,11 +399,15 @@ fn run(args: Args) -> Result<()> {
         }
         Command::Init {
             output,
+            repo,
             nonce,
             logs,
             saves,
         } => {
             verify_lease()?;
+            if bundle(&output, &repo)?.nonce != nonce {
+                return Err(Error::scenario("init bundle nonce differs"));
+            }
             for generation in [1, 2] {
                 let name = protocol::save_name(&nonce, generation)?;
                 if saves.join(format!("{name}.Civ6Save")).exists() {
@@ -420,11 +438,12 @@ fn run(args: Args) -> Result<()> {
         }
         Command::Drive {
             output,
+            repo,
             logs,
             saves,
             timeout,
             port,
-        } => drive(&output, &logs, &saves, timeout, port)?,
+        } => drive(&output, &repo, &logs, &saves, timeout, port)?,
     }
     Ok(())
 }
@@ -547,4 +566,37 @@ mod tests {
         assert_eq!(completed_lines("noise\nJAC_NC|1|partial"), "noise\n");
         assert_eq!(completed_lines("JAC_NC|1|partial"), "");
     }
+}
+#[test]
+fn current_bundle_requires_five_matching_files_and_refuses_legacy_version() {
+    let run_nonce = uuid::Uuid::new_v4().simple().to_string();
+    let temp = tempfile::tempdir().unwrap();
+    let output = temp.path().join("output");
+    let repo = temp.path().join("repo");
+    fs::create_dir(&output).unwrap();
+    for relative in BINDINGS {
+        let file = repo.join(relative);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, b"deployed bytes").unwrap();
+    }
+    let mut value = Bundle {
+        version: 2,
+        nonce: run_nonce.clone(),
+        bindings: std::collections::BTreeMap::new(),
+    };
+    for relative in BINDINGS {
+        value
+            .bindings
+            .insert(relative.into(), file_hash(&repo.join(relative)).unwrap());
+    }
+    let path = output.join("bundle.json");
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert_eq!(bundle(&output, &repo).unwrap().nonce, run_nonce);
+    value.version = 1;
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert!(bundle(&output, &repo).is_err());
+    value.version = 2;
+    value.bindings.remove(BINDINGS[4]);
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert!(bundle(&output, &repo).is_err());
 }

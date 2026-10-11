@@ -93,7 +93,9 @@ end
 ContextPtr:SetShowHandler(OnShow)
 -- Preserve the stock updater. Only this exact new request consumes F15.
 OnUpdate=function(...) stockUpdate(...);publishReady() end
-ContextPtr:SetInputHandler(function(message,key)
+ContextPtr:SetInputHandler(function(input)
+ local message=input:GetMessageType()
+ local key=input:GetKey()
  if message~=KeyEvents.KeyUp or key~=0x7E or not armed then return false end
  local r=armed
  if failed or attempted[r.ID] or ContextPtr:IsHidden() or not UI.IsInFrontEnd() then return false end

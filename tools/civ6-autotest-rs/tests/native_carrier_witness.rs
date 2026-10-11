@@ -106,11 +106,13 @@ GameConfiguration={GetValue=function(k) return VALUES[k] end,SetValue=function(k
  SetToDefaults=function(mode) MODE=mode or 0;VALUES={} end,SetRuleSet=function(v) VALUES.RULESET=v end}
 MapConfiguration={GetValue=function(k) return MAPVALUES[k] end,SetValue=function(k,v) MAPVALUES[k]=v end}
 ContextPtr={IsHidden=function() return HIDDEN end,SetShowHandler=function(_,f) SHOW=f end,
- SetInputHandler=function(_,f) INPUT=f end,SetUpdate=function(_,f) UPDATE=f end}
+ SetInputHandler=function(_,f,structured) assert(structured==true);INPUT=function(message,key) return f({GetMessageType=function() return message end,GetKey=function() return key end}) end end,
+ SetUpdate=function(_,f) UPDATE=f end}
 include=function(name)
  assert(name=='MainMenu')
  OnUpdate=function() UPDATES=UPDATES+1 end
  OnShow=function() SHOWS=SHOWS+1;GameConfiguration.SetToDefaults();ContextPtr:SetUpdate(OnUpdate) end
+ if SYNC_INCLUDE_SHOW then HIDDEN=false;OnShow() end
 end
 print=function(s) LINES[#LINES+1]=s end
 Network={LeaveGame=function() LEAVES=LEAVES+1 end,GetGameConfigurationSaveType=function() return 3 end,
@@ -179,6 +181,14 @@ fn fixed_frontend_rejects_foreign_scope_and_unknown_dispatch_never_retries() {
         lua.load(witness::frontend_binding()).exec().unwrap();
         lua.load("HIDDEN=false;SHOW();INPUT(1,0x7E);INPUT(1,0x7E);SHOW();INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)").exec().unwrap();
     }
+}
+
+#[test]
+fn fixed_frontend_captures_request_before_synchronous_stock_show_resets_it() {
+    let lua = frontend_session(1);
+    lua.load("SYNC_INCLUDE_SHOW=true").exec().unwrap();
+    lua.load(witness::frontend_binding()).exec().unwrap();
+    lua.load("assert(SHOWS==1 and LOADS==0);UPDATE();assert(INPUT(1,0x7E));assert(LOADS==1 and LEAVES==1)").exec().unwrap();
 }
 
 #[test]
