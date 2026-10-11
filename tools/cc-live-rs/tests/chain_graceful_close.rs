@@ -56,6 +56,40 @@ fn missing_requested_exit_journal_retains_failure_in_evidence() {
 }
 
 #[test]
+fn cleanup_evidence_retains_new_journal_without_overwriting_the_first_exit() {
+    let f = Fixture::new(false);
+    let artifacts = f.paths.here.join("exit-artifacts");
+    let journal = f.paths.here.join("original.jsonl");
+    fs::write(&journal, b"first exit").unwrap();
+    let mut first = json!({"sync_journal":cc_live::path(&journal)});
+    chain::save_exit_evidence(&artifacts, &mut first).unwrap();
+    fs::write(&journal, b"cleanup exit").unwrap();
+    let mut second =
+        json!({"sync_journal":cc_live::path(&journal),"primary_chain_error":"timeout"});
+    chain::save_cleanup_exit_evidence(&artifacts, &mut second).unwrap();
+    assert_eq!(
+        fs::read(artifacts.join("steam-exit.jsonl")).unwrap(),
+        b"first exit"
+    );
+    assert_eq!(
+        fs::read(artifacts.join("steam-exit-cleanup.jsonl")).unwrap(),
+        b"cleanup exit"
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(
+            &fs::read(artifacts.join("exit-evidence-cleanup.json")).unwrap()
+        )
+        .unwrap()["primary_chain_error"],
+        "timeout"
+    );
+    assert!(chain::save_cleanup_exit_evidence(&artifacts, &mut second).is_err());
+    assert_eq!(
+        fs::read(artifacts.join("steam-exit-cleanup.jsonl")).unwrap(),
+        b"cleanup exit"
+    );
+}
+
+#[test]
 fn exit_error_combines_driver_close_and_preservation_failures() {
     let error =
         chain::exit_result(3, Err("Steam timeout".into()), Err("disk failure".into())).unwrap_err();
