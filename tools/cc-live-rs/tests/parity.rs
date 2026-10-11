@@ -3,7 +3,7 @@ use serde_json::json;
 use std::{
     collections::VecDeque,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
 };
 static SERIAL: AtomicUsize = AtomicUsize::new(0);
@@ -3085,7 +3085,8 @@ impl Runner for ReliabilityRunner {
             );
             let output = call.args.iter().position(|a| a == "--output").unwrap() + 1;
             self.artifacts.push(call.args[output].clone());
-            fs::create_dir_all(&call.args[output]).map_err(|e| e.to_string())?;
+            // Match Runner::run: an existing output leaf is a hard error.
+            fs::create_dir(&call.args[output]).map_err(|e| e.to_string())?;
             return Ok(Output {
                 code: self.codes.pop_front().unwrap(),
                 stdout: "driver result".into(),
@@ -4871,9 +4872,13 @@ fn ordinary_runs_keep_distinct_test_archives_and_original_bytes() {
     assert_eq!(begins.len(), 2);
     assert_ne!(begins[0].args[5], begins[1].args[5]);
     for (begin, artifact) in begins.iter().zip(&r.artifacts) {
-        assert_eq!(&begin.args[5], artifact);
         assert_eq!(
-            fs::read(PathBuf::from(artifact).join("test-auto/test-save")).unwrap(),
+            Path::new(artifact).parent().unwrap(),
+            Path::new(&begin.args[5])
+        );
+        assert_eq!(Path::new(artifact).file_name().unwrap(), "run");
+        assert_eq!(
+            fs::read(PathBuf::from(&begin.args[5]).join("test-auto/test-save")).unwrap(),
             b"test autosave bytes"
         );
     }
