@@ -189,7 +189,14 @@ impl<R: Runner> Runner for ExitGenerationRunner<'_, R> {
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
         // An old cursor may never close a game that appeared after its mark.
         // Recheck at every external observation/action in the exit protocol.
-        let current = game_generation(self.runner)?;
+        let deadline = call
+            .deadline
+            .unwrap_or(f64::MAX)
+            .min(self.runner.monotonic() + call.timeout.unwrap_or(30.0));
+        let current = game_generation(&mut WithinDeadline {
+            runner: self.runner,
+            deadline,
+        })?;
         if current.iter().any(|game| !self.games.contains(game)) {
             return Err(
                 "Civ6 exit generation changed; refusing to close or restore another game".into(),
@@ -198,16 +205,17 @@ impl<R: Runner> Runner for ExitGenerationRunner<'_, R> {
         if call.args.first().is_some_and(|arg| arg == "taskkill")
             && call.args.get(1).is_some_and(|arg| arg == "/IM")
         {
-            if let Some((_, pid, _)) = current
+            if let Some((image, pid, created)) = current
                 .iter()
                 .find(|(image, _, _)| image.eq_ignore_ascii_case(&call.args[2]))
             {
-                call.args[1] = "/PID".into();
-                call.args[2] = pid.to_string();
+                time_left(self.runner, deadline)?;
+                return self.runner.terminate_game(*pid, image, *created, deadline);
             } else {
                 return Ok(Output::default());
             }
         }
+        call.timeout = Some(time_left(self.runner, deadline)?);
         self.runner.run(call)
     }
     fn now(&mut self) -> f64 {
@@ -1303,6 +1311,17 @@ pub(crate) struct WithinDeadline<'a, R> {
     pub(crate) deadline: f64,
 }
 impl<R: Runner> Runner for WithinDeadline<'_, R> {
+    fn terminate_game(
+        &mut self,
+        pid: u32,
+        image: &str,
+        created: u64,
+        deadline: f64,
+    ) -> Result<Output, String> {
+        let deadline = deadline.min(self.deadline);
+        time_left(self.runner, deadline)?;
+        self.runner.terminate_game(pid, image, created, deadline)
+    }
     fn process_identity(
         &mut self,
         pid: u32,
@@ -1314,6 +1333,10 @@ impl<R: Runner> Runner for WithinDeadline<'_, R> {
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
         let left = time_left(self.runner, self.deadline)?;
         call.timeout = Some(call.timeout.unwrap_or(left).min(left));
+        call.deadline = Some(
+            call.deadline
+                .map_or(self.deadline, |deadline| deadline.min(self.deadline)),
+        );
         self.runner.run(call)
     }
     fn now(&mut self) -> f64 {

@@ -81,6 +81,8 @@ struct Model {
     broken_output: bool,
     restore_code: i32,
     publish_collision: Option<PathBuf>,
+    replaced_before_termination: bool,
+    pinned_terminations: usize,
     calls: Vec<(f64, Call)>,
     sleeps: Vec<f64>,
     printed: Vec<String>,
@@ -108,6 +110,8 @@ impl Model {
             broken_output: false,
             restore_code: 0,
             publish_collision: None,
+            replaced_before_termination: false,
+            pinned_terminations: 0,
             calls: vec![],
             sleeps: vec![],
             printed: vec![],
@@ -135,6 +139,29 @@ impl Model {
     }
 }
 impl Runner for Model {
+    fn terminate_game(
+        &mut self,
+        pid: u32,
+        image: &str,
+        created: u64,
+        deadline: f64,
+    ) -> Result<Output, String> {
+        assert_eq!(pid, 42);
+        assert_eq!(image, "CivilizationVI.exe");
+        assert_eq!(created, 1);
+        assert!(self.time < deadline);
+        if self.replaced_before_termination {
+            return Err("pinned game identity changed; termination refused".into());
+        }
+        self.pinned_terminations += 1;
+        if !self.denied {
+            self.running = [false; 2];
+        }
+        Ok(Output {
+            code: i32::from(self.denied),
+            ..Output::default()
+        })
+    }
     fn process_identity(
         &mut self,
         pid: u32,
@@ -579,6 +606,72 @@ fn invalid_or_failed_exit_publication_preserves_record_without_shutdown_or_resto
             .iter()
             .any(|(_, call)| call.args.get(1).is_some_and(|arg| arg == "--restore")));
     }
+}
+
+#[test]
+fn helper_enabled_forced_exit_uses_pinned_generation_and_refusal_keeps_recovery() {
+    for refused in [false, true] {
+        let f = Fixture::new(true);
+        let source = f
+            .paths
+            .live()
+            .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(source, "fixture").unwrap();
+        fs::write(
+            f.paths
+                .live()
+                .join("tools/target/release/civ6-steam-sync.exe"),
+            "fixture",
+        )
+        .unwrap();
+        let state = f.paths.here.join("reliability-auto-state.json");
+        fs::write(&state, "fixture").unwrap();
+        let mut r = Model::new([true, false]);
+        r.exit_delay = None;
+        r.replaced_before_termination = refused;
+        let result = chain::close_civ6_with_paths(&mut r, &f.paths);
+        assert_eq!(result.is_err(), refused);
+        assert_eq!(r.pinned_terminations, usize::from(!refused));
+        assert_eq!(r.count("taskkill"), 0);
+        assert_eq!(r.running[0], refused);
+        assert_eq!(state.exists(), refused);
+        assert_eq!(
+            f.paths.here.join("steam-exit-recovery.json").exists(),
+            refused
+        );
+    }
+}
+
+#[test]
+fn helper_generation_observation_cannot_extend_exit_stage_deadline() {
+    let f = Fixture::new(true);
+    let source = f
+        .paths
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(source, "fixture").unwrap();
+    fs::write(
+        f.paths
+            .live()
+            .join("tools/target/release/civ6-steam-sync.exe"),
+        "fixture",
+    )
+    .unwrap();
+    let mut r = Model::new([true, false]);
+    r.query_duration = 3.0;
+    r.lua_duration = 15.0;
+    r.exit_delay = None;
+    r.replaced_before_termination = true;
+    assert!(chain::close_civ6_with_paths(&mut r, &f.paths).is_err());
+    for (started, call) in &r.calls {
+        if let Some(deadline) = call.deadline {
+            assert!(*started < deadline);
+            assert!(call.timeout.unwrap() <= deadline - started + 0.000001);
+        }
+    }
+    assert_eq!(r.pinned_terminations, 0);
 }
 
 #[test]

@@ -17,6 +17,7 @@ pub struct Call {
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
     pub timeout: Option<f64>,
+    pub deadline: Option<f64>,
     pub merge_stderr: bool,
     pub creationflags: u32,
     pub kill_tree: bool,
@@ -203,6 +204,7 @@ impl Call {
             args,
             env: BTreeMap::new(),
             timeout: None,
+            deadline: None,
             merge_stderr: false,
             creationflags: CREATE_NO_WINDOW,
             kill_tree: false,
@@ -252,6 +254,15 @@ pub struct ProcessIdentity {
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
 pub trait Runner {
     fn run(&mut self, call: Call) -> Result<Output, String>;
+    fn terminate_game(
+        &mut self,
+        _pid: u32,
+        _image: &str,
+        _created: u64,
+        _deadline: f64,
+    ) -> Result<Output, String> {
+        Err("pinned game termination unavailable".into())
+    }
     /// The command fallback keeps non-Windows runners and fixtures injectable.
     /// Windows uses one pinned handle, without spawning tasklist per waiter.
     fn process_identity(
@@ -456,10 +467,140 @@ fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String>
     }))
 }
 
+#[cfg(windows)]
+fn terminate_pinned_game(
+    pid: u32,
+    expected_image: &str,
+    expected_created: u64,
+    deadline: f64,
+    clock: &mut impl FnMut() -> f64,
+) -> Result<Output, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
+            WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            PROCESS_TERMINATE,
+        },
+    };
+    let check_deadline = |clock: &mut dyn FnMut() -> f64| {
+        if clock() < deadline {
+            Ok(())
+        } else {
+            Err("Civ6 termination deadline exhausted".to_owned())
+        }
+    };
+    check_deadline(clock)?;
+    struct Handle(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        return Err(format!(
+            "open pinned game {pid}: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let handle = Handle(raw);
+    let mut path = vec![0u16; 32768];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let path = String::from_utf16(&path[..length as usize]).map_err(|e| e.to_string())?;
+    let image = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("pinned game image unavailable")?;
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
+    {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let actual_created =
+        (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
+    if !image.eq_ignore_ascii_case(expected_image) || actual_created != expected_created {
+        return Err("pinned game identity changed; termination refused".into());
+    }
+    check_deadline(clock)?;
+    match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_OBJECT_0 => return Ok(Output::default()),
+        WAIT_TIMEOUT => {}
+        _ => return Err(std::io::Error::last_os_error().to_string()),
+    }
+    // Identity and termination share this same retained HANDLE. PID reuse after
+    // a prior observation can only open a different creation time and reject.
+    check_deadline(clock)?;
+    if unsafe { TerminateProcess(handle.0, 1) } == 0 {
+        let error = std::io::Error::last_os_error();
+        if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
+            return Err(error.to_string());
+        }
+    }
+    Ok(Output::default())
+}
+
 #[cfg(all(test, windows))]
 mod native_identity_tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+
+    #[test]
+    fn pinned_termination_rejects_changed_creation_and_expired_deadline_before_owned_child_exit() {
+        struct OwnedChild(std::process::Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut owned = OwnedChild(
+            Command::new("cmd.exe")
+                .args(["/d", "/q", "/c", "set /p cc_termination_fixture=waiting"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap(),
+        );
+        let child = &mut owned.0;
+        let identity = windows_process_identity(child.id()).unwrap().unwrap();
+        let created = identity.created_filetime.unwrap();
+        assert!(
+            terminate_pinned_game(child.id(), "cmd.exe", created + 1, 10.0, &mut || 0.0).is_err()
+        );
+        assert!(child.try_wait().unwrap().is_none());
+        let mut checks = 0;
+        assert!(
+            terminate_pinned_game(child.id(), "cmd.exe", created, 1.0, &mut || {
+                checks += 1;
+                if checks == 1 {
+                    0.0
+                } else {
+                    2.0
+                }
+            })
+            .is_err()
+        );
+        assert!(child.try_wait().unwrap().is_none());
+        terminate_pinned_game(child.id(), "cmd.exe", created, 10.0, &mut || 0.0).unwrap();
+        assert!(!child.wait().unwrap().success());
+    }
 
     #[test]
     fn current_process_identity_uses_one_handle_and_no_commands() {
@@ -568,6 +709,16 @@ fn interrupted() -> Result<(), String> {
 }
 
 impl Runner for RealRunner {
+    #[cfg(windows)]
+    fn terminate_game(
+        &mut self,
+        pid: u32,
+        image: &str,
+        created: u64,
+        deadline: f64,
+    ) -> Result<Output, String> {
+        terminate_pinned_game(pid, image, created, deadline, &mut || self.monotonic())
+    }
     #[cfg(windows)]
     fn process_identity(
         &mut self,
