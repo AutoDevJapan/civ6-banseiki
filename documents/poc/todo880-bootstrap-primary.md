@@ -432,7 +432,7 @@ EXEとCoreのRVAを混ぜず、各々の固定SHA・命令bytes・実行可能�
 
 実GPU・Civ6起動、標準実行器の配備とこの修正版の検査はまだ行っていない。標準の待ち列・共有lock・時間上限・他担当への30分以内の譲渡は維持する。CPU描画の追加は外側の終了契約や元7条件の達成を証明しない。
 
-### 2026-10-12：通常一回のCPU描画で外側frameを実測
+### 2026-10-12：CPU描画設定を使った通常一回の外側frame観測
 
 PR143の通常一回隔離をPR86のCPU設定復旧へ統合し、既存996のHotseat実保存先保護・実queue/lockによる順番・所有reader子の回収も受領した。統合ソース142c1d6fはcc-live174成功（既存の子入口skip2）、保存helper関連14成功、Clippy成功、限定した連続AstraレビューMust0である。標準chainへ同sourceのA7007703…を配備し、配備の一時停止を解除した。旧候補の171/172/198/1840件をこのsourceへ付け替えていない。
 
@@ -441,3 +441,4 @@ PR143の通常一回隔離をPR86のCPU設定復旧へ統合し、既存996のHo
 早期RETとContextReleaseは0hitで未観測である。24組の対応からreceiverの型・world寿命・発行停止・保留公開・同じjob setのWait・他6domainの全退出を推定しない。native全排出・runtime有効化はfalse、候補e273は無効、元7製品条件0/7のまま。register復元、114thread handleの閉鎖、reader join、親の回収が成功した。元auto4本・AppOptions・COS1のSHA一致を再照合し、各復旧recordと自分のmaintenanceを残していない。
 
 原記録16ファイル（約1.96MB）はD:/CC/Work/todo880/native-outer-captured-142c-20261012へ全SHA一致で保全し、捕捉結果・復元照合・原ハッシュ台帳を同880に保存した。新しい親や引継ぎToDoは作らず、通常の発行停止・完全な外側frameの終了契約へ戻る。
+今回のRenderer.logは原記録へ保存する前に、03:50の次担当の起動で更新された。CPU用設定の適用と元設定の復元は確認できたが、今回の実際の選択adapterは未確認として扱う。次の観測では共有枠の解放前に同じPID/作成時刻・ログの時刻へ対応したRendererを保全し、後の実行のログを流用しない。
