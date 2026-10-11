@@ -404,6 +404,7 @@ impl Journal {
             }
             "LOAD_REQUESTED" => {
                 if !self.load_sent.contains(&f.generation)
+                    || self.frontend_arms.get(&f.generation) != Some(&f.scene)
                     || payload.name.as_ref() != Some(&save_name(&self.nonce, f.generation)?)
                     || !self.load_observed.insert(f.generation)
                 {
@@ -703,6 +704,13 @@ mod tests {
             .is_err());
         assert!(restarted
             .clone()
+            .consume(&event("loaded", 1, 1, "BOOT", "real"))
+            .is_err());
+        let mut foreign = restarted.clone();
+        assert!(foreign
+            .consume(&event("stale.g1", 1, 1, "LOAD_REQUESTED", "issued"))
+            .is_err());
+        assert!(foreign
             .consume(&event("loaded", 1, 1, "BOOT", "real"))
             .is_err());
         restarted
