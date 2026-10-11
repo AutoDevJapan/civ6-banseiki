@@ -25,6 +25,8 @@ pub mod production_copy;
 pub mod quantity;
 
 #[cfg(windows)]
+pub mod cold_lifecycle;
+#[cfg(windows)]
 pub mod game_property;
 #[cfg(windows)]
 mod identity_windows;

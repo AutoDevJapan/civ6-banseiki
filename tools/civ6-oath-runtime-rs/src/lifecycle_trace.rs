@@ -65,11 +65,22 @@ impl LifecycleTrace {
     fn boxed() -> Box<Self> {
         Box::new(Self::new())
     }
+    #[cfg(test)]
     fn start(&self, seconds: u32) -> Result<(), OathStatus> {
-        self.deadline_ms.store(
-            now().saturating_add(u64::from(seconds) * 1000),
-            Ordering::Release,
-        );
+        self.start_until(seconds, 0)
+    }
+    fn start_until(&self, seconds: u32, absolute: u64) -> Result<(), OathStatus> {
+        let current = now();
+        let relative = current.saturating_add(u64::from(seconds) * 1000);
+        let due = if absolute == 0 {
+            relative
+        } else {
+            relative.min(absolute)
+        };
+        if due <= current {
+            return Err(OathStatus::WrongState);
+        }
+        self.deadline_ms.store(due, Ordering::Release);
         self.stopped
             .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Acquire)
             .map(|_| ())
@@ -316,6 +327,14 @@ static BINDINGS: Mutex<[Option<Binding>; 2]> = Mutex::new([const { None }; 2]);
 
 static CONTROL: Mutex<bool> = Mutex::new(false);
 static SECONDS: AtomicU32 = AtomicU32::new(0);
+// Set only by the cold callback, before Install/Start, never by an export.
+static COLD_DEADLINE: AtomicU64 = AtomicU64::new(0);
+pub(crate) fn bound_cold_start(deadline: u64) -> Result<(), OathStatus> {
+    COLD_DEADLINE
+        .compare_exchange(0, deadline, Ordering::AcqRel, Ordering::Acquire)
+        .map(|_| ())
+        .map_err(|_| OathStatus::WrongState)
+}
 /// Uses exactly the existing fixed-process/image identity contract, followed
 /// by lifecycle code and table ownership checks. flags must remain zero.
 #[unsafe(no_mangle)]
@@ -344,6 +363,14 @@ pub extern "system" fn Civ6OathLifecycleInstall(input: *mut c_void) -> u32 {
 /// retained until process exit; the parent can read its own view after exit.
 #[unsafe(no_mangle)]
 pub extern "system" fn Civ6OathLifecycleInstallShared(input: *mut c_void) -> u32 {
+    install_shared_verified(input, crate::identity_windows::verify_lifecycle)
+}
+// Sealed test injection; the public export always uses the current-game gate.
+pub(crate) fn install_shared_verified(
+    input: *mut c_void,
+    verify: impl FnOnce(&OathRuntimeConfig) -> Result<[(usize, u64); 2], OathStatus>
+        + std::panic::UnwindSafe,
+) -> u32 {
     std::panic::catch_unwind(|| {
         if !committed_range(
             input as usize,
@@ -369,10 +396,11 @@ pub extern "system" fn Civ6OathLifecycleInstallShared(input: *mut c_void) -> u32
             Ok(view) if view.trace().initialized() => view,
             _ => return OathStatus::InvalidInput,
         };
-        if let Err(status) = install(
+        if let Err(status) = install_verified(
             &mut c.config,
             Some(view),
             Civ6OathLifecycleInstallShared as *const () as usize,
+            verify,
         ) {
             return status;
         }
@@ -387,11 +415,19 @@ fn install(
     shared: Option<MappedTrace>,
     entry: usize,
 ) -> Result<(), OathStatus> {
+    install_verified(c, shared, entry, crate::identity_windows::verify_lifecycle)
+}
+fn install_verified(
+    c: &mut OathRuntimeConfig,
+    shared: Option<MappedTrace>,
+    entry: usize,
+    verify: impl FnOnce(&OathRuntimeConfig) -> Result<[(usize, u64); 2], OathStatus>,
+) -> Result<(), OathStatus> {
     let mut used = CONTROL.lock().map_err(|_| OathStatus::Panic)?;
     if *used {
         return Err(OathStatus::WrongState);
     }
-    let slots = crate::identity_windows::verify_lifecycle(c)?;
+    let slots = verify(c)?;
     if crate::runtime::pin_module(entry).is_none() {
         return Err(OathStatus::HookFailure);
     }
@@ -427,8 +463,11 @@ pub extern "system" fn Civ6OathLifecycleStart() -> u32 {
     if t.stopped.load(Ordering::Acquire) != 1 {
         return OathStatus::WrongState as u32;
     }
-    t.start(SECONDS.load(Ordering::Acquire))
-        .map_or_else(|e| e as u32, |_| 0)
+    t.start_until(
+        SECONDS.load(Ordering::Acquire),
+        COLD_DEADLINE.load(Ordering::Acquire),
+    )
+    .map_or_else(|e| e as u32, |_| 0)
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn Civ6OathLifecycleStop() -> u32 {

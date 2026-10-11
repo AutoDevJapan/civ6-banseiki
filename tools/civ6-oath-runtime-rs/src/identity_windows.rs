@@ -26,7 +26,7 @@ use windows_sys::Win32::System::Memory::{
 static SOURCE_FILES: Mutex<Option<Vec<File>>> = Mutex::new(None);
 const MAX_FILE: u64 = 64 * 1024 * 1024;
 
-fn module_path(module: *mut c_void) -> Result<PathBuf, OathStatus> {
+pub(crate) fn module_path(module: *mut c_void) -> Result<PathBuf, OathStatus> {
     let mut path = vec![0u16; 32768];
     let len = unsafe { GetModuleFileNameW(module, path.as_mut_ptr(), path.len() as u32) } as usize;
     if len == 0 || len >= path.len() {
@@ -35,7 +35,7 @@ fn module_path(module: *mut c_void) -> Result<PathBuf, OathStatus> {
     Ok(PathBuf::from(OsString::from_wide(&path[..len])))
 }
 
-fn same_path(actual: &Path, expected: &str) -> bool {
+pub(crate) fn same_path(actual: &Path, expected: &str) -> bool {
     let (Ok(actual), Ok(expected)) = (actual.canonicalize(), Path::new(expected).canonicalize())
     else {
         return false;
@@ -46,7 +46,7 @@ fn same_path(actual: &Path, expected: &str) -> bool {
         .eq_ignore_ascii_case(&expected.as_os_str().to_string_lossy())
 }
 
-fn pinned_disk(path: &str) -> Result<(File, Vec<u8>), OathStatus> {
+pub(crate) fn pinned_disk(path: &str) -> Result<(File, Vec<u8>), OathStatus> {
     let mut file = OpenOptions::new()
         .read(true)
         .share_mode(1)
@@ -124,7 +124,7 @@ impl ImageMemory for CurrentImage {
     }
 }
 
-fn header_matches(base: usize, disk: &[u8]) -> bool {
+pub(crate) fn header_matches(base: usize, disk: &[u8]) -> bool {
     if !image_region(base, base, 0x400) {
         return false;
     }
@@ -137,7 +137,7 @@ fn header_matches(base: usize, disk: &[u8]) -> bool {
 pub(crate) struct CurrentGameGate;
 
 // Read-only PE RVA conversion for the two fixed, hashed lifecycle images.
-fn source_rva(disk: &[u8], rva: u32, len: usize) -> Result<&[u8], OathStatus> {
+pub(crate) fn source_rva(disk: &[u8], rva: u32, len: usize) -> Result<&[u8], OathStatus> {
     let fail = OathStatus::EntryBytes;
     let read32 = |at: usize| -> Result<u32, OathStatus> {
         Ok(u32::from_le_bytes(
@@ -173,7 +173,12 @@ fn source_rva(disk: &[u8], rva: u32, len: usize) -> Result<&[u8], OathStatus> {
     }
     Err(fail)
 }
-fn match_window(base: usize, disk: &[u8], rva: u32, len: usize) -> Result<(), OathStatus> {
+pub(crate) fn match_window(
+    base: usize,
+    disk: &[u8],
+    rva: u32,
+    len: usize,
+) -> Result<(), OathStatus> {
     let expected = source_rva(disk, rva, len)?;
     let mut actual = vec![0; len];
     CurrentImage(base)
@@ -184,7 +189,7 @@ fn match_window(base: usize, disk: &[u8], rva: u32, len: usize) -> Result<(), Oa
     }
     Ok(())
 }
-fn match_function(base: usize, disk: &[u8], rva: u32) -> Result<(), OathStatus> {
+pub(crate) fn match_function(base: usize, disk: &[u8], rva: u32) -> Result<(), OathStatus> {
     let mut owner = 0;
     let entry = unsafe {
         RtlLookupFunctionEntry(
