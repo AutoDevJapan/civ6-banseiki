@@ -99,6 +99,10 @@ VALUES={JAC_NATIVE_CARRIER_WITNESS_NONCE=RUN_ID,JAC_NATIVE_CARRIER_LOAD_GENERATI
  JAC_NATIVE_CARRIER_WITNESS_HOTSEAT=true,JAC_NATIVE_CARRIER_LOAD_REQUEST=RUN_ID..':'..GEN,RULESET=RULESET}
 MAPVALUES={MAP_SCRIPT=MAP};MODE=2;HIDDEN=true;FRONT=true;LOADS=0;LEAVES=0;SHOWS=0;UPDATES=0;LINES={}
 GameModeTypes={HOTSEAT=2};KeyEvents={KeyUp=1,KeyDown=2}
+-- Live Civ6 uses a distinct game-key enum: F15=67, F20=72, F21=73.
+Keys={};local translated={}
+for n=1,24 do Keys['VK_F'..n]=52+n;translated[111+n]=52+n end
+assert(Keys.VK_F15==67 and Keys.VK_F20==72 and Keys.VK_F21==73)
 SaveLocations={LOCAL_STORAGE=0};SaveDirectories={DEFAULT=0};ServerType={SERVER_TYPE_HOTSEAT=3}
 UI={IsInFrontEnd=function() return FRONT end}
 GameConfiguration={GetValue=function(k) return VALUES[k] end,SetValue=function(k,v) VALUES[k]=v end,
@@ -106,7 +110,7 @@ GameConfiguration={GetValue=function(k) return VALUES[k] end,SetValue=function(k
  SetToDefaults=function(mode) MODE=mode or 0;VALUES={} end,SetRuleSet=function(v) VALUES.RULESET=v end}
 MapConfiguration={GetValue=function(k) return MAPVALUES[k] end,SetValue=function(k,v) MAPVALUES[k]=v end}
 ContextPtr={IsHidden=function() return HIDDEN end,SetShowHandler=function(_,f) SHOW=f end,
- SetInputHandler=function(_,f,structured) assert(structured==true);INPUT=function(message,key) return f({GetMessageType=function() return message end,GetKey=function() return key end}) end end,
+ SetInputHandler=function(_,f,structured) assert(structured==true);INPUT=function(message,key) return f({GetMessageType=function() return message end,GetKey=function() return translated[key] or key end}) end end,
  SetUpdate=function(_,f) UPDATE=f end}
 include=function(name)
  assert(name=='MainMenu')

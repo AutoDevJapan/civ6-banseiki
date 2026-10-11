@@ -5,6 +5,9 @@ local stockShow=assert(OnShow)
 local stockUpdate=assert(OnUpdate)
 local armed,packet,scene
 local attempted={}
+-- Structured input reports game Keys values, not Windows virtual-key codes.
+local digitKeys={}
+for n=1,16 do digitKeys[assert(Keys['VK_F'..n])]=string.format('%x',n-1) end
 local serial,epoch=0,0
 local announced,failed=false,false
 local function quoted(s)
@@ -66,7 +69,7 @@ ContextPtr:SetInputHandler(function(input)
  if not visible() or not announced or failed then return false end
  if message~=KeyEvents.KeyUp then return packet~=nil end
  if packet then
-  if key==0x84 then
+  if key==Keys.VK_F21 then
    local text=packet.Text;packet=nil
    if #text~=37 then failed=true;return true end
    local payload=text:sub(1,33);local checksum=0
@@ -78,16 +81,16 @@ ContextPtr:SetInputHandler(function(input)
    local r={Nonce=n,Generation=g,ID=id}
    local ok,err=pcall(function() apply(r);armed=r;emit('FRONTEND_READY',r) end)
    if not ok then failed=true;armed=nil;emit('FAIL',r,'FRONTEND_PREPARE',err) end
-  elseif key>=0x70 and key<=0x7F and #packet.Text<37 then
-   packet.Text=packet.Text..string.format('%x',key-0x70)
+  elseif digitKeys[key] and #packet.Text<37 then
+   packet.Text=packet.Text..digitKeys[key]
   else packet=nil;failed=true end
   return true
  end
- if key==0x83 then
+ if key==Keys.VK_F20 then
   if armed then failed=true;return true end
   packet={Text='',Elapsed=0};return true
  end
- if key~=0x7E or not armed then return false end
+ if key~=Keys.VK_F15 or not armed then return false end
  local r=armed
  if attempted[r.ID] then return false end
  attempted[r.ID]=true;armed=nil
