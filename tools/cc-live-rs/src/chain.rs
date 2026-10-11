@@ -525,6 +525,7 @@ pub fn is_long(items: &[String]) -> bool {
 /// has one effective arrival time, so every claimant sees the same total order.
 pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String> {
     let mine = read_json(me)?;
+    let mut registered = Vec::new();
     let entries = fs::read_dir(p.here.join("queue")).map_err(|e| e.to_string())?;
     for entry in entries.filter_map(Result::ok) {
         let other = entry.path();
@@ -538,6 +539,7 @@ pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String
             remove_if_exists(&other)?;
             continue;
         }
+        registered.push(info.clone());
         let rank = |v: &Value| -> Result<(f64, f64), String> {
             let since = v["since"].as_f64().ok_or("waiter since missing")?;
             let long = v["long"].as_i64().ok_or("waiter long missing")?;
@@ -568,6 +570,15 @@ pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String
     for item in items {
         let assigned = json!({"job":item["scheduler"]["job"]});
         if fairness::same_owner(&mine, &assigned) {
+            continue;
+        }
+        // Once a dispatched job reaches the queue, its queue rank governs.
+        // Reserving it again as a ToDo would make an earlier queue claimant
+        // wait for this job while this job waits for that earlier claimant.
+        if registered
+            .iter()
+            .any(|owner| fairness::same_owner(owner, &assigned))
+        {
             continue;
         }
         if fairness::ready_item(&item, now)
