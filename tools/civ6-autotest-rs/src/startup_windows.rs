@@ -121,10 +121,7 @@ impl RecoveryLease {
             .filter(|p| p.is_absolute())
             .ok_or_else(|| Error::input("absolute shared Civ6 lock path was not supplied"))?;
         super::verify_control_path(&fs::canonicalize(path)?, super::SHARED_LOCK_PATH)?;
-        let mut file = OpenOptions::new()
-            .read(true)
-            .share_mode(1)
-            .open(super::SHARED_LOCK_PATH)?; // FILE_SHARE_READ only
+        let mut file = pin_record_file(Path::new(super::SHARED_LOCK_PATH))?;
         let mut record = Vec::new();
         (&mut file).take(32769).read_to_end(&mut record)?;
         if record.len() > 32768 {
@@ -177,6 +174,72 @@ impl RecoveryLease {
         super::verify_control_ancestry(std::process::id(), self.chain_pid, &rows, |pid| {
             created(open_process(pid, 0x101000)?.0)
         })
+    }
+}
+
+fn pin_record_file(path: &Path) -> std::io::Result<File> {
+    OpenOptions::new().read(true).share_mode(1).open(path)
+}
+
+#[cfg(test)]
+mod lease_sharing_tests {
+    use super::*;
+    #[test]
+    fn recovery_legacy_reader_reproduces_os32_while_mutable_writer_is_open() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("owned.lock");
+        fs::write(&path, b"{\"lock_token\":\"owned\"}").unwrap();
+        let writer = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        let error = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(32));
+        let canonical = fs::canonicalize(&path);
+        println!(
+            "TODO880_LOCK_OS_RECEIPT={}",
+            json!({"case":"legacy_read_vs_rw_writer",
+            "read_open_os_error":error.raw_os_error(),"canonicalize_os_error":canonical.as_ref().err().and_then(|e|e.raw_os_error()),
+            "canonicalize_ok":canonical.is_ok(),"game_launches":0})
+        );
+        drop(writer);
+        assert!(OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .is_ok());
+    }
+    #[test]
+    fn recovery_identity_pin_must_coexist_with_writer_and_still_deny_delete() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("owned.lock");
+        fs::write(&path, b"{\"lock_token\":\"owned\"}").unwrap();
+        let writer = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        // RED on the old long-lived FILE_SHARE_READ proof.
+        let pin = pin_record_file(&path).unwrap();
+        assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
+        drop(writer);
+        let update = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        drop(update);
+        assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
+        drop(pin);
+        fs::remove_file(&path).unwrap();
     }
 }
 
