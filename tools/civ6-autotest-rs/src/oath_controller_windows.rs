@@ -587,6 +587,7 @@ struct Inner {
     exports: [usize; 4],
     module_base: usize,
     trace_address: usize,
+    trace_length: usize,
     receipt_buffer: usize,
     max_seconds: u32,
     phase: Phase,
@@ -859,7 +860,7 @@ impl Inner {
             callee,
             shared.as_ref(),
         );
-        let (base, exports, trace_address, receipt_buffer) = match built {
+        let (base, exports, trace_address, receipt_buffer, trace_length) = match built {
             Ok(done) => done,
             Err(error) => {
                 if target.unresolved() {
@@ -884,6 +885,7 @@ impl Inner {
             exports,
             module_base: base,
             trace_address: trace_address as usize,
+            trace_length,
             receipt_buffer,
             max_seconds,
             phase: if cold {
@@ -928,13 +930,7 @@ impl Inner {
         })
     }
     fn trace_size(&self) -> usize {
-        if self.lifecycle {
-            crate::oath_lifecycle_wire::SIZE
-        } else if self.callee {
-            crate::oath_recipient_wire::SIZE
-        } else {
-            wire::TRACE_SIZE
-        }
+        self.trace_length
     }
 
     /// Starts the one observation window. A second start is refused locally
@@ -1457,7 +1453,7 @@ fn capture_after_exit(
     }
 }
 
-type BroughtUp = (usize, [usize; 4], u64, usize);
+type BroughtUp = (usize, [usize; 4], u64, usize, usize);
 
 /// Load, verify and install; every step after the load runs on the poisoned-
 /// until-proven target.
@@ -1513,7 +1509,7 @@ fn bring_up(
     }
     target.verify_after_install(|target| {
         let after = target.read(config_at, config.len())?;
-        let (trace_address, _) = if lifecycle {
+        let (trace_address, trace_length) = if lifecycle {
             if after[..32] != config[..32]
                 || after[44..48] != config[44..48]
                 || after[48..] != config[48..]
@@ -1537,7 +1533,7 @@ fn bring_up(
             .map_err(Error::input)?;
         } else if callee {
             crate::oath_recipient_wire::validate(
-                &target.read(trace_address as usize, crate::oath_recipient_wire::SIZE)?,
+                &target.read(trace_address as usize, trace_length as usize)?,
             )
             .map_err(Error::input)?;
         } else {
@@ -1545,7 +1541,13 @@ fn bring_up(
                 .map_err(Error::input)?;
         }
         let receipt_buffer = target.alloc(wire::RECEIPT_SIZE.max(crate::oath_cold_wire::SIZE))?;
-        Ok((base, exports, trace_address, receipt_buffer))
+        Ok((
+            base,
+            exports,
+            trace_address,
+            receipt_buffer,
+            trace_length as usize,
+        ))
     })
 }
 

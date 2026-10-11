@@ -8,11 +8,20 @@ pub(crate) const HEADER: usize = 64;
 pub(crate) const ROW: usize = 4320;
 pub(crate) const CAPACITY: usize = 1024;
 pub(crate) const SIZE: usize = HEADER + ROW * CAPACITY;
+pub(crate) const ROW_V5: usize = ROW + 96;
+pub(crate) const SIZE_V5: usize = HEADER + ROW_V5 * CAPACITY;
+
+fn row_size(bytes: &[u8]) -> Result<usize, String> {
+    match (u32_at(bytes, 4), bytes.len()) {
+        (Some(4), SIZE) => Ok(ROW),
+        (Some(5), SIZE_V5) => Ok(ROW_V5),
+        _ => Err("callee trace version and size differ".into()),
+    }
+}
 
 pub(crate) fn validate(bytes: &[u8]) -> Result<(), String> {
-    if bytes.len() != SIZE
-        || u32_at(bytes, 0) != Some(0x4a41_4352)
-        || u32_at(bytes, 4) != Some(4)
+    row_size(bytes)?;
+    if u32_at(bytes, 0) != Some(0x4a41_4352)
         || u32_at(bytes, 8).is_none_or(|n| n as usize > CAPACITY)
         || u32_at(bytes, 24).is_none_or(|n| n > 2)
         || u32_at(bytes, 52).is_none_or(|n| n > 1)
@@ -20,6 +29,33 @@ pub(crate) fn validate(bytes: &[u8]) -> Result<(), String> {
         return Err("invalid callee trace header or size".into());
     }
     Ok(())
+}
+
+fn helper_boundary(row: &[u8], at: usize, thread: u32) -> Result<Value, String> {
+    let flags = u32_at(row, at).unwrap();
+    if flags & !7 != 0 || u32_at(row, at + 4) != Some(0) {
+        return Err("invalid helper boundary flags or reserved field".into());
+    }
+    let sample = |offset: usize, valid: bool| {
+        json!({"read_complete":valid,"helper":format!("0x{:x}",u64_at(row,offset).unwrap()),
+            "owner_thread":u32_at(row,offset+8),
+            "recursion":u32_at(row,offset+12).unwrap() as i32})
+    };
+    let first = sample(at + 16, flags & 1 != 0);
+    let second = sample(at + 32, flags & 2 != 0);
+    let stable = flags == 7 && first == second;
+    let helper = u64_at(row, at + 32).unwrap();
+    let recursion = u32_at(row, at + 44).unwrap() as i32;
+    let owned = if stable && helper != 0 && helper.is_multiple_of(8) && recursion >= 0 {
+        json!(thread != 0 && recursion > 0 && u32_at(row, at + 40) == Some(thread))
+    } else {
+        Value::Null
+    };
+    Ok(
+        json!({"raw_flags":flags,"tick":u64_at(row,at+8),"first":first,"second":second,
+        "copies_equal":stable,"helper_owned_at_boundary":owned,
+        "continuous_holding_proved":false,"native_lifetime_proved":false,"quantity_accepted":false}),
+    )
 }
 
 fn production(row: &[u8], at: usize) -> Option<Value> {
@@ -39,6 +75,11 @@ fn production(row: &[u8], at: usize) -> Option<Value> {
 pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<Value, String> {
     validate(first)?;
     validate(second)?;
+    let width = row_size(second)?;
+    let version = u32_at(second, 4).unwrap();
+    if first.len() != second.len() || u32_at(first, 4) != Some(version) {
+        return Err("callee snapshots describe different wire versions".into());
+    }
     let mut rows = Vec::new();
     let mut open = 0;
     let mut unstable = 0;
@@ -47,9 +88,9 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     let count = u32_at(second, 8).unwrap() as usize;
     let first_count = u32_at(first, 8).unwrap() as usize;
     for index in 0..count {
-        let at = HEADER + index * ROW;
-        let row = &second[at..at + ROW];
-        let stable = index < first_count && first[at..at + ROW] == *row;
+        let at = HEADER + index * width;
+        let row = &second[at..at + width];
+        let stable = index < first_count && first[at..at + width] == *row;
         let state = u32_at(row, 0).unwrap();
         let slot = u32_at(row, 4).unwrap();
         if !stable {
@@ -96,6 +137,21 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
                 (delta != 0).then(|| json!({"unit_index":index,"before_q8":b,"after_q8":a,"difference_q8":delta}))
             }).collect::<Vec<_>>())
         });
+        let helper_before = if version == 5 && stable && matches!(state, 1..=3) {
+            helper_boundary(row, ROW, u32_at(row, 8).unwrap())?
+        } else {
+            Value::Null
+        };
+        let helper_after = if version == 5 && stable && state == 2 {
+            helper_boundary(row, ROW + 48, u32_at(row, 8).unwrap())?
+        } else {
+            Value::Null
+        };
+        let helper_unwind = if version == 5 && stable && state == 3 {
+            helper_boundary(row, ROW + 48, u32_at(row, 8).unwrap())?
+        } else {
+            Value::Null
+        };
         rows.push(json!({"sequence":index+1,"state":if !stable { "unknown_unstable" } else { match state {2=>"completed",3=>"unwound",_=>"incomplete"} },
             "slot":slot,"family":match slot / 2 {0=>"military",1=>"naval",2=>"building",3=>"growth",_=>"unknown"},
             "call":if slot.is_multiple_of(2) {"apply"} else {"remove"},
@@ -107,6 +163,9 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
                 "definition_vtable_rva":if u32_at(row,116).unwrap() != 0 {json!(format!("0x{:x}",u32_at(row,116).unwrap()))} else {Value::Null},
                 "definition_name_at_call_entry":name}) } else { Value::Null },
             "production_array_before":before,"production_array_after":after,
+            "helper_boundary_before":helper_before,"helper_boundary_after":helper_after,
+            "helper_boundary_unwind":helper_unwind,
+            "native_holding_established":false,
             "observed_production_differences":difference,
             "production_attribution_established":false,
             "quantity_accepted":false}));
@@ -117,7 +176,7 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     let dropped = u32_at(second, 12).unwrap();
     // The receipt and two remote copies are separate observations. Only
     // equal stopped counters can describe this snapshot as complete.
-    let counters_match = receipt.trace_size as usize == SIZE
+    let counters_match = receipt.trace_size as usize == second.len()
         && receipt.rows as usize == count
         && receipt.completed == u32_at(second, 20).unwrap()
         && receipt.dropped == dropped
@@ -136,10 +195,11 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     ) && detached
         && counters_match;
     Ok(
-        json!({"capture":"callee","trace_version":4,"rows":rows,"row_count":count,
+        json!({"capture":"callee","trace_version":version,"rows":rows,"row_count":count,
         "completed":u32_at(second,20),"unwound":u32_at(second,28),"in_flight":in_flight,"dropped":dropped,
         "stopped":stopped,"entry_slots_restored":detached,"complete":complete,"snapshot_consistent":complete,"unstable_rows":unstable,"receipt_counters_match":counters_match,
         "image_base":format!("0x{:x}",u64_at(second,32).unwrap()),"deadline_hit":u32_at(second,48)==Some(1),
+        "exe_base":if version==5 {json!(format!("0x{:x}",u64_at(second,56).unwrap()))} else {Value::Null},
         "quantity_accepted":false,"accepted":false,
         "limitations":["complete_is_point_in_time_snapshot_consistency","point_in_time_counts_do_not_authorize_gateway_retirement","city_identity_and_lifetime_not_established","no_quantity_adjustment"]}),
     )
@@ -220,7 +280,7 @@ mod tests {
     fn layout_matches_compiled_atomic_runtime() {
         assert_eq!(
             civ6_oath_runtime_rs::recipient_trace::RecipientTrace::wire_layout(),
-            (HEADER, ROW, SIZE)
+            (HEADER, ROW_V5, SIZE_V5)
         );
     }
 
@@ -324,6 +384,82 @@ mod tests {
         bytes[HEADER..HEADER + 4].copy_from_slice(&3u32.to_le_bytes());
         assert!(
             project(&bytes, &bytes, &r).unwrap()["rows"][0]["production_array_after"].is_null()
+        );
+    }
+
+    #[test]
+    fn helper_v5_boundaries_never_grant_continuous_holding_and_v4_stays_separate() {
+        let old = sample();
+        let legacy = project(&old, &old, &receipt()).unwrap();
+        assert_eq!(legacy["trace_version"], 4);
+        assert!(legacy["rows"][0]["helper_boundary_before"].is_null());
+        let mut bytes = vec![0; SIZE_V5];
+        bytes[..HEADER + ROW].copy_from_slice(&old[..HEADER + ROW]);
+        bytes[4..8].copy_from_slice(&5u32.to_le_bytes());
+        bytes[56..64].copy_from_slice(&0x140000000u64.to_le_bytes());
+        bytes[HEADER + 8..HEADER + 12].copy_from_slice(&77u32.to_le_bytes());
+        let at = HEADER + ROW;
+        bytes[at..at + 4].copy_from_slice(&7u32.to_le_bytes());
+        for sample in [at + 16, at + 32] {
+            bytes[sample..sample + 8].copy_from_slice(&0x8000u64.to_le_bytes());
+            bytes[sample + 8..sample + 12].copy_from_slice(&77u32.to_le_bytes());
+            bytes[sample + 12..sample + 16].copy_from_slice(&1u32.to_le_bytes());
+        }
+        let mut r = receipt();
+        r.trace_size = SIZE_V5 as u32;
+        let value = project(&bytes, &bytes, &r).unwrap();
+        let probe = &value["rows"][0]["helper_boundary_before"];
+        assert_eq!(value["trace_version"], 5);
+        assert_eq!(probe["helper_owned_at_boundary"], true);
+        assert_eq!(probe["continuous_holding_proved"], false);
+        assert_eq!(probe["native_lifetime_proved"], false);
+        assert_eq!(value["rows"][0]["native_holding_established"], false);
+        assert!(value["rows"][0]["helper_boundary_after"]["helper_owned_at_boundary"].is_null());
+        for (offset, word, expected) in [
+            (at, 0u32, Value::Null),
+            (at, 3u32, Value::Null),
+            (at + 40, 78, Value::Null), // producer's stable bit cannot hide changed samples
+            (at + 44, u32::MAX, Value::Null),
+        ] {
+            let mut changed = bytes.clone();
+            changed[offset..offset + 4].copy_from_slice(&word.to_le_bytes());
+            assert_eq!(
+                project(&changed, &changed, &r).unwrap()["rows"][0]["helper_boundary_before"]
+                    ["helper_owned_at_boundary"],
+                expected
+            );
+        }
+        for owner in [0u32, 78] {
+            let mut changed = bytes.clone();
+            for offset in [at + 24, at + 40] {
+                changed[offset..offset + 4].copy_from_slice(&owner.to_le_bytes());
+            }
+            assert_eq!(
+                project(&changed, &changed, &r).unwrap()["rows"][0]["helper_boundary_before"]
+                    ["helper_owned_at_boundary"],
+                false
+            );
+        }
+        let mut changed = bytes.clone();
+        for offset in [at + 28, at + 44] {
+            changed[offset..offset + 4].copy_from_slice(&0u32.to_le_bytes());
+        }
+        assert_eq!(
+            project(&changed, &changed, &r).unwrap()["rows"][0]["helper_boundary_before"]
+                ["helper_owned_at_boundary"],
+            false
+        );
+        let mut invalid = bytes.clone();
+        invalid[at + 4..at + 8].copy_from_slice(&1u32.to_le_bytes());
+        assert!(project(&invalid, &invalid, &r).is_err());
+        assert!(project(&old, &bytes, &r).is_err());
+        invalid = bytes.clone();
+        invalid[4..8].copy_from_slice(&4u32.to_le_bytes());
+        assert!(validate(&invalid).is_err());
+        changed = bytes.clone();
+        changed[at + 24] ^= 1;
+        assert!(
+            project(&bytes, &changed, &r).unwrap()["rows"][0]["helper_boundary_before"].is_null()
         );
     }
 }

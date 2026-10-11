@@ -21,7 +21,7 @@ pub(crate) const HEADER_SIZE: usize = 64;
 pub(crate) const ROW_SIZE: usize = 136;
 pub(crate) const TRACE_SIZE: usize = HEADER_SIZE + CAPACITY * ROW_SIZE;
 /// Upper bound of any raw trace read.
-pub(crate) const MAX_TRACE_READ: usize = super::oath_recipient_wire::SIZE;
+pub(crate) const MAX_TRACE_READ: usize = super::oath_recipient_wire::SIZE_V5;
 
 // Trace header offsets (repr(C), shared by v4 and v5).
 const H_NEXT: usize = 8;
@@ -125,14 +125,18 @@ pub(crate) fn check_installed_config(
     if address == 0 || !address.is_multiple_of(8) {
         return Err("install returned no usable trace address".into());
     }
-    let expected = match u32_at(sent, 28) {
-        Some(0) => TRACE_SIZE,
-        Some(1) => crate::oath_recipient_wire::SIZE,
+    let accepted = match u32_at(sent, 28) {
+        Some(0) => size as usize == TRACE_SIZE,
+        Some(1) => [
+            crate::oath_recipient_wire::SIZE,
+            crate::oath_recipient_wire::SIZE_V5,
+        ]
+        .contains(&(size as usize)),
         _ => return Err("unknown capture flag".into()),
     };
-    if size as usize != expected {
+    if !accepted {
         return Err(format!(
-            "install returned trace size {size}, expected {expected}"
+            "install returned unsupported trace size {size} for its capture flag"
         ));
     }
     Ok((address, size))
@@ -733,6 +737,38 @@ pub(crate) mod tests {
         let mut unaligned = after;
         unaligned[32..40].copy_from_slice(&0x1234_5001u64.to_le_bytes());
         assert!(check_installed_config(&sent, &unaligned).is_err());
+    }
+
+    #[test]
+    fn callee_install_sizes_are_bounded_to_v4_and_v5_without_changing_adapter_sizes() {
+        let mut sent = encode_config(42, 30, 0x01d9_0000_0000_0001);
+        sent[28..32].copy_from_slice(&1u32.to_le_bytes());
+        for size in [
+            super::super::oath_recipient_wire::SIZE,
+            super::super::oath_recipient_wire::SIZE_V5,
+        ] {
+            let mut after = sent;
+            after[32..40].copy_from_slice(&0x12345000u64.to_le_bytes());
+            after[40..44].copy_from_slice(&(size as u32).to_le_bytes());
+            assert_eq!(
+                check_installed_config(&sent, &after),
+                Ok((0x12345000, size as u32))
+            );
+            let mut adapter_sent = sent;
+            adapter_sent[28..32].copy_from_slice(&0u32.to_le_bytes());
+            after[..32].copy_from_slice(&adapter_sent[..32]);
+            assert!(check_installed_config(&adapter_sent, &after).is_err());
+        }
+        for size in [
+            0,
+            super::super::oath_recipient_wire::SIZE + 8,
+            super::super::oath_recipient_wire::SIZE_V5 + 8,
+        ] {
+            let mut after = sent;
+            after[32..40].copy_from_slice(&0x12345000u64.to_le_bytes());
+            after[40..44].copy_from_slice(&(size as u32).to_le_bytes());
+            assert!(check_installed_config(&sent, &after).is_err());
+        }
     }
 
     fn receipt_bytes() -> [u8; RECEIPT_SIZE] {
