@@ -14,8 +14,7 @@ use std::{
     time::Duration,
 };
 
-#[path = "../hotseat_native_carrier.rs"]
-mod protocol;
+use civ6_autotest_rs::hotseat_native_carrier as protocol;
 
 #[derive(Parser)]
 #[command(about = "Validate the fixed native-carrier hotseat log protocol")]
@@ -70,11 +69,12 @@ enum Command {
 }
 
 const NONCE_KEY: &str = "JAC_NATIVE_CARRIER_WITNESS_NONCE";
-const BINDINGS: [&str; 4] = [
+const BINDINGS: [&str; 5] = [
     "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
     "poc/JAC_PoC_Absorption/UI/JAC_NativeCarrierWitness_UI.lua",
     "poc/JAC_PoC_JapanMapScale/UI/JAC_NativeCarrierWitness_Staging.lua",
     civ6_autotest_rs::native_carrier_witness::STAGING_ROOM,
+    civ6_autotest_rs::native_carrier_witness::FRONTEND_MENU,
 ];
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -92,7 +92,7 @@ fn file_hash(path: &Path) -> Result<String> {
 
 fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
     let b: Bundle = serde_json::from_slice(&fs::read(output.join("bundle.json"))?)?;
-    if b.version != 1 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
+    if b.version != 2 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
         return Err(Error::scenario("invalid fixed witness bundle"));
     }
     for relative in BINDINGS {
@@ -110,23 +110,6 @@ fn pregame_flags(nonce: &str) -> String {
     let value = scenario::lua_string(nonce);
     let hotseat = scenario::lua_string(civ6_autotest_rs::native_carrier_witness::HOTSEAT_KEY);
     format!("assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'actual hotseat frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue({hotseat}, true)\nlocal confirmed=GameConfiguration.GetValue({hotseat})\nassert(confirmed==true or confirmed==1,'hotseat confirmation was not applied')\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
-}
-
-fn witness_load_code(name: &str, nonce: &str, generation: u8) -> String {
-    assert!(protocol::nonce_valid(nonce) && (1..=2).contains(&generation));
-    let defaults = "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)\n";
-    let value = scenario::lua_string(nonce);
-    let flags=format!("{defaults}assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'actual hotseat load frontend required')\nGameConfiguration.SetValue('{NONCE_KEY}',{value})\nGameConfiguration.SetValue('JAC_NATIVE_CARRIER_WITNESS_HOTSEAT',true)\nGameConfiguration.SetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION',{generation})\nassert(GameConfiguration.GetValue('{NONCE_KEY}')=={value},'load nonce was not applied')\nlocal confirmed=GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_HOTSEAT')\nassert(confirmed==true or confirmed==1,'load hotseat confirmation was not applied')\nassert(tonumber((GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_GENERATION')))=={generation},'load generation was not applied')\n");
-    let code = scenario::load_code(name, scenario::SessionType::Hotseat);
-    assert_eq!(
-        code.matches(defaults).count(),
-        1,
-        "fixed load defaults anchor changed"
-    );
-    format!(
-        "if not UI.IsInFrontEnd() then error('frontend required') end\nNetwork.LeaveGame()\n{}",
-        code.replacen(defaults, &flags, 1)
-    )
 }
 
 fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
@@ -243,7 +226,7 @@ fn completed_lines(text: &str) -> &str {
     text.rfind('\n').map_or("", |end| &text[..=end])
 }
 
-fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, port: u16) -> Result<()> {
+fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, _port: u16) -> Result<()> {
     if !timeout.is_finite() || !(1.0..=1200.).contains(&timeout) {
         return Err(Error::input("drive timeout must be 1..1200 seconds"));
     }
@@ -341,33 +324,12 @@ fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, port: u16) -> R
                         }
                         io.sleep(0.2);
                     }
-                    let mut runner = Runner::new(
-                        serde_json::json!({"session_type":"hotseat"}),
-                        output.to_owned(),
-                        logs.to_owned(),
-                        saves.to_owned(),
-                        port,
-                    );
-                    let menu_deadline = deadline.min(io.now() + 30.);
-                    let ready = runner.send_frontend_transition_checked(
-                        "return UI.IsInFrontEnd()",
-                        menu_deadline,
-                        || verify_owner(&mut io, &state),
-                    )?;
-                    if ready.trim() != "true" {
-                        return Err(Error::scenario("frontend is not confirmed; no LoadGame"));
-                    }
-                    let code = witness_load_code(&name, &state.journal.nonce, generation);
                     state
                         .load_baselines
                         .insert(generation, judge::snapshot_logs(logs)?);
                     append_state(&path, &state)?;
-                    runner.send_frontend_transition_checked(
-                        &code,
-                        deadline.min(io.now() + 15.),
-                        || verify_owner(&mut io, &state),
-                    )?;
-                    runner.disconnect();
+                    verify_owner(&mut io, &state)?;
+                    io.key(0x7E, deadline)?; // F15; fixed visible frontend handler only.
                 }
                 Some(protocol::Action::Complete) => {
                     println!("native carrier exact saved reload complete");
@@ -393,7 +355,7 @@ fn run(args: Args) -> Result<()> {
                 bindings.insert(relative.to_owned(), file_hash(&repo.join(relative))?);
             }
             let value = Bundle {
-                version: 1,
+                version: 2,
                 nonce: uuid::Uuid::new_v4().simple().to_string(),
                 bindings,
             };
@@ -504,42 +466,6 @@ mod tests {
         assert!(lua.load(pregame_flags(&other)).eval::<String>().is_err());
         lua.load("local read=GameConfiguration.GetValue;GameConfiguration.GetValue=function(k) if k=='GAMEMODE_HEROES' then return false end;return read(k) end").exec().unwrap();
         assert!(lua.load(pregame_flags(nonce())).eval::<String>().is_err());
-    }
-
-    #[test]
-    fn load_restores_verified_run_settings_after_defaults_clear_them() {
-        for generation in [1, 2] {
-            let lua = mlua::Lua::new();
-            lua.globals().set("RUN_ID", nonce()).unwrap();
-            lua.globals().set("GEN", generation).unwrap();
-            lua.load(r#"
-local values={};CALLS=0
-UI={IsInFrontEnd=function() return true end}
-GameModeTypes={HOTSEAT=2};SaveLocations={LOCAL_STORAGE=0};SaveDirectories={DEFAULT=0};ServerType={SERVER_TYPE_HOTSEAT=3}
-GameConfiguration={SetToDefaults=function(mode) assert(mode==2);values={} end,
- IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,
- SetValue=function(k,v) values[k]=v end,GetValue=function(k) return values[k] end}
-Network={LeaveGame=function() end,GetGameConfigurationSaveType=function() return 3 end,
- LoadGame=function(save,server)
- assert(save.Name=='proof-save' and server==3)
- assert(values.JAC_NATIVE_CARRIER_WITNESS_NONCE==RUN_ID,'defaults discarded the run identity')
- assert(values.JAC_NATIVE_CARRIER_WITNESS_HOTSEAT==true and values.JAC_NATIVE_CARRIER_LOAD_GENERATION==GEN,'load settings missing')
- CALLS=CALLS+1;return true end}
-"#).exec().unwrap();
-            assert!(lua
-                .load(witness_load_code("proof-save", nonce(), generation))
-                .eval::<bool>()
-                .unwrap());
-            assert_eq!(lua.globals().get::<u32>("CALLS").unwrap(), 1);
-            lua.load("GameConfiguration.SetValue=function() end;CALLS=0")
-                .exec()
-                .unwrap();
-            assert!(lua
-                .load(witness_load_code("proof-save", nonce(), generation))
-                .eval::<bool>()
-                .is_err());
-            assert_eq!(lua.globals().get::<u32>("CALLS").unwrap(), 0);
-        }
     }
 
     #[test]

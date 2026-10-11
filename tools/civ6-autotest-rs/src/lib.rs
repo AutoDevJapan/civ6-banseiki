@@ -8,6 +8,7 @@ pub mod error;
 pub mod growth_roster;
 pub mod growth_sync;
 pub mod hotseat_bridge;
+pub mod hotseat_native_carrier;
 pub mod judge;
 pub mod metrics;
 pub mod native_carrier_witness;

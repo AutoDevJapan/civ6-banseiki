@@ -23,9 +23,13 @@ const GAMEPLAY_COMMON: &str = include_str!("native_carrier_witness/gameplay_comm
 const GAMEPLAY: &str = include_str!("native_carrier_witness/gameplay.lua");
 const UI: &str = include_str!("native_carrier_witness/ui.lua");
 const STAGING: &str = include_str!("native_carrier_witness/staging.lua");
+const FRONTEND: &str = include_str!("native_carrier_witness/frontend.lua");
 const RULES: &str =
     include_str!("../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua");
 pub const STAGING_ROOM: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.lua";
+pub const FRONTEND_MENU: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanMainMenu.lua";
+const FRONTEND_START: &str = "-- BEGIN GENERATED NATIVE CARRIER FRONTEND\n";
+const FRONTEND_END: &str = "-- END GENERATED NATIVE CARRIER FRONTEND";
 const INLINE_START: &str = "-- BEGIN GENERATED NATIVE CARRIER STAGING\n";
 const INLINE_END: &str = "-- END GENERATED NATIVE CARRIER STAGING";
 
@@ -252,9 +256,39 @@ pub fn staging_room_binding(source: &str) -> Result<String> {
     ))
 }
 
+pub fn frontend_binding() -> String {
+    let fixed = fixture();
+    let ruleset = crate::scenario::lua_string(fixed["steps"][1]["ruleset"].as_str().unwrap());
+    let map = crate::scenario::lua_string(fixed["steps"][1]["map_file"].as_str().unwrap());
+    format!("local requiredRuleset={ruleset}\nlocal requiredMap={map}\n{FRONTEND}")
+}
+
+pub fn frontend_menu_binding(source: &str) -> Result<String> {
+    if source.trim() == "include(\"MainMenu\")" {
+        return Ok(format!(
+            "{FRONTEND_START}{}{FRONTEND_END}\n",
+            frontend_binding()
+        ));
+    }
+    if source.matches(FRONTEND_START).count() != 1 || source.matches(FRONTEND_END).count() != 1 {
+        return Err(Error::scenario(
+            "native frontend needs exactly one generated section",
+        ));
+    }
+    let (prefix, rest) = source.split_once(FRONTEND_START).unwrap();
+    let (_, suffix) = rest
+        .split_once(FRONTEND_END)
+        .ok_or_else(|| Error::scenario("frontend section order invalid"))?;
+    Ok(format!(
+        "{prefix}{FRONTEND_START}{}{FRONTEND_END}{suffix}",
+        frontend_binding()
+    ))
+}
+
 pub fn emit(root: &Path, nonce: &str) -> Result<EmittedWitness> {
     let (mid_save, returned_save) = save_names(nonce)?;
     let room = staging_room_binding(&fs::read_to_string(crate::repo_root().join(STAGING_ROOM))?)?;
+    let menu = frontend_menu_binding(&fs::read_to_string(crate::repo_root().join(FRONTEND_MENU))?)?;
     let scripts = [
         (
             "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
@@ -269,6 +303,7 @@ pub fn emit(root: &Path, nonce: &str) -> Result<EmittedWitness> {
             staging_binding(),
         ),
         (STAGING_ROOM, room),
+        (FRONTEND_MENU, menu),
     ];
     let mut files = Vec::new();
     for (relative, source) in scripts {

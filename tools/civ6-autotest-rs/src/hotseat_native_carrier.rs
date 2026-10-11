@@ -226,24 +226,28 @@ pub fn save_name(nonce: &str, generation: u8) -> Result<String> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Journal {
+    version: u8,
     pub nonce: String,
-    pub owner: civ6_autotest_rs::hotseat_bridge::WindowOwner,
+    pub owner: crate::hotseat_bridge::WindowOwner,
     receipts: Receipts,
     scenes: BTreeMap<String, u8>,
     save_snapshots: BTreeMap<u8, String>,
     save_complete: BTreeSet<u8>,
     pub load_sent: BTreeSet<u8>,
+    load_reserved: BTreeSet<u8>,
+    load_observed: BTreeSet<u8>,
     begin_sent: BTreeSet<String>,
     dialog_sent: BTreeSet<(String, u64)>,
     pub complete: bool,
 }
 
 impl Journal {
-    pub fn new(nonce: &str, owner: civ6_autotest_rs::hotseat_bridge::WindowOwner) -> Result<Self> {
+    pub fn new(nonce: &str, owner: crate::hotseat_bridge::WindowOwner) -> Result<Self> {
         if !nonce_valid(nonce) || owner.pid == 0 || owner.hwnd == 0 || !owner.started.is_finite() {
             return Err(problem("invalid run/window ownership"));
         }
         Ok(Self {
+            version: 2,
             nonce: nonce.into(),
             owner,
             receipts: Receipts::default(),
@@ -251,6 +255,8 @@ impl Journal {
             save_snapshots: BTreeMap::new(),
             save_complete: BTreeSet::new(),
             load_sent: BTreeSet::new(),
+            load_reserved: BTreeSet::new(),
+            load_observed: BTreeSet::new(),
             begin_sent: BTreeSet::new(),
             dialog_sent: BTreeSet::new(),
             complete: false,
@@ -260,7 +266,7 @@ impl Journal {
     /// Returns an action only once. Persist the entire journal before issuing it.
     /// A failed or unknown input/load keeps the sent marker and stops the run.
     pub fn consume(&mut self, f: &Frame) -> Result<Option<Action>> {
-        if f.nonce != self.nonce || self.complete {
+        if self.version != 2 || f.nonce != self.nonce || self.complete {
             return Err(problem("foreign frame or event after completion"));
         }
         if !self.receipts.accept(f)? {
@@ -276,7 +282,7 @@ impl Journal {
         match f.kind.as_str() {
             "BOOT" => {
                 if self.scenes.contains_key(&f.scene)
-                    || (f.generation > 0 && !self.load_sent.contains(&f.generation))
+                    || (f.generation > 0 && !self.load_observed.contains(&f.generation))
                 {
                     return Err(problem("unissued load or repeated BOOT scene"));
                 }
@@ -304,13 +310,30 @@ impl Journal {
             }
             "EXIT_REQUESTED" => {
                 if !self.save_complete.contains(&f.generation)
-                    || !self.load_sent.insert(f.generation)
+                    || !self.load_reserved.insert(f.generation)
                 {
                     return Err(problem("exit/load before save completion or repeated load"));
+                }
+            }
+            "FRONTEND_READY" => {
+                if !self.load_reserved.contains(&f.generation)
+                    || !self.save_complete.contains(&f.generation)
+                    || payload.name.as_ref() != Some(&save_name(&self.nonce, f.generation)?)
+                    || !self.load_sent.insert(f.generation)
+                {
+                    return Err(problem("unreserved or repeated frontend load"));
                 }
                 return Ok(Some(Action::Load {
                     generation: f.generation,
                 }));
+            }
+            "LOAD_REQUESTED" => {
+                if !self.load_sent.contains(&f.generation)
+                    || payload.name.as_ref() != Some(&save_name(&self.nonce, f.generation)?)
+                    || !self.load_observed.insert(f.generation)
+                {
+                    return Err(problem("unissued or repeated frontend load receipt"));
+                }
             }
             "LOAD_READY" => {
                 if self.scenes.get(&f.scene) != Some(&f.generation)
@@ -335,6 +358,8 @@ impl Journal {
             }
             "DONE" => {
                 if f.generation != 2
+                    || !self.load_observed.contains(&1)
+                    || !self.load_observed.contains(&2)
                     || !self.load_sent.contains(&2)
                     || !self.save_complete.contains(&2)
                     || self.scenes.get(&f.scene) != Some(&2)
@@ -379,14 +404,12 @@ mod tests {
         assert_eq!(frames[0].body, "原本");
         let old = format!("JAC_HS|1|{run_id}|12.5|1|21|RESULT|1/1|e58e9fe69cac");
         assert_eq!(
-            civ6_autotest_rs::hotseat_bridge::parse_frames(&old, nonce()).unwrap()[0].body,
+            crate::hotseat_bridge::parse_frames(&old, nonce()).unwrap()[0].body,
             "原本"
         );
-        assert!(civ6_autotest_rs::hotseat_bridge::parse_frames(
-            &old.replace("|21|", "|25|"),
-            nonce()
-        )
-        .is_err());
+        assert!(
+            crate::hotseat_bridge::parse_frames(&old.replace("|21|", "|25|"), nonce()).is_err()
+        );
     }
 
     #[test]
@@ -458,11 +481,12 @@ mod tests {
     }
 
     fn event(scene: &str, serial: u64, generation: u8, kind: &str, canonical: &str) -> Frame {
-        let name = if kind.starts_with("SAVE_") {
-            Some(save_name(nonce(), generation).unwrap())
-        } else {
-            None
-        };
+        let name =
+            if kind.starts_with("SAVE_") || matches!(kind, "FRONTEND_READY" | "LOAD_REQUESTED") {
+                Some(save_name(nonce(), generation).unwrap())
+            } else {
+                None
+            };
         let mut body = serde_json::json!({"generation":generation,"canonical":canonical});
         if let Some(name) = name {
             body["name"] = name.into();
@@ -481,7 +505,7 @@ mod tests {
     fn journal() -> Journal {
         Journal::new(
             nonce(),
-            civ6_autotest_rs::hotseat_bridge::WindowOwner {
+            crate::hotseat_bridge::WindowOwner {
                 pid: 1,
                 started: 1.,
                 hwnd: 1,
@@ -502,8 +526,16 @@ mod tests {
         assert_eq!(
             j.consume(&event("initial", 4, 1, "EXIT_REQUESTED", "exit"))
                 .unwrap(),
+            None
+        );
+        assert!(j.load_sent.is_empty());
+        assert_eq!(
+            j.consume(&event("menu1", 1, 1, "FRONTEND_READY", "menu"))
+                .unwrap(),
             Some(Action::Load { generation: 1 })
         );
+        j.consume(&event("menu1", 2, 1, "LOAD_REQUESTED", "issued"))
+            .unwrap();
         j.consume(&event("midload", 1, 1, "BOOT", "borrowed"))
             .unwrap();
         let begin = event("midload", 2, 1, "LOAD_READY", "armed");
@@ -517,6 +549,10 @@ mod tests {
         j.consume(&event("midload", 4, 2, "SAVE_COMPLETE", "returned"))
             .unwrap();
         j.consume(&event("midload", 5, 2, "EXIT_REQUESTED", "exit"))
+            .unwrap();
+        j.consume(&event("menu2", 1, 2, "FRONTEND_READY", "menu"))
+            .unwrap();
+        j.consume(&event("menu2", 2, 2, "LOAD_REQUESTED", "issued"))
             .unwrap();
         j.consume(&event("final", 1, 2, "BOOT", "returned"))
             .unwrap();
@@ -551,5 +587,54 @@ mod tests {
         let mut altered = f.clone();
         altered.body = serde_json::json!({"generation":1,"canonical":"real"}).to_string();
         assert!(altered.payload().is_err());
+    }
+
+    #[test]
+    fn frontend_dispatch_requires_reserved_exact_save_and_receipt_before_new_boot() {
+        let mut j = journal();
+        assert!(j
+            .consume(&event("menu", 1, 1, "FRONTEND_READY", "ready"))
+            .is_err());
+        let mut j = journal();
+        j.consume(&event("game", 1, 1, "SAVE_RETURNED", "real"))
+            .unwrap();
+        j.consume(&event("game", 2, 1, "SAVE_COMPLETE", "real"))
+            .unwrap();
+        j.consume(&event("game", 3, 1, "EXIT_REQUESTED", "exit"))
+            .unwrap();
+        assert!(j.load_sent.is_empty());
+        let mut wrong = event("menu", 1, 1, "FRONTEND_READY", "ready");
+        wrong.body = serde_json::json!({"generation":1,"canonical":"ready","name":"foreign save"})
+            .to_string();
+        assert!(j.clone().consume(&wrong).is_err());
+        assert!(j
+            .clone()
+            .consume(&event("menu", 1, 1, "LOAD_REQUESTED", "issued"))
+            .is_err());
+        let ready = event("menu", 1, 1, "FRONTEND_READY", "ready");
+        assert_eq!(
+            j.consume(&ready).unwrap(),
+            Some(Action::Load { generation: 1 })
+        );
+        let mut restarted: Journal =
+            serde_json::from_str(&serde_json::to_string(&j).unwrap()).unwrap();
+        assert_eq!(restarted.consume(&ready).unwrap(), None);
+        assert!(restarted
+            .clone()
+            .consume(&event("menu2", 1, 1, "FRONTEND_READY", "ready"))
+            .is_err());
+        assert!(restarted
+            .clone()
+            .consume(&event("loaded", 1, 1, "BOOT", "real"))
+            .is_err());
+        restarted
+            .consume(&event("menu", 2, 1, "LOAD_REQUESTED", "issued"))
+            .unwrap();
+        restarted
+            .consume(&event("loaded", 1, 1, "BOOT", "real"))
+            .unwrap();
+        let mut old = serde_json::to_value(&restarted).unwrap();
+        old.as_object_mut().unwrap().remove("version");
+        assert!(serde_json::from_value::<Journal>(old).is_err());
     }
 }

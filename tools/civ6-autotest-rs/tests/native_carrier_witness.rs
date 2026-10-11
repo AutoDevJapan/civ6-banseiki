@@ -52,7 +52,7 @@ fn generated_deploy_files_match_and_compile_lua51() {
         emitted.returned_save,
         format!("JAC-NativeCarrier-Returned-{run_id}")
     );
-    assert_eq!(emitted.files.len(), 4);
+    assert_eq!(emitted.files.len(), 5);
     let shipped = fs::read_to_string(repo_root().join(witness::STAGING_ROOM)).unwrap();
     assert_eq!(witness::staging_room_binding(&shipped).unwrap(), shipped);
     assert_eq!(
@@ -81,6 +81,113 @@ fn staging_generator_rejects_ambiguous_sections_before_deployment() {
         witness::staging_room_binding(&generated).unwrap(),
         generated
     );
+}
+
+fn frontend_session(generation: u8) -> Lua {
+    let lua = Lua::new();
+    let fixed = witness::fixture();
+    lua.globals().set("RUN_ID", nonce()).unwrap();
+    lua.globals().set("GEN", generation).unwrap();
+    lua.globals()
+        .set("RULESET", fixed["steps"][1]["ruleset"].as_str().unwrap())
+        .unwrap();
+    lua.globals()
+        .set("MAP", fixed["steps"][1]["map_file"].as_str().unwrap())
+        .unwrap();
+    lua.load(r#"
+VALUES={JAC_NATIVE_CARRIER_WITNESS_NONCE=RUN_ID,JAC_NATIVE_CARRIER_LOAD_GENERATION=GEN,
+ JAC_NATIVE_CARRIER_WITNESS_HOTSEAT=true,JAC_NATIVE_CARRIER_LOAD_REQUEST=RUN_ID..':'..GEN,RULESET=RULESET}
+MAPVALUES={MAP_SCRIPT=MAP};MODE=2;HIDDEN=true;FRONT=true;LOADS=0;LEAVES=0;SHOWS=0;UPDATES=0;LINES={}
+GameModeTypes={HOTSEAT=2};KeyEvents={KeyUp=1,KeyDown=2}
+SaveLocations={LOCAL_STORAGE=0};SaveDirectories={DEFAULT=0};ServerType={SERVER_TYPE_HOTSEAT=3}
+UI={IsInFrontEnd=function() return FRONT end}
+GameConfiguration={GetValue=function(k) return VALUES[k] end,SetValue=function(k,v) VALUES[k]=v end,
+ IsHotseat=function() return MODE==2 end,IsAnyMultiplayer=function() return MODE==2 end,
+ SetToDefaults=function(mode) MODE=mode or 0;VALUES={} end,SetRuleSet=function(v) VALUES.RULESET=v end}
+MapConfiguration={GetValue=function(k) return MAPVALUES[k] end,SetValue=function(k,v) MAPVALUES[k]=v end}
+ContextPtr={IsHidden=function() return HIDDEN end,SetShowHandler=function(_,f) SHOW=f end,
+ SetInputHandler=function(_,f) INPUT=f end,SetUpdate=function(_,f) UPDATE=f end}
+include=function(name)
+ assert(name=='MainMenu')
+ OnUpdate=function() UPDATES=UPDATES+1 end
+ OnShow=function() SHOWS=SHOWS+1;GameConfiguration.SetToDefaults();ContextPtr:SetUpdate(OnUpdate) end
+end
+print=function(s) LINES[#LINES+1]=s end
+Network={LeaveGame=function() LEAVES=LEAVES+1 end,GetGameConfigurationSaveType=function() return 3 end,
+ LoadGame=function(save,server)
+ local label=GEN==1 and 'MidLoan' or 'Returned'
+ assert(save.Name=='JAC-NativeCarrier-'..label..'-'..RUN_ID and server==3 and save.Type==3)
+ assert(VALUES.JAC_NATIVE_CARRIER_WITNESS_NONCE==RUN_ID and VALUES.JAC_NATIVE_CARRIER_LOAD_GENERATION==GEN)
+ assert(VALUES.JAC_NATIVE_CARRIER_FRONTEND_SPENT==RUN_ID..':'..GEN)
+ LOADS=LOADS+1;return true end}
+"#).exec().unwrap();
+    lua
+}
+
+#[test]
+fn fixed_frontend_survives_stock_defaults_and_loads_each_generation_once() {
+    for generation in [1, 2] {
+        let lua = frontend_session(generation);
+        lua.load(witness::frontend_binding()).exec().unwrap();
+        lua.load("HIDDEN=false;SHOW();UPDATE();assert(SHOWS==1 and UPDATES==1 and #LINES>0 and LOADS==0)").exec().unwrap();
+        lua.load("assert(not INPUT(2,0x7E));assert(not INPUT(1,0x0D));assert(LOADS==0);assert(INPUT(1,0x7E));assert(LOADS==1 and LEAVES==1);INPUT(1,0x7E);assert(LOADS==1)").exec().unwrap();
+        // Simulate an entirely new frontend VM context with only config retained.
+        lua.load(witness::frontend_binding()).exec().unwrap();
+        lua.load("SHOW();INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)")
+            .exec()
+            .unwrap();
+        let lines: Vec<String> = lua.globals().get("LINES").unwrap();
+        let frames = civ6_autotest_rs::hotseat_native_carrier::parse_available_frames(
+            &lines.join("\n"),
+            nonce(),
+        )
+        .unwrap();
+        assert_eq!(
+            frames.iter().filter(|f| f.kind == "FRONTEND_READY").count(),
+            1
+        );
+        assert_eq!(
+            frames.iter().filter(|f| f.kind == "LOAD_REQUESTED").count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn fixed_frontend_rejects_foreign_scope_and_unknown_dispatch_never_retries() {
+    for change in [
+        "VALUES.JAC_NATIVE_CARRIER_LOAD_REQUEST='foreign'",
+        "MODE=0",
+        "VALUES.RULESET='foreign'",
+        "MAPVALUES.MAP_SCRIPT='foreign'",
+        "VALUES.JAC_NATIVE_CARRIER_WITNESS_NONCE='short'",
+    ] {
+        let lua = frontend_session(1);
+        lua.load(change).exec().unwrap();
+        lua.load(witness::frontend_binding()).exec().unwrap();
+        lua.load("HIDDEN=false;SHOW();INPUT(1,0x7E);assert(LOADS==0 and LEAVES==0 and #LINES==0)")
+            .exec()
+            .unwrap();
+    }
+    for failure in ["return false", "error('unknown native dispatch')"] {
+        let lua = frontend_session(1);
+        lua.load(format!(
+            "Network.LoadGame=function() LOADS=LOADS+1;{failure} end"
+        ))
+        .exec()
+        .unwrap();
+        lua.load(witness::frontend_binding()).exec().unwrap();
+        lua.load("HIDDEN=false;SHOW();INPUT(1,0x7E);INPUT(1,0x7E);SHOW();INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)").exec().unwrap();
+    }
+}
+
+#[test]
+fn frontend_generated_block_is_idempotent_and_rejects_ambiguous_markers() {
+    let source = witness::frontend_menu_binding("include(\"MainMenu\")\n").unwrap();
+    assert_eq!(witness::frontend_menu_binding(&source).unwrap(), source);
+    Lua::new().load(&source).into_function().unwrap();
+    assert!(witness::frontend_menu_binding("unrelated code").is_err());
+    assert!(witness::frontend_menu_binding(&(source.clone() + &source)).is_err());
 }
 
 fn gp() -> Lua {

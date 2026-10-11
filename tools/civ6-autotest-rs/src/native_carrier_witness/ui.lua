@@ -127,6 +127,9 @@ local function tick(delta)
  if a.kind=='GP' or a.kind=='save' then send(step)
  elseif a.kind=='exit' then
   assert(not spent[step]);spent[step]=true
+  local request=nonce..':'..generation
+  GameConfiguration.SetValue('JAC_NATIVE_CARRIER_LOAD_REQUEST',request)
+  assert(GameConfiguration.GetValue('JAC_NATIVE_CARRIER_LOAD_REQUEST')==request,'frontend load request not published')
   emit('EXIT_REQUESTED',generation,step,canonical({Bridge=b,Fixture=Game:GetProperty(fixtureKey)}))
   step=step+1;Events.ExitToMainMenu()
  elseif a.kind=='external_load' then return -- parent checks real file and sends menu load once
