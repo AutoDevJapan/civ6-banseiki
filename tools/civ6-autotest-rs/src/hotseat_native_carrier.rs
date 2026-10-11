@@ -224,6 +224,51 @@ pub fn save_name(nonce: &str, generation: u8) -> Result<String> {
     Ok(format!("JAC-NativeCarrier-{label}-{nonce}"))
 }
 
+/// Fixed keyboard packet: nonce, generation and checksum, never Lua or a path.
+pub fn frontend_keys(nonce: &str, generation: u8) -> Result<Vec<u16>> {
+    save_name(nonce, generation)?;
+    let payload = format!("{}{generation:x}", nonce.to_ascii_lowercase());
+    let checksum = payload
+        .chars()
+        .fold(0_u32, |n, c| (n * 17 + c.to_digit(16).unwrap()) % 65536);
+    let mut keys = vec![0x83]; // F20 starts a packet only on the visible menu.
+    keys.extend(
+        format!("{payload}{checksum:04x}")
+            .chars()
+            .map(|c| 0x70 + c.to_digit(16).unwrap() as u16),
+    );
+    keys.push(0x84); // F21 commits the complete checked packet; never loads.
+    Ok(keys)
+}
+
+pub fn frontend_after_exit<'a>(text: &'a str, nonce: &str, generation: u8) -> Option<&'a str> {
+    let exit = format!(
+        "|{generation}|{}|EXIT_REQUESTED|",
+        if generation == 1 { 31 } else { 39 }
+    );
+    let mut exited = false;
+    let mut scene = None;
+    for line in text.lines() {
+        if line.contains(&format!("JAC_NC|1|{nonce}|")) && line.contains(&exit) {
+            exited = true;
+            scene = None;
+        } else if exited {
+            if let Some((_, value)) = line.split_once("JAC_NC_FRONTEND_AVAILABLE|") {
+                let value = value.trim();
+                if !value.is_empty()
+                    && value.len() <= 128
+                    && value
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || c == b'.')
+                {
+                    scene = Some(value);
+                }
+            }
+        }
+    }
+    scene
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Journal {
     version: u8,
@@ -235,6 +280,8 @@ pub struct Journal {
     save_complete: BTreeSet<u8>,
     pub load_sent: BTreeSet<u8>,
     load_reserved: BTreeSet<u8>,
+    #[serde(default)]
+    frontend_arms: BTreeMap<u8, String>,
     load_observed: BTreeSet<u8>,
     begin_sent: BTreeSet<String>,
     dialog_sent: BTreeSet<(String, u64)>,
@@ -247,7 +294,7 @@ impl Journal {
             return Err(problem("invalid run/window ownership"));
         }
         Ok(Self {
-            version: 2,
+            version: 3,
             nonce: nonce.into(),
             owner,
             receipts: Receipts::default(),
@@ -256,6 +303,7 @@ impl Journal {
             save_complete: BTreeSet::new(),
             load_sent: BTreeSet::new(),
             load_reserved: BTreeSet::new(),
+            frontend_arms: BTreeMap::new(),
             load_observed: BTreeSet::new(),
             begin_sent: BTreeSet::new(),
             dialog_sent: BTreeSet::new(),
@@ -263,10 +311,36 @@ impl Journal {
         })
     }
 
+    pub fn arm_frontend(&mut self, generation: u8, scene: &str) -> Result<()> {
+        if self.version != 3
+            || !self.load_reserved.contains(&generation)
+            || !self.save_complete.contains(&generation)
+            || self.load_sent.contains(&generation)
+            || self.frontend_arms.contains_key(&generation)
+            || scene.is_empty()
+            || scene.len() > 128
+            || !scene
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'.')
+        {
+            return Err(problem("unreserved or repeated frontend arm"));
+        }
+        self.frontend_arms
+            .insert(generation, format!("{scene}.g{generation}"));
+        Ok(())
+    }
+
+    pub fn pending_frontend(&self) -> Option<u8> {
+        self.load_reserved
+            .iter()
+            .copied()
+            .find(|g| !self.frontend_arms.contains_key(g))
+    }
+
     /// Returns an action only once. Persist the entire journal before issuing it.
     /// A failed or unknown input/load keeps the sent marker and stops the run.
     pub fn consume(&mut self, f: &Frame) -> Result<Option<Action>> {
-        if self.version != 2 || f.nonce != self.nonce || self.complete {
+        if self.version != 3 || f.nonce != self.nonce || self.complete {
             return Err(problem("foreign frame or event after completion"));
         }
         if !self.receipts.accept(f)? {
@@ -317,6 +391,7 @@ impl Journal {
             }
             "FRONTEND_READY" => {
                 if !self.load_reserved.contains(&f.generation)
+                    || self.frontend_arms.get(&f.generation) != Some(&f.scene)
                     || !self.save_complete.contains(&f.generation)
                     || payload.name.as_ref() != Some(&save_name(&self.nonce, f.generation)?)
                     || !self.load_sent.insert(f.generation)
@@ -529,12 +604,13 @@ mod tests {
             None
         );
         assert!(j.load_sent.is_empty());
+        j.arm_frontend(1, "menu1").unwrap();
         assert_eq!(
-            j.consume(&event("menu1", 1, 1, "FRONTEND_READY", "menu"))
+            j.consume(&event("menu1.g1", 1, 1, "FRONTEND_READY", "menu"))
                 .unwrap(),
             Some(Action::Load { generation: 1 })
         );
-        j.consume(&event("menu1", 2, 1, "LOAD_REQUESTED", "issued"))
+        j.consume(&event("menu1.g1", 2, 1, "LOAD_REQUESTED", "issued"))
             .unwrap();
         j.consume(&event("midload", 1, 1, "BOOT", "borrowed"))
             .unwrap();
@@ -550,9 +626,10 @@ mod tests {
             .unwrap();
         j.consume(&event("midload", 5, 2, "EXIT_REQUESTED", "exit"))
             .unwrap();
-        j.consume(&event("menu2", 1, 2, "FRONTEND_READY", "menu"))
+        j.arm_frontend(2, "menu2").unwrap();
+        j.consume(&event("menu2.g2", 1, 2, "FRONTEND_READY", "menu"))
             .unwrap();
-        j.consume(&event("menu2", 2, 2, "LOAD_REQUESTED", "issued"))
+        j.consume(&event("menu2.g2", 2, 2, "LOAD_REQUESTED", "issued"))
             .unwrap();
         j.consume(&event("final", 1, 2, "BOOT", "returned"))
             .unwrap();
@@ -603,6 +680,7 @@ mod tests {
         j.consume(&event("game", 3, 1, "EXIT_REQUESTED", "exit"))
             .unwrap();
         assert!(j.load_sent.is_empty());
+        j.arm_frontend(1, "menu").unwrap();
         let mut wrong = event("menu", 1, 1, "FRONTEND_READY", "ready");
         wrong.body = serde_json::json!({"generation":1,"canonical":"ready","name":"foreign save"})
             .to_string();
@@ -611,7 +689,7 @@ mod tests {
             .clone()
             .consume(&event("menu", 1, 1, "LOAD_REQUESTED", "issued"))
             .is_err());
-        let ready = event("menu", 1, 1, "FRONTEND_READY", "ready");
+        let ready = event("menu.g1", 1, 1, "FRONTEND_READY", "ready");
         assert_eq!(
             j.consume(&ready).unwrap(),
             Some(Action::Load { generation: 1 })
@@ -628,7 +706,7 @@ mod tests {
             .consume(&event("loaded", 1, 1, "BOOT", "real"))
             .is_err());
         restarted
-            .consume(&event("menu", 2, 1, "LOAD_REQUESTED", "issued"))
+            .consume(&event("menu.g1", 2, 1, "LOAD_REQUESTED", "issued"))
             .unwrap();
         restarted
             .consume(&event("loaded", 1, 1, "BOOT", "real"))
@@ -636,5 +714,57 @@ mod tests {
         let mut old = serde_json::to_value(&restarted).unwrap();
         old.as_object_mut().unwrap().remove("version");
         assert!(serde_json::from_value::<Journal>(old).is_err());
+    }
+
+    #[test]
+    fn frontend_arm_is_spent_before_partial_input_and_only_new_menu_receipt_is_accepted() {
+        let mut j = journal();
+        assert!(j.arm_frontend(1, "menu").is_err());
+        j.consume(&event("game", 1, 1, "SAVE_RETURNED", "real"))
+            .unwrap();
+        j.consume(&event("game", 2, 1, "SAVE_COMPLETE", "real"))
+            .unwrap();
+        j.consume(&event("game", 3, 1, "EXIT_REQUESTED", "exit"))
+            .unwrap();
+        assert_eq!(j.pending_frontend(), Some(1));
+        j.arm_frontend(1, "menu").unwrap();
+        let mut resumed: Journal =
+            serde_json::from_str(&serde_json::to_string(&j).unwrap()).unwrap();
+        assert_eq!(resumed.pending_frontend(), None);
+        assert!(resumed.arm_frontend(1, "another").is_err());
+        assert!(resumed
+            .clone()
+            .consume(&event("stale.g1", 1, 1, "FRONTEND_READY", "ready"))
+            .is_err());
+        assert_eq!(
+            resumed
+                .consume(&event("menu.g1", 1, 1, "FRONTEND_READY", "ready"))
+                .unwrap(),
+            Some(Action::Load { generation: 1 })
+        );
+    }
+
+    #[test]
+    fn frontend_offer_must_follow_this_nonce_and_generation_exit() {
+        let hello = "menu: JAC_NC_FRONTEND_AVAILABLE|Context.fe1\n";
+        let exit = format!("JAC_NC|1|{}|game|1|1|31|EXIT_REQUESTED|1/1|00\n", nonce());
+        assert_eq!(frontend_after_exit(hello, nonce(), 1), None);
+        assert_eq!(
+            frontend_after_exit(&(hello.to_owned() + &exit), nonce(), 1),
+            None
+        );
+        let text = exit + hello;
+        assert_eq!(frontend_after_exit(&text, nonce(), 1), Some("Context.fe1"));
+        assert_eq!(frontend_after_exit(&text, nonce(), 2), None);
+        assert_eq!(
+            frontend_after_exit(&text, "00000000000000000000000000000000", 1),
+            None
+        );
+        let keys = frontend_keys(nonce(), 1).unwrap();
+        assert_eq!(keys.len(), 39);
+        assert_eq!(keys[0], 0x83);
+        assert_eq!(keys[38], 0x84);
+        assert!(frontend_keys("short", 1).is_err());
+        assert!(frontend_keys(nonce(), 3).is_err());
     }
 }

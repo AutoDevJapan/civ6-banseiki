@@ -96,7 +96,7 @@ fn file_hash(path: &Path) -> Result<String> {
 
 fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
     let b: Bundle = serde_json::from_slice(&fs::read(output.join("bundle.json"))?)?;
-    if b.version != 2 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
+    if b.version != 3 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
         return Err(Error::scenario("invalid fixed witness bundle"));
     }
     for relative in BINDINGS {
@@ -352,6 +352,25 @@ fn drive(
                 None => {}
             }
         }
+        if let Some(generation) = state.journal.pending_frontend() {
+            let text = completed_lines(fresh.get("Lua.log").map(String::as_str).unwrap_or(""));
+            if let Some(scene) =
+                protocol::frontend_after_exit(text, &state.journal.nonce, generation)
+            {
+                let name = protocol::save_name(&state.journal.nonce, generation)?;
+                let save = saves.join(format!("{name}.Civ6Save"));
+                if save.is_file() && fs::metadata(&save)?.len() > 0 {
+                    state.journal.arm_frontend(generation, scene)?;
+                    // Entire packet is spent before the first input, including partial delivery.
+                    append_state(&path, &state)?;
+                    let packet_deadline = deadline.min(io.now() + 15.);
+                    for vk in protocol::frontend_keys(&state.journal.nonce, generation)? {
+                        verify_owner(&mut io, &state)?;
+                        io.key(vk, packet_deadline)?;
+                    }
+                }
+            }
+        }
         std::thread::sleep(Duration::from_millis(200));
     }
 }
@@ -369,7 +388,7 @@ fn run(args: Args) -> Result<()> {
                 bindings.insert(relative.to_owned(), file_hash(&repo.join(relative))?);
             }
             let value = Bundle {
-                version: 2,
+                version: 3,
                 nonce: uuid::Uuid::new_v4().simple().to_string(),
                 bindings,
             };
@@ -580,7 +599,7 @@ fn current_bundle_requires_five_matching_files_and_refuses_legacy_version() {
         fs::write(file, b"deployed bytes").unwrap();
     }
     let mut value = Bundle {
-        version: 2,
+        version: 3,
         nonce: run_nonce.clone(),
         bindings: std::collections::BTreeMap::new(),
     };
@@ -595,7 +614,7 @@ fn current_bundle_requires_five_matching_files_and_refuses_legacy_version() {
     value.version = 1;
     fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(bundle(&output, &repo).is_err());
-    value.version = 2;
+    value.version = 3;
     value.bindings.remove(BINDINGS[4]);
     fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
     assert!(bundle(&output, &repo).is_err());

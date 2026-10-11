@@ -859,6 +859,36 @@ fn dispatched_job_in_queue_uses_arrival_order_instead_of_blocking_earlier_waiter
     assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
 }
 #[test]
+fn ready_todo_with_registered_job_uses_queue_rank_until_registration_is_removed() {
+    let f = Fixture::new();
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":10}),
+    );
+    let peer = f.json(
+        "here/queue/peer.json",
+        json!({"job":"peer","long":0,"since":20}),
+    );
+    for job in ["mine", "peer"] {
+        f.json(&format!("jobs/{job}/job.json"), json!({"status":"running"}));
+    }
+    f.json(
+        "todo/todo.json",
+        json!({"items":[{
+            "id":437,"created_s":1,"status":"todo","dispatchable":true,
+            "spec":"s.md","needs":["civ6"],"scheduler":{"job":"peer"}
+        }]}),
+    );
+    let mut r = Fake {
+        time: 30.,
+        ..Fake::default()
+    };
+    assert!(my_turn(&mut r, &f.p, &me).unwrap());
+    assert!(!my_turn(&mut r, &f.p, &peer).unwrap());
+    fs::remove_file(peer).unwrap();
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+}
+#[test]
 fn stale_waiter_removed_and_broken_waiter_ignored() {
     let f = Fixture::new();
     let me = f.json("here/queue/me.json", json!({"long":1,"since":2}));

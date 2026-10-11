@@ -126,14 +126,25 @@ Network={LeaveGame=function() LEAVES=LEAVES+1 end,GetGameConfigurationSaveType=f
     lua
 }
 
+fn send_frontend_packet(lua: &Lua, generation: u8) {
+    for key in civ6_autotest_rs::hotseat_native_carrier::frontend_keys(nonce(), generation).unwrap()
+    {
+        lua.load(format!("assert(INPUT(1,{key}))")).exec().unwrap();
+    }
+}
+
 #[test]
-fn fixed_frontend_survives_stock_defaults_and_loads_each_generation_once() {
+fn fixed_frontend_loads_exact_saved_generation_after_engine_discarded_configuration() {
     for generation in [1, 2] {
         let lua = frontend_session(generation);
+        lua.load("GameConfiguration.SetToDefaults();MAPVALUES={}")
+            .exec()
+            .unwrap();
         lua.load(witness::frontend_binding()).exec().unwrap();
-        lua.load("HIDDEN=false;SHOW();UPDATE();assert(SHOWS==1 and UPDATES==1 and #LINES>0 and LOADS==0)").exec().unwrap();
-        lua.load("assert(not INPUT(2,0x7E));assert(not INPUT(1,0x0D));assert(LOADS==0);assert(INPUT(1,0x7E));assert(LOADS==1 and LEAVES==1);INPUT(1,0x7E);assert(LOADS==1)").exec().unwrap();
-        // Simulate an entirely new frontend VM context with only config retained.
+        lua.load("HIDDEN=false;SHOW();UPDATE(0.01);assert(SHOWS==1 and UPDATES==1 and LOADS==0);assert(not INPUT(1,0x7E))").exec().unwrap();
+        send_frontend_packet(&lua, generation);
+        lua.load("assert(LOADS==0);assert(not INPUT(2,0x7E));assert(INPUT(1,0x7E));INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)").exec().unwrap();
+        // A new VM cannot dispatch by an old F15 or retained config alone.
         lua.load(witness::frontend_binding()).exec().unwrap();
         lua.load("SHOW();INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)")
             .exec()
@@ -156,21 +167,35 @@ fn fixed_frontend_survives_stock_defaults_and_loads_each_generation_once() {
 }
 
 #[test]
-fn fixed_frontend_rejects_foreign_scope_and_unknown_dispatch_never_retries() {
-    for change in [
-        "VALUES.JAC_NATIVE_CARRIER_LOAD_REQUEST='foreign'",
-        "MODE=0",
-        "VALUES.RULESET='foreign'",
-        "MAPVALUES.MAP_SCRIPT='foreign'",
-        "VALUES.JAC_NATIVE_CARRIER_WITNESS_NONCE='short'",
-    ] {
+fn frontend_partial_bad_checksum_hidden_input_and_unknown_load_are_not_replayed() {
+    for corrupt in [0, 1, 2] {
         let lua = frontend_session(1);
-        lua.load(change).exec().unwrap();
         lua.load(witness::frontend_binding()).exec().unwrap();
-        lua.load("HIDDEN=false;SHOW();INPUT(1,0x7E);assert(LOADS==0 and LEAVES==0 and #LINES==0)")
+        lua.load("assert(not INPUT(1,0x83));HIDDEN=false;SHOW()")
+            .exec()
+            .unwrap();
+        let mut keys = civ6_autotest_rs::hotseat_native_carrier::frontend_keys(nonce(), 1).unwrap();
+        if corrupt == 0 {
+            keys.remove(2);
+        }
+        if corrupt == 1 {
+            keys[5] = 0x70 + (keys[5] - 0x70 + 1) % 16;
+        }
+        if corrupt == 2 {
+            keys.insert(2, 0x0D);
+        }
+        for key in keys {
+            lua.load(format!("INPUT(1,{key})")).exec().unwrap();
+        }
+        lua.load("INPUT(1,0x7E);assert(LOADS==0 and LEAVES==0)")
             .exec()
             .unwrap();
     }
+    let lua = frontend_session(1);
+    lua.load(witness::frontend_binding()).exec().unwrap();
+    lua.load("HIDDEN=false;SHOW();INPUT(1,0x83);UPDATE(16);INPUT(1,0x7E);assert(LOADS==0)")
+        .exec()
+        .unwrap();
     for failure in ["return false", "error('unknown native dispatch')"] {
         let lua = frontend_session(1);
         lua.load(format!(
@@ -179,16 +204,25 @@ fn fixed_frontend_rejects_foreign_scope_and_unknown_dispatch_never_retries() {
         .exec()
         .unwrap();
         lua.load(witness::frontend_binding()).exec().unwrap();
-        lua.load("HIDDEN=false;SHOW();INPUT(1,0x7E);INPUT(1,0x7E);SHOW();INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)").exec().unwrap();
+        lua.load("HIDDEN=false;SHOW()").exec().unwrap();
+        send_frontend_packet(&lua, 1);
+        lua.load("INPUT(1,0x7E);INPUT(1,0x7E);SHOW();INPUT(1,0x7E);assert(LOADS==1 and LEAVES==1)")
+            .exec()
+            .unwrap();
     }
 }
 
 #[test]
-fn fixed_frontend_captures_request_before_synchronous_stock_show_resets_it() {
+fn fixed_frontend_accepts_checked_packet_after_synchronous_stock_show() {
     let lua = frontend_session(1);
-    lua.load("SYNC_INCLUDE_SHOW=true").exec().unwrap();
+    lua.load("SYNC_INCLUDE_SHOW=true;GameConfiguration.SetToDefaults()")
+        .exec()
+        .unwrap();
     lua.load(witness::frontend_binding()).exec().unwrap();
-    lua.load("assert(SHOWS==1 and LOADS==0);UPDATE();assert(INPUT(1,0x7E));assert(LOADS==1 and LEAVES==1)").exec().unwrap();
+    send_frontend_packet(&lua, 1);
+    lua.load("assert(SHOWS==1);UPDATE(0.01);assert(INPUT(1,0x7E));assert(LOADS==1 and LEAVES==1)")
+        .exec()
+        .unwrap();
 }
 
 #[test]
