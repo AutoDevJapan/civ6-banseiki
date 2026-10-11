@@ -250,11 +250,18 @@ local function AdvanceLoyalty(city, governance, pending, phase, delta)
   if not pending.Issued and pending.Before ~= pending.Target then
     -- Both the intent and a distinct after-read request exist before the
     -- native setter. A crash after the call can reconcile without a new call.
+    local receiver = { Owner = city:GetOwner(), ID = city:GetID(),
+      X = city:GetX(), Y = city:GetY(), Turn = Game.GetCurrentGameTurn() }
     pending.Issued = true
     local request = RequestLoyaltyRead(city, governance, phase .. ":after:0", pending.BeforePublication)
     pending.IssuedPublication = request and request.AfterPublication
     city:SetProperty(R.GOVERNANCE_KEY, governance)
     TraceLoyalty(city, governance, pending, phase, nil, nil, "ISSUED")
+    -- Resolve the mutation receiver after the UI read and durable property writes.
+    city = assert(CityManager.GetCityAt(receiver.X, receiver.Y), "loyalty receiver disappeared")
+    assert(city:GetOwner() == receiver.Owner and city:GetID() == receiver.ID
+      and city:GetX() == receiver.X and city:GetY() == receiver.Y
+      and Game.GetCurrentGameTurn() == receiver.Turn, "loyalty receiver changed before mutation")
     TraceLoyalty(city, governance, pending, phase, nil, nil, "NATIVE_CALL")
     city:ChangeLoyalty(delta)
     TraceLoyalty(city, governance, pending, phase, nil, nil, "NATIVE_RETURN")

@@ -353,7 +353,8 @@ fn transfer_probe_steps() -> Vec<Value> {
  end
  if not d.TransferComplete or d.TransferUIReady then return end
  assert(Game.GetCurrentGameTurn()==d.Turn and Game.GetLocalPlayer()==d.Actor and Players[d.Actor]:IsTurnActive(),'transfer UI turn or sender changed')
- local c=assert(CityManager.GetCityAt(d.X,d.Y),'transferred UI city missing')
+ local c=CityManager.GetCityAt(d.X,d.Y)
+ if not c then return end
  assert(c:GetOwner()==d.Recipient and c:GetID()==d.CoreTransferredID and c:GetX()==d.X and c:GetY()==d.Y,'transferred CacheCity identity mismatch')
  d.Owner=c:GetOwner();d.ID=c:GetID()
  local identity=c:GetCulturalIdentity()
@@ -925,6 +926,18 @@ end
         assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
         lua.load("assert(Transfers==1 and Setters==1 and #Requests==2)")
             .exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn transfer_probe_waits_for_missing_cache_before_setter() -> Result<()> {
+        let lua = transfer_fixture()?;
+        lua.load(TRANSFER_REQUEST_UI).exec()?;
+        lua.load("local get=CityManager.GetCityAt;CityManager.GetCityAt=function(x,y) if Domain=='UI' and CacheMissing then return nil end return get(x,y) end;CacheMissing=true;Fire();local d=ExposedMembers.JAC_LoyaltyNativeProbe;assert(not d.TransferUIReady and d.TransferPublications==0 and Transfers==1 and Setters==0 and #Requests==1)").exec()?;
+        assert!(lua.load(TRANSFER_SETTER_UI).exec().is_err());
+        lua.load("CacheMissing=false;PublishTransfer()").exec()?;
+        lua.load(TRANSFER_SETTER_UI).exec()?;
+        lua.load("local d=ExposedMembers.JAC_LoyaltyNativeProbe;FireCity(0,22);Fire();Fire();assert(d.TransferUIReady and d.TransferPublications==1 and d.Publications==2 and d.Events==1 and Current==95 and Transfers==1 and Setters==1 and #Requests==2)").exec()?;
         Ok(())
     }
 
