@@ -193,5 +193,13 @@
     }
   ],
   "parent_product_conditions": "unchanged; parent134 not completed",
-  "ci_and_merge": "pending; tracked in PR143"
+  "ci_and_merge": {
+    "required_ci_head": "bec82e7208484a85f504a2e0c7fed7488b2357ea",
+    "required_ci_success": 7,
+    "merged": true,
+    "merge_commit": "5f1ae595ce575adf56c363cf2dfa1be82dcb70ff",
+    "merge_tree": "2f5bdda9894da7256165dbeabb86ea6c3f8b20e6",
+    "merged_at_utc": "2026-10-11T15:21:46Z",
+    "software_tree_matches_verified_public_head": true
+  }
 }
