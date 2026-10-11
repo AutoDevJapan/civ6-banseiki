@@ -325,41 +325,51 @@ mod win {
         (*(param as *mut Vec<(isize, String)>)).push((h, from_wide(&buf)));
         1
     }
+    fn snapshot_candidates(names: &BTreeSet<String>) -> Result<Vec<(u32, String)>> {
+        let h = unsafe { CreateToolhelp32Snapshot(2, 0) };
+        if h == 0 || h == -1 {
+            return Err(Error::input("Could not enumerate Civ VI processes"));
+        }
+        let snapshot = Owned(h);
+        let mut e = Entry {
+            size: size_of::<Entry>() as u32,
+            usage: 0,
+            pid: 0,
+            heap: 0,
+            module: 0,
+            threads: 0,
+            parent: 0,
+            priority: 0,
+            flags: 0,
+            name: [0; 260],
+        };
+        if unsafe { Process32FirstW(snapshot.0, &mut e) } == 0 {
+            return Err(Error::input("Could not read Civ VI process list"));
+        }
+        let mut found = Vec::new();
+        loop {
+            let name = from_wide(&e.name);
+            if matches_executable(&name, names) {
+                found.push((e.pid, name));
+            }
+            if unsafe { Process32NextW(snapshot.0, &mut e) } == 0 {
+                if unsafe { GetLastError() } != 18 {
+                    return Err(Error::input("Civ VI process list became unavailable"));
+                }
+                break;
+            }
+        }
+        Ok(found)
+    }
+    fn process_ids_from_snapshot(
+        candidates: Vec<(u32, String)>,
+        _names: &BTreeSet<String>,
+    ) -> Result<BTreeSet<u32>> {
+        Ok(candidates.into_iter().map(|(pid, _)| pid).collect())
+    }
     impl InputBackend for WindowsBackend {
         fn process_ids(&mut self, names: &BTreeSet<String>) -> Result<BTreeSet<u32>> {
-            let h = unsafe { CreateToolhelp32Snapshot(2, 0) };
-            if h == 0 || h == -1 {
-                return Err(Error::input("Could not enumerate Civ VI processes"));
-            }
-            let snapshot = Owned(h);
-            let mut e = Entry {
-                size: size_of::<Entry>() as u32,
-                usage: 0,
-                pid: 0,
-                heap: 0,
-                module: 0,
-                threads: 0,
-                parent: 0,
-                priority: 0,
-                flags: 0,
-                name: [0; 260],
-            };
-            if unsafe { Process32FirstW(snapshot.0, &mut e) } == 0 {
-                return Err(Error::input("Could not read Civ VI process list"));
-            }
-            let mut found = BTreeSet::new();
-            loop {
-                if matches_executable(&from_wide(&e.name), names) {
-                    found.insert(e.pid);
-                }
-                if unsafe { Process32NextW(snapshot.0, &mut e) } == 0 {
-                    if unsafe { GetLastError() } != 18 {
-                        return Err(Error::input("Civ VI process list became unavailable"));
-                    }
-                    break;
-                }
-            }
-            Ok(found)
+            process_ids_from_snapshot(snapshot_candidates(names)?, names)
         }
         fn windows(&mut self) -> Result<Vec<(isize, String)>> {
             let mut out = Vec::new();
@@ -457,6 +467,104 @@ mod win {
     }
     pub fn require_single_civ_process() -> Result<()> {
         require_single_with(&mut WindowsBackend::new())
+    }
+    #[cfg(test)]
+    mod snapshot_exit_tests {
+        use super::*;
+        use std::{
+            io::Write,
+            os::windows::{io::AsRawHandle, process::CommandExt},
+            process::{Child, Command, Stdio},
+        };
+        use windows_sys::Win32::{
+            Foundation::WAIT_OBJECT_0, System::Threading::WaitForSingleObject,
+        };
+
+        struct OwnedChild(Child);
+        impl OwnedChild {
+            fn new() -> Self {
+                Self(
+                    Command::new("cmd.exe")
+                        .args([
+                            "/d",
+                            "/q",
+                            "/c",
+                            "set /p CC_SNAPSHOT_TEST=waiting & exit /b 259",
+                        ])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .creation_flags(0x0800_0000)
+                        .spawn()
+                        .unwrap(),
+                )
+            }
+            fn finish(&mut self) {
+                self.0.stdin.take().unwrap().write_all(b"exit\r\n").unwrap();
+                assert_eq!(
+                    unsafe { WaitForSingleObject(self.0.as_raw_handle(), 5_000) },
+                    WAIT_OBJECT_0,
+                    "only the owned child must exit within the test bound"
+                );
+                assert_eq!(self.0.wait().unwrap().code(), Some(259));
+            }
+        }
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        fn owned_snapshot(pid: u32, names: &BTreeSet<String>) -> Vec<(u32, String)> {
+            let candidates: Vec<_> = snapshot_candidates(names)
+                .unwrap()
+                .into_iter()
+                .filter(|(candidate, _)| *candidate == pid)
+                .collect();
+            assert_eq!(
+                candidates.len(),
+                1,
+                "live child must be in the actual OS snapshot"
+            );
+            candidates
+        }
+
+        #[test]
+        fn snapshot_exited_child_with_retained_handle_is_not_a_live_candidate() {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            let mut child = OwnedChild::new();
+            let pid = child.0.id();
+            let candidates = owned_snapshot(pid, &names);
+            assert_eq!(
+                process_ids_from_snapshot(candidates.clone(), &names).unwrap(),
+                BTreeSet::from([pid])
+            );
+            child.finish();
+            let listed_after_exit = snapshot_candidates(&names)
+                .unwrap()
+                .iter()
+                .any(|(id, _)| *id == pid);
+            eprintln!("snapshot_exit_observation pid={pid} exit_code=259 retained_handle=true fresh_snapshot_contains_pid={listed_after_exit}");
+            // The frozen snapshot definitely contains the child. Its strong
+            // Child handle remains open, and exit 259 is not STILL_ACTIVE.
+            assert!(process_ids_from_snapshot(candidates, &names)
+                .unwrap()
+                .is_empty());
+        }
+
+        #[test]
+        fn snapshot_child_disappearing_before_inspection_is_not_a_live_candidate() {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            let mut child = OwnedChild::new();
+            let pid = child.0.id();
+            let candidates = owned_snapshot(pid, &names);
+            child.finish();
+            drop(child);
+            assert!(process_ids_from_snapshot(candidates, &names)
+                .unwrap()
+                .is_empty());
+        }
     }
 }
 #[cfg(windows)]
