@@ -4886,4 +4886,3 @@ fn queued_session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
     assert!(holder_alive(&mut r, &f.p, &owner).unwrap());
     assert_eq!(r.calls.len(), 1);
 }
-
