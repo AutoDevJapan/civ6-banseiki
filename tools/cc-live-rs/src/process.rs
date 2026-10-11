@@ -122,6 +122,9 @@ pub fn observe_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeasePro
         if first && probe == LeaseProbe::TimedOut {
             r.error("Civ6 lease observation timed out; retrying without changing ownership or the competition deadline")?;
         }
+        if first && probe == LeaseProbe::Unavailable {
+            r.error("Civ6 lease record unavailable (missing or sharing conflict); retrying within the original 5s without changing ownership")?;
+        }
         if limit
             .observation_deadline()
             .is_some_and(|d| r.monotonic() >= d)
@@ -245,10 +248,109 @@ pub struct Output {
     pub stderr: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcessIdentity {
     pub image: String,
     pub created_filetime: Option<u64>,
+}
+
+/// One pinned handle supplies image, creation time and signalled exit state.
+/// Access failures remain errors; an exited process is never a live waiter.
+#[cfg(windows)]
+pub fn native_process_identity(pid: u32) -> std::io::Result<Option<ProcessIdentity>> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+    };
+    struct Handle(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        let error = std::io::Error::last_os_error();
+        return if error.raw_os_error() == Some(87) {
+            Ok(None)
+        } else {
+            Err(error)
+        };
+    }
+    let handle = Handle(raw);
+    let alive = || match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_OBJECT_0 => Ok(false),
+        WAIT_TIMEOUT => Ok(true),
+        _ => Err(std::io::Error::last_os_error()),
+    };
+    if !alive()? {
+        return Ok(None);
+    }
+    let mut created = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut exited = created;
+    let mut kernel = created;
+    let mut user = created;
+    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    let mut path = vec![0u16; 32768];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
+        let error = std::io::Error::last_os_error();
+        if !alive()? {
+            return Ok(None);
+        }
+        return Err(error);
+    }
+    let path = String::from_utf16(&path[..length as usize])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let image = path
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "waiter executable name is empty",
+            )
+        })?
+        .to_owned();
+    if !alive()? {
+        return Ok(None);
+    }
+    Ok(Some(ProcessIdentity {
+        image,
+        created_filetime: Some(
+            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime),
+        ),
+    }))
+}
+
+/// If SYNCHRONIZE is unavailable, use the original snapshot/creation
+/// proof instead. An access failure itself never means the waiter is absent.
+#[cfg(any(windows, test))]
+fn native_identity_or_fallback(
+    result: std::io::Result<Option<ProcessIdentity>>,
+) -> Option<Result<Option<ProcessIdentity>, String>> {
+    match result {
+        Err(error) if error.raw_os_error() == Some(5) => None,
+        other => Some(other.map_err(|error| error.to_string())),
+    }
 }
 
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
@@ -330,8 +432,10 @@ fn process_open_failure(
         Some(87) => Ok(None),
         // A stale PID can now belong to a protected process. Snapshot lookup
         // preserves the old image rejection without a tasklist subprocess.
-        Some(5) => snapshot_process_identity(pid),
-        _ => Err(format!("inspect Civ6 queue process {pid}: {error}")),
+        _ => match native_identity_or_fallback(Err(error)) {
+            None => snapshot_process_identity(pid),
+            Some(result) => result,
+        },
     }
 }
 
@@ -394,79 +498,11 @@ fn snapshot_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String
 
 #[cfg(windows)]
 fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, FILETIME, WAIT_TIMEOUT},
-        System::Threading::{
-            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-        },
-    };
-    struct Handle(windows_sys::Win32::Foundation::HANDLE);
-    impl Drop for Handle {
-        fn drop(&mut self) {
-            unsafe {
-                CloseHandle(self.0);
-            }
-        }
+    match native_process_identity(pid) {
+        Ok(identity) => Ok(identity),
+        Err(error) => process_open_failure(pid, error),
     }
-    let raw = unsafe {
-        OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
-            0,
-            pid,
-        )
-    };
-    if raw.is_null() {
-        return process_open_failure(pid, std::io::Error::last_os_error());
-    }
-    let handle = Handle(raw);
-    let alive = || match unsafe { WaitForSingleObject(handle.0, 0) } {
-        WAIT_TIMEOUT => Ok(true),
-        0 => Ok(false),
-        _ => Err(format!(
-            "inspect Civ6 waiter process {pid} state: {}",
-            std::io::Error::last_os_error()
-        )),
-    };
-    if !alive()? {
-        return Ok(None);
-    }
-    let mut path = vec![0u16; 32768];
-    let mut length = path.len() as u32;
-    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
-        return Err(format!(
-            "inspect Civ6 waiter process {pid} image: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    let path = String::from_utf16(&path[..length as usize]).map_err(|e| e.to_string())?;
-    let image = std::path::Path::new(&path)
-        .file_name()
-        .and_then(|p| p.to_str())
-        .ok_or("waiter image has no file name")?
-        .to_owned();
-    let mut created = FILETIME::default();
-    let mut exited = FILETIME::default();
-    let mut kernel = FILETIME::default();
-    let mut user = FILETIME::default();
-    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
-    {
-        return Err(format!(
-            "inspect Civ6 waiter process {pid} creation time: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    if !alive()? {
-        return Ok(None);
-    }
-    Ok(Some(ProcessIdentity {
-        image,
-        created_filetime: Some(
-            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime),
-        ),
-    }))
 }
-
 #[cfg(windows)]
 fn terminate_pinned_game(
     pid: u32,
@@ -734,6 +770,7 @@ impl Runner for RealRunner {
         pid: u32,
         _timeout: f64,
     ) -> Result<Option<ProcessIdentity>, String> {
+        interrupted()?;
         windows_process_identity(pid)
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
@@ -925,5 +962,30 @@ fn wait(
             .into());
         }
         thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(test)]
+mod native_identity_tests {
+    use super::*;
+    #[test]
+    fn native_waiter_access_denial_requires_the_existing_proof_not_a_dead_result() {
+        assert!(native_identity_or_fallback(Err(std::io::Error::from_raw_os_error(5))).is_none());
+        assert_eq!(native_identity_or_fallback(Ok(None)), Some(Ok(None)));
+        let identity = ProcessIdentity {
+            image: "live_chain.exe".into(),
+            created_filetime: Some(41),
+        };
+        assert_eq!(
+            native_identity_or_fallback(Ok(Some(identity.clone()))),
+            Some(Ok(Some(identity)))
+        );
+        for code in [6, 87] {
+            assert!(
+                native_identity_or_fallback(Err(std::io::Error::from_raw_os_error(code)))
+                    .unwrap()
+                    .is_err()
+            );
+        }
     }
 }
