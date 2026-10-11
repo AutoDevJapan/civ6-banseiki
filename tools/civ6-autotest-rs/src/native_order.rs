@@ -78,7 +78,7 @@ pub fn validate_options(step: &Value) -> Result<()> {
             .all(|key| step[key].as_u64().is_some_and(|v| (1..=4).contains(&v)))
         || !matches!(
             step["phase"].as_str(),
-            Some("front" | "load" | "native-outer")
+            Some("front" | "load" | "native-outer" | "native-shutdown")
         )
         || step.as_object().is_none_or(|o| {
             o.keys().any(|k| {
@@ -372,7 +372,7 @@ mod platform {
             }
         }
         pub fn phase(&mut self, phase: &str) -> Result<()> {
-            if !matches!(phase, "front" | "load" | "native-outer") {
+            if !matches!(phase, "front" | "load" | "native-outer" | "native-shutdown") {
                 return Err(Error::scenario("unknown order phase"));
             }
             if self.phase == phase {

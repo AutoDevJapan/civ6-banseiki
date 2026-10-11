@@ -263,7 +263,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 if phase_change {
                     if !matches!(
                         step["phase"].as_str(),
-                        Some("front" | "load" | "native-outer")
+                        Some("front" | "load" | "native-outer" | "native-shutdown")
                     ) || order_changes >= 8
                         || order_phase == step["phase"].as_str()
                     {

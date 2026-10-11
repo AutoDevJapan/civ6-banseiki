@@ -21,6 +21,10 @@ pub fn source_identity() -> Value {
             include_str!("order_analysis.rs"),
         ),
         (
+            "civ6-pe-rs/src/order_shutdown_analysis.rs",
+            include_str!("order_shutdown_analysis.rs"),
+        ),
+        (
             "civ6-pe-rs/src/order_step_tests.rs",
             include_str!("order_step_tests.rs"),
         ),
@@ -87,6 +91,7 @@ pub enum Phase {
     Front,
     Load,
     NativeOuter,
+    NativeShutdown,
 }
 impl Phase {
     pub fn parse(s: &str) -> Result<Self, String> {
@@ -94,7 +99,8 @@ impl Phase {
             "front" => Ok(Self::Front),
             "load" => Ok(Self::Load),
             "native-outer" => Ok(Self::NativeOuter),
-            _ => Err("phase must be front, load or native-outer".into()),
+            "native-shutdown" => Ok(Self::NativeShutdown),
+            _ => Err("phase must be front, load, native-outer or native-shutdown".into()),
         }
     }
     pub fn name(self) -> &'static str {
@@ -102,6 +108,7 @@ impl Phase {
             Self::Front => "front",
             Self::Load => "load",
             Self::NativeOuter => "native-outer",
+            Self::NativeShutdown => "native-shutdown",
         }
     }
     pub fn sites(self) -> &'static [Site; 4] {
@@ -109,7 +116,11 @@ impl Phase {
             Self::Front => &FRONT,
             Self::Load => &LOAD,
             Self::NativeOuter => &NATIVE_OUTER,
+            Self::NativeShutdown => &NATIVE_SHUTDOWN,
         }
+    }
+    pub fn is_native(self) -> bool {
+        matches!(self, Self::NativeOuter | Self::NativeShutdown)
     }
 }
 #[derive(Clone, Copy, Debug)]
@@ -232,11 +243,51 @@ pub const NATIVE_OUTER: [Site; 4] = [
     LOAD[0],
 ];
 pub fn inventory(include_native: bool) -> impl Iterator<Item = &'static Site> {
+    inventory_for(include_native, false)
+}
+pub fn inventory_for(
+    include_native: bool,
+    include_shutdown: bool,
+) -> impl Iterator<Item = &'static Site> {
     FRONT
         .iter()
         .chain(LOAD.iter())
         .chain(NATIVE_OUTER[..if include_native { 3 } else { 0 }].iter())
+        .chain(NATIVE_SHUTDOWN[..if include_shutdown { 4 } else { 0 }].iter())
 }
+// Fixed PE 324c51e9: observe shutdown and the manager's actual Wait call.
+// The CALL's single-step reaches the callee; only wait_return observes return.
+// Neither state 3, empty set/list nor these four sites certify global drainage.
+pub const NATIVE_SHUTDOWN: [Site; 4] = [
+    Site {
+        image: Image::Core,
+        name: "shutdown_entry",
+        rva: 0x63e160,
+        bytes: &[0x40, 0x53],
+        next: Next::Sequential,
+    },
+    Site {
+        image: Image::Core,
+        name: "manager_cleanup_entry",
+        rva: 0x4a1150,
+        bytes: &[0x48, 0x89, 0x5c, 0x24, 0x10],
+        next: Next::Sequential,
+    },
+    Site {
+        image: Image::Core,
+        name: "manager_wait_call",
+        rva: 0x4a1191,
+        bytes: &[0xe8, 0x2a, 0x11, 0x4f, 0x00],
+        next: Next::Rva(0x9922c0),
+    },
+    Site {
+        image: Image::Core,
+        name: "manager_wait_return",
+        rva: 0x4a1196,
+        bytes: &[0x40, 0x88, 0xb3, 0xac, 0x38, 0x00, 0x00],
+        next: Next::Sequential,
+    },
+];
 pub fn prefix(phase: Phase, count: usize) -> Result<&'static [Site], String> {
     if !(1..=4).contains(&count) {
         return Err("approved prefix count must be 1..4".into());
@@ -410,7 +461,7 @@ impl Request {
         match phase {
             Phase::Front => self.front_prefix,
             Phase::Load => self.load_prefix,
-            Phase::NativeOuter => 4,
+            Phase::NativeOuter | Phase::NativeShutdown => 4,
         }
     }
 }
@@ -440,6 +491,15 @@ pub fn disk_native_sites(bytes: &[u8]) -> Result<Value, String> {
     }
     Ok(
         json!({"core_sha256":CORE_SHA,"static_sites":disk_site_rows(bytes, &[Phase::NativeOuter], Image::Core)?,"all_producer_domains_covered":false,"native_quiescence_proven":false}),
+    )
+}
+pub fn disk_shutdown_sites(bytes: &[u8]) -> Result<Value, String> {
+    if format!("{:x}", Sha256::digest(bytes)) != CORE_SHA {
+        return Err("Core SHA mismatch".into());
+    }
+    Ok(
+        json!({"core_sha256":CORE_SHA,"static_sites":disk_site_rows(bytes, &[Phase::NativeShutdown], Image::Core)?,
+        "all_producer_domains_covered":false,"same_set_wait_proven":false,"native_quiescence_proven":false}),
     )
 }
 
@@ -537,6 +597,26 @@ mod tests {
         assert_eq!(inventory(true).count(), 11);
         assert_eq!(inventory(false).count(), 8);
         assert!(disk_native_sites(b"bad Core").is_err());
+    }
+    #[test]
+    fn shutdown_call_steps_into_wait_and_only_return_site_is_after_wait() {
+        assert_eq!(
+            Phase::parse("native-shutdown").unwrap(),
+            Phase::NativeShutdown
+        );
+        assert!(NATIVE_SHUTDOWN.iter().all(|site| site.image == Image::Core));
+        assert_eq!(
+            successor(NATIVE_SHUTDOWN[2], 0x180000000, 0).unwrap(),
+            0x1809922c0
+        );
+        let displacement = i32::from_le_bytes(NATIVE_SHUTDOWN[2].bytes[1..5].try_into().unwrap());
+        assert_eq!(
+            (NATIVE_SHUTDOWN[2].rva + 5).checked_add_signed(i64::from(displacement)),
+            Some(0x9922c0)
+        );
+        assert_eq!(NATIVE_SHUTDOWN[3].rva, NATIVE_SHUTDOWN[2].rva + 5);
+        assert_eq!(inventory_for(true, true).count(), 15);
+        assert!(disk_shutdown_sites(b"unverified Core").is_err());
     }
     #[test]
     fn request_rejects_unbounded_prefix_and_forged_identity_fields() {

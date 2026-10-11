@@ -89,6 +89,21 @@ fn native_outer_capture_uses_the_same_bounded_scenario_and_excludes_runtime_hook
     assert!(validate_scenario(&overlap).is_err());
 }
 #[test]
+fn shutdown_profile_can_leave_and_reload_without_enabling_runtime() {
+    let mut native = start();
+    native["phase"] = json!("native-shutdown");
+    native_order::validate_options(&native).unwrap();
+    validate_scenario(&json!({"name":"shutdown capture only","steps":[native,
+        {"action":"exit_to_menu"},
+        {"action":"load","name":"SAVED_GAME"},
+        {"action":"stop_native_order_capture"}]}))
+    .unwrap();
+    validate_scenario(&scenario(vec![
+        json!({"action":"set_native_order_phase","phase":"native-shutdown"}),
+    ]))
+    .unwrap();
+}
+#[test]
 fn restored_success_needs_the_exact_process_and_complete_parent_receipt() {
     let good = json!({"type":"order_parent_receipt","schema":"todo880-order-v1","game_pid":12,
         "game_created_filetime":34,"source_dll_sha256":"abc","child_reaped":true,"child_pid":56,"permit_granted":true,"never_attached":false,"stop_writes":1,

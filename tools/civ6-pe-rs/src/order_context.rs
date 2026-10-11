@@ -38,6 +38,32 @@ fn qword(game: &Handle, address: u64) -> Value {
         Err(error) => json!({"address":address,"value":null,"error":error}),
     }
 }
+// Raw candidates from the fixed cleanup ABI; reads do not assert a Rust/game
+// type, object lifetime, worker completion, or pending-list drainage.
+pub(super) fn shutdown(game: &Handle, site: Site, c: &CONTEXT) -> Value {
+    let manager = match site.name {
+        "manager_cleanup_entry" => Some(c.Rcx),
+        "manager_wait_call" | "manager_wait_return" => Some(c.Rbx),
+        _ => None,
+    };
+    let mut row = json!({"manager_candidate":manager,"world_candidate":if site.name=="shutdown_entry"{Some(c.Rcx)}else{None},
+        "world_manager_slot":null,"set_address":null,"list_slot":null,"same_set_wait_proven":false,"native_quiescence_proven":false});
+    if site.name == "shutdown_entry" {
+        row["world_manager_slot"] = c
+            .Rcx
+            .checked_add(0x250)
+            .map(|address| qword(game, address))
+            .unwrap_or(json!({"error":"world slot overflow"}));
+    }
+    if let Some(manager) = manager.filter(|m| *m != 0) {
+        row["set_address"] = json!(manager.checked_add(0x400));
+        row["list_slot"] = manager
+            .checked_add(0x410)
+            .map(|address| qword(game, address))
+            .unwrap_or(json!({"error":"manager slot overflow"}));
+    }
+    row
+}
 fn object(game: &Handle, pid: u32, address: u64, core: Option<&Module>, verified: bool) -> Value {
     if address == 0 {
         return json!({"object":0,"status":"null"});

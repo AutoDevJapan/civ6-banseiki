@@ -442,3 +442,15 @@ PR143の通常一回隔離をPR86のCPU設定復旧へ統合し、既存996のHo
 
 原記録16ファイル（約1.96MB）はD:/CC/Work/todo880/native-outer-captured-142c-20261012へ全SHA一致で保全し、捕捉結果・復元照合・原ハッシュ台帳を同880に保存した。新しい親や引継ぎToDoは作らず、通常の発行停止・完全な外側frameの終了契約へ戻る。
 今回のRenderer.logは原記録へ保存する前に、03:50の次担当の起動で更新された。CPU用設定の適用と元設定の復元は確認できたが、今回の実際の選択adapterは未確認として扱う。次の観測では共有枠の解放前に同じPID/作成時刻・ログの時刻へ対応したRendererを保全し、後の実行のログを流用しない。
+
+### 2026-10-12：自然なshutdownと同じmanagerのWaitを分けて観測する
+
+24組の4182B0復帰では後続callerの退出を確認できないため、既存観測器に固定4slotの`native-shutdown`を追加した。固定Core SHA324c51e9…e98cのLLVM走査で、63E160は`40 53`、4A1150は`48 89 5C 24 10`、4A1191は`E8 2A 11 4F 00`（9922C0へのcall）、4A1196は`40 88 B3 AC 38 00 00`と照合した。旧案のcall bytes`E8 2A E1 04 00`は実物と違うため採用しない。
+
+CALLのsingle-step完了はcalleeへの到達であり、Waitから戻ったという結果にしない。復帰位置4A1196で別の原命令を記録し、同じphase区間、TID、thread世代、RSPに属するentry/call/returnだけを結ぶ。固定prologueのpush RSIとsub RSP,30による38byte差をentryに対応させ、entryのRCX、call/returnのRBX、callのRCX=manager+400を照合する。不一致、別thread世代、phase切替、復帰欠落を成功へ付け替えない。world+250とmanager+410は読取結果とエラーを原記録に残すだけで、型や寿命を認定しない。
+
+Coreの途中unload、SHA/命令不一致、未復元register、親子の回収失敗は従来どおり拒否する。既存のfront/load/native-outerと旧捕捉記録の解釈を保持する。通常runtimeを有効化せず、未知のflag書込と原関数の省略を加えていない。
+
+検査は観測器105件成功（従来helper入口1件は対象外）、利用側のnative_orderとscenario_fixtures78件成功・省略0。Clippy初回のmatch記法の警告を修正し、両crateの全targetが警告0で終了した。これらは今回の有限観測機能の検査で、製品の7条件の実機成功ではない。
+
+次の有限試験は元COS1をSHA固定で読み、ターン・支払い・任務を進めず正式なメニュー退出を観測する。観測器を復元・回収してから同じプロセスで同じ保存を読み戻す8手順を準備した。4slotは保留仕事の公開、全producer、同期の外側完全frame、Context解放を網羅しない。Wait候補の対応が得られても全排出・本体有効化・製品受入の完了はfalseを維持する。準備したシナリオを実行済みとは扱わない。

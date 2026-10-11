@@ -537,7 +537,10 @@ impl<R: Recovery> ChildGuard<R> {
                     Ok(Ok(cmd))
                         if matches!(
                             cmd.as_str(),
-                            "phase front" | "phase load" | "phase native-outer"
+                            "phase front"
+                                | "phase load"
+                                | "phase native-outer"
+                                | "phase native-shutdown"
                         ) =>
                     {
                         if matches!(self.state, State::Active(Ownership::Attached)) {

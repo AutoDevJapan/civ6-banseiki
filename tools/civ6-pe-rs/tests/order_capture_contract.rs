@@ -138,7 +138,7 @@ mod order_capture {
                 3,
                 "phase",
                 json!("unknown"),
-                "phase must be front, load or native-outer",
+                "phase must be front, load, native-outer or native-shutdown",
             ),
         ] {
             let mut request = manifest(&temp.0);

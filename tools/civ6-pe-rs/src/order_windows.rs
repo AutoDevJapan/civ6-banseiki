@@ -163,7 +163,7 @@ impl CaptureEpoch {
     }
 
     fn validate_native_image(&self, d: &Debugger) -> Result<(), String> {
-        if self.phase != Phase::NativeOuter {
+        if !self.phase.is_native() {
             return Ok(());
         }
         if d.cleanup_event.is_none()
@@ -180,11 +180,17 @@ impl CaptureEpoch {
         let core = core_module(d.pid)?.ok_or("stopped native capture Core missing")?;
         let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
         let expected_core = self.sites[0]
-            .and_then(|address| address.checked_sub(plan::NATIVE_OUTER[0].rva))
+            .and_then(|address| address.checked_sub(self.phase.sites()[0].rva))
             .ok_or("native capture entry missing")?;
-        let expected_exe = self.sites[3]
-            .and_then(|address| address.checked_sub(plan::NATIVE_OUTER[3].rva))
-            .ok_or("native capture release missing")?;
+        let expected_exe = self
+            .phase
+            .sites()
+            .iter()
+            .enumerate()
+            .find(|(_, site)| site.image == plan::Image::Exe)
+            .map(|(i, site)| self.sites[i].and_then(|address| address.checked_sub(site.rva)))
+            .unwrap_or(Some(0))
+            .ok_or("native capture EXE site missing")?;
         // Called only with an outstanding debug event or the complete phase
         // freeze. GO/attach preparation is not a stopped module snapshot.
         if core.base != expected_core
@@ -193,7 +199,7 @@ impl CaptureEpoch {
         {
             return Err("stopped native capture Core identity differs".into());
         }
-        for site in plan::NATIVE_OUTER {
+        for site in *self.phase.sites() {
             instruction(
                 &d.game,
                 site.image.base(expected_exe, Some(core.base))?,
@@ -879,6 +885,8 @@ pub fn observe(req: Request) -> Result<(), String> {
     }
     static_proof["native_outer"] =
         plan::disk_native_sites(&fs::read(&core_path).map_err(|e| e.to_string())?)?;
+    static_proof["native_shutdown"] =
+        plan::disk_shutdown_sites(&fs::read(&core_path).map_err(|e| e.to_string())?)?;
     if !req.source_dll.is_absolute()
         || req
             .source_dll
@@ -910,8 +918,8 @@ pub fn observe(req: Request) -> Result<(), String> {
         return Err("initial GameCore path differs".into());
     }
     let capture_core_base = initial_core.as_ref().map(|core| core.base);
-    if req.phase == Phase::NativeOuter {
-        for site in plan::NATIVE_OUTER {
+    if req.phase.is_native() {
+        for site in *req.phase.sites() {
             instruction(&game, site.image.base(exe.base, capture_core_base)?, site)?;
         }
     }
@@ -979,8 +987,9 @@ pub fn observe(req: Request) -> Result<(), String> {
                     "phase front" => desired = Phase::Front,
                     "phase load" => desired = Phase::Load,
                     "phase native-outer" => desired = Phase::NativeOuter,
+                    "phase native-shutdown" => desired = Phase::NativeShutdown,
                     "game_close_requested" => d.close_ack.store(true, Ordering::SeqCst),
-                    _ => return Err("unknown command; use phase front, phase load, phase native-outer, stop".into()),
+                    _ => return Err("unknown command; use phase front, load, native-outer, native-shutdown or stop".into()),
                 }
             }
             if stop || started.elapsed() >= Duration::from_secs(req.seconds) || hits >= req.max_hits
@@ -1008,7 +1017,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                 }
                 if desired != phase && steps.is_empty() && d.attach_origin.accepted {
                     if epoch.generation >= 8 {return Err("phase change bound exceeded".into());}
-                    if desired == Phase::NativeOuter {
+                    if desired.is_native() {
                         if native_core_unloaded { return Err("native capture Core lifetime ended since attach".into()); }
                         let core = core_module(req.pid)?.ok_or("native capture requires loaded Core")?;
                         if Some(core.base) != capture_core_base || !same_path(&core.path, &core_path) || sha256(&core.path)? != plan::CORE_SHA {
@@ -1084,7 +1093,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                         // Reuse of base/path/SHA after unload is a new lifetime,
                         // including when a non-native phase was armed at unload.
                         native_core_unloaded = true;
-                        if phase == Phase::NativeOuter {
+                        if phase.is_native() {
                             return Err("native capture Core unloaded; no lifetime certificate".into());
                         }
                     }
@@ -1226,7 +1235,10 @@ pub fn observe(req: Request) -> Result<(), String> {
                                     let context_slot = if matches!(site.name,"context_release"|"context_replace") {
                                         context_facts::capture(&d,&exe,site,&c,pointer.unwrap_or(0))
                                     } else {Value::Null};
-                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"thread_lifetime":thread_lifetime,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"stack_return":stack_return,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
+                                    let shutdown = if phase == Phase::NativeShutdown {
+                                        context_facts::shutdown(&d.game, site, &c)
+                                    } else {Value::Null};
+                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"thread_lifetime":thread_lifetime,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"stack_return":stack_return,"pointer_candidate":pointer,"context_slot":context_slot,"shutdown":shutdown,"gameplay_owner":"unknown","original_instruction_executions":null});
                                     mark(&mut d, row.clone())?;
                                     steps.insert(
                                         tid,
@@ -1319,7 +1331,7 @@ pub fn observe(req: Request) -> Result<(), String> {
         d.terminal = TerminalKind::TargetExited;
         d.held.clear();
     }
-    let rows:Vec<_>=plan::inventory(true).map(|s|json!({"site":s.name,"completed":counts.get(s.name).copied().unwrap_or(0),"armed_windows":armed_windows.get(s.name).copied().unwrap_or(0),"coverage":"bounded_phase_only","missing_is_not_zero_calls":true})).collect();
+    let rows:Vec<_>=plan::inventory_for(true, true).map(|s|json!({"site":s.name,"completed":counts.get(s.name).copied().unwrap_or(0),"armed_windows":armed_windows.get(s.name).copied().unwrap_or(0),"coverage":"bounded_phase_only","missing_is_not_zero_calls":true})).collect();
     let terminal = d.terminal.label();
     let handles = d.threads.len();
     d.threads.clear();

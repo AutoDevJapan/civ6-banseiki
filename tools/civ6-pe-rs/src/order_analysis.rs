@@ -8,6 +8,8 @@ use std::{
 
 const LIMIT: usize = 20_000;
 const BYTE_LIMIT: u64 = 16 * 1024 * 1024;
+#[path = "order_shutdown_analysis.rs"]
+mod shutdown;
 fn number(row: &Value, key: &str) -> Result<u64, String> {
     row[key]
         .as_u64()
@@ -85,6 +87,7 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
     let exe_base = positive(first, "exe_base")?;
     let core_base = first["initial_core_base"].as_u64();
     let include_native = first["static_proof"]["native_outer"].is_object();
+    let include_shutdown = first["static_proof"]["native_shutdown"].is_object();
     let mut phase = Phase::parse(
         first["capture_phase"]
             .as_str()
@@ -107,12 +110,18 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
     let prefix_len = |p| match p {
         Phase::Front => prefixes[0],
         Phase::Load => prefixes[1],
-        Phase::NativeOuter => 4,
+        Phase::NativeOuter | Phase::NativeShutdown => 4,
     };
     if phase == Phase::NativeOuter
         && (!include_native || first["static_proof"]["native_outer"]["core_sha256"] != CORE_SHA)
     {
         return Err("native capture static identity missing".into());
+    }
+    if phase == Phase::NativeShutdown
+        && (!include_shutdown
+            || first["static_proof"]["native_shutdown"]["core_sha256"] != CORE_SHA)
+    {
+        return Err("shutdown capture static identity missing".into());
     }
     for site in crate::order_capture::prefix(phase, prefix_len(phase))? {
         *armed.entry(site.name.into()).or_default() += 1;
@@ -151,6 +160,12 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
                 {
                     return Err("native capture static identity missing".into());
                 }
+                if next == Phase::NativeShutdown
+                    && (!include_shutdown
+                        || first["static_proof"]["native_shutdown"]["core_sha256"] != CORE_SHA)
+                {
+                    return Err("shutdown capture static identity missing".into());
+                }
                 if next == phase || window >= 8 {
                     return Err("phase transition is unchanged or exceeds eight switches".into());
                 }
@@ -163,7 +178,7 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
             "instruction_before" => {
                 let id = positive(row, "capture_seq")?;
                 let tid = positive(row, "tid")?;
-                if phase == Phase::NativeOuter {
+                if phase.is_native() {
                     positive(row, "thread_lifetime")?;
                 }
                 if id != next_capture {
@@ -216,6 +231,7 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
                     "pointer_candidate",
                     "stack_return",
                     "thread_lifetime",
+                    "shutdown",
                 ] {
                     if row[key] != before[key] {
                         return Err(format!("completion changed captured {key}"));
@@ -274,10 +290,12 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
                 let reported = row["sites"]
                     .as_array()
                     .ok_or("terminal site counts missing")?;
-                if reported.len() != crate::order_capture::inventory(include_native).count() {
+                if reported.len()
+                    != crate::order_capture::inventory_for(include_native, include_shutdown).count()
+                {
                     return Err("terminal site inventory incomplete".into());
                 }
-                for s in crate::order_capture::inventory(include_native) {
+                for s in crate::order_capture::inventory_for(include_native, include_shutdown) {
                     let found: Vec<_> = reported.iter().filter(|r| r["site"] == s.name).collect();
                     if found.len() != 1
                         || number(found[0], "completed")?
@@ -312,8 +330,9 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
         }
     }
     let native_outer = native_outer_observations(&rows)?;
+    let native_shutdown = shutdown::observations(&rows)?;
     Ok(
-        json!({"schema":"todo880-order-analysis-v1","input_integrity":"consistent","game_pid":pid,"game_created_filetime":created,"source_dll_sha256":source,"compiled_source_sha256":compiled_source,"completed_instructions":hits.len(),"site_counts":counts,"factory_pairs":pairs,"native_outer":native_outer,"module_changes":module_changes,"phase_windows":window+1,"initial_context":first["initial_context"],"initial_core_base":first["initial_core_base"],"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","common_load_boundary_proven":false,"runtime_activation_allowed":false,"runtime_calls_executed":0,"next_runtime_sequence":["BridgeRuntimeInstall before first Gameplay initialization","BridgeRuntimeClose before old objects/Lua destruction","BridgeRuntimeRebuild after destruction and before new Gameplay RESET","existing runtime COMMIT CAS publishes eligibility"],"missing_evidence":["native startup entry before Gameplay, including already-loaded front end","one pre-destruction boundary covering Load/Continue/QuickLoad/LeaveGame","Gameplay state identity and new RESET boundary","runtime installation/rebuild and COMMIT receipts"],"evidence_scope":"supplied capture structure; no live replay or runtime activation"}),
+        json!({"schema":"todo880-order-analysis-v1","input_integrity":"consistent","game_pid":pid,"game_created_filetime":created,"source_dll_sha256":source,"compiled_source_sha256":compiled_source,"completed_instructions":hits.len(),"site_counts":counts,"factory_pairs":pairs,"native_outer":native_outer,"native_shutdown":native_shutdown,"module_changes":module_changes,"phase_windows":window+1,"initial_context":first["initial_context"],"initial_core_base":first["initial_core_base"],"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","common_load_boundary_proven":false,"runtime_activation_allowed":false,"runtime_calls_executed":0,"next_runtime_sequence":["BridgeRuntimeInstall before first Gameplay initialization","BridgeRuntimeClose before old objects/Lua destruction","BridgeRuntimeRebuild after destruction and before new Gameplay RESET","existing runtime COMMIT CAS publishes eligibility"],"missing_evidence":["native startup entry before Gameplay, including already-loaded front end","one pre-destruction boundary covering Load/Continue/QuickLoad/LeaveGame","Gameplay state identity and new RESET boundary","runtime installation/rebuild and COMMIT receipts"],"evidence_scope":"supplied capture structure; no live replay or runtime activation"}),
     )
 }
 
