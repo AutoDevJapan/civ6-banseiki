@@ -2,6 +2,7 @@
 //! RDX is the receiver delivered by the City adapter, not a shared_ptr.
 //! This records raw arguments and completion only. There is no quantity write,
 //! City lifetime authority or product bootstrap in this module.
+use crate::holding_candidate::{HelperProbe, ProbeSnapshot};
 use crate::native::*;
 use crate::oath_record::{OathCall, OathEffectFamily};
 
@@ -85,6 +86,8 @@ pub struct RecipientRecord {
     pub caller_rbp: u64,
     pub caller_rdi: u64,
     pub original_rax: Option<u64>,
+    pub holding_before: ProbeSnapshot,
+    pub holding_after: ProbeSnapshot,
 }
 #[repr(C)]
 #[derive(Default)]
@@ -113,6 +116,10 @@ struct Row {
     name_words: [AtomicU64; 8],
     production_before: ProductionRow,
     production_after: ProductionRow,
+    // v5 preserves the entire 4320-byte v4 row prefix. Boundary probes
+    // belong to this row's record number and thread, not a global lifetime.
+    holding_before: HelperProbe,
+    holding_after: HelperProbe,
 }
 #[repr(C)]
 pub struct RecipientTrace {
@@ -128,7 +135,7 @@ pub struct RecipientTrace {
     deadline_ms: AtomicU64,
     expired: AtomicU32,
     detached: AtomicU32,
-    reserved: u64,
+    exe_base: AtomicU64,
     rows: [Row; CAPACITY],
 }
 impl RecipientTrace {
@@ -137,7 +144,7 @@ impl RecipientTrace {
         unsafe {
             let p = trace.as_mut_ptr();
             ptr::addr_of_mut!((*p).magic).write(0x4a41_4352);
-            ptr::addr_of_mut!((*p).version).write(4);
+            ptr::addr_of_mut!((*p).version).write(5);
             ptr::addr_of_mut!((*p).stopped).write(AtomicU32::new(1));
             ptr::addr_of_mut!((*p).flight).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).next).write(AtomicU32::new(0));
@@ -148,7 +155,7 @@ impl RecipientTrace {
             ptr::addr_of_mut!((*p).deadline_ms).write(AtomicU64::new(0));
             ptr::addr_of_mut!((*p).expired).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).detached).write(AtomicU32::new(0));
-            ptr::addr_of_mut!((*p).reserved).write(0);
+            ptr::addr_of_mut!((*p).exe_base).write(AtomicU64::new(0));
             let rows = ptr::addr_of_mut!((*p).rows).cast::<Row>();
             for i in 0..CAPACITY {
                 rows.add(i).write(Row::default());
@@ -234,6 +241,8 @@ impl RecipientTrace {
                     caller_rbp: r.rbp.load(Ordering::Relaxed),
                     caller_rdi: r.rdi.load(Ordering::Relaxed),
                     original_rax: (state == 2).then(|| r.rax.load(Ordering::Relaxed)),
+                    holding_before: r.holding_before.snapshot(),
+                    holding_after: r.holding_after.snapshot(),
                 }
             })
             .collect()
@@ -250,6 +259,20 @@ struct Binding {
     protection: u32,
 }
 static BINDINGS: Mutex<[Option<Binding>; 8]> = Mutex::new([const { None }; 8]);
+
+fn capture_holding(trace: &RecipientTrace, probe: &HelperProbe) {
+    let tick = clock_ms();
+    if let Some(global) = crate::holding_candidate::global(trace.exe_base.load(Ordering::Acquire)) {
+        probe.capture(&mut Current, global, tick);
+    } else {
+        probe.tick.store(tick, Ordering::Relaxed);
+    }
+}
+
+const _: () = assert!(std::mem::offset_of!(RecipientTrace, exe_base) == 56);
+const _: () = assert!(std::mem::offset_of!(Row, holding_before) == 4320);
+const _: () = assert!(std::mem::offset_of!(Row, holding_after) == 4368);
+const _: () = assert!(std::mem::size_of::<Row>() == 4416);
 
 unsafe extern "system-unwind" fn begin(
     effect: u64,
@@ -290,6 +313,9 @@ unsafe extern "system-unwind" fn begin(
     row.caller.store(caller, Ordering::Relaxed);
     row.rbp.store(rbp, Ordering::Relaxed);
     row.rdi.store(rdi, Ordering::Relaxed);
+    if slot < 2 {
+        capture_holding(trace, &row.holding_before);
+    }
     if let Ok(identity) = crate::call_identity::copy_recipient_identity(
         &mut Current,
         crate::call_identity::RecipientFrame {
@@ -345,6 +371,9 @@ unsafe fn settle(token: *mut u64, rax: Option<u64>) {
     let index = claim & MASK;
     if index != 0 {
         let row = &trace.rows[index as usize - 1];
+        if row.slot.load(Ordering::Relaxed) < 2 {
+            capture_holding(trace, &row.holding_after);
+        }
         if let Some(rax) = rax {
             row.rax.store(rax, Ordering::Relaxed);
             if row.slot.load(Ordering::Relaxed) < 2
@@ -468,6 +497,12 @@ pub(crate) unsafe fn install_at(
     if index >= 8 || original == 0 || !committed_range(address, 8, 8, false) {
         return Err("invalid recipient slot");
     }
+    // Source checks, allocation/file pins and OnceLock initialization occur
+    // BEFORE publication, never in the native callbacks. Failure leaves
+    // helper observations unknown while the existing callee trace continues.
+    if let Some(exe) = crate::holding_candidate::prepare() {
+        trace.exe_base.store(exe, Ordering::Release);
+    }
     let mut bindings = BINDINGS.lock().map_err(|_| "recipient bindings poisoned")?;
     if bindings[index].is_some() {
         return Err("recipient binding frozen; restart process");
@@ -585,6 +620,7 @@ pub fn pinned_slot(index: usize, base: u64) -> Option<(u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::windows::process::CommandExt;
     static CALLS: AtomicU32 = AtomicU32::new(0);
     unsafe extern "system-unwind" fn original(effect: u64, city: u64, r8: u64) -> u64 {
         CALLS.fetch_add(1, Ordering::SeqCst);
@@ -628,6 +664,19 @@ mod tests {
         assert_eq!(records[0].actual_receiver_argument, 0x12340000);
         assert_eq!(records[0].raw_r8, 91);
         assert_eq!(records[0].slot, index as u32);
+        assert_eq!(trace.version, 5);
+        assert_eq!(RecipientTrace::wire_layout(), (64, 4416, 4522048));
+        // The real EXE gate rejects this helper; both actual gateway boundaries
+        // retain unknown reads, including unwind, without fabricating zeros.
+        assert_eq!(trace.exe_base.load(Ordering::Acquire), 0);
+        if index < 2 {
+            assert_eq!(records[0].holding_before.flags, 0);
+            assert_eq!(records[0].holding_after.flags, 0);
+            assert_eq!(records[0].holding_before.first.depth, u32::MAX);
+            assert_eq!(records[0].holding_after.first.depth, u32::MAX);
+            assert_ne!(records[0].holding_before.tick, 0);
+            assert_ne!(records[0].holding_after.tick, 0);
+        }
         assert_eq!(
             trace.counts(),
             if case == "overflow" {
@@ -659,6 +708,7 @@ mod tests {
             .chain([(0, "unwind"), (0, "overflow")])
         {
             let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000)
                 .args([
                     "--exact",
                     "recipient_trace::tests::recipient_gateway_child",

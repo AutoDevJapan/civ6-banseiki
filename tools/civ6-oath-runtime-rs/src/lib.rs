@@ -18,6 +18,7 @@
 pub mod call_identity;
 pub mod contribution_ledger;
 pub mod contribution_save;
+pub mod holding_candidate;
 pub mod oath_install_state;
 pub mod oath_record;
 pub mod preflight;
