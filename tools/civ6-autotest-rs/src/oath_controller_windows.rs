@@ -684,6 +684,25 @@ impl Session {
     pub(crate) fn ready(&mut self) -> Result<Value> {
         self.inner.ready()
     }
+    pub(crate) fn remaining_budget(&self) -> Option<Duration> {
+        self.inner
+            .deadline
+            .map(|deadline| deadline.saturating_duration_since(Instant::now()))
+    }
+    pub(crate) fn failure_snapshot(&self) -> Result<Option<Value>> {
+        let Some(shared) = self.inner.shared.as_ref() else {
+            return Ok(None);
+        };
+        let first = shared.snapshot();
+        let second = shared.snapshot();
+        let mut trace =
+            crate::oath_lifecycle_wire::project(&first, &second).map_err(Error::input)?;
+        crate::oath_cold_wire::attach(&mut trace, self.inner.cold_receipt.as_ref());
+        trace["snapshot_phase"] = json!("step_failure");
+        trace["controller_deadline_expired"] =
+            json!(self.inner.deadline.is_some_and(|due| Instant::now() >= due));
+        Ok(Some(trace))
+    }
     pub(crate) fn finalize(&mut self, timeout: Duration) -> Result<Value> {
         self.inner.finalize(timeout)
     }

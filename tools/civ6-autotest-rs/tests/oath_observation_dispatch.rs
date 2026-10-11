@@ -517,3 +517,169 @@ fn incomplete_cold_capture_keeps_raw_evidence_and_finishes_steam_wait_before_fai
     );
     assert_eq!(raw["product_accepted"], false);
 }
+
+struct BudgetProbe {
+    clock: Arc<ManualClock>,
+    budget: Option<f64>,
+    query_delay: f64,
+    state_delay: f64,
+    writes: Arc<Mutex<usize>>,
+}
+impl Backend for BudgetProbe {
+    fn oath_trace_remaining(&mut self) -> Result<Option<f64>> {
+        self.clock.advance(self.query_delay);
+        Ok(self.budget)
+    }
+    fn require_single_process(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+        self.clock.advance(self.state_delay);
+        Ok(vec!["InGame".into()])
+    }
+    fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+        *self.writes.lock().unwrap() += 1;
+        Ok("true".into())
+    }
+}
+#[test]
+fn native_window_caps_long_steps_and_query_preparation_cannot_extend_it() {
+    for (budget, query_delay, state_delay, accepted) in [
+        (None, 0.0, 0.2, true),
+        (Some(1.0), 0.0, 0.2, true),
+        (Some(0.1), 0.0, 0.2, false),
+        (Some(0.1), 0.2, 0.0, false),
+        (Some(0.0), 0.0, 0.0, false),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("artifacts");
+        fs::create_dir(&output).unwrap();
+        let clock = Arc::new(ManualClock::default());
+        let writes = Arc::new(Mutex::new(0));
+        let mut runner = Runner::with_backend(
+            json!({"name":"cold window budget"}),
+            output,
+            temp.path().join("logs"),
+            temp.path().join("saves"),
+            4318,
+            Box::new(BudgetProbe {
+                clock: clock.clone(),
+                budget,
+                query_delay,
+                state_delay,
+                writes: writes.clone(),
+            }),
+            clock,
+        );
+        let result = runner.run_step(
+            &json!({"action":"ui_lua","timeout":600.0,"state_name":"InGame","code":"return true"}),
+        );
+        assert_eq!(result.is_ok(), accepted, "{result:?}/{budget:?}");
+        assert_eq!(
+            *writes.lock().unwrap(),
+            usize::from(accepted),
+            "reject before any command bytes are sent"
+        );
+    }
+}
+
+struct FailureProbe;
+impl Backend for FailureProbe {
+    fn mod_folders(&mut self, _: &Value, _: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
+        Ok(vec![])
+    }
+    fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+        Ok(Some((99, 1.0)))
+    }
+    fn require_single_process(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+        Ok(vec!["InGame".into()])
+    }
+    fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+        Err(Error::unknown("original startup failed"))
+    }
+    fn oath_trace_failure_snapshot(&mut self) -> Result<Option<Value>> {
+        Ok(Some(
+            json!({"raw_first":"owned-first","raw_second":"owned-second"}),
+        ))
+    }
+}
+
+#[test]
+fn failed_step_keeps_owned_trace_and_original_failure_without_overwriting_evidence() {
+    for existing in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let output = temp.path().join("artifacts");
+        let logs = temp.path().join("logs");
+        fs::create_dir(&logs).unwrap();
+        // Backend creates an existing proof after run() creates the output leaf.
+        struct ExistingProbe {
+            existing: bool,
+            output: std::path::PathBuf,
+        }
+        impl Backend for ExistingProbe {
+            fn mod_folders(
+                &mut self,
+                s: &Value,
+                p: &std::path::Path,
+            ) -> Result<Vec<std::path::PathBuf>> {
+                if self.existing {
+                    fs::write(
+                        self.output.join("oath-observation-failure.json"),
+                        b"earlier proof",
+                    )?;
+                }
+                FailureProbe.mod_folders(s, p)
+            }
+            fn single_process(&mut self, s: f64) -> Result<Option<(u32, f64)>> {
+                FailureProbe.single_process(s)
+            }
+            fn require_single_process(&mut self) -> Result<()> {
+                FailureProbe.require_single_process()
+            }
+            fn list_states(&mut self, s: f64) -> Result<Vec<String>> {
+                FailureProbe.list_states(s)
+            }
+            fn run_lua(&mut self, s: &str, c: &str, t: f64) -> Result<String> {
+                FailureProbe.run_lua(s, c, t)
+            }
+            fn oath_trace_failure_snapshot(&mut self) -> Result<Option<Value>> {
+                FailureProbe.oath_trace_failure_snapshot()
+            }
+        }
+        let mut runner = Runner::with_backend(
+            json!({"name":"failed cold startup","steps":[{"action":"ui_lua","state_name":"InGame","code":"return true"}]}),
+            output.clone(),
+            logs,
+            temp.path().join("saves"),
+            4318,
+            Box::new(ExistingProbe {
+                existing,
+                output: output.clone(),
+            }),
+            Arc::new(ManualClock::default()),
+        );
+        runner.auto_restart = false;
+        assert_eq!(runner.run().unwrap(), 1);
+        assert!(runner
+            .failure
+            .as_ref()
+            .unwrap()
+            .contains("original startup failed"));
+        let bytes = fs::read(output.join("oath-observation-failure.json")).unwrap();
+        if existing {
+            assert_eq!(bytes, b"earlier proof");
+        } else {
+            let proof: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(proof["native_observation"]["raw_first"], "owned-first");
+            assert_eq!(proof["native_observation"]["raw_second"], "owned-second");
+            assert_eq!(proof["product_accepted"], false);
+            assert!(proof["failure"]
+                .as_str()
+                .unwrap()
+                .contains("original startup failed"));
+        }
+    }
+}

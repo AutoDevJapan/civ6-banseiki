@@ -27,6 +27,12 @@ pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 an
 pub const OATH_OBSERVER_READY_UI: &str = "local p=Game.GetLocalPlayer(); return p==0 and Players[p] and Players[p]:IsHuman() and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and not UI.HasSentTurnComplete()";
 
 pub trait Backend: Send {
+    fn oath_trace_failure_snapshot(&mut self) -> Result<Option<Value>> {
+        Ok(None)
+    }
+    fn oath_trace_remaining(&mut self) -> Result<Option<f64>> {
+        Ok(None)
+    }
     fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
         Err(Error::input(
             "shared lifecycle observer session unavailable",
@@ -261,6 +267,28 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn oath_trace_failure_snapshot(&mut self) -> Result<Option<Value>> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            self.oath_observer
+                .as_ref()
+                .map_or(Ok(None), |session| session.failure_snapshot())
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Ok(None)
+    }
+    fn oath_trace_remaining(&mut self) -> Result<Option<f64>> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            Ok(self
+                .oath_observer
+                .as_ref()
+                .and_then(|session| session.remaining_budget())
+                .map(|budget| budget.as_secs_f64()))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Ok(None)
+    }
     fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
         #[cfg(all(windows, target_arch = "x86_64"))]
         {
@@ -2112,7 +2140,21 @@ impl Runner {
             } else {
                 120.0
             });
-        let deadline = self.clock.now() + timeout;
+        let mut deadline = self.clock.now() + timeout;
+        if !matches!(
+            action,
+            "oath_trace_ready" | "oath_trace_snapshot" | "oath_trace_finalize"
+        ) {
+            let budget_at = self.clock.now();
+            if let Some(remaining) = self.backend.oath_trace_remaining()? {
+                if !remaining.is_finite() || remaining <= 0.0 {
+                    return Err(Error::input(
+                        "oath observation budget expired before this step",
+                    ));
+                }
+                deadline = deadline.min(budget_at + remaining);
+            }
+        }
         match action {
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
@@ -3487,6 +3529,23 @@ impl Runner {
                 Err(e) => {
                     self.failure = Some(e.to_string());
                     self.record_failure(Some(step), Some(i), &e);
+                    let save_trace = (|| -> Result<()> {
+                        if let Some(trace) = self.backend.oath_trace_failure_snapshot()? {
+                            let mut file = OpenOptions::new()
+                                .write(true)
+                                .create_new(true)
+                                .open(self.output.join("oath-observation-failure.json"))?;
+                            file.write_all(&serde_json::to_vec_pretty(&json!({"failure":e.to_string(),
+                                "native_observation":trace,"quantity_accepted":false,"product_accepted":false}))?)?;
+                            file.sync_all()?;
+                        }
+                        Ok(())
+                    })();
+                    if let Err(trace_error) = save_trace {
+                        eprintln!(
+                            "Original failure: {e}; saving owned trace failed: {trace_error}"
+                        );
+                    }
                     if e.kind == ErrorKind::Interrupted {
                         return Err(e);
                     }
