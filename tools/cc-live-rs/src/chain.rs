@@ -797,49 +797,11 @@ pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String
         {
             return Ok(false);
         }
-        // Dispatch gets one bounded arrival window. A long-lived worker's
-        // analysis after releasing Civ6 must not reserve the game forever;
-        // subsequent runs compete through the actual protected queue/lock.
-        if item["status"] == "doing"
-            && fairness::needs_civ6(&item)
-            && chain_job_reservation_active(p, &item["scheduler"]["job"], now)?
-        {
-            return Ok(false);
-        }
+        // Assignment also spans builds and reviews. Only an actual queue or
+        // lease reserves the game for an assigned worker; otherwise two active
+        // workers can prevent each other from ever entering their first run.
     }
     Ok(true)
-}
-fn chain_job_reservation_active(p: &Paths, job: &Value, now: f64) -> Result<bool, String> {
-    let Some(job) = job.as_str() else {
-        return Ok(false);
-    };
-    let path = p.jobs.join(job).join("job.json");
-    if !path.exists() {
-        return Ok(false);
-    }
-    let state = read_json(path)?;
-    if !matches!(
-        state["status"].as_str(),
-        Some("queued" | "starting" | "running")
-    ) {
-        return Ok(false);
-    }
-    let started = if state["status"] == "running" || !state["started_at"].is_null() {
-        state["started_at"]
-            .as_str()
-            .ok_or("active Civ6 worker lacks a valid start time")?
-    } else {
-        state["created_at"]
-            .as_str()
-            .ok_or("unstarted Civ6 worker lacks creation time")?
-    };
-    let started = chrono::DateTime::parse_from_rfc3339(started)
-        .map_err(|e| format!("invalid dispatched Civ6 arrival time: {e}"))?
-        .timestamp() as f64;
-    if started > now {
-        return Err("dispatched Civ6 arrival time is in the future".into());
-    }
-    Ok(now < started + fairness::LEASE_SECONDS)
 }
 fn remove_if_exists(p: &Path) -> Result<(), String> {
     match fs::remove_file(p) {

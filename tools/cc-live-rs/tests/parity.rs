@@ -852,8 +852,15 @@ impl OwnedReader {
             os::windows::process::CommandExt,
             process::{Command, Stdio},
             thread,
-            time::Duration,
+            time::{Duration, Instant},
         };
+        // A file keeps diagnostic output from blocking the child on a full pipe.
+        let error_path = ready.with_extension("stderr.log");
+        let diagnostics = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&error_path)
+            .unwrap();
         let child = Command::new(std::env::current_exe().unwrap())
             .args(["--ignored", "--exact", "release_reader_child"])
             .env("CC_LIVE_TEST_LOCK", lock)
@@ -862,10 +869,10 @@ impl OwnedReader {
             .env("CC_LIVE_TEST_SHARE", share.to_string())
             .creation_flags(CREATE_NO_WINDOW)
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::from(diagnostics))
             .spawn()
             .unwrap();
-        let reader = Self {
+        let mut reader = Self {
             child: Some(child),
             release: release.into(),
         };
@@ -892,9 +899,11 @@ impl OwnedReader {
     }
 
     fn finish(&mut self) {
-        if let Some(mut child) = self.child.take() {
+        if let Some(child) = self.child.as_mut() {
             fs::write(&self.release, "release").unwrap();
-            assert!(child.wait().unwrap().success());
+            let status = child.wait().unwrap();
+            self.child = None;
+            assert!(status.success());
         }
     }
 }
@@ -4352,64 +4361,6 @@ fn live_chain_finishes_scenario_then_requeues_fifo_before_next() {
     assert_eq!(r.scenarios, 2);
     assert!(r.yielded);
     assert!(!f.p.here.join("civ6.lock").exists());
-}
-
-#[test]
-fn dispatched_worker_priority_expires_after_one_lease_and_actual_queue_still_wins() {
-    let f = Fixture::new();
-    f.json(
-        "todo/todo.json",
-        json!({"items":[{"id":995,"status":"doing","needs":["civ6"],"scheduler":{"job":"peer"}}]}),
-    );
-    f.json(
-        "jobs/peer/job.json",
-        json!({"status":"running","started_at":"1970-01-01T00:16:40Z"}),
-    );
-    let me = f.json(
-        "here/queue/me.json",
-        json!({"job":"mine","pid":123,"since":2800,"long":0,"fifo":true}),
-    );
-    let mut r = Fake {
-        time: 2799.,
-        ..Fake::default()
-    };
-    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
-    r.time = 2800.;
-    assert!(my_turn(&mut r, &f.p, &me).unwrap());
-    f.json(
-        "here/queue/peer.json",
-        json!({"job":"peer","since":2700,"long":0,"fifo":true}),
-    );
-    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
-    f.json("jobs/peer/job.json", json!({"status":"succeeded"}));
-    assert!(my_turn(&mut r, &f.p, &me).unwrap());
-    assert!(!f.p.here.join("queue/peer.json").exists());
-    for started in [
-        serde_json::Value::Null,
-        json!(1000),
-        json!([]),
-        json!("bad date"),
-        json!("1970-01-01T01:00:00Z"),
-    ] {
-        f.json(
-            "jobs/peer/job.json",
-            json!({"status":"running","started_at":started,"created_at":"1970-01-01T00:16:40Z"}),
-        );
-        assert!(my_turn(&mut r, &f.p, &me).is_err());
-    }
-    f.json(
-        "jobs/peer/job.json",
-        json!({"status":"queued","created_at":"1970-01-01T00:16:40Z"}),
-    );
-    r.time = 2799.;
-    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
-    r.time = 2800.;
-    assert!(my_turn(&mut r, &f.p, &me).unwrap());
-    f.json(
-        "jobs/peer/job.json",
-        json!({"status":"queued","started_at":1000,"created_at":"1970-01-01T00:16:40Z"}),
-    );
-    assert!(my_turn(&mut r, &f.p, &me).is_err());
 }
 
 #[test]
