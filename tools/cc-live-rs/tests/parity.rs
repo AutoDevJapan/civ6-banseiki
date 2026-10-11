@@ -4381,6 +4381,32 @@ fn dispatched_worker_priority_expires_after_one_lease_and_actual_queue_still_win
     f.json("jobs/peer/job.json", json!({"status":"succeeded"}));
     assert!(my_turn(&mut r, &f.p, &me).unwrap());
     assert!(!f.p.here.join("queue/peer.json").exists());
+    for started in [
+        serde_json::Value::Null,
+        json!(1000),
+        json!([]),
+        json!("bad date"),
+        json!("1970-01-01T01:00:00Z"),
+    ] {
+        f.json(
+            "jobs/peer/job.json",
+            json!({"status":"running","started_at":started,"created_at":"1970-01-01T00:16:40Z"}),
+        );
+        assert!(my_turn(&mut r, &f.p, &me).is_err());
+    }
+    f.json(
+        "jobs/peer/job.json",
+        json!({"status":"queued","created_at":"1970-01-01T00:16:40Z"}),
+    );
+    r.time = 2799.;
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+    r.time = 2800.;
+    assert!(my_turn(&mut r, &f.p, &me).unwrap());
+    f.json(
+        "jobs/peer/job.json",
+        json!({"status":"queued","started_at":1000,"created_at":"1970-01-01T00:16:40Z"}),
+    );
+    assert!(my_turn(&mut r, &f.p, &me).is_err());
 }
 
 #[test]

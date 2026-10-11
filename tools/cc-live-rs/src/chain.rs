@@ -824,10 +824,15 @@ fn chain_job_reservation_active(p: &Paths, job: &Value, now: f64) -> Result<bool
     ) {
         return Ok(false);
     }
-    let started = state["started_at"]
-        .as_str()
-        .or_else(|| state["created_at"].as_str())
-        .ok_or("dispatched Civ6 worker lacks arrival time")?;
+    let started = if state["status"] == "running" || !state["started_at"].is_null() {
+        state["started_at"]
+            .as_str()
+            .ok_or("active Civ6 worker lacks a valid start time")?
+    } else {
+        state["created_at"]
+            .as_str()
+            .ok_or("unstarted Civ6 worker lacks creation time")?
+    };
     let started = chrono::DateTime::parse_from_rfc3339(started)
         .map_err(|e| format!("invalid dispatched Civ6 arrival time: {e}"))?
         .timestamp() as f64;
