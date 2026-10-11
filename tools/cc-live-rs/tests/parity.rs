@@ -2294,6 +2294,9 @@ struct ReliabilityRunner {
     isolation_calls: Vec<Call>,
     expect_fifo: bool,
     expect_software_renderer: bool,
+    fail_sync: Option<&'static str>,
+    sync_cursors: Vec<String>,
+    sync_marks: usize,
     restore_calls: usize,
     waiter_during_prepare: bool,
     reschedule_after_begin_failure: f64,
@@ -2332,6 +2335,9 @@ impl ReliabilityRunner {
             isolation_calls: vec![],
             expect_fifo: true,
             expect_software_renderer: false,
+            fail_sync: None,
+            sync_cursors: vec![],
+            sync_marks: 0,
             restore_calls: 0,
             waiter_during_prepare: false,
             reschedule_after_begin_failure: 0.0,
@@ -2349,18 +2355,29 @@ impl Runner for ReliabilityRunner {
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         if call.args.get(1).is_some_and(|arg| arg == "--mark") {
+            self.sync_marks += 1;
             return Ok(Output {
-                stdout: json!({"cloud":{},"process":{}}).to_string(),
+                stdout: json!({"cloud":{"fixture_generation":self.sync_marks},"process":{}})
+                    .to_string(),
                 ..Output::default()
             });
         }
         if call.args.get(1).is_some_and(|arg| arg == "--cursor") {
             assert!(!self.running && !self.closing);
+            self.sync_cursors.push(call.args[2].clone());
+            if self.fail_sync == Some("unknown") {
+                return Err("Steam wait response unknown".into());
+            }
             write_json(
                 &call.args[4],
-                &json!({"phase":"steam_released_without_new_sync_request"}),
+                &json!({"phase": if self.fail_sync == Some("invalid") {
+                    "exit_wait_begin"
+                } else { "steam_released_without_new_sync_request" }}),
             )?;
-            return Ok(Output::default());
+            return Ok(Output {
+                code: i32::from(self.fail_sync == Some("denied")),
+                ..Output::default()
+            });
         }
         if call.args.get(1).is_some_and(|arg| arg == "--begin") {
             self.isolation_calls.push(call.clone());
@@ -2395,6 +2412,10 @@ impl Runner for ReliabilityRunner {
             });
         }
         if call.args.get(1).is_some_and(|arg| arg == "--restore") {
+            assert!(
+                !self.p.here.join("steam-exit-recovery.json").exists(),
+                "owner originals must remain isolated until Steam release is confirmed"
+            );
             self.isolation_calls.push(call.clone());
             assert!(self.p.here.join("civ6.lock").exists());
             assert_eq!(call.args[2], "--state");
@@ -2798,6 +2819,33 @@ fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
             if failure == "unknown_exit" {
                 assert_eq!(r.isolation_calls.len(), 1);
             }
+            if software {
+                write_json(f.p.here.join("civ6.lock"), &json!({"pid":u32::MAX,"chain_pid":u32::MAX,"pid_created_filetime":1,"live_chain":true,"lock_token":"retired"})).unwrap();
+            }
+            assert!(cli(&mut r, &f.p, &options).is_err());
+            assert_eq!(
+                r.artifacts.len(),
+                1,
+                "unresolved recovery must not launch another driver"
+            );
+            assert!(state.exists());
+            if software {
+                write_json(f.p.here.join("civ6.lock"), &json!({"pid":u32::MAX,"chain_pid":u32::MAX,"pid_created_filetime":1,"live_chain":true,"lock_token":"retired"})).unwrap();
+            }
+            r.fail_restore = false;
+            r.unknown_exit = false;
+            r.codes.push_back(0);
+            assert_eq!(cli(&mut r, &f.p, &options).unwrap(), 0);
+            assert_eq!(r.artifacts.len(), 2);
+            assert_eq!(r.restore_calls, 2);
+            assert!(!state.exists());
+            assert_eq!(fs::read(&settings).unwrap(), original_settings);
+            assert_eq!(
+                fs::read(original.join("owner-save")).unwrap(),
+                b"owner original bytes"
+            );
+            assert!(!f.p.here.join("software-renderer-original.bin").exists());
+            assert!(!f.p.here.join("civ6.lock").exists());
         } else {
             assert!(!state.exists());
             assert_eq!(r.restore_calls, 1);
@@ -2817,6 +2865,97 @@ fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
                     b"test autosave bytes"
                 );
             }
+        }
+    }
+}
+
+#[test]
+fn steam_exit_failure_keeps_the_original_generation_until_recovery_before_new_driver() {
+    for software in [false, true] {
+        for failure in ["denied", "unknown", "invalid"] {
+            let f = Fixture::new();
+            for helper in ["civ6-save-isolation", "civ6-steam-sync"] {
+                f.json(
+                    &format!("wt/live/tools/civ6-autotest-rs/src/bin/{helper}.rs"),
+                    json!("fixture source"),
+                );
+                fs::write(
+                    f.p.live()
+                        .join(format!("tools/target/release/{helper}.exe")),
+                    "fixture binary",
+                )
+                .unwrap();
+            }
+            let settings =
+                f.p.profile
+                    .join("AppData/Local/Firaxis Games/Sid Meier's Civilization VI/AppOptions.txt");
+            fs::create_dir_all(settings.parent().unwrap()).unwrap();
+            let original_settings = b"DeviceID 5056\r\nAllowSWRenderer 0\r\nOther 9\r\n";
+            fs::write(&settings, original_settings).unwrap();
+            let original =
+                f.p.profile
+                    .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+            fs::create_dir_all(&original).unwrap();
+            fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+            let mut r = ReliabilityRunner::new(&f, vec![0; 2]);
+            r.running = false;
+            r.expect_fifo = false;
+            r.expect_software_renderer = software;
+            r.fail_sync = Some(failure);
+            let mut options = args(&["main:cycle.json"]);
+            if software {
+                options.push("--software-rendering".into());
+            }
+            assert!(cli(&mut r, &f.p, &options).is_err());
+            assert_eq!(r.artifacts.len(), 1);
+            assert_eq!(r.restore_calls, 0);
+            let receipt = f.p.here.join("steam-exit-recovery.json");
+            let pending = fs::read(&receipt).unwrap();
+            let generation = read_json(&receipt).unwrap()["cursor"].to_string();
+            assert!(r.sync_cursors.iter().all(|cursor| cursor == &generation));
+            assert!(!original.join("owner-save").exists());
+            if software {
+                assert_eq!(
+                    fs::read(f.p.here.join("software-renderer-original.bin")).unwrap(),
+                    original_settings
+                );
+                // The previous chain exited; model its stale PID rather than
+                // granting a second run the still-live owner's lease.
+                write_json(f.p.here.join("civ6.lock"), &json!({"pid":u32::MAX,"chain_pid":u32::MAX,"pid_created_filetime":1,"live_chain":true,"lock_token":"retired"})).unwrap();
+            }
+            assert!(cli(&mut r, &f.p, &options).is_err());
+            assert_eq!(
+                r.artifacts.len(),
+                1,
+                "unresolved exit must not launch another driver"
+            );
+            assert_eq!(fs::read(&receipt).unwrap(), pending);
+            assert_eq!(
+                r.sync_marks, 2,
+                "a retry must not replace the original exit generation"
+            );
+            assert!(r.sync_cursors.iter().all(|cursor| cursor == &generation));
+            assert_eq!(r.restore_calls, 0);
+            if software {
+                write_json(f.p.here.join("civ6.lock"), &json!({"pid":u32::MAX,"chain_pid":u32::MAX,"pid_created_filetime":1,"live_chain":true,"lock_token":"retired"})).unwrap();
+            }
+            assert!(cli(&mut r, &f.p, &args(&["--cleanup-only"])).is_err());
+            assert_eq!(r.artifacts.len(), 1);
+            assert_eq!(fs::read(&receipt).unwrap(), pending);
+            assert_eq!(r.restore_calls, 0);
+            r.fail_sync = None;
+            assert_eq!(cli(&mut r, &f.p, &options).unwrap(), 0);
+            assert_eq!(r.artifacts.len(), 2);
+            assert_eq!(r.restore_calls, 2);
+            assert!(!receipt.exists());
+            assert!(!f.p.here.join("reliability-auto-state.json").exists());
+            assert!(!f.p.here.join("software-renderer-original.bin").exists());
+            assert!(!f.p.here.join("civ6.lock").exists());
+            assert_eq!(fs::read(&settings).unwrap(), original_settings);
+            assert_eq!(
+                fs::read(original.join("owner-save")).unwrap(),
+                b"owner original bytes"
+            );
         }
     }
 }

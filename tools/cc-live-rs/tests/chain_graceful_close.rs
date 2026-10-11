@@ -393,7 +393,7 @@ fn exit_sync_barrier_runs_after_process_exit_and_propagates_failure() {
 }
 
 #[test]
-fn missing_sync_executable_closes_game_then_refuses_unobserved_completion() {
+fn missing_sync_executable_refuses_shutdown_without_an_exit_generation() {
     let f = Fixture::new(true);
     let source = f
         .paths
@@ -404,12 +404,13 @@ fn missing_sync_executable_closes_game_then_refuses_unobserved_completion() {
     let mut r = Model::new([true, false]);
     let error = chain::close_civ6_with_paths(&mut r, &f.paths).unwrap_err();
     assert!(error.contains("executable is missing"));
-    assert!(!r.running.iter().any(|running| *running));
+    assert!(r.running[0]);
+    assert!(r.tuner_calls("lua").is_empty());
     assert_eq!(r.count("taskkill"), 0);
 }
 
 #[test]
-fn autosave_restore_follows_sync_barrier_even_when_sync_failed() {
+fn autosave_restore_requires_confirmed_sync_and_failed_exit_recovers_its_original_cursor() {
     let f = Fixture::new(true);
     let source = f
         .paths
@@ -429,7 +430,7 @@ fn autosave_restore_follows_sync_barrier_even_when_sync_failed() {
         r.sync_code = code;
         let result = chain::close_civ6_with_paths(&mut r, &f.paths);
         assert_eq!(result.is_ok(), code == 0);
-        assert!(!state.exists());
+        assert_eq!(state.exists(), code != 0);
         let s = r
             .calls
             .iter()
@@ -438,9 +439,30 @@ fn autosave_restore_follows_sync_barrier_even_when_sync_failed() {
         let restore = r
             .calls
             .iter()
-            .position(|(_, c)| c.args.get(1).is_some_and(|a| a == "--restore"))
-            .unwrap();
-        assert!(s < restore);
+            .position(|(_, c)| c.args.get(1).is_some_and(|a| a == "--restore"));
+        if code == 0 {
+            assert!(s < restore.unwrap());
+        } else {
+            assert!(restore.is_none());
+            let pending = fs::read(f.paths.here.join("steam-exit-recovery.json")).unwrap();
+            r.sync_code = 0;
+            chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();
+            assert!(!state.exists());
+            assert!(!f.paths.here.join("steam-exit-recovery.json").exists());
+            let saved: serde_json::Value = serde_json::from_slice(&pending).unwrap();
+            let cursors: Vec<_> = r
+                .calls
+                .iter()
+                .filter(|(_, c)| c.args.get(1).is_some_and(|a| a == "--cursor"))
+                .collect();
+            assert_eq!(cursors.len(), 2);
+            assert!(cursors
+                .iter()
+                .all(
+                    |(_, c)| serde_json::from_str::<serde_json::Value>(&c.args[2]).unwrap()
+                        == saved["cursor"]
+                ));
+        }
         let mark = r
             .calls
             .iter()
@@ -460,8 +482,9 @@ fn autosave_restore_follows_sync_barrier_even_when_sync_failed() {
     assert!(chain::close_civ6_with_paths(&mut r, &f.paths)
         .unwrap_err()
         .contains("cannot mark"));
-    assert!(!state.exists());
-    assert!(!r.running.iter().any(|alive| *alive));
+    assert!(state.exists());
+    assert!(r.running[0]);
+    assert!(r.tuner_calls("lua").is_empty());
     assert!(!r
         .calls
         .iter()

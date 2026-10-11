@@ -71,7 +71,7 @@ fn replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
     result
 }
 
-fn publish_backup(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn publish_backup(path: &Path, bytes: &[u8]) -> Result<(), String> {
     // Publish only complete synced bytes. A process crash during write must
     // not leave a truncated original which a later ordinary run could restore.
     let temporary = path.with_extension(format!(

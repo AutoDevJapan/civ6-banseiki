@@ -143,7 +143,7 @@ fn close_civ6_with_evidence(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let journal = p.temp.join(format!(
+    let mut journal = p.temp.join(format!(
         "civ6-steam-exit-{}-{stamp}-{}.jsonl",
         std::process::id(),
         SERIAL.fetch_add(1, Ordering::Relaxed)
@@ -152,7 +152,31 @@ fn close_civ6_with_evidence(
     let source = p
         .live()
         .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    let receipt = p.here.join("steam-exit-recovery.json");
+    let pending = match fs::read(&receipt) {
+        Ok(bytes) => {
+            let state: Value = serde_json::from_slice(&bytes)
+                .map_err(|e| format!("invalid pending Steam exit: {e}"))?;
+            if state["version"] != 1
+                || !state["cursor"]["cloud"].is_object()
+                || !state["cursor"]["process"].is_object()
+            {
+                return Err("invalid pending Steam exit; refusing a new generation".into());
+            }
+            journal = state["journal"]
+                .as_str()
+                .ok_or("pending Steam exit lacks journal")?
+                .into();
+            Some(state["cursor"].to_string())
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => None,
+        Err(e) => return Err(format!("read pending Steam exit: {e}")),
+    };
+    let recovering = pending.is_some();
     let cursor = (|| -> Result<Option<String>, String> {
+        if let Some(cursor) = pending {
+            return Ok(Some(cursor));
+        }
         if source.is_file() && sync_tool.is_file() {
             // Mark both files inside the native helper, before asking the game to exit.
             let out = r.run(
@@ -171,21 +195,35 @@ fn close_civ6_with_evidence(
             if !value["cloud"].is_object() || !value["process"].is_object() {
                 return Err("Steam mark lacks generation cursors".into());
             }
+            // Keep the original pre-exit generation across failed waits and
+            // process restarts. Publish before asking the game to exit.
+            let bytes = serde_json::to_vec(&json!({
+                "version": 1, "cursor": value, "journal": path(&journal)
+            }))
+            .map_err(|e| e.to_string())?;
+            crate::software_renderer::publish_backup(&receipt, &bytes)
+                .map_err(|e| format!("publish pending Steam exit: {e}"))?;
             Ok(Some(out.stdout.trim().to_owned()))
+        } else if source.is_file() {
+            Err("Steam sync helper source exists but its executable is missing".into())
         } else {
             Ok(None)
         }
-    })();
+    })()?;
     let outcome = close_civ6_outcome(r, p)?;
     evidence["game_close_outcome"] = json!(outcome);
     let printed = r.print(&format!("CIV6_CLOSE outcome={outcome}"));
     let sync_result = (|| -> Result<(), String> {
-        if outcome == "absent" {
+        if outcome == "absent" && !recovering {
+            if cursor.is_some() {
+                fs::remove_file(&receipt)
+                    .map_err(|e| format!("clear unused Steam exit generation: {e}"))?;
+            }
             evidence["sync_phase"] = json!("not_needed_game_absent");
             return Ok(());
         }
         if source.is_file() {
-            let Some(cursor) = cursor? else {
+            let Some(cursor) = cursor else {
                 return Err("Steam sync helper source exists but its executable is missing; game closed, refusing an unobserved sync".into());
             };
             evidence["sync_journal"] = json!(path(&journal));
@@ -222,6 +260,9 @@ fn close_civ6_with_evidence(
             ) {
                 return Err("Steam sync helper returned success without a valid terminal journal; refusing an unproven exit".into());
             }
+            fs::remove_file(&receipt).map_err(|e| format!("clear confirmed Steam exit: {e}"))?;
+        } else if recovering {
+            return Err("pending Steam exit needs its native helper before recovery".into());
         } else {
             evidence["sync_phase"] = json!("legacy_helper_absent");
             r.print("STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it")?;
@@ -234,7 +275,13 @@ fn close_civ6_with_evidence(
         "failed"
     });
     evidence["sync_error"] = json!(sync_result.as_ref().err());
-    let restored = restore_autosaves(r, p);
+    // Game absence alone does not complete an earlier Cloud barrier. Never
+    // move the owner's originals back while the original exit is unresolved.
+    let restored = if sync_result.is_ok() {
+        restore_autosaves(r, p)
+    } else {
+        Err("autosave restoration waits for confirmed Steam release".into())
+    };
     evidence["autosave_restore_result"] = json!(if restored.is_ok() {
         "success"
     } else {
@@ -1287,7 +1334,7 @@ fn main_owned(
                 "cleanup-only requires a closed Civ6; refusing to close an unrelated game".into(),
             );
         }
-        restore_autosaves(r, p)?;
+        close_civ6_with_paths(r, p)?;
         *game_closed = true;
         return Ok(0);
     }
