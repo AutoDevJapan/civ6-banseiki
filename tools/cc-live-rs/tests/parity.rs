@@ -811,9 +811,10 @@ fn dispatched_job_in_queue_uses_arrival_order_instead_of_blocking_earlier_waiter
     );
     assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
     assert!(!my_turn(&mut Fake::success(), &f.p, &peer).unwrap());
-    // Until the dispatched job registers, its reservation is still honoured.
+    // The 996 integration reserves an assigned worker only through its actual
+    // queue/lease. A worker now building/reviewing must not block the queue.
     fs::remove_file(peer).unwrap();
-    assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+    assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
 }
 #[test]
 fn stale_waiter_removed_and_broken_waiter_ignored() {

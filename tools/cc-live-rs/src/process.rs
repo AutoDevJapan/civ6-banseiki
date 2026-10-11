@@ -434,7 +434,9 @@ fn process_open_failure(
         // preserves the old image rejection without a tasklist subprocess.
         _ => match native_identity_or_fallback(Err(error)) {
             None => snapshot_process_identity(pid),
-            Some(result) => result,
+            Some(result) => {
+                result.map_err(|error| format!("inspect Civ6 queue process {pid}: {error}"))
+            }
         },
     }
 }
@@ -966,7 +968,7 @@ fn wait(
 }
 
 #[cfg(test)]
-mod native_identity_tests {
+mod native_termination_tests {
     use super::*;
     #[test]
     fn native_waiter_access_denial_requires_the_existing_proof_not_a_dead_result() {
