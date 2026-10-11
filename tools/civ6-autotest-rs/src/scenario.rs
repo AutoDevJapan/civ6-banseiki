@@ -5,7 +5,8 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 43] = [
+pub const ACTIONS: [&str; 44] = [
+    "audit_thread_visibility",
     "start_native_order_capture",
     "set_native_order_phase",
     "stop_native_order_capture",
@@ -237,6 +238,17 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             ));
         }
         match action {
+            "audit_thread_visibility" => {
+                crate::native_order::validate_audit_options(step)?;
+                if order_open || bridge_open || trace_open || runtime_used {
+                    return Err(fail(
+                        "thread audit cannot overlap native intervention".into(),
+                    ));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_string()) {
+                    return Err(fail("native audit names must be unique".into()));
+                }
+            }
             "start_native_order_capture" => {
                 crate::native_order::validate_options(step)?;
                 if order_open || trace_open || bridge_open || runtime_used {

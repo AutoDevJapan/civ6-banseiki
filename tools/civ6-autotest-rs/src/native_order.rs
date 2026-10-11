@@ -17,7 +17,14 @@ pub fn identity() -> Value {
 /// `observe` is the fixed child command used by the original parent protocol.
 pub fn worker(args: &[String]) -> Option<Result<()>> {
     let operation = args.first()?.as_str();
-    if !["order-identity", "order-parent", "observe"].contains(&operation) {
+    if ![
+        "order-identity",
+        "order-parent",
+        "observe",
+        "audit-thread-visibility",
+    ]
+    .contains(&operation)
+    {
         return None;
     }
     Some((|| {
@@ -36,7 +43,9 @@ pub fn worker(args: &[String]) -> Option<Result<()>> {
             let value: Value = serde_json::from_slice(&std::fs::read(&args[1])?)?;
             let req = civ6_native_probe_rs::order_capture::Request::parse(&value)
                 .map_err(Error::input)?;
-            let result = if operation == "order-parent" {
+            let result = if operation == "audit-thread-visibility" {
+                civ6_native_probe_rs::windows::order_capture::audit(req)
+            } else if operation == "order-parent" {
                 civ6_native_probe_rs::windows::order_capture::parent(value)
             } else {
                 civ6_native_probe_rs::windows::order_capture::observe(req)
@@ -138,6 +147,115 @@ pub fn validate_receipt(
     Ok(())
 }
 
+pub fn validate_audit_options(step: &Value) -> Result<()> {
+    let object = step
+        .as_object()
+        .ok_or_else(|| Error::scenario("audit options must be an object"))?;
+    if object.keys().any(|key| {
+        ![
+            "action",
+            "name",
+            "max_seconds",
+            "timeout",
+            "source_dll",
+            "source_dll_sha256",
+        ]
+        .contains(&key.as_str())
+    }) || step["action"] != "audit_thread_visibility"
+        || !step["max_seconds"]
+            .as_u64()
+            .is_some_and(|s| (1..=30).contains(&s))
+        || !step["source_dll"].is_string()
+        || !step["source_dll_sha256"].is_string()
+    {
+        return Err(Error::scenario(
+            "invalid finite thread visibility audit options",
+        ));
+    }
+    let mut capture = step.clone();
+    for (key, value) in [
+        ("max_hits", json!(1)),
+        ("front_prefix", json!(1)),
+        ("load_prefix", json!(1)),
+        ("phase", json!("front")),
+    ] {
+        capture[key] = value;
+    }
+    validate_options(&capture)
+}
+pub fn validate_audit_receipt(
+    row: &Value,
+    pid: u32,
+    created: u64,
+    sha: &str,
+    observer_source: &Value,
+) -> Result<()> {
+    if row["type"] != "order_thread_audit"
+        || row["schema"] != civ6_native_probe_rs::order_capture::SCHEMA
+        || row["game_pid"].as_u64() != Some(u64::from(pid))
+        || row["game_created_filetime"].as_u64() != Some(created)
+        || row["source_dll_sha256"] != sha
+        || row["observer_source"] != *observer_source
+        || !row["threads"].is_array()
+        || row["threads"].as_array().is_some_and(|a| a.len() > 1024)
+    {
+        return Err(Error::input("thread audit receipt identity differs"));
+    }
+    for key in [
+        "debug_attach_calls",
+        "debug_register_writes",
+        "thread_suspend_calls",
+        "thread_hide_set_calls",
+        "memory_writes",
+        "dll_install_calls",
+    ] {
+        if row[key].as_u64() != Some(0) {
+            return Err(Error::input(
+                "thread audit receipt contains intervention or lacks zero counters",
+            ));
+        }
+    }
+    for key in [
+        "snapshot_complete_over_interval",
+        "future_thread_visibility_proven",
+        "hardware_capture_admitted",
+        "rebuild_authorized",
+        "root_generation_verified",
+        "native_quiescence_proven",
+        "runtime_activation_allowed",
+        "root_activation_allowed",
+        "all_producer_domains_covered",
+        "same_set_wait_proven",
+        "pending_publication_drained",
+    ] {
+        if row[key] != false {
+            return Err(Error::input(
+                "thread audit receipt claims unproven authority",
+            ));
+        }
+    }
+    if row["native_event_root_identity"] != "unknown" {
+        return Err(Error::input(
+            "thread audit cannot identify a native event root",
+        ));
+    }
+    for thread in row["threads"].as_array().unwrap() {
+        if !thread["tid"].as_u64().is_some_and(|tid| tid > 0)
+            || thread["expected_owner_pid"] != pid
+            || thread["read_only"] != true
+            || !matches!(
+                thread["visibility"].as_str(),
+                Some("hidden" | "visible" | "unknown")
+            )
+        {
+            return Err(Error::input(
+                "thread audit row lacks bounded identity or visibility status",
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod platform {
     use super::*;
@@ -185,6 +303,159 @@ mod platform {
             ));
         }
         Ok(())
+    }
+
+    fn audit_command(
+        executable: &Path,
+        args: &[&std::ffi::OsStr],
+        stdout: &Path,
+        stderr: &Path,
+        deadline: Instant,
+    ) -> Result<()> {
+        let out = File::create_new(stdout)?;
+        let errors = File::create_new(stderr)?;
+        if Instant::now() >= deadline {
+            return Err(Error::input("thread audit deadline before helper spawn"));
+        }
+        let child = Command::new(executable)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(out)
+            .stderr(errors)
+            .creation_flags(0x08000000)
+            .spawn()?;
+        struct ReadOnlyChild(Child);
+        impl Drop for ReadOnlyChild {
+            fn drop(&mut self) {
+                if self.0.try_wait().is_ok_and(|status| status.is_some()) {
+                    return;
+                }
+                let _ = self.0.kill();
+                if unsafe { WaitForSingleObject(self.0.as_raw_handle().cast(), 5_000) } == 0 {
+                    let _ = self.0.try_wait();
+                }
+            }
+        }
+        let mut owner = ReadOnlyChild(child);
+        let child = &mut owner.0;
+        let mut expired = false;
+        loop {
+            if let Some(status) = child.try_wait()? {
+                if !status.success() || expired || Instant::now() >= deadline {
+                    return Err(Error::input("thread audit helper failed or exceeded deadline; see retained audit stderr"));
+                }
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                expired = true;
+                if child.kill().is_err() && child.try_wait()?.is_none() {
+                    return Err(Error::input(
+                        "owned read-only audit helper termination failed",
+                    ));
+                }
+                if unsafe { WaitForSingleObject(child.as_raw_handle().cast(), 5_000) } != 0 {
+                    return Err(Error::input(
+                        "owned read-only audit helper exit unconfirmed",
+                    ));
+                }
+            } else {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+    }
+    pub fn audit_thread_visibility(
+        pid: u32,
+        started: f64,
+        output: &Path,
+        step: &Value,
+        budget: f64,
+    ) -> Result<PathBuf> {
+        validate_audit_options(step)?;
+        if !budget.is_finite() || budget <= 0.0 {
+            return Err(Error::input("thread audit deadline exhausted"));
+        }
+        let deadline = Instant::now()
+            + Duration::from_secs_f64(budget.min(step["max_seconds"].as_u64().unwrap() as f64));
+        let created = created(pid)?;
+        if created as f64 / 10_000_000.0 - 11_644_473_600.0 != started {
+            return Err(Error::input("thread audit game generation changed"));
+        }
+        let chain: u32 = std::env::var("CIV6_LIVE_CHAIN_PID")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|p| *p > 0)
+            .ok_or_else(|| Error::input("thread audit requires live_chain"))?;
+        let executable = std::env::current_exe()?.with_file_name("civ6-startup-diagnostics.exe");
+        let _helper_image = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&executable)?;
+        let base = output.join(format!("{}.audit", step["name"].as_str().unwrap()));
+        let artifact = base.with_extension("audit.json");
+        let proof_path = base.with_extension("audit.identity.json");
+        audit_command(
+            &executable,
+            &[std::ffi::OsStr::new("order-identity")],
+            &proof_path,
+            &base.with_extension("audit.identity.stderr.log"),
+            deadline,
+        )?;
+        if serde_json::from_slice::<Value>(&fs::read(&proof_path)?)? != identity() {
+            return Err(Error::input("thread audit helper source differs"));
+        }
+        let dll = PathBuf::from(step["source_dll"].as_str().unwrap());
+        let _dll_pin = fs::OpenOptions::new().read(true).share_mode(1).open(&dll)?;
+        let sha = format!("{:x}", Sha256::digest(fs::read(&dll)?));
+        if !sha.eq_ignore_ascii_case(step["source_dll_sha256"].as_str().unwrap()) {
+            return Err(Error::input(
+                "thread audit source DLL differs from frozen build",
+            ));
+        }
+        let request = base.with_extension("audit.driver-request.json");
+        let value = json!({"schema":civ6_native_probe_rs::order_capture::SCHEMA,
+            "pid":pid,"created_filetime":created,"chain_pid":chain,"chain_created_filetime":self::created(chain)?,
+            "controller_pid":std::process::id(),"controller_created_filetime":self::created(std::process::id())?,
+            "source_dll":dll,"source_dll_sha256":sha,"output":artifact,
+            "max_seconds":step["max_seconds"],"max_hits":1,"front_prefix":1,"load_prefix":1,"phase":"front"});
+        let mut file = File::create_new(&request)?;
+        serde_json::to_writer_pretty(&mut file, &value)?;
+        file.sync_all()?;
+        audit_command(
+            &executable,
+            &[
+                std::ffi::OsStr::new("audit-thread-visibility"),
+                request.as_os_str(),
+            ],
+            &base.with_extension("audit.transport.json"),
+            &base.with_extension("audit.stderr.log"),
+            deadline,
+        )?;
+        let row: Value = serde_json::from_slice(&fs::read(&artifact)?)?;
+        validate_audit_receipt(&row, pid, created, &sha, &identity()["observer"])?;
+        for key in [
+            "chain_pid",
+            "chain_created_filetime",
+            "controller_pid",
+            "controller_created_filetime",
+        ] {
+            if row[key] != value[key] {
+                return Err(Error::input(
+                    "thread audit owner generation differs from request",
+                ));
+            }
+        }
+        let receipt = json!({"type":"order_audit_driver_receipt","game_pid":pid,"game_created_filetime":created,"created_filetime":created,
+            "helper_reaped":true,"helper_exit_code":0,"helper_sha256":format!("{:x}",Sha256::digest(fs::read(&executable)?)),
+            "source_identity":identity(),"source_dll_sha256":sha,"attached":false,"hardware_capture_admitted":false,"runtime_activation_allowed":false});
+        let mut file = File::create_new(base.with_extension("audit.driver.json"))?;
+        serde_json::to_writer_pretty(&mut file, &receipt)?;
+        file.sync_all()?;
+        if Instant::now() >= deadline {
+            return Err(Error::input(
+                "thread audit deadline exhausted after receipt retention",
+            ));
+        }
+        Ok(artifact)
     }
 
     pub struct Session {
@@ -471,7 +742,12 @@ mod platform {
     }
 }
 #[cfg(all(windows, target_arch = "x86_64"))]
-pub use platform::{check_parent_active, Session};
+pub use platform::{audit_thread_visibility, check_parent_active, Session};
+
+#[cfg(not(all(windows, target_arch = "x86_64")))]
+pub fn audit_thread_visibility(_: u32, _: f64, _: &Path, _: &Value, _: f64) -> Result<PathBuf> {
+    Err(Error::input("thread visibility audit requires Windows x64"))
+}
 
 #[cfg(not(all(windows, target_arch = "x86_64")))]
 pub struct Session;

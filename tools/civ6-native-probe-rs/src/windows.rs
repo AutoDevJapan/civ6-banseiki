@@ -121,6 +121,51 @@ const THREAD_RIGHTS: u32 = THREAD_GET_CONTEXT
 const LIFECYCLE_THREAD_ROW_LIMIT: usize = 1024;
 type NtQueryThreadFn =
     unsafe extern "system" fn(HANDLE, i32, *mut std::ffi::c_void, u32, *mut u32) -> i32;
+// phnt THREADINFOCLASS 17: query BOOLEAN, set void. Production only queries.
+// https://github.com/winsiderss/phnt/blob/master/ntpsapi.h
+#[cfg(any(feature = "bootstrap-order", test))]
+#[derive(Clone, Copy, Debug)]
+struct ThreadVisibility {
+    hidden: Option<bool>,
+    status: i32,
+    returned_len: u32,
+    raw: u8,
+}
+#[cfg(any(feature = "bootstrap-order", test))]
+impl ThreadVisibility {
+    fn evidence(self) -> Value {
+        json!({"class":17,"hidden":self.hidden,"visibility":match self.hidden{Some(true)=>"hidden",Some(false)=>"visible",None=>"unknown"},"ntstatus":format!("0x{:08x}",self.status as u32),
+            "returned_len":self.returned_len,"raw_boolean":self.raw,
+            "scope":"query_instant_only","future_visibility_proven":false})
+    }
+    fn require_visible(self) -> Result<(), String> {
+        match self.hidden {
+            Some(false) => Ok(()),
+            Some(true) => Err("thread is hidden from debugger; DR write refused".into()),
+            None => Err("thread debugger visibility unknown; DR write refused".into()),
+        }
+    }
+}
+#[cfg(any(feature = "bootstrap-order", test))]
+fn query_thread_visibility(handle: &Handle, query: NtQueryThreadFn) -> ThreadVisibility {
+    let mut raw = 0xffu8;
+    let mut returned_len = 0u32;
+    let status = unsafe {
+        query(
+            handle.0,
+            17,
+            (&mut raw as *mut u8).cast(),
+            1,
+            &mut returned_len,
+        )
+    };
+    ThreadVisibility {
+        hidden: (status >= 0 && returned_len == 1 && raw <= 1).then_some(raw == 1),
+        status,
+        returned_len,
+        raw,
+    }
+}
 #[derive(Clone, Copy, Debug)]
 struct Win32StartQuery {
     address: Option<u64>,
@@ -2873,6 +2918,28 @@ mod tests {
                     println!("PROBE_OUT:U{}", UNKNOWN_STEP_HANDLED.load(Ordering::SeqCst));
                 }
                 "R" => println!("PROBE_REG:{}", child_registers(main_tid, false)),
+                "V" => println!("PROBE_TID:{main_tid}"),
+                "D" => {
+                    // Only this owned test helper can set class 17. No setter
+                    // exists in the production observer or audit capability.
+                    let name: Vec<u16> = "ntdll.dll".encode_utf16().chain(Some(0)).collect();
+                    let module = unsafe { GetModuleHandleW(name.as_ptr()) };
+                    assert!(!module.is_null());
+                    let export =
+                        unsafe { GetProcAddress(module, b"NtSetInformationThread\0".as_ptr()) }
+                            .unwrap();
+                    let set: unsafe extern "system" fn(
+                        HANDLE,
+                        i32,
+                        *mut std::ffi::c_void,
+                        u32,
+                    ) -> i32 = unsafe { std::mem::transmute(export) };
+                    assert_eq!(
+                        unsafe { set((-2isize) as HANDLE, 17, std::ptr::null_mut(), 0) },
+                        0
+                    );
+                    println!("PROBE_HIDDEN:{main_tid}");
+                }
                 "O" => println!("PROBE_OWNER:{:x}", governors.as_ptr() as u64),
                 "P" => {
                     governors[0x70..0x78]
@@ -2891,6 +2958,167 @@ mod tests {
                 _ => panic!("invalid fixture command"),
             }
             std::io::stdout().flush().unwrap();
+        }
+    }
+
+    #[test]
+    fn hidden_thread_query_rejects_owned_child_without_attach_or_dr_write() {
+        if isolated_test("hidden_thread_query_rejects_owned_child_without_attach_or_dr_write") {
+            return;
+        }
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let tid: u32 = child.command("V", "PROBE_TID:").parse().unwrap();
+        let (_, query, _) = resolve_attach_origin(pid).unwrap();
+        let handle = thread_handle(tid).unwrap();
+        let before = query_thread_visibility(&handle, query);
+        assert_eq!(before.hidden, Some(false));
+        assert!(before.require_visible().is_ok());
+        assert_eq!(child.command("D", "PROBE_HIDDEN:"), tid.to_string());
+        let hidden = query_thread_visibility(&handle, query);
+        assert_eq!(hidden.hidden, Some(true));
+        assert!(hidden.require_visible().unwrap_err().contains("hidden"));
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"hidden_thread_safe_refusal",
+            "pid":pid,"tid":tid,"before":before.evidence(),"after":hidden.evidence(),
+            "debug_attach_calls":0,"debug_register_writes":0,"child_alive":alive(&process(pid,false).unwrap()).unwrap(),
+            "future_visibility_proven":false,"game_live":false})
+        );
+    }
+
+    #[test]
+    fn hidden_thread_owned_hardware_negative_exits_without_debugger_single_step() {
+        if isolated_test("hidden_thread_owned_hardware_negative_exits_without_debugger_single_step")
+        {
+            return;
+        }
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let tid: u32 = child.command("D", "PROBE_HIDDEN:").parse().unwrap();
+        let entry = child.entry;
+        let path = std::env::temp_dir().join(format!(
+            "todo880-hidden-negative-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let output = Jsonl::new(&path).unwrap();
+        let (stop_tx, _) = mpsc::channel();
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let observer = child.observe(&stop_tx, move |ack| {
+            let mut d = Debugger::attach(
+                pid,
+                process(pid, true).unwrap(),
+                entry - CAN_EVER_RVA,
+                0x500000,
+                output,
+                ProbeMode::Lifecycle,
+            )
+            .unwrap();
+            d.close_ack = ack;
+            let handle = thread_handle(tid).unwrap();
+            let hidden = query_thread_visibility(&handle, d.query_thread_start);
+            assert_eq!(hidden.hidden, Some(true));
+            let mut barrier = test_support::AttachReadyBarrier::default();
+            let mut armed = false;
+            let mut steps = 0u32;
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while Instant::now() < deadline {
+                let mut event = DEBUG_EVENT::default();
+                if unsafe { WaitForDebugEventEx(&mut event, 50) } == 0 {
+                    continue;
+                }
+                d.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
+                if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
+                    && unsafe { event.u.Exception.ExceptionRecord.ExceptionCode }
+                        == EXCEPTION_SINGLE_STEP
+                {
+                    steps += 1;
+                }
+                let status = d.handle_event(&event).unwrap();
+                d.continue_pending_with_status(status).unwrap();
+                if !armed && barrier.advance(&mut d, &event) {
+                    // Deliberately unsafe ONLY in the owned negative fixture:
+                    // demonstrate the hazard that production now refuses.
+                    assert_ne!(unsafe { SuspendThread(handle.0) }, u32::MAX);
+                    let mut c = context(&handle).unwrap();
+                    c.Dr0 = entry;
+                    c.Dr7 = (c.Dr7 & !0xff & !(0xffff << 16)) | 1;
+                    c.Dr6 &= !15;
+                    let set = set_context(&handle, &c);
+                    assert_ne!(unsafe { ResumeThread(handle.0) }, u32::MAX);
+                    set.unwrap();
+                    armed = true;
+                    ready_tx.send(()).unwrap();
+                }
+                if d.terminal == TerminalKind::TargetExited {
+                    return (steps, d.lifecycle.exit_code, hidden.evidence());
+                }
+            }
+            panic!("owned hidden hardware fixture did not exit within its bound");
+        });
+        ready_rx.recv_timeout(Duration::from_secs(12)).unwrap();
+        child.send("T").unwrap();
+        let (steps, code, hidden) = join_observer(observer).unwrap();
+        let status = child.wait_for_exit();
+        assert_eq!(
+            steps, 0,
+            "a hidden thread's trap must not be reported as observed"
+        );
+        assert_eq!(code, Some(EXCEPTION_SINGLE_STEP as u32));
+        assert_eq!(
+            status.code().map(|v| v as u32),
+            Some(EXCEPTION_SINGLE_STEP as u32)
+        );
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"owned_hidden_hardware_negative",
+            "pid":pid,"tid":tid,"hidden":hidden,"debugger_single_step_events":steps,
+            "exit_code":code,"child_reaped":true,"game_live":false,"root_activation_allowed":false})
+        );
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn visibility_query_unknown_status_length_and_boolean_are_rejected() {
+        use std::sync::atomic::AtomicU32;
+        static CASE: AtomicU32 = AtomicU32::new(0);
+        static CLASS: AtomicU32 = AtomicU32::new(0);
+        static LENGTH: AtomicU32 = AtomicU32::new(0);
+        unsafe extern "system" fn unavailable(
+            _: HANDLE,
+            class: i32,
+            buffer: *mut std::ffi::c_void,
+            len: u32,
+            returned: *mut u32,
+        ) -> i32 {
+            CLASS.store(class as u32, Ordering::SeqCst);
+            LENGTH.store(len, Ordering::SeqCst);
+            let case = CASE.load(Ordering::SeqCst);
+            unsafe {
+                *returned = if case == 1 { 0 } else { 1 };
+                *buffer.cast::<u8>() = if case == 2 { 2 } else { 0 };
+            }
+            if case == 0 {
+                0xc0000003u32 as i32
+            } else {
+                0
+            }
+        }
+        let handle =
+            thread_handle(unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() })
+                .unwrap();
+        for case in 0..3 {
+            CASE.store(case, Ordering::SeqCst);
+            let sample = query_thread_visibility(&handle, unavailable);
+            assert_eq!(
+                (CLASS.load(Ordering::SeqCst), LENGTH.load(Ordering::SeqCst)),
+                (17, 1)
+            );
+            assert_eq!(sample.hidden, None);
+            assert!(sample.require_visible().is_err());
         }
     }
 

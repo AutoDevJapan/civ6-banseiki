@@ -192,6 +192,11 @@ pub trait Backend: Send {
     fn start_native_order(&mut self, _: &Path, _: &Value) -> Result<()> {
         Err(Error::input("backend cannot observe native startup order"))
     }
+    fn audit_thread_visibility(&mut self, _: &Path, _: &Value, _: f64) -> Result<PathBuf> {
+        Err(Error::input(
+            "backend cannot audit native thread visibility",
+        ))
+    }
     fn check_native_order(&self) -> Result<()> {
         Ok(())
     }
@@ -1147,6 +1152,38 @@ impl Backend for SystemBackend {
             pid, started, output, step,
         )?);
         Ok(())
+    }
+    fn audit_thread_visibility(
+        &mut self,
+        output: &Path,
+        step: &Value,
+        budget: f64,
+    ) -> Result<PathBuf> {
+        if self.native_order.is_some()
+            || self.native_bridge.is_some()
+            || self.native_trace.is_some()
+            || self.native_runtime.is_some()
+            || self.native_bootstrap.is_some()
+        {
+            return Err(Error::scenario(
+                "thread audit cannot overlap native intervention",
+            ));
+        }
+        crate::native_order::validate_audit_options(step)?;
+        self.check_startup_lock()?;
+        if self
+            .live_lease_budget()?
+            .is_some_and(|remaining| remaining <= budget + 5.0)
+        {
+            return Err(Error::input(
+                "live_chain lease cannot cover finite thread audit",
+            ));
+        }
+        self.require_single_process()?;
+        let (pid, started) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("Civ6 is absent"))?;
+        crate::native_order::audit_thread_visibility(pid, started, output, step, budget)
     }
     fn native_order_phase(&mut self, phase: &str) -> Result<()> {
         self.native_order
@@ -3123,6 +3160,18 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "audit_thread_visibility" => {
+                let budget = self.remaining(deadline)?.min(
+                    step["max_seconds"]
+                        .as_u64()
+                        .ok_or_else(|| Error::scenario("thread audit max_seconds missing"))?
+                        as f64,
+                );
+                self.backend
+                    .audit_thread_visibility(&self.output, step, budget)?;
+                self.remaining(deadline)?;
+                return Ok("thread visibility snapshot retained; no attach or DR writes; future visibility and root activation unproven".into());
+            }
             "start_native_order_capture" => {
                 self.remaining(deadline)?;
                 self.backend.start_native_order(&self.output, step)?;

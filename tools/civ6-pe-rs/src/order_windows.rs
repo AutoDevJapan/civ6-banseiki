@@ -234,6 +234,8 @@ fn arm_evidence(
     } != 0;
     let c = context(&state.handle);
     let mut row = json!({"type":"arm_state","tid":tid,"expected_owner_pid":d.pid,"thread_owner_pid":unsafe{GetProcessIdOfThread(state.handle.0)},"handle_tid":unsafe{GetThreadId(state.handle.0)},"handle_wait":wait,"exit_code":if exit_ok{Some(exit_code)}else{None},"held":d.held.contains(&tid),"armed_sites":state.armed_sites,"expected_phase":from.map(|e|e.phase.name()),"expected_generation":from.map(|e|e.generation),"last_written_generation":generations.get(&tid),"target_phase":to.phase.name(),"target_generation":to.generation,"target_sites":to.sites});
+    row["debugger_visibility"] =
+        query_thread_visibility(&state.handle, d.query_thread_start).evidence();
     match &c {
         Ok(c) => {
             row["raw_context"] = json!({"context_flags":c.ContextFlags,"rip":c.Rip,"eflags":c.EFlags,"dr0":c.Dr0,"dr1":c.Dr1,"dr2":c.Dr2,"dr3":c.Dr3,"dr6":c.Dr6,"dr7":c.Dr7})
@@ -322,6 +324,15 @@ fn install_sites(
     mut c: CONTEXT,
     threads: &mut CaptureThreads,
 ) -> Result<(), String> {
+    let state = d.threads.get(&tid).ok_or("thread lost during arm")?;
+    let visibility = query_thread_visibility(&state.handle, d.query_thread_start);
+    if let Err(error) = visibility.require_visible() {
+        return Err(reject_arm(
+            d,
+            json!({"tid":tid,"debugger_visibility":visibility.evidence()}),
+            error,
+        ));
+    }
     let state = d.threads.get_mut(&tid).ok_or("thread lost during arm")?;
     [c.Dr0, c.Dr1, c.Dr2, c.Dr3] = epoch.sites.map(|s| s.unwrap_or(0));
     c.Dr7 = (c.Dr7 & !0xff & !(0xffff << 16))
@@ -530,6 +541,13 @@ fn rearm_frozen_threads(
                 d,
                 row,
                 "prior capture debug-register ownership changed".into(),
+            ));
+        }
+        if row["debugger_visibility"]["hidden"] != false {
+            return Err(reject_arm(
+                d,
+                row,
+                "phase preflight cannot prove thread visible; DR write refused".into(),
             ));
         }
         row["disposition"] = json!("live_held_verified");
@@ -848,7 +866,143 @@ fn reader(ack: Arc<AtomicBool>) -> (Reader, Receiver<Result<String, String>>) {
     )
 }
 
+// Diagnostic snapshot only: no attach, suspension, DR/context write or setter.
+// Reading false at this instant never admits hardware observation afterward.
+pub fn audit(req: Request) -> Result<(), String> {
+    let chain = OrderChain::pin(req.chain_pid, req.chain_created)?;
+    let lock = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
+    verify_order_lock(lock, req.chain_pid, &chain)?;
+    let controller = process(req.controller_pid, false)?;
+    if process_created(&controller)? != req.controller_created
+        || !alive(&controller)?
+        || parent_pid(std::process::id())? != req.controller_pid
+        || std::env::var("CIV6_LIVE_CHAIN_PID")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            != Some(req.chain_pid)
+    {
+        return Err("audit controller or inherited chain identity differs".into());
+    }
+    chain_descendant(req.controller_pid, req.chain_pid)?;
+    let game = exact_process(
+        req.pid,
+        req.created,
+        Path::new(crate::PINNED_DX11_EXE),
+        true,
+    )?;
+    if req.created < req.chain_created {
+        return Err("audit game predates owning chain".into());
+    }
+    let exe = module_named(req.pid, "CivilizationVI.exe")?;
+    if !is_pinned_dx11_exe(&exe.path) {
+        return Err("audit EXE path differs".into());
+    }
+    plan::disk_sites(&fs::read(&exe.path).map_err(|e| e.to_string())?)?;
+    let core_path = Path::new(GAME_ROOT).join(MODULE_REL);
+    let _core_pin = pin_hashed_image_file(&core_path, plan::CORE_SHA, "audit Core")?;
+    let (_, query, ntdll) = resolve_attach_origin(req.pid)?;
+    let _source_pin =
+        pin_hashed_image_file(&req.source_dll, &req.source_dll_sha, "audit source DLL")?;
+    let rows = audit_threads(req.pid, query)?;
+    let core = core_module(req.pid)?;
+    if core
+        .as_ref()
+        .is_some_and(|m| !same_path(&m.path, &core_path))
+    {
+        return Err("audit Core module path differs".into());
+    }
+    verify_order_lock(lock, req.chain_pid, &chain)?;
+    if !alive(&game)? || process_created(&game)? != req.created || !alive(&controller)? {
+        return Err("audit identity changed during snapshot".into());
+    }
+    let report = json!({"type":"order_thread_audit","schema":plan::SCHEMA,
+        "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d|d.as_millis()),
+        "source_dll_sha256":req.source_dll_sha,"observer_source":plan::source_identity()["compiled_source_sha256"],
+        "game_pid":req.pid,"game_created_filetime":req.created,
+        "chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,
+        "controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,
+        "threads":rows,"initial_core_base":core.as_ref().map(|m|m.base),
+        "ntdll_disk_sha256":ntdll.disk_sha256,"ntdll_query_rva":ntdll.query_rva,
+        "snapshot_complete_over_interval":false,"future_thread_visibility_proven":false,
+        "hardware_capture_admitted":false,"debug_attach_calls":0,"debug_register_writes":0,
+        "thread_suspend_calls":0,"thread_hide_set_calls":0,"memory_writes":0,"dll_install_calls":0,
+        "native_event_root_identity":"unknown","rebuild_authorized":false,"root_generation_verified":false,
+        "root_activation_allowed":false,"all_producer_domains_covered":false,"same_set_wait_proven":false,"pending_publication_drained":false,
+        "native_quiescence_proven":false,"runtime_activation_allowed":false});
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&req.output)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_writer_pretty(&mut file, &report).map_err(|e| e.to_string())?;
+    file.sync_all().map_err(|e| e.to_string())?;
+    emit(&report)
+}
+fn audit_threads(pid: u32, query: NtQueryThreadFn) -> Result<Vec<Value>, String> {
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+    };
+    let snapshot = Handle::new(
+        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) },
+        "audit thread snapshot",
+    )?;
+    let mut entry: THREADENTRY32 = unsafe { zeroed() };
+    entry.dwSize = size_of::<THREADENTRY32>() as u32;
+    let mut found = unsafe { Thread32First(snapshot.0, &mut entry) };
+    let mut rows = Vec::new();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while found != 0 {
+        if entry.th32OwnerProcessID == pid {
+            if rows.len() >= 1024 || Instant::now() >= deadline {
+                return Err("audit thread bound exceeded".into());
+            }
+            let tid = entry.th32ThreadID;
+            let handle = Handle::new(
+                unsafe { OpenThread(THREAD_QUERY_INFORMATION | THREAD_SYNCHRONIZE, 0, tid) },
+                "audit OpenThread",
+            );
+            let mut row = json!({"tid":tid,"expected_owner_pid":pid,"read_only":true,"visibility":"unknown","debugger_visibility":null,
+                "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d|d.as_millis())});
+            match handle {
+                Err(error) => row["inspection_error"] = json!(error),
+                Ok(handle) => {
+                    row["owner_pid"] = json!(unsafe { GetProcessIdOfThread(handle.0) });
+                    row["handle_tid"] = json!(unsafe { GetThreadId(handle.0) });
+                    row["handle_wait"] = json!(unsafe { WaitForSingleObject(handle.0, 0) });
+                    if row["owner_pid"] != pid
+                        || row["handle_tid"] != tid
+                        || row["handle_wait"] != WAIT_TIMEOUT
+                    {
+                        row["inspection_error"] = json!("thread ownership/liveness unproven");
+                    } else {
+                        row["debugger_visibility"] =
+                            query_thread_visibility(&handle, query).evidence();
+                        row["win32_start_candidate"] =
+                            json!(query_win32_start(&handle, query).address);
+                        row["handle_wait_after_query"] =
+                            json!(unsafe { WaitForSingleObject(handle.0, 0) });
+                        if row["handle_wait_after_query"] == WAIT_TIMEOUT {
+                            row["visibility"] = row["debugger_visibility"]["visibility"].clone();
+                        }
+                    }
+                }
+            }
+            rows.push(row);
+        }
+        found = unsafe { Thread32Next(snapshot.0, &mut entry) };
+    }
+    if std::io::Error::last_os_error().raw_os_error() != Some(18) {
+        return Err(win_error("audit Thread32Next"));
+    }
+    Ok(rows)
+}
+
 pub fn observe(req: Request) -> Result<(), String> {
+    // A query cannot prevent a thread from hiding after its snapshot. Until
+    // that delivery gap is controlled, production must not arm any game DR.
+    if !cfg!(test) {
+        return Err("live hardware capture withheld: future thread debugger visibility unproven; use audit-thread-visibility".into());
+    }
     // Resolve authority before attach. No lock acquisition, reservation, launch,
     // injection, DLL loading, memory setter or runtime API is present here.
     let chain = OrderChain::pin(req.chain_pid, req.chain_created)?;

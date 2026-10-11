@@ -5,6 +5,139 @@ fn start() -> Value {
     json!({"action":"start_native_order_capture","name":"order-front", "max_seconds":120,
         "max_hits":128,"front_prefix":4,"load_prefix":4,"phase":"front"})
 }
+fn audit() -> Value {
+    json!({"action":"audit_thread_visibility","name":"visibility","max_seconds":15,
+        "source_dll":"D:/owned/fixed.dll","source_dll_sha256":"a".repeat(64)})
+}
+#[test]
+fn thread_audit_is_finite_and_cannot_overlap_a_capture_or_supply_setters() {
+    native_order::validate_audit_options(&audit()).unwrap();
+    validate_scenario(&json!({"name":"read only","steps":[audit(),
+        {"action":"exit_to_menu"},{"action":"load","name":"SAVED_GAME"}]}))
+    .unwrap();
+    assert!(validate_scenario(&scenario(vec![audit()])).is_err());
+    for (key, value) in [
+        ("max_seconds", json!(31)),
+        ("pid", json!(12)),
+        ("phase", json!("native-shutdown")),
+        ("thread_hide_set", json!(true)),
+        ("source_dll", Value::Null),
+    ] {
+        let mut step = audit();
+        step[key] = value;
+        assert!(
+            native_order::validate_audit_options(&step).is_err(),
+            "{key}"
+        );
+    }
+    assert!(
+        validate_scenario(&json!({"name":"duplicate audit","steps":[audit(),audit()]})).is_err()
+    );
+}
+#[test]
+fn thread_audit_receipt_is_separate_and_unknown_does_not_admit_hardware() {
+    let source = json!("b".repeat(64));
+    let mut good = json!({"type":"order_thread_audit","schema":"todo880-order-v1",
+        "game_pid":12,"game_created_filetime":34,"source_dll_sha256":"a".repeat(64),"observer_source":source,
+        "threads":[{"tid":4,"expected_owner_pid":12,"read_only":true,"visibility":"unknown","debugger_visibility":{"hidden":null,"ntstatus":"0xc0000003"}}],
+        "native_event_root_identity":"unknown"});
+    for key in [
+        "debug_attach_calls",
+        "debug_register_writes",
+        "thread_suspend_calls",
+        "thread_hide_set_calls",
+        "memory_writes",
+        "dll_install_calls",
+    ] {
+        good[key] = json!(0);
+    }
+    let authorities = [
+        "snapshot_complete_over_interval",
+        "future_thread_visibility_proven",
+        "hardware_capture_admitted",
+        "rebuild_authorized",
+        "root_generation_verified",
+        "native_quiescence_proven",
+        "runtime_activation_allowed",
+        "root_activation_allowed",
+        "all_producer_domains_covered",
+        "same_set_wait_proven",
+        "pending_publication_drained",
+    ];
+    for key in authorities {
+        good[key] = json!(false);
+    }
+    native_order::validate_audit_receipt(&good, 12, 34, &"a".repeat(64), &source).unwrap();
+    assert!(native_order::validate_receipt(&good, 12, 34, &"a".repeat(64), 56).is_err());
+    for key in authorities {
+        let mut bad = good.clone();
+        bad[key] = json!(true);
+        assert!(
+            native_order::validate_audit_receipt(&bad, 12, 34, &"a".repeat(64), &source).is_err(),
+            "{key}"
+        );
+    }
+    for key in [
+        "debug_attach_calls",
+        "debug_register_writes",
+        "thread_suspend_calls",
+        "thread_hide_set_calls",
+        "memory_writes",
+        "dll_install_calls",
+    ] {
+        let mut bad = good.clone();
+        bad[key] = json!(1);
+        assert!(
+            native_order::validate_audit_receipt(&bad, 12, 34, &"a".repeat(64), &source).is_err(),
+            "{key}"
+        );
+    }
+    assert!(native_order::validate_audit_receipt(&good, 12, 35, &"a".repeat(64), &source).is_err());
+    assert!(native_order::validate_audit_receipt(&good, 12, 34, &"c".repeat(64), &source).is_err());
+}
+#[test]
+fn runner_dispatches_thread_audit_without_starting_a_debug_session() {
+    use civ6_autotest_rs::{
+        runner::{Backend, Runner},
+        time::SystemClock,
+        Result,
+    };
+    use std::{
+        path::{Path, PathBuf},
+        sync::{Arc, Mutex},
+    };
+    struct Audit(Arc<Mutex<usize>>);
+    impl Backend for Audit {
+        fn audit_thread_visibility(
+            &mut self,
+            output: &Path,
+            step: &Value,
+            budget: f64,
+        ) -> Result<PathBuf> {
+            native_order::validate_audit_options(step)?;
+            assert!(budget > 0.0 && budget <= 15.0);
+            *self.0.lock().unwrap() += 1;
+            Ok(output.join("visibility.audit.json"))
+        }
+        fn start_native_order(&mut self, _: &Path, _: &Value) -> Result<()> {
+            panic!("audit cannot start a capture");
+        }
+    }
+    let calls = Arc::new(Mutex::new(0));
+    let dir = tempfile::tempdir().unwrap();
+    let mut runner = Runner::with_backend(
+        json!({"name":"audit","steps":[]}),
+        dir.path().into(),
+        dir.path().into(),
+        dir.path().into(),
+        4318,
+        Box::new(Audit(calls.clone())),
+        Arc::new(SystemClock),
+    );
+    let detail = runner.run_step(&audit()).unwrap();
+    assert!(detail.contains("no attach or DR writes"));
+    assert_eq!(*calls.lock().unwrap(), 1);
+}
 fn scenario(middle: Vec<Value>) -> Value {
     let mut steps = vec![start()];
     steps.extend(middle);

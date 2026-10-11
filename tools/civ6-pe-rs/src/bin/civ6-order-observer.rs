@@ -11,7 +11,7 @@ fn output(value: &str) -> Result<(), String> {
 fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() != 2 {
-        return Err("usage: civ6-order-observer snapshot|summary <EXE> | analyze <capture.jsonl> | validate|observe|parent <request.json>".into());
+        return Err("usage: civ6-order-observer snapshot|summary <EXE> | analyze <capture.jsonl> | validate|audit-thread-visibility|observe|parent <request.json>".into());
     }
     if args[0] == "analyze" {
         let file = std::fs::File::open(&args[1]).map_err(|e| e.to_string())?;
@@ -66,7 +66,11 @@ fn run() -> Result<(), String> {
         output(&serde_json::to_string_pretty(&proof).map_err(|e| e.to_string())?)?;
         return Ok(());
     }
-    if args[0] != "observe" && args[0] != "parent" && args[0] != "validate" {
+    if args[0] != "observe"
+        && args[0] != "parent"
+        && args[0] != "validate"
+        && args[0] != "audit-thread-visibility"
+    {
         return Err("unknown command".into());
     }
     let request: serde_json::Value =
@@ -79,7 +83,9 @@ fn run() -> Result<(), String> {
     }
     #[cfg(all(windows, target_arch = "x86_64"))]
     {
-        if args[0] == "parent" {
+        if args[0] == "audit-thread-visibility" {
+            civ6_native_probe_rs::windows::order_capture::audit(Request::parse(&request)?)
+        } else if args[0] == "parent" {
             civ6_native_probe_rs::windows::order_capture::parent(request)
         } else {
             civ6_native_probe_rs::windows::order_capture::observe(Request::parse(&request)?)
