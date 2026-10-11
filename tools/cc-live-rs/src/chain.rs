@@ -591,7 +591,7 @@ fn chain_job_active(p: &Paths, job: &Value) -> Result<bool, String> {
     }
     Ok(matches!(
         read_json(path)?["status"].as_str(),
-        Some("queued" | "starting" | "running")
+        Some("starting" | "running")
     ))
 }
 fn remove_if_exists(p: &Path) -> Result<(), String> {
