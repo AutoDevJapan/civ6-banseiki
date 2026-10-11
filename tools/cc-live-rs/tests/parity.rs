@@ -3,7 +3,7 @@ use serde_json::json;
 use std::{
     collections::VecDeque,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicUsize, Ordering},
 };
 static SERIAL: AtomicUsize = AtomicUsize::new(0);
@@ -2837,6 +2837,10 @@ struct ReliabilityRunner {
     add_waiter: bool,
     fail_cleanup: bool,
     fail_begin: Option<bool>,
+    fail_restore: bool,
+    unknown_exit: bool,
+    isolation_calls: Vec<Call>,
+    expect_fifo: bool,
     restore_calls: usize,
     waiter_during_prepare: bool,
     reschedule_after_begin_failure: f64,
@@ -2870,6 +2874,10 @@ impl ReliabilityRunner {
             add_waiter: false,
             fail_cleanup: false,
             fail_begin: None,
+            fail_restore: false,
+            unknown_exit: false,
+            isolation_calls: vec![],
+            expect_fifo: true,
             restore_calls: 0,
             waiter_during_prepare: false,
             reschedule_after_begin_failure: 0.0,
@@ -2901,12 +2909,18 @@ impl Runner for ReliabilityRunner {
             return Ok(Output::default());
         }
         if call.args.get(1).is_some_and(|arg| arg == "--begin") {
+            self.isolation_calls.push(call.clone());
+            assert_eq!(call.args[2], "--state");
+            assert_eq!(call.args[4], "--archive");
+            assert_eq!(call.args.len(), 6);
+            assert!(self.p.here.join("civ6.lock").exists());
             assert!(!self.running && !self.closing);
             let original = self
                 .p
                 .profile
                 .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
             let archive = PathBuf::from(&call.args[5]);
+            fs::create_dir_all(&archive).map_err(|e| e.to_string())?;
             fs::rename(&original, archive.join("owner-auto-original"))
                 .map_err(|e| e.to_string())?;
             fs::create_dir(&original).map_err(|e| e.to_string())?;
@@ -2921,14 +2935,25 @@ impl Runner for ReliabilityRunner {
                 return Err("begin timed out after original rename".into());
             }
             return Ok(Output {
-                code: 1,
+                code: i32::from(self.fail_begin.is_some()),
                 stderr: "begin failed after original rename".into(),
                 ..Output::default()
             });
         }
         if call.args.get(1).is_some_and(|arg| arg == "--restore") {
+            self.isolation_calls.push(call.clone());
+            assert!(self.p.here.join("civ6.lock").exists());
+            assert_eq!(call.args[2], "--state");
+            assert_eq!(call.args.len(), 4);
             assert!(!self.running && !self.closing);
             self.restore_budgets.push(call.timeout.unwrap());
+            if self.fail_restore {
+                return Ok(Output {
+                    code: 1,
+                    stderr: "restore denied".into(),
+                    ..Output::default()
+                });
+            }
             let record = read_json(&call.args[3])?;
             let original = PathBuf::from(record["original"].as_str().unwrap());
             let archive = PathBuf::from(record["archive"].as_str().unwrap());
@@ -2940,6 +2965,9 @@ impl Runner for ReliabilityRunner {
             return Ok(Output::default());
         }
         if call.args[0] == "tasklist" && call.args[2] == "IMAGENAME eq CivilizationVI.exe" {
+            if self.unknown_exit && !self.artifacts.is_empty() {
+                return Err("game exit cannot be inspected".into());
+            }
             if self.closing {
                 if self.exit_polls > 0 {
                     self.exit_polls -= 1;
@@ -2995,7 +3023,7 @@ impl Runner for ReliabilityRunner {
         }
         if call.args[0].ends_with("ship.exe") {
             let owner = read_json(self.p.here.join("civ6.lock"))?;
-            assert_eq!(owner["fifo"], true);
+            assert_eq!(owner["fifo"] == true, self.expect_fifo);
             self.tokens
                 .push(owner["lock_token"].as_str().unwrap().into());
             assert_eq!(&call.args[1..4], &args(&["live", "main", "cycle.json"]));
@@ -3041,6 +3069,13 @@ impl Runner for ReliabilityRunner {
                 "previous game must close before launching a scenario"
             );
             self.running = true;
+            if !self.isolation_calls.is_empty() {
+                let record = read_json(self.p.here.join("reliability-auto-state.json"))?;
+                let original = PathBuf::from(record["original"].as_str().unwrap());
+                assert!(!original.join("owner-save").exists());
+                fs::write(original.join("test-save"), b"test autosave bytes")
+                    .map_err(|e| e.to_string())?;
+            }
             assert!(call.kill_tree && call.timeout.unwrap() <= 1560.0);
             let scenario = read_json(&call.args[1])?;
             assert_eq!(scenario["steps"][1]["name"], "JAC-Reliability-Seed-1971");
@@ -3050,7 +3085,8 @@ impl Runner for ReliabilityRunner {
             );
             let output = call.args.iter().position(|a| a == "--output").unwrap() + 1;
             self.artifacts.push(call.args[output].clone());
-            fs::create_dir_all(&call.args[output]).map_err(|e| e.to_string())?;
+            // Match Runner::run: an existing output leaf is a hard error.
+            fs::create_dir(&call.args[output]).map_err(|e| e.to_string())?;
             return Ok(Output {
                 code: self.codes.pop_front().unwrap(),
                 stdout: "driver result".into(),
@@ -3186,6 +3222,162 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         assert_eq!(round["cleanup"]["game_closed"], true);
         assert_eq!(round["cleanup"]["lock_released"], true);
     }
+}
+
+#[test]
+fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
+    for failure in ["none", "begin", "unknown_begin", "unknown_exit", "restore"] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        fs::write(
+            f.p.live()
+                .join("tools/target/release/civ6-save-isolation.exe"),
+            "fixture binary",
+        )
+        .unwrap();
+        let original =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        r.expect_fifo = false;
+        r.running = false;
+        r.fail_begin = match failure {
+            "begin" => Some(false),
+            "unknown_begin" => Some(true),
+            _ => None,
+        };
+        r.unknown_exit = failure == "unknown_exit";
+        r.fail_restore = failure == "restore";
+        let result = cli(&mut r, &f.p, &args(&["main:cycle.json"]));
+        if failure == "none" {
+            assert_eq!(result.unwrap(), 0);
+        } else {
+            assert!(result.is_err(), "{failure} must not be counted as success");
+        }
+        let state = f.p.here.join("reliability-auto-state.json");
+        let begin = &r.isolation_calls[0];
+        assert_eq!(
+            begin.args[0],
+            path(
+                f.p.live()
+                    .join("tools/target/release/civ6-save-isolation.exe")
+            )
+        );
+        assert_eq!(
+            begin.args[1..4],
+            args(&["--begin", "--state", &path(&state)])
+        );
+        assert_eq!(
+            begin.env["CIV6_LIVE_CHAIN_PID"],
+            std::process::id().to_string()
+        );
+        assert_eq!(
+            begin.env["CIV6_LIVE_LOCK_PATH"],
+            path(f.p.here.join("civ6.lock"))
+        );
+        assert!(begin.kill_tree);
+        assert_eq!(begin.creationflags, CREATE_NO_WINDOW);
+        assert_eq!(
+            r.artifacts.len(),
+            usize::from(!matches!(failure, "begin" | "unknown_begin"))
+        );
+        assert!(!r.printed.iter().any(|s| s.starts_with("RELIABILITY")));
+        assert!(!f.p.here.join("civ6.lock").exists());
+        if matches!(failure, "unknown_exit" | "restore") {
+            assert!(
+                state.is_file(),
+                "unresolved recovery must keep the compatible receipt"
+            );
+            let record = read_json(&state).unwrap();
+            assert_eq!(
+                fs::read(
+                    PathBuf::from(record["archive"].as_str().unwrap())
+                        .join("owner-auto-original/owner-save")
+                )
+                .unwrap(),
+                b"owner original bytes"
+            );
+            assert_eq!(r.restore_calls, 0);
+            if failure == "unknown_exit" {
+                assert_eq!(r.isolation_calls.len(), 1);
+            }
+        } else {
+            assert!(!state.exists());
+            assert_eq!(r.restore_calls, 1);
+            assert_eq!(
+                fs::read(original.join("owner-save")).unwrap(),
+                b"owner original bytes"
+            );
+            assert!(!original.join("test-save").exists());
+            let restore = r.isolation_calls.last().unwrap();
+            assert_eq!(
+                restore.args[1..],
+                args(&["--restore", "--state", &path(&state)])
+            );
+            if failure == "none" {
+                assert_eq!(
+                    fs::read(PathBuf::from(&begin.args[5]).join("test-auto/test-save")).unwrap(),
+                    b"test autosave bytes"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn ordinary_runs_keep_distinct_test_archives_and_original_bytes() {
+    let f = Fixture::new();
+    f.json(
+        "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+        json!("fixture source"),
+    );
+    fs::write(
+        f.p.live()
+            .join("tools/target/release/civ6-save-isolation.exe"),
+        "fixture binary",
+    )
+    .unwrap();
+    let original =
+        f.p.profile
+            .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+    fs::create_dir_all(&original).unwrap();
+    fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+    let mut r = ReliabilityRunner::new(&f, vec![0; 2]);
+    r.expect_fifo = false;
+    r.running = false;
+    for _ in 0..2 {
+        assert_eq!(cli(&mut r, &f.p, &args(&["main:cycle.json"])).unwrap(), 0);
+        assert_eq!(
+            fs::read(original.join("owner-save")).unwrap(),
+            b"owner original bytes"
+        );
+    }
+    let begins: Vec<_> = r
+        .isolation_calls
+        .iter()
+        .filter(|call| call.args[1] == "--begin")
+        .collect();
+    assert_eq!(begins.len(), 2);
+    assert_ne!(begins[0].args[5], begins[1].args[5]);
+    for (begin, artifact) in begins.iter().zip(&r.artifacts) {
+        assert_eq!(
+            Path::new(artifact).parent().unwrap(),
+            Path::new(&begin.args[5])
+        );
+        assert_eq!(Path::new(artifact).file_name().unwrap(), "run");
+        assert_eq!(
+            fs::read(PathBuf::from(&begin.args[5]).join("test-auto/test-save")).unwrap(),
+            b"test autosave bytes"
+        );
+    }
+    assert_eq!(r.restore_calls, 2);
+    assert!(!f.p.here.join("reliability-auto-state.json").exists());
+    assert!(!f.p.here.join("civ6.lock").exists());
 }
 
 #[test]
