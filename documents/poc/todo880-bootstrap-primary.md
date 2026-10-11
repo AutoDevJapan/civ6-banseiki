@@ -431,3 +431,13 @@ EXEとCoreのRVAを混ぜず、各々の固定SHA・命令bytes・実行可能�
 元設定は実行器のフォルダのsoftware-renderer-original.binへcreate_newとsyncで保存してから、同期した一時ファイルの置換で変更する。共有lockの読取handleはDELETEを許可せず、ゲーム終了後の元bytes復元・照合より前にそのlockを消せない。失敗でも元設定を保持し、次の標準実行はCPU指定なしでも同じlockを取得し、ゲーム終了後に中断分を復元してから進む。重複したDeviceID欄、保存先の失敗、所有token不一致はゲーム起動へ進めない。cleanup-onlyとの併用と、共有lockを持たない内部mainからの指定を拒否する。Windowsの元設定読取中の置換失敗も、元bytesを失わず解放後の復元を確認する検査へ加えた。
 
 実GPU・Civ6起動、標準実行器の配備とこの修正版の検査はまだ行っていない。標準の待ち列・共有lock・時間上限・他担当への30分以内の譲渡は維持する。CPU描画の追加は外側の終了契約や元7条件の達成を証明しない。
+
+### 2026-10-12：通常一回のCPU描画で外側frameを実測
+
+PR143の通常一回隔離をPR86のCPU設定復旧へ統合し、既存996のHotseat実保存先保護・実queue/lockによる順番・所有reader子の回収も受領した。統合ソース142c1d6fはcc-live174成功（既存の子入口skip2）、保存helper関連14成功、Clippy成功、限定した連続AstraレビューMust0である。標準chainへ同sourceのA7007703…を配備し、配備の一時停止を解除した。旧候補の171/172/198/1840件をこのsourceへ付け替えていない。
+
+元COS1を一度読み、自然な1ターンと正式なメニュー退出を観測した。7手順・5判定が成功し、PID478272/FILETIME134362178391476325、同じTID153248/追跡thread世代89で4182B0の入口24件と正常RET24件が対応した。孤立RET、未復帰入口、解放との重なりは0。21組の復帰先はCore RVA413FEF（call413FEA、EDX=FFFFFFFF、RCX候補21）、残り3組は41A41A（call41A415、EDX=0/1/2、RCX候補1）だった。固定CoreのLLVM照合では両E8とも4182B0を呼ぶ。413FEF後の処理と41A41A後の418860へのtail-jumpは残るため、このRETをcaller全体の退出と扱わない。
+
+早期RETとContextReleaseは0hitで未観測である。24組の対応からreceiverの型・world寿命・発行停止・保留公開・同じjob setのWait・他6domainの全退出を推定しない。native全排出・runtime有効化はfalse、候補e273は無効、元7製品条件0/7のまま。register復元、114thread handleの閉鎖、reader join、親の回収が成功した。元auto4本・AppOptions・COS1のSHA一致を再照合し、各復旧recordと自分のmaintenanceを残していない。
+
+原記録16ファイル（約1.96MB）はD:/CC/Work/todo880/native-outer-captured-142c-20261012へ全SHA一致で保全し、捕捉結果・復元照合・原ハッシュ台帳を同880に保存した。新しい親や引継ぎToDoは作らず、通常の発行停止・完全な外側frameの終了契約へ戻る。
