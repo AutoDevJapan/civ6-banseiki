@@ -823,7 +823,9 @@ fn release_reader_child() {
         .open(lock)
         .unwrap();
     fs::write(ready, "ready").unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // Parent startup can take 15s; retain the handle until its explicit
+    // release, with room for assertions and the parent's bounded cleanup.
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !release.exists() {
         assert!(
             Instant::now() < deadline,
@@ -2412,13 +2414,26 @@ impl Runner for ReliabilityRunner {
             self.isolation_calls.push(call.clone());
             assert_eq!(call.args[2], "--state");
             assert_eq!(call.args[4], "--archive");
-            assert_eq!(call.args.len(), 6);
             assert!(self.p.here.join("civ6.lock").exists());
+            let session = match call.args.get(6).map(String::as_str) {
+                None => {
+                    assert_eq!(call.args.len(), 6);
+                    "Single"
+                }
+                Some("--session-type") => {
+                    assert_eq!(call.args[7], "hotseat");
+                    assert_eq!(call.args.len(), 8);
+                    "Hotseat"
+                }
+                other => panic!("unexpected isolation session argument: {other:?}"),
+            };
             assert!(!self.running && !self.closing);
             let original = self
                 .p
                 .profile
-                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves")
+                .join(session)
+                .join("auto");
             let archive = PathBuf::from(&call.args[5]);
             fs::create_dir_all(&archive).map_err(|e| e.to_string())?;
             fs::rename(&original, archive.join("owner-auto-original"))
@@ -4504,3 +4519,59 @@ fn queued_session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
     assert_eq!(r.calls.len(), 1);
 }
 
+#[test]
+fn ordinary_hotseat_selects_its_autosaves_and_preserves_single_player() {
+    for session in ["hotseat", "unsupported"] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        fs::write(
+            f.p.live()
+                .join("tools/target/release/civ6-save-isolation.exe"),
+            "fixture binary",
+        )
+        .unwrap();
+        let saves =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves");
+        for folder in ["Single", "Hotseat"] {
+            fs::create_dir_all(saves.join(folder).join("auto")).unwrap();
+            fs::write(
+                saves.join(folder).join("auto/owner-save"),
+                folder.as_bytes(),
+            )
+            .unwrap();
+        }
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        r.expect_fifo = false;
+        r.running = false;
+        let scenario_path = f.p.live().join("tools/civ6-autotest/scenarios/cycle.json");
+        let mut scenario = read_json(&scenario_path).unwrap();
+        scenario["session_type"] = json!(session);
+        write_json(&scenario_path, &scenario).unwrap();
+        let result = cli(&mut r, &f.p, &args(&["main:cycle.json"]));
+        if session == "hotseat" {
+            assert_eq!(result.unwrap(), 0);
+            assert_eq!(r.restore_calls, 1);
+            assert_eq!(r.artifacts.len(), 1);
+            assert_eq!(
+                &r.isolation_calls[0].args[6..],
+                &args(&["--session-type", "hotseat"])
+            );
+        } else {
+            assert!(result.unwrap_err().contains("unsupported autosave session"));
+            assert!(r.artifacts.is_empty());
+            assert!(r.isolation_calls.is_empty());
+        }
+        for folder in ["Single", "Hotseat"] {
+            assert_eq!(
+                fs::read(saves.join(folder).join("auto/owner-save")).unwrap(),
+                folder.as_bytes()
+            );
+        }
+        assert!(!f.p.here.join("reliability-auto-state.json").exists());
+        assert!(!f.p.here.join("civ6.lock").exists());
+    }
+}
