@@ -58,7 +58,11 @@ impl Backend for Probe {
         )
     }
     fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
-        Ok(vec!["InGame".into(), "GameCore_Tuner".into()])
+        Ok(vec![
+            "FrontEnd".into(),
+            "InGame".into(),
+            "GameCore_Tuner".into(),
+        ])
     }
     fn require_single_process(&mut self) -> Result<()> {
         Ok(())
@@ -71,19 +75,70 @@ impl Backend for Probe {
     }
     fn oath_trace_operation(&mut self, op: Operation, install: Option<&Install>) -> Result<Value> {
         self.calls.lock().unwrap().push(op);
-        assert_eq!(install.is_some(), op == Operation::Install);
+        assert_eq!(
+            install.is_some(),
+            matches!(op, Operation::Install | Operation::Prepare)
+        );
         if self.fail_operation {
             return Err(Error::input("unknown native outcome"));
         }
-        Ok(json!({"status":"observed","quantity_accepted":false}))
+        Ok(
+            json!({"status":"observed","quantity_accepted":false,"installed_before_target_context":op==Operation::Ready}),
+        )
     }
 }
 fn step(action: &str) -> Value {
-    if action == "oath_trace_install" {
+    if matches!(action, "oath_trace_install" | "oath_trace_prepare") {
         json!({"action":action,"timeout":0.5,"dll":"owned.dll",
         "dll_sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","max_seconds":300})
     } else {
         json!({"action":action,"timeout":0.5})
+    }
+}
+
+#[test]
+fn cold_preparation_checks_frontend_mode_and_receipt_is_a_separate_operation() {
+    for (ready, reject) in [(true, false), (true, true), (false, false)] {
+        let temp = tempfile::tempdir().unwrap();
+        let (mut runner, calls) = runner(temp.path(), ready, reject, false);
+        let mut prepare = step("oath_trace_prepare");
+        prepare["capture"] = json!("cold_lifecycle");
+        runner.scenario["steps"] = json!([prepare]);
+        scenario::validate_scenario(&runner.scenario).unwrap();
+        assert_eq!(runner.run_step(&prepare).is_ok(), ready && !reject);
+        if ready && !reject {
+            runner.completed_steps = 1;
+            runner.run_step(&step("oath_trace_ready")).unwrap();
+            assert_eq!(
+                *calls.lock().unwrap(),
+                vec![Operation::Prepare, Operation::Ready]
+            );
+            let proof: Value = serde_json::from_slice(
+                &fs::read(
+                    runner
+                        .output
+                        .join("oath-observation-2-oath_trace_ready.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(proof["quantity_accepted"], false);
+        } else {
+            assert!(calls.lock().unwrap().is_empty());
+        }
+    }
+}
+
+#[test]
+fn postgame_install_cannot_be_relabelled_as_cold_and_prepare_requires_that_mode() {
+    let mut install = step("oath_trace_install");
+    install["capture"] = json!("cold_lifecycle");
+    assert!(civ6_autotest_rs::oath_observation::validate_step(&install).is_err());
+    install["action"] = json!("oath_trace_prepare");
+    civ6_autotest_rs::oath_observation::validate_step(&install).unwrap();
+    for mode in [json!("lifecycle"), json!("callee"), json!(null)] {
+        install["capture"] = mode;
+        assert!(civ6_autotest_rs::oath_observation::validate_step(&install).is_err());
     }
 }
 fn runner(
@@ -328,6 +383,7 @@ fn unknown_final_process_exit_fails_the_step_but_keeps_its_raw_evidence() {
 struct ClosingProbe {
     events: Arc<Mutex<Vec<String>>>,
     pending: usize,
+    cold_missing: bool,
 }
 impl Backend for ClosingProbe {
     fn require_single_process(&mut self) -> Result<()> {
@@ -352,9 +408,15 @@ impl Backend for ClosingProbe {
     }
     fn oath_trace_finalize(&mut self, _: f64) -> Result<Value> {
         self.events.lock().unwrap().push("final_copy".into());
-        Ok(json!({"process_exit_observed":true,"process_exit_code":0,
+        let mut proof = json!({"process_exit_observed":true,"process_exit_code":0,
             "controller_deadline_expired":false,"controller_remaining_seconds":2.0,
-            "raw_first":"first-copy","raw_second":"second-copy"}))
+            "raw_first":"first-copy","raw_second":"second-copy"});
+        if self.cold_missing {
+            proof["cold_receipt"] = json!({"installed_before_target_context":true});
+            proof["cold_loader_context_root_observed"] = json!(false);
+            proof["application_teardown_diagnostic"] = json!("unknown");
+        }
+        Ok(proof)
     }
     fn steam_sync_status(
         &mut self,
@@ -386,6 +448,7 @@ fn lost_close_reply_is_not_resent_and_fresh_steam_sync_is_required() {
             Box::new(ClosingProbe {
                 events: events.clone(),
                 pending,
+                cold_missing: false,
             }),
             Arc::new(ManualClock::default()),
         );
@@ -412,4 +475,45 @@ fn lost_close_reply_is_not_resent_and_fresh_steam_sync_is_required() {
         assert_eq!(proof["native_observation"]["raw_second"], "second-copy");
         assert_eq!(proof["product_accepted"], false);
     }
+}
+
+#[test]
+fn incomplete_cold_capture_keeps_raw_evidence_and_finishes_steam_wait_before_failing() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = temp.path().join("artifacts");
+    fs::create_dir(&output).unwrap();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let mut runner = Runner::with_backend(
+        json!({"name":"missing cold trace","diagnostic_only":true}),
+        output.clone(),
+        temp.path().join("logs"),
+        temp.path().join("saves"),
+        4318,
+        Box::new(ClosingProbe {
+            events: events.clone(),
+            pending: 1,
+            cold_missing: true,
+        }),
+        Arc::new(ManualClock::default()),
+    );
+    runner.test_mode = true;
+    let error = runner
+        .run_step(&json!({"action":"oath_trace_finalize","timeout":60.0}))
+        .unwrap_err();
+    assert!(error.message.contains("after Steam synchronization"));
+    assert!(events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|event| event == "exit_sync"));
+    let raw: Value = serde_json::from_slice(
+        &fs::read(output.join("oath-observation-1-oath_trace_finalize.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(raw["native_observation"]["raw_first"], "first-copy");
+    assert_eq!(
+        raw["native_observation"]["cold_loader_context_root_observed"],
+        false
+    );
+    assert_eq!(raw["product_accepted"], false);
 }

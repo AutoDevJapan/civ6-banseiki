@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
+    Prepare,
+    Ready,
     Install,
     Start,
     Snapshot,
@@ -21,10 +23,13 @@ pub struct Install {
     pub max_seconds: u32,
     pub callee: bool,
     pub lifecycle: bool,
+    pub cold: bool,
 }
 
 pub fn operation(action: &str) -> Result<Operation> {
     match action {
+        "oath_trace_prepare" => Ok(Operation::Prepare),
+        "oath_trace_ready" => Ok(Operation::Ready),
         "oath_trace_install" => Ok(Operation::Install),
         "oath_trace_start" => Ok(Operation::Start),
         "oath_trace_snapshot" => Ok(Operation::Snapshot),
@@ -51,7 +56,7 @@ pub fn validate_step(step: &Value) -> Result<Operation> {
     if object.keys().any(|name| {
         name != "action"
             && name != "timeout"
-            && !(op == Operation::Install
+            && !(matches!(op, Operation::Install | Operation::Prepare)
                 && matches!(
                     name.as_str(),
                     "dll" | "dll_sha256" | "max_seconds" | "capture"
@@ -59,20 +64,24 @@ pub fn validate_step(step: &Value) -> Result<Operation> {
     }) {
         return Err(Error::scenario("unsupported oath observer field"));
     }
-    if op == Operation::Install {
-        install_request(step)?;
+    if matches!(op, Operation::Install | Operation::Prepare) {
+        let request = install_request(step)?;
+        if (op == Operation::Prepare) != request.cold {
+            return Err(Error::scenario("cold capture requires oath_trace_prepare"));
+        }
     }
     Ok(op)
 }
 
 pub fn install_request(step: &Value) -> Result<Install> {
-    let (callee, lifecycle) = match step.get("capture") {
-        None => (false, false),
-        Some(Value::String(value)) if value == "callee" => (true, false),
-        Some(Value::String(value)) if value == "lifecycle" => (false, true),
+    let (callee, lifecycle, cold) = match step.get("capture") {
+        None => (false, false, false),
+        Some(Value::String(value)) if value == "callee" => (true, false, false),
+        Some(Value::String(value)) if value == "lifecycle" => (false, true, false),
+        Some(Value::String(value)) if value == "cold_lifecycle" => (false, true, true),
         _ => {
             return Err(Error::scenario(
-                "oath capture must be absent, callee or lifecycle",
+                "oath capture must be absent, callee, lifecycle or cold_lifecycle",
             ))
         }
     };
@@ -94,6 +103,7 @@ pub fn install_request(step: &Value) -> Result<Install> {
         max_seconds: seconds as u32,
         callee,
         lifecycle,
+        cold,
     })
 }
 

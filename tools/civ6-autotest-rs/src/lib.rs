@@ -12,6 +12,7 @@ pub mod judge;
 pub mod metrics;
 mod native_inventory;
 pub mod oath_call_identity;
+mod oath_cold_wire;
 #[cfg(all(windows, target_arch = "x86_64"))]
 mod oath_controller_windows;
 pub mod oath_exact_removal;

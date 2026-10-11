@@ -16,6 +16,8 @@ pub const ACTIONS: &[&str] = &[
     "ui_lua",
     "oath_exact_removal",
     "oath_trace_install",
+    "oath_trace_prepare",
+    "oath_trace_ready",
     "oath_trace_start",
     "oath_trace_snapshot",
     "oath_trace_stop",
@@ -135,6 +137,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         };
         match action {
             "oath_trace_install"
+            | "oath_trace_prepare"
+            | "oath_trace_ready"
             | "oath_trace_start"
             | "oath_trace_snapshot"
             | "oath_trace_stop"

@@ -308,19 +308,20 @@ impl Backend for SystemBackend {
             pin.check_remaining()?;
             let game = pin.game;
             let proof = match operation {
-                Operation::Install => {
+                Operation::Install | Operation::Prepare => {
                     if self.oath_observer.is_some() {
                         return Err(Error::input("oath observer already owns this session"));
                     }
                     let request =
                         install.ok_or_else(|| Error::input("oath install request missing"))?;
-                    let session = crate::oath_controller_windows::Session::install_mode(
+                    let session = crate::oath_controller_windows::Session::install_capture_mode(
                         game,
                         &request.dll,
                         &request.sha256,
                         request.max_seconds,
                         request.callee,
                         request.lifecycle,
+                        request.cold,
                     )?;
                     let proof = session.identity();
                     self.oath_observer = Some(session);
@@ -335,7 +336,8 @@ impl Backend for SystemBackend {
                         Operation::Start => session.start()?,
                         Operation::Snapshot => session.snapshot()?,
                         Operation::Stop => session.stop()?,
-                        Operation::Install => unreachable!(),
+                        Operation::Ready => session.ready()?,
+                        Operation::Install | Operation::Prepare => unreachable!(),
                         Operation::Finalize => {
                             return Err(Error::input(
                                 "finalize requires an explicit finite timeout",
@@ -2371,6 +2373,8 @@ impl Runner {
                 ))
             }
             "oath_trace_install"
+            | "oath_trace_prepare"
+            | "oath_trace_ready"
             | "oath_trace_start"
             | "oath_trace_snapshot"
             | "oath_trace_stop"
@@ -2383,7 +2387,14 @@ impl Runner {
                     crate::session::SessionType::from_scenario(&self.scenario)?
                         != crate::session::SessionType::SinglePlayer,
                 )?;
-                if operation != Operation::Finalize {
+                if operation == Operation::Prepare {
+                    let verified=self.lua("FrontEnd", "if not UI.IsInFrontEnd() then error('cold diagnostic requires FrontEnd') end\nif GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nif GameConfiguration.GetValue('JAC_AUTOTEST') ~= 1 then error('actual diagnostic setting required') end\nreturn true",self.budget(deadline,5.0)?)?;
+                    if verified != "true" {
+                        return Err(Error::input(
+                            "cold actual setting confirmation was not true",
+                        ));
+                    }
+                } else if operation != Operation::Finalize {
                     self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
                 }
                 if matches!(operation, Operation::Install | Operation::Start) {
@@ -2394,7 +2405,7 @@ impl Runner {
                         false,
                     )?;
                 }
-                let install = if operation == Operation::Install {
+                let install = if matches!(operation, Operation::Install | Operation::Prepare) {
                     Some(oath_observation::install_request(step)?)
                 } else {
                     None
@@ -2462,6 +2473,13 @@ impl Runner {
                 file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
                 file.sync_all()?;
                 self.remaining(deadline)?;
+                if operation == Operation::Ready
+                    && proof["native_observation"]["installed_before_target_context"] != true
+                {
+                    return Err(Error::input(
+                        "cold lifecycle readiness was not confirmed; raw receipt preserved",
+                    ));
+                }
                 if operation == Operation::Finalize
                     && (proof["native_observation"]["process_exit_observed"] != true
                         || proof["native_observation"]["controller_deadline_expired"] != false
@@ -2477,6 +2495,14 @@ impl Runner {
                         self.clock.now() + self.remaining(deadline)?.min(remaining).min(45.0);
                     self.wait_steam_exit(sync_until, false)?;
                     self.remaining(sync_until)?;
+                    if proof["native_observation"].get("cold_receipt").is_some()
+                        && (proof["native_observation"]["cold_loader_context_root_observed"]
+                            != true
+                            || proof["native_observation"]["application_teardown_diagnostic"]
+                                != "observed")
+                    {
+                        return Err(Error::input("cold root or application teardown was not observed; raw capture preserved after Steam synchronization"));
+                    }
                 }
                 Ok(format!("native oath observation: {proof}"))
             }

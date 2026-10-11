@@ -164,13 +164,18 @@ struct LocalDll {
     sha: String,
     image: wire::PeImage,
     exports: [u32; 4],
+    cold: bool,
 }
 impl LocalDll {
     #[cfg(test)]
     fn open(path: &Path, expected_sha: &str) -> Result<Self> {
         Self::open_mode(path, expected_sha, false)
     }
+    #[cfg(test)]
     fn open_mode(path: &Path, expected_sha: &str, lifecycle: bool) -> Result<Self> {
+        Self::open_capture(path, expected_sha, lifecycle, false)
+    }
+    fn open_capture(path: &Path, expected_sha: &str, lifecycle: bool, cold: bool) -> Result<Self> {
         if !wire::lower_hex_sha(expected_sha) {
             return Err(Error::input(
                 "expected DLL SHA256 must be 64 lowercase hex digits",
@@ -197,7 +202,12 @@ impl LocalDll {
         let image = wire::parse_pe(&bytes).map_err(Error::input)?;
         let exports = if lifecycle {
             let mut exports = [0; 4];
-            for (index, name) in crate::oath_lifecycle_wire::EXPORTS.iter().enumerate() {
+            let names = if cold {
+                &crate::oath_cold_wire::EXPORTS
+            } else {
+                &crate::oath_lifecycle_wire::EXPORTS
+            };
+            for (index, name) in names.iter().enumerate() {
                 exports[index] = image
                     .export(name)
                     .ok_or_else(|| Error::input(format!("missing lifecycle export {name}")))?;
@@ -218,6 +228,7 @@ impl LocalDll {
             sha,
             image,
             exports,
+            cold,
         })
     }
 }
@@ -558,6 +569,7 @@ pub(crate) fn pending_count() -> usize {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
+    ColdPrepared,
     Installed,
     Started,
     Stopped,
@@ -583,6 +595,8 @@ struct Inner {
     lifecycle: bool,
     shared: Option<civ6_oath_runtime_rs::lifecycle_transport::SharedTrace>,
     deadline: Option<Instant>,
+    cold: bool,
+    cold_receipt: Option<Value>,
 }
 unsafe impl Send for Inner {}
 
@@ -614,6 +628,7 @@ impl Session {
     ) -> Result<Self> {
         Self::install_mode(game, dll_path, expected_sha, max_seconds, callee, false)
     }
+    #[cfg(test)]
     pub(crate) fn install_mode(
         game: GameProcess,
         dll_path: &Path,
@@ -622,10 +637,36 @@ impl Session {
         callee: bool,
         lifecycle: bool,
     ) -> Result<Self> {
-        Inner::install(game, dll_path, expected_sha, max_seconds, callee, lifecycle).map(|inner| {
-            Self {
-                inner: std::mem::ManuallyDrop::new(inner),
-            }
+        Self::install_capture_mode(
+            game,
+            dll_path,
+            expected_sha,
+            max_seconds,
+            callee,
+            lifecycle,
+            false,
+        )
+    }
+    pub(crate) fn install_capture_mode(
+        game: GameProcess,
+        dll_path: &Path,
+        expected_sha: &str,
+        max_seconds: u32,
+        callee: bool,
+        lifecycle: bool,
+        cold: bool,
+    ) -> Result<Self> {
+        Inner::install(
+            game,
+            dll_path,
+            expected_sha,
+            max_seconds,
+            callee,
+            lifecycle,
+            cold,
+        )
+        .map(|inner| Self {
+            inner: std::mem::ManuallyDrop::new(inner),
         })
     }
     pub(crate) fn identity(&self) -> Value {
@@ -639,6 +680,9 @@ impl Session {
     }
     pub(crate) fn stop(&mut self) -> Result<Value> {
         self.inner.stop()
+    }
+    pub(crate) fn ready(&mut self) -> Result<Value> {
+        self.inner.ready()
     }
     pub(crate) fn finalize(&mut self, timeout: Duration) -> Result<Value> {
         self.inner.finalize(timeout)
@@ -707,8 +751,9 @@ impl Inner {
         max_seconds: u32,
         callee: bool,
         lifecycle: bool,
+        cold: bool,
     ) -> Result<Self> {
-        if callee && lifecycle {
+        if callee && lifecycle || cold && !lifecycle {
             return Err(Error::input("incompatible oath capture modes"));
         }
         if game.pid == 0
@@ -725,7 +770,7 @@ impl Inner {
             return Err(Error::input("max_seconds is outside 1..=300"));
         }
         // Everything about the DLL is settled before the game is touched.
-        let dll = LocalDll::open_mode(dll_path, expected_sha, lifecycle)?;
+        let dll = LocalDll::open_capture(dll_path, expected_sha, lifecycle, cold)?;
         let mut lease = RecoveryLease::acquire()?;
         lease.check()?;
         if click::civ_process_ids()?
@@ -784,6 +829,8 @@ impl Inner {
         } else {
             None
         };
+        let deadline = cold.then(|| Instant::now() + Duration::from_secs(u64::from(max_seconds)));
+        target.absolute_deadline = deadline;
         let built = bring_up(
             &mut target,
             &dll,
@@ -820,13 +867,19 @@ impl Inner {
             trace_address: trace_address as usize,
             receipt_buffer,
             max_seconds,
-            phase: Phase::Installed,
+            phase: if cold {
+                Phase::ColdPrepared
+            } else {
+                Phase::Installed
+            },
             stop_value: None,
             _dll: dll,
             callee,
             lifecycle,
             shared,
-            deadline: None,
+            deadline,
+            cold,
+            cold_receipt: None,
         })
     }
 
@@ -840,7 +893,7 @@ impl Inner {
             "module_base": format!("0x{:x}", self.module_base),
             "trace_address": format!("0x{:x}", self.trace_address),
             "trace_size": self.trace_size(),
-            "capture":if self.lifecycle { "lifecycle" } else if self.callee { "callee" } else { "adapter" },
+            "capture":if self.cold { "cold_lifecycle" } else if self.lifecycle { "lifecycle" } else if self.callee { "callee" } else { "adapter" },
             "max_seconds": self.max_seconds,
             "quantity_accepted": false,
         })
@@ -922,6 +975,73 @@ impl Inner {
         let argument = if export == 3 { self.receipt_buffer } else { 0 };
         self.target.call(self.exports[export], argument)
     }
+    fn ready(&mut self) -> Result<Value> {
+        if !self.cold || self.phase != Phase::ColdPrepared {
+            return Err(Error::input(
+                "cold ready requires this session's prepared cold observer",
+            ));
+        }
+        let status = match self.target.call(self.exports[1], self.receipt_buffer) {
+            Ok(status) => status,
+            Err(error) => return self.cold_failure(error.to_string()),
+        };
+        if status != 0 {
+            return Err(self
+                .target
+                .runtime_refusal("Civ6OathColdReadReceipt", status));
+        }
+        let first = match self
+            .target
+            .read(self.receipt_buffer, crate::oath_cold_wire::SIZE)
+        {
+            Ok(bytes) => bytes,
+            Err(error) => return self.cold_failure(error.to_string()),
+        };
+        let second = match self
+            .target
+            .read(self.receipt_buffer, crate::oath_cold_wire::SIZE)
+        {
+            Ok(bytes) => bytes,
+            Err(error) => return self.cold_failure(error.to_string()),
+        };
+        let proof = match crate::oath_cold_wire::ready(
+            &first,
+            &second,
+            self.target.pid,
+            self.target.created,
+        ) {
+            Ok(proof) => proof,
+            Err(error) => {
+                self.phase = Phase::Failed;
+                let hex = |b: &[u8]| b.iter().map(|v| format!("{v:02x}")).collect::<String>();
+                return Ok(
+                    json!({"format":"oath-cold-v1","installed_before_target_context":false,
+                    "receipt_error":error,"raw_first":hex(&first),"raw_second":hex(&second),
+                    "quantity_accepted":false,"product_accepted":false}),
+                );
+            }
+        };
+        self.cold_receipt = Some(proof.clone());
+        self.phase = Phase::Started;
+        Ok(proof)
+    }
+    fn cold_failure(&mut self, error: String) -> Result<Value> {
+        // A failed/aborted loader can no longer answer a remote receipt. The
+        // parent mapping still owns its complete raw trace; keep it in failure.
+        let shared = self
+            .shared
+            .as_ref()
+            .ok_or_else(|| Error::input("cold failure lost shared trace"))?;
+        let first = shared.snapshot();
+        let second = shared.snapshot();
+        let trace = crate::oath_lifecycle_wire::project(&first, &second).map_err(Error::input)?;
+        self.phase = Phase::Failed;
+        Ok(
+            json!({"format":"oath-cold-v1","installed_before_target_context":false,
+            "receipt_error":error,"shared_capture":trace,
+            "process_exit_observed":self.target.observe_end(),"quantity_accepted":false,"product_accepted":false}),
+        )
+    }
 
     /// The game must have been asked to close by its normal UI. This operation
     /// sends no remote call, stop, or termination. Its final copies come from
@@ -940,11 +1060,13 @@ impl Inner {
         let deadline = self
             .deadline
             .ok_or_else(|| Error::input("observation deadline missing"))?;
-        capture_after_exit(
+        let mut value = capture_after_exit(
             &mut self.target,
             self.shared.as_ref().unwrap(),
             deadline.min(Instant::now() + timeout),
-        )
+        )?;
+        crate::oath_cold_wire::attach(&mut value, self.cold_receipt.as_ref());
+        Ok(value)
     }
 
     /// Receipt plus two raw copies of the trace. While recording, rows that
@@ -970,6 +1092,7 @@ impl Inner {
             value["controller_phase"] = json!(format!("{:?}", self.phase));
             value["controller_deadline_expired"] =
                 json!(self.deadline.is_some_and(|d| Instant::now() >= d));
+            crate::oath_cold_wire::attach(&mut value, self.cold_receipt.as_ref());
             return Ok(value);
         }
         let status = self.call(3)?;
@@ -996,6 +1119,11 @@ impl Inner {
         // its deadline, which only moves the phase forward.
         let expected = match self.phase {
             Phase::Installed => 1,
+            Phase::ColdPrepared => {
+                return Err(Error::input(
+                    "cold observer has not confirmed deferred readiness",
+                ))
+            }
             Phase::Started => 2,
             Phase::Stopped => 3,
             Phase::Failed => 4,
@@ -1335,10 +1463,33 @@ fn bring_up(
         config.extend_from_slice(&(crate::oath_lifecycle_wire::SIZE as u32).to_le_bytes());
         config.extend_from_slice(&0u32.to_le_bytes());
     }
+    if dll.cold {
+        let deadline = target
+            .absolute_deadline
+            .ok_or_else(|| Error::input("cold deadline missing before prepare"))?;
+        // GetTickCount64 shares an OS-wide clock with the in-game runtime.
+        // Sample it before Instant so the transmitted deadline is conservative.
+        let tick = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
+        let remaining = deadline
+            .saturating_duration_since(Instant::now())
+            .as_millis() as u64;
+        if remaining == 0 {
+            return Err(Error::input(
+                "cold preparation budget exhausted before dispatch",
+            ));
+        }
+        config.extend_from_slice(&tick.saturating_add(remaining).to_le_bytes());
+        config.extend_from_slice(&0u64.to_le_bytes());
+    }
     let config_at = target.alloc(config.len())?;
     target.write(config_at, &config)?;
     let status = target.call(exports[0], config_at)?;
     if status != 0 {
+        if dll.cold {
+            return Err(target.kill_report(&format!(
+                "cold preparation refused ({status}); no activation retry"
+            )));
+        }
         return Err(target.runtime_refusal("OathRuntimeInstall", status));
     }
     target.verify_after_install(|target| {
@@ -1374,7 +1525,7 @@ fn bring_up(
             wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
                 .map_err(Error::input)?;
         }
-        let receipt_buffer = target.alloc(wire::RECEIPT_SIZE)?;
+        let receipt_buffer = target.alloc(wire::RECEIPT_SIZE.max(crate::oath_cold_wire::SIZE))?;
         Ok((base, exports, trace_address, receipt_buffer))
     })
 }

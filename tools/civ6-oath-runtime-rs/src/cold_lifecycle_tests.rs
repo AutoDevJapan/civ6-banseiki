@@ -428,7 +428,7 @@ fn child() {
         );
         let root_call: unsafe extern "system-unwind" fn(u64, u64, u64, u64) -> u64 =
             unsafe { std::mem::transmute(t.slots[0].load(Ordering::Acquire)) };
-        assert_eq!(unsafe { root_call(1, 2, 3, 4) }, 1 ^ 2 ^ 3 ^ 4);
+        assert_eq!(unsafe { root_call(1, 2, 3, 4) }, 4);
         assert_eq!(
             trace.next.load(Ordering::Acquire),
             1,
