@@ -29,6 +29,18 @@ fn require_fresh_journals(root: &Path) -> Result<(), Box<dyn std::error::Error>>
     }
     Ok(())
 }
+fn cpu_renderer_selected(text: &str) -> bool {
+    let Some((_, selected)) = text.rsplit_once("Selected GPU device:") else {
+        return false;
+    };
+    let value = |key: &str| {
+        selected
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(key).map(str::trim))
+    };
+    value("Device:") == Some("Microsoft Basic Render Driver")
+        && value("DeviceID:").is_some_and(|id| id.eq_ignore_ascii_case("8c"))
+}
 
 fn hash(p: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let mut file = fs::File::open(p)?;
@@ -87,6 +99,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let seed = paths.profile.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/JAC-Reliability-Seed-1971.Civ6Save");
     let state = paths.here.join("reliability-auto-state.json");
     let profile_state = paths.here.join("appoptions-restore-state.json");
+    // Use the same current location as judge::default_log_dir in the driver.
+    let renderer_path = std::path::PathBuf::from(
+        std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA is unavailable")?,
+    )
+    .join("Firaxis Games/Sid Meier's Civilization VI/Logs/Renderer.log");
     let executable = paths.here.join("live_chain.exe");
     if manifest(auto)? != baseline["autosaves"]
         || hash(&options)? != baseline["appoptions_sha256"]
@@ -230,13 +247,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        let renderer_path = paths
-            .profile
-            .join("Documents/My Games/Sid Meier's Civilization VI/Logs/Renderer.log");
         if let Ok(meta) = fs::metadata(&renderer_path) {
             if meta.modified().is_ok_and(|time| time >= started) {
                 if let Ok(text) = fs::read_to_string(&renderer_path) {
-                    if text.contains("Microsoft Basic Render Driver") || text.contains("WARP") {
+                    if cpu_renderer_selected(&text) {
                         renderer = Some(text.clone());
                         let _ = fs::write(evidence.join("Renderer.log"), text);
                     }
@@ -364,5 +378,14 @@ mod tests {
         assert!(require_fresh_journals(&root).is_ok());
         fs::remove_file(root.join("Renderer.log")).unwrap();
         fs::remove_dir(root).unwrap();
+    }
+    #[test]
+    fn available_software_adapter_cannot_prove_actual_cpu_selection() {
+        let available = "Available device: Microsoft Basic Render Driver (DeviceID = 8c)\n";
+        assert!(!cpu_renderer_selected(available));
+        assert!(!cpu_renderer_selected(&format!(
+            "{available}Selected GPU device:\n Device: NVIDIA GeForce\n DeviceID: 2b85\n"
+        )));
+        assert!(cpu_renderer_selected(&format!("{available}Selected GPU device:\n Device: Microsoft Basic Render Driver\n DeviceID: 8c\n")));
     }
 }
