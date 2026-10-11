@@ -146,6 +146,7 @@ type GameGeneration = Vec<(String, u32, u64)>;
 
 fn game_generation(r: &mut impl Runner) -> Result<GameGeneration, String> {
     let mut games = Vec::new();
+    let mut candidates = Vec::new();
     for image in CIV_EXECUTABLES {
         let out = r.run(
             Call::new(args(&[
@@ -173,20 +174,145 @@ fn game_generation(r: &mut impl Runner) -> Result<GameGeneration, String> {
                 .trim_matches('"')
                 .parse()
                 .map_err(|_| "invalid game PID")?;
-            let Some(identity) = r.process_identity(pid, 2.0)? else {
+            let identity = match r.process_identity(pid, 2.0) {
+                Ok(identity) => identity,
+                Err(error) => {
+                    candidates.push(json!({"pid":pid,"snapshot_image":image,
+                        "exit_state":"unknown","created_filetime":null,"inspection_error":error}));
+                    return Err(format!(
+                        "game identity inspection failed; process_candidates={}",
+                        json!(candidates)
+                    ));
+                }
+            };
+            let Some(identity) = identity else {
+                candidates.push(json!({"pid":pid,"snapshot_image":image,
+                    "exit_state":"absent_or_signaled","created_filetime":null,"inspection_error":null}));
+                let _ = r.error(&format!("process_candidates={}", json!(candidates)));
                 continue;
             };
+            candidates.push(json!({"pid":pid,"snapshot_image":image,"image":identity.image,
+                "exit_state":if identity.created_filetime.is_some(){"not_signaled"}else{"unknown"},
+                "created_filetime":identity.created_filetime,
+                "inspection_error":if identity.created_filetime.is_some(){None}else{Some("creation FILETIME unavailable; name-only snapshot is not live identity")}}));
             let created = identity
                 .created_filetime
                 .filter(|created| *created > 0)
-                .ok_or("game creation time unavailable")?;
+                .ok_or_else(|| {
+                    format!(
+                        "game creation time unavailable; process_candidates={}",
+                        json!(candidates)
+                    )
+                })?;
             if !identity.image.eq_ignore_ascii_case(image) {
-                return Err("game identity changed during exit generation capture".into());
+                return Err(format!(
+                    "game identity changed during exit generation capture; process_candidates={}",
+                    json!(candidates)
+                ));
             }
             games.push((image.to_owned(), pid, created));
         }
     }
+    if games.len() > 1 {
+        let _ = r.error(&format!("process_candidates={}", json!(candidates)));
+    }
     Ok(games)
+}
+
+#[cfg(test)]
+mod game_candidate_tests {
+    use super::*;
+    struct CandidateRunner {
+        identity: Result<Option<process::ProcessIdentity>, String>,
+        queried: Vec<u32>,
+        diagnostics: Vec<String>,
+    }
+    impl Runner for CandidateRunner {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert_eq!(call.args[0], "tasklist");
+            Ok(Output {
+                stdout: if call.args[2].ends_with("CivilizationVI.exe") {
+                    "\"CivilizationVI.exe\",\"12\"".into()
+                } else {
+                    String::new()
+                },
+                ..Output::default()
+            })
+        }
+        fn process_identity(
+            &mut self,
+            pid: u32,
+            _: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            self.queried.push(pid);
+            self.identity.clone()
+        }
+        fn now(&mut self) -> f64 {
+            0.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("no waits")
+        }
+        fn error(&mut self, text: &str) -> Result<(), String> {
+            self.diagnostics.push(text.into());
+            Ok(())
+        }
+    }
+    #[test]
+    fn exit_candidate_preserves_unknown_errors_and_skips_only_proven_not_live() {
+        for (identity, succeeds) in [
+            (Ok(None), true),
+            (
+                Ok(Some(process::ProcessIdentity {
+                    image: "CivilizationVI.exe".into(),
+                    created_filetime: Some(41),
+                })),
+                true,
+            ),
+            (
+                Ok(Some(process::ProcessIdentity {
+                    image: "CivilizationVI.exe".into(),
+                    created_filetime: None,
+                })),
+                false,
+            ),
+            (Err("OpenProcess os_error=5".into()), false),
+            (
+                Ok(Some(process::ProcessIdentity {
+                    image: "other.exe".into(),
+                    created_filetime: Some(41),
+                })),
+                false,
+            ),
+        ] {
+            let mut r = CandidateRunner {
+                identity: identity.clone(),
+                queried: vec![],
+                diagnostics: vec![],
+            };
+            let result = game_generation(&mut r);
+            assert_eq!(r.queried, [12]);
+            assert_eq!(result.is_ok(), succeeds);
+            match identity {
+                Ok(None) => {
+                    assert!(result.unwrap().is_empty());
+                    assert!(r.diagnostics[0].contains("absent_or_signaled"));
+                }
+                Ok(Some(process::ProcessIdentity {
+                    created_filetime: Some(41),
+                    image,
+                })) if image == "CivilizationVI.exe" => {
+                    assert_eq!(result.unwrap(), [("CivilizationVI.exe".into(), 12, 41)]);
+                }
+                _ => {
+                    let error = result.unwrap_err();
+                    assert!(error.contains("\"pid\":12"));
+                    assert!(error.contains("\"created_filetime\":"));
+                    assert!(error.contains("process_candidates="));
+                }
+            }
+        }
+    }
 }
 
 struct ExitGenerationRunner<'a, R> {

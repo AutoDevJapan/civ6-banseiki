@@ -306,7 +306,11 @@ pub fn native_process_identity(pid: u32) -> std::io::Result<Option<ProcessIdenti
     let mut user = created;
     if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
     {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        if !alive()? {
+            return Ok(None);
+        }
+        return Err(error);
     }
     let mut path = vec![0u16; 32768];
     let mut length = path.len() as u32;
@@ -350,6 +354,19 @@ fn native_identity_or_fallback(
     match result {
         Err(error) if error.raw_os_error() == Some(5) => None,
         other => Some(other.map_err(|error| error.to_string())),
+    }
+}
+
+#[cfg(any(windows, test))]
+fn denied_snapshot_identity(
+    pid: u32,
+    snapshot: Result<Option<ProcessIdentity>, String>,
+) -> Result<Option<ProcessIdentity>, String> {
+    match snapshot? {
+        Some(identity) => Ok(Some(identity)),
+        None => Err(format!(
+            "inspect Civ6 queue process {pid}: native query access denied; no snapshot identity; exit state unknown"
+        )),
     }
 }
 
@@ -433,7 +450,7 @@ fn process_open_failure(
         // A stale PID can now belong to a protected process. Snapshot lookup
         // preserves the old image rejection without a tasklist subprocess.
         _ => match native_identity_or_fallback(Err(error)) {
-            None => snapshot_process_identity(pid),
+            None => denied_snapshot_identity(pid, snapshot_process_identity(pid)),
             Some(result) => {
                 result.map_err(|error| format!("inspect Civ6 queue process {pid}: {error}"))
             }
@@ -502,7 +519,22 @@ fn snapshot_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String
 fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
     match native_process_identity(pid) {
         Ok(identity) => Ok(identity),
-        Err(error) => process_open_failure(pid, error),
+        Err(error) => {
+            let os_error = error.raw_os_error();
+            let result = process_open_failure(pid, error);
+            // A name-only fallback cannot prove a game generation. Retain the
+            // original native query failure without exposing executable paths.
+            eprintln!(
+                "process_identity_diagnostic={}",
+                serde_json::json!({
+                    "pid":pid,"native_query_os_error":os_error,"exited":null,
+                    "image":result.as_ref().ok().and_then(|v|v.as_ref()).map(|v|&v.image),
+                    "created_filetime":result.as_ref().ok().and_then(|v|v.as_ref()).and_then(|v|v.created_filetime),
+                    "inspection_error":result.as_ref().err()
+                })
+            );
+            result
+        }
     }
 }
 #[cfg(windows)]
@@ -989,5 +1021,23 @@ mod native_termination_tests {
                     .is_err()
             );
         }
+    }
+    #[test]
+    fn native_denied_query_without_snapshot_identity_does_not_mean_exited() {
+        assert!(denied_snapshot_identity(12, Ok(None))
+            .unwrap_err()
+            .contains("exit state unknown"));
+        let identity = ProcessIdentity {
+            image: "CivilizationVI.exe".into(),
+            created_filetime: None,
+        };
+        assert_eq!(
+            denied_snapshot_identity(12, Ok(Some(identity.clone()))).unwrap(),
+            Some(identity)
+        );
+        assert_eq!(
+            denied_snapshot_identity(12, Err("snapshot unavailable".into())).unwrap_err(),
+            "snapshot unavailable"
+        );
     }
 }

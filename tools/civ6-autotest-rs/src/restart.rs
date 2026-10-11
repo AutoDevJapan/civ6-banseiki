@@ -355,7 +355,7 @@ pub fn single_civ_process_with<B: LifecycleBackend>(
     }
     if ids.len() > 1 {
         return Err(Error::input(format!(
-            "Multiple Civ VI processes found ({}); driver requires one local game",
+            "Multiple Civ VI processes found ({}); driver requires one local game; candidate_pids={ids:?}",
             ids.len()
         )));
     }
@@ -397,7 +397,7 @@ pub fn terminate_civ_process_with<B: LifecycleBackend>(
     let ids = backend.civ_ids()?;
     if ids.len() > 1 {
         return Err(Error::input(format!(
-            "Multiple Civ VI processes found ({}); refusing termination",
+            "Multiple Civ VI processes found ({}); refusing termination; candidate_pids={ids:?}",
             ids.len()
         )));
     }
