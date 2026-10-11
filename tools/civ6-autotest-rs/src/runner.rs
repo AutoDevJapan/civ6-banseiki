@@ -68,6 +68,18 @@ pub trait Backend: Send {
             "backend cannot prove shared startup lock ownership",
         ))
     }
+    fn acquire_startup_lock_until(&mut self, deadline: std::time::Instant) -> Result<()> {
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::input("shared lock acquisition deadline exhausted"));
+        }
+        self.acquire_startup_lock()?;
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::input(
+                "shared lock acquisition deadline exhausted after preparation",
+            ));
+        }
+        Ok(())
+    }
     fn check_startup_lock(&mut self) -> Result<()> {
         Err(Error::input(
             "backend cannot prove shared startup lock ownership",
@@ -970,6 +982,18 @@ impl Backend for SystemBackend {
         }
         self.check_startup_lock()
     }
+    fn acquire_startup_lock_until(&mut self, deadline: std::time::Instant) -> Result<()> {
+        if self.startup_lease.is_none() {
+            self.startup_lease = Some(crate::startup::RecoveryLease::acquire_until(deadline)?);
+        }
+        self.check_startup_lock()?;
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::input(
+                "shared lock acquisition deadline exhausted after verification",
+            ));
+        }
+        Ok(())
+    }
     fn check_startup_lock(&mut self) -> Result<()> {
         self.startup_lease
             .as_mut()
@@ -1159,6 +1183,10 @@ impl Backend for SystemBackend {
         step: &Value,
         budget: f64,
     ) -> Result<PathBuf> {
+        if !budget.is_finite() || budget <= 0.0 {
+            return Err(Error::input("thread audit budget exhausted"));
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(budget);
         if self.native_order.is_some()
             || self.native_bridge.is_some()
             || self.native_trace.is_some()
@@ -1172,7 +1200,7 @@ impl Backend for SystemBackend {
         crate::native_order::validate_audit_options(step)?;
         // Startup deliberately releases its lease when launch finishes. Audit
         // acquires its own read proof and holds it through helper completion.
-        let mut audit_lease = crate::startup::RecoveryLease::acquire()?;
+        let mut audit_lease = crate::startup::RecoveryLease::acquire_until(deadline)?;
         audit_lease.check()?;
         if self
             .live_lease_budget()?
@@ -1187,8 +1215,15 @@ impl Backend for SystemBackend {
             .single_process(0.0)?
             .ok_or_else(|| Error::input("Civ6 is absent"))?;
         audit_lease.check()?;
-        let result =
-            crate::native_order::audit_thread_visibility(pid, started, output, step, budget);
+        let result = crate::native_order::audit_thread_visibility(
+            pid,
+            started,
+            output,
+            step,
+            deadline
+                .saturating_duration_since(std::time::Instant::now())
+                .as_secs_f64(),
+        );
         match (result, audit_lease.check()) {
             (result, Ok(())) => result,
             (Ok(_), Err(error)) => Err(error),
@@ -2344,8 +2379,11 @@ impl Runner {
         )))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
+        let acquisition_deadline = std::time::Instant::now()
+            + std::time::Duration::from_secs_f64(self.remaining(deadline)?);
         let result = (|| {
-            self.backend.acquire_startup_lock()?;
+            self.backend
+                .acquire_startup_lock_until(acquisition_deadline)?;
             self.begin_steam_observation_until(deadline)?;
             self.launch_startup_and_wait(deadline, false, &mut StartupAttempt::default())
         })();
@@ -2485,10 +2523,14 @@ impl Runner {
         if !timeout.is_finite() || timeout <= 0.0 {
             return Err(Error::input("restart timeout must be finite and positive"));
         }
+        let deadline = self.clock.now() + timeout;
+        let acquisition_deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs_f64(timeout);
         self.backend.startup_cancel_check()?;
         let result = (|| {
-            self.backend.acquire_startup_lock()?;
-            self.restart_game_inner(timeout)
+            self.backend
+                .acquire_startup_lock_until(acquisition_deadline)?;
+            self.restart_game_inner(self.remaining(deadline)?)
         })();
         self.backend.release_startup_lock();
         result
@@ -2699,9 +2741,9 @@ impl Runner {
         recovery: bool,
         attempt: &mut StartupAttempt,
     ) -> Result<String> {
+        let deadline = self.clock.now() + timeout;
         self.backend.startup_cancel_check()?;
         self.backend.authorize_game_control(None)?;
-        let deadline = self.clock.now() + timeout;
         let settle = self.budget(deadline, 30.0)?;
         let old = self.backend.single_process(settle)?;
         if recovery && old.is_some() {

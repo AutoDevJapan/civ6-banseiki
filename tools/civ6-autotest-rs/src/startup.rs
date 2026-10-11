@@ -411,6 +411,9 @@ impl RecoveryLease {
     pub fn acquire() -> Result<Self> {
         Err(Error::input("startup recovery lock requires Windows"))
     }
+    pub fn acquire_until(_: std::time::Instant) -> Result<Self> {
+        Err(Error::input("startup recovery lock requires Windows"))
+    }
     pub fn check(&mut self) -> Result<()> {
         Err(Error::input("startup recovery lock requires Windows"))
     }

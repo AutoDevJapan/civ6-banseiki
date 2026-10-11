@@ -6,7 +6,6 @@ mod pdh;
 use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
-    io::{Seek, SeekFrom},
     os::windows::{fs::OpenOptionsExt, io::AsRawHandle, process::CommandExt},
     path::PathBuf,
     process::{Child, Command, Stdio},
@@ -100,16 +99,34 @@ fn process_rows() -> Result<Vec<crate::restart::ProcessRow>> {
     Ok(rows)
 }
 
-/// Pin a read-only Windows handle which denies writes/deletion until recovery ends.
+/// Pin the file object against deletion, not its mutable contention fields.
+/// Each record snapshot briefly denies writes and checks this same file ID.
 /// This never acquires, modifies, replaces or releases the chain's lock record.
 pub struct RecoveryLease {
     file: File,
     chain_pid: u32,
     chain_created: u64,
     token: String,
+    acquired_at: f64,
+    snapshot_deadline: Option<Instant>,
 }
 impl RecoveryLease {
     pub fn acquire() -> Result<Self> {
+        Self::acquire_inner(None)
+    }
+    pub fn acquire_until(deadline: Instant) -> Result<Self> {
+        if Instant::now() >= deadline {
+            return Err(Error::input("shared lock acquisition deadline exhausted"));
+        }
+        let lease = Self::acquire_inner(Some(deadline))?;
+        if Instant::now() >= deadline {
+            return Err(Error::input(
+                "shared lock acquisition deadline exhausted after preparation",
+            ));
+        }
+        Ok(lease)
+    }
+    fn acquire_inner(snapshot_deadline: Option<Instant>) -> Result<Self> {
         let chain_pid = std::env::var(CHAIN_PID_ENV)
             .ok()
             .and_then(|s| s.parse().ok())
@@ -120,48 +137,48 @@ impl RecoveryLease {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .ok_or_else(|| Error::input("absolute shared Civ6 lock path was not supplied"))?;
-        super::verify_control_path(&fs::canonicalize(path)?, super::SHARED_LOCK_PATH)?;
-        let mut file = pin_record_file(Path::new(super::SHARED_LOCK_PATH))?;
-        let mut record = Vec::new();
-        (&mut file).take(32769).read_to_end(&mut record)?;
-        if record.len() > 32768 {
-            return Err(Error::input("shared Civ6 lock record too large"));
-        }
-        let record: Value = serde_json::from_slice(&record)?;
+        let file = pin_record_file(&path).map_err(|e| {
+            Error::new(
+                crate::ErrorKind::Io,
+                format!("pin shared lock file identity: {e}"),
+            )
+        })?;
+        super::verify_control_path(&final_record_path(&file)?, super::SHARED_LOCK_PATH)?;
+        let record =
+            read_record_snapshot(&file, Path::new(super::SHARED_LOCK_PATH), snapshot_deadline)?;
         let token = record["lock_token"]
             .as_str()
             .filter(|s| !s.is_empty())
             .ok_or_else(|| Error::input("live-chain acquisition token missing"))?
             .to_owned();
+        let acquired_at = record["acquired_at"]
+            .as_f64()
+            .filter(|at| at.is_finite())
+            .ok_or_else(|| Error::input("live-chain acquisition time missing"))?;
         let owner = open_process(chain_pid, 0x101000)?;
         let mut lease = Self {
             file,
             chain_pid,
             chain_created: created(owner.0)?,
             token,
+            acquired_at,
+            snapshot_deadline,
         };
         lease.check()?;
         Ok(lease)
     }
     pub fn check(&mut self) -> Result<()> {
         time::check_interrupt()?;
-        self.file.seek(SeekFrom::Start(0))?;
-        let mut record = Vec::new();
-        (&mut self.file).take(32769).read_to_end(&mut record)?;
-        if record.len() > 32768 {
-            return Err(Error::input("shared Civ6 lock record too large"));
-        }
+        let record = read_record_snapshot(
+            &self.file,
+            Path::new(super::SHARED_LOCK_PATH),
+            self.snapshot_deadline,
+        )?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| Error::input(e.to_string()))?
             .as_secs_f64();
-        super::verify_control_record(
-            &serde_json::from_slice(&record)?,
-            self.chain_pid,
-            self.chain_created,
-            &self.token,
-            now,
-        )?;
+        self.verify_frozen_record(&record, now)?;
         let owner = open_process(self.chain_pid, 0x101000)?;
         if created(owner.0)? != self.chain_created
             || unsafe { WaitForSingleObject(owner.0, 0) } != 258
@@ -175,15 +192,145 @@ impl RecoveryLease {
             created(open_process(pid, 0x101000)?.0)
         })
     }
+    fn verify_frozen_record(&self, record: &Value, now: f64) -> Result<()> {
+        if record["acquired_at"].as_f64() != Some(self.acquired_at) {
+            return Err(Error::input("live-chain original acquisition time changed"));
+        }
+        super::verify_control_record(record, self.chain_pid, self.chain_created, &self.token, now)
+    }
 }
 
 fn pin_record_file(path: &Path) -> std::io::Result<File> {
-    OpenOptions::new().read(true).share_mode(1).open(path)
+    use windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
+    // Metadata-only access allows an existing RW/ShareRead writer and future
+    // deadline updates. Omitting SHARE_DELETE still prevents release/replace.
+    OpenOptions::new()
+        .read(true)
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .share_mode(3)
+        .open(path)
+}
+fn record_file_identity(file: &File) -> Result<(u32, u64)> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut info) } == 0 {
+        return Err(Error::new(
+            crate::ErrorKind::Io,
+            format!(
+                "inspect shared lock file ID: {}",
+                std::io::Error::last_os_error()
+            ),
+        ));
+    }
+    Ok((
+        info.dwVolumeSerialNumber,
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+    ))
+}
+fn final_record_path(file: &File) -> Result<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+    let mut buffer = vec![0u16; 32768];
+    let length = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle().cast(),
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            0,
+        )
+    };
+    if length == 0 || length as usize >= buffer.len() {
+        return Err(Error::new(
+            crate::ErrorKind::Io,
+            format!(
+                "resolve shared lock final path on pinned handle: {}",
+                std::io::Error::last_os_error()
+            ),
+        ));
+    }
+    Ok(PathBuf::from(std::ffi::OsString::from_wide(
+        &buffer[..length as usize],
+    )))
+}
+fn open_record_snapshot(path: &Path, deadline: Option<Instant>) -> Result<File> {
+    open_record_snapshot_with(path, deadline, || {})
+}
+fn open_record_snapshot_with(
+    path: &Path,
+    deadline: Option<Instant>,
+    mut conflict: impl FnMut(),
+) -> Result<File> {
+    open_record_snapshot_operation(
+        || OpenOptions::new().read(true).share_mode(1).open(path),
+        deadline,
+        &mut conflict,
+    )
+}
+fn open_record_snapshot_operation(
+    mut open: impl FnMut() -> std::io::Result<File>,
+    deadline: Option<Instant>,
+    mut conflict: impl FnMut(),
+) -> Result<File> {
+    let mut last_error = None;
+    loop {
+        time::check_interrupt()?;
+        if deadline.is_some_and(|end| Instant::now() >= end) {
+            if let Some(error) = last_error.take() {
+                return Err(Error::new(
+                    crate::ErrorKind::Io,
+                    format!("open coherent shared lock snapshot: {error}"),
+                ));
+            }
+        }
+        match open() {
+            Ok(file) => return Ok(file),
+            Err(error) => {
+                if error.raw_os_error() != Some(32)
+                    || deadline.is_none_or(|end| Instant::now() >= end)
+                {
+                    return Err(Error::new(
+                        crate::ErrorKind::Io,
+                        format!("open coherent shared lock snapshot: {error}"),
+                    ));
+                }
+                conflict();
+                last_error = Some(error);
+                let remaining = deadline.unwrap().saturating_duration_since(Instant::now());
+                std::thread::sleep(remaining.min(Duration::from_millis(10)));
+            }
+        }
+    }
+}
+fn read_record_snapshot(pin: &File, path: &Path, deadline: Option<Instant>) -> Result<Value> {
+    let mut reader = open_record_snapshot(path, deadline)?;
+    if record_file_identity(pin)? != record_file_identity(&reader)? {
+        return Err(Error::input(
+            "shared lock file identity changed before record snapshot",
+        ));
+    }
+    let mut bytes = Vec::new();
+    (&mut reader)
+        .take(32769)
+        .read_to_end(&mut bytes)
+        .map_err(|e| {
+            Error::new(
+                crate::ErrorKind::Io,
+                format!("read coherent shared lock snapshot: {e}"),
+            )
+        })?;
+    if bytes.len() > 32768 {
+        return Err(Error::input("shared Civ6 lock record too large"));
+    }
+    serde_json::from_slice(&bytes)
+        .map_err(|e| Error::input(format!("invalid shared lock record snapshot: {e}")))
 }
 
 #[cfg(test)]
 mod lease_sharing_tests {
     use super::*;
+    use std::io::{Seek, SeekFrom, Write};
     #[test]
     fn recovery_legacy_reader_reproduces_os32_while_mutable_writer_is_open() {
         let directory = tempfile::tempdir().unwrap();
@@ -240,6 +387,146 @@ mod lease_sharing_tests {
         assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
         drop(pin);
         fs::remove_file(&path).unwrap();
+    }
+    #[test]
+    fn recovery_snapshot_waits_for_real_os32_then_reads_complete_updated_record() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("owned.lock");
+        fs::write(&path, b"{\"lock_token\":\"owned\"}").unwrap();
+        let pin = pin_record_file(&path).unwrap();
+        let id = record_file_identity(&pin).unwrap();
+        let mut writer = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        writer.set_len(0).unwrap();
+        writer.write_all(b"{\"lock_token\":").unwrap();
+        let (seen_tx, seen_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let read_path = path.clone();
+        let reader = std::thread::spawn(move || {
+            let mut first = true;
+            let mut reader = open_record_snapshot_with(
+                &read_path,
+                Some(Instant::now() + Duration::from_secs(5)),
+                || {
+                    if first {
+                        first = false;
+                        seen_tx.send(()).unwrap();
+                        release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    }
+                },
+            )
+            .unwrap();
+            assert_eq!(record_file_identity(&reader).unwrap(), id);
+            let mut bytes = Vec::new();
+            reader.read_to_end(&mut bytes).unwrap();
+            serde_json::from_slice::<Value>(&bytes).unwrap()
+        });
+        seen_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        writer.seek(SeekFrom::Start(0)).unwrap();
+        writer.set_len(0).unwrap();
+        writer
+            .write_all(b"{\"lock_token\":\"owned\",\"competitor_since\":300}")
+            .unwrap();
+        writer.sync_all().unwrap();
+        drop(writer);
+        release_tx.send(()).unwrap();
+        let record = reader.join().unwrap();
+        assert_eq!(record, json!({"lock_token":"owned","competitor_since":300}));
+        assert_eq!(record_file_identity(&pin).unwrap(), id);
+        assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
+    }
+    #[test]
+    fn recovery_os32_wait_uses_the_original_deadline_including_preparation() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("owned.lock");
+        fs::write(&path, b"{}").unwrap();
+        let mut writer = Some(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .share_mode(1)
+                .open(&path)
+                .unwrap(),
+        );
+        let started = Instant::now();
+        let deadline = started + Duration::from_millis(20);
+        let error = open_record_snapshot_with(&path, Some(deadline), || {
+            // Hold preparation beyond the parent's deadline. A renewed wait
+            // budget, or accepting an open after this barrier, is incorrect.
+            while Instant::now() < deadline {
+                std::thread::yield_now();
+            }
+            // The file is available after preparation, but no new open may
+            // turn this already expired parent deadline into success.
+            drop(writer.take());
+        })
+        .unwrap_err();
+        assert!(error.message.contains("os error 32"));
+        drop(writer);
+        assert!(open_record_snapshot(&path, None).is_ok());
+    }
+    #[test]
+    fn recovery_other_errors_do_not_retry_and_identity_changes_are_not_ignored() {
+        for code in [5, 33, 2, 6] {
+            let mut calls = 0;
+            let error = open_record_snapshot_operation(
+                || {
+                    calls += 1;
+                    Err(std::io::Error::from_raw_os_error(code))
+                },
+                Some(Instant::now() + Duration::from_secs(5)),
+                || panic!("only demonstrated sharing error 32 may wait"),
+            )
+            .unwrap_err();
+            assert_eq!(calls, 1);
+            assert!(error.message.contains(&format!("os error {code}")));
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("owned.lock");
+        fs::write(&path, b"{}").unwrap();
+        let created = 116_444_736_000_000_000u64 + 100 * 10_000_000;
+        let lease = RecoveryLease {
+            file: pin_record_file(&path).unwrap(),
+            chain_pid: 7,
+            chain_created: created,
+            token: "owned".into(),
+            acquired_at: 200.0,
+            snapshot_deadline: None,
+        };
+        let original = json!({"live_chain":true,"pid":7,"chain_pid":7,"pid_created_filetime":created,"lock_token":"owned","acquired_at":200.0});
+        lease.verify_frozen_record(&original, 400.0).unwrap();
+        let mut deadline_update = original.clone();
+        deadline_update["competitor_since"] = json!(300.0);
+        lease.verify_frozen_record(&deadline_update, 400.0).unwrap();
+        for (key, value) in [
+            ("lock_token", json!("peer")),
+            ("pid_created_filetime", json!(created + 1)),
+            ("acquired_at", json!(201.0)),
+            ("chain_pid", json!(8)),
+        ] {
+            let mut changed = original.clone();
+            changed[key] = value;
+            assert!(
+                lease.verify_frozen_record(&changed, 400.0).is_err(),
+                "{key}"
+            );
+        }
+        let other = directory.path().join("other.lock");
+        fs::write(&other, b"{}").unwrap();
+        assert!(read_record_snapshot(&lease.file, &other, None)
+            .unwrap_err()
+            .message
+            .contains("file identity changed"));
+        fs::write(&other, b"{").unwrap();
+        let other_pin = pin_record_file(&other).unwrap();
+        assert!(read_record_snapshot(&other_pin, &other, None)
+            .unwrap_err()
+            .message
+            .contains("invalid shared lock record"));
     }
 }
 

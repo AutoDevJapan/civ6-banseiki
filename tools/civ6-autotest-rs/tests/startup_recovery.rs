@@ -14,6 +14,38 @@ use std::{
     sync::{Arc, Mutex},
 };
 use support_driver::ManualClock;
+#[test]
+fn startup_lock_preparation_consumes_restart_budget_before_any_launch() {
+    struct Preparing(Arc<ManualClock>);
+    impl Backend for Preparing {
+        fn acquire_startup_lock_until(&mut self, deadline: std::time::Instant) -> Result<()> {
+            assert!(deadline > std::time::Instant::now());
+            self.0.advance(11.0);
+            Ok(())
+        }
+        fn authorize_game_control(&mut self, _: Option<GameProcess>) -> Result<()> {
+            panic!("expired preparation cannot authorize game control");
+        }
+        fn launch(&mut self) -> Result<()> {
+            panic!("expired preparation cannot launch a game");
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let clock = Arc::new(ManualClock::default());
+    let mut runner = Runner::with_backend(
+        json!({"name":"preparation bound","steps":[]}),
+        directory.path().into(),
+        directory.path().into(),
+        directory.path().into(),
+        4318,
+        Box::new(Preparing(clock.clone())),
+        clock,
+    );
+    assert_eq!(
+        runner.restart_game(10.0).unwrap_err().message,
+        "Step deadline expired"
+    );
+}
 fn clear_idle() -> IdleProof {
     IdleProof {
         software_adapters: Vec::new(),
