@@ -174,6 +174,63 @@ fn assert_closed(h: &Harness, game: &Game, expected: &[&str]) {
 }
 
 #[test]
+fn wait_for_can_close_successive_statements_without_sending_another_turn() {
+    for opt_in in [None, Some(false), Some(true)] {
+        let closed = Arc::new(Mutex::new(0));
+        let for_states = closed.clone();
+        let for_lua = closed.clone();
+        let fake = FakeBackend::new()
+            .states(move || {
+                let mut states = vec!["InGame".into()];
+                if *for_states.lock().unwrap() < 2 {
+                    states.push("DiplomacyActionView".into());
+                }
+                Ok(states)
+            })
+            .lua(move |state, code| {
+                assert!(
+                    !code.contains("ACTION_ENDTURN"),
+                    "wait must not request a turn"
+                );
+                if state == "DiplomacyActionView" {
+                    assert!(code.contains("OnClose()"));
+                    *for_lua.lock().unwrap() += 1;
+                    return Ok("true".into());
+                }
+                assert_eq!(code, "return human_control_has_returned()");
+                Ok((*for_lua.lock().unwrap() == 2).to_string())
+            });
+        let mut h = Harness::new(json!({}), fake);
+        let mut step = json!({"action":"wait_for","timeout":5,"condition":{"type":"lua","state_name":"InGame","code":"return human_control_has_returned()"}});
+        if let Some(value) = opt_in {
+            step["close_diplomacy"] = json!(value);
+        }
+        let result = h.runner.run_step(&step);
+        assert_eq!(result.is_ok(), opt_in == Some(true));
+        assert_eq!(
+            *closed.lock().unwrap(),
+            if opt_in == Some(true) { 2 } else { 0 }
+        );
+    }
+}
+
+#[test]
+fn wait_for_rejects_nonboolean_diplomacy_option_before_contacting_the_game() {
+    for value in [json!(null), json!(1), json!("true"), json!([])] {
+        let mut h = Harness::new(json!({}), FakeBackend::new());
+        let step = json!({"action":"wait_for","close_diplomacy":value,"condition":{"type":"lua","state_name":"InGame","code":"return true"}});
+        let error = h.runner.run_step(&step).unwrap_err();
+        assert!(error.message.contains("close_diplomacy must be boolean"));
+        assert!(h.calls().is_empty());
+        let error = civ6_autotest_rs::scenario::validate_scenario(
+            &json!({"name":"bad wait option","judge_profile":"generic","steps":[step]}),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("close_diplomacy must be boolean"));
+    }
+}
+
+#[test]
 fn test_statement_after_final_turn_retries_only_idempotent_handler_cleanup() {
     let mut game = Game::new(&[]);
     game.cleanup_fail_once = true;

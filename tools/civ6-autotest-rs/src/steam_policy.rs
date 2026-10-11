@@ -263,6 +263,8 @@ fn other_button(kind: Kind, label: &str) -> bool {
 /// Makes a bounded, deterministic choice from one snapshot. No game attribution
 /// is inferred from buttons. `console_proves_civ6` is ignored unless both the
 /// generic Steam title and live176's complete warning match first.
+/// An empty measured launch placeholder permits observation only; the caller
+/// must keep the original launch deadline and must not select any button.
 pub fn decide(title: &str, body: &str, buttons: &[String], console_proves_civ6: bool) -> Action {
     let title = normalize(title);
     let body = normalize(body);
@@ -272,6 +274,17 @@ pub fn decide(title: &str, body: &str, buttons: &[String], console_proves_civ6: 
     let explicit = game_title(&title);
     if !explicit && ordinary_window(&title, buttons) && !warning_like(&title, &body, buttons) {
         return Action::None;
+    }
+    // live54/live55 captured the same empty Chromium window. In live55 this
+    // preceded ShowInterstitials and the current launch's game process.
+    // Observe this measured placeholder within the existing launch deadline;
+    // it supplies no text or button that could authorize a selection.
+    if title == "steam - game launch failed"
+        && body.is_empty()
+        && buttons.is_empty()
+        && !console_proves_civ6
+    {
+        return Action::Wait;
     }
     if body.is_empty() {
         return Action::Stop("Steam warning body is empty".into());
@@ -309,6 +322,54 @@ pub fn decide(title: &str, body: &str, buttons: &[String], console_proves_civ6: 
     }
 }
 
+/// Select only the account Steam already configured for automatic login,
+/// from the saved-account chooser. This never handles credential forms.
+pub fn saved_account_choice(
+    title: &str,
+    body: &str,
+    buttons: &[String],
+    account: &str,
+) -> Option<usize> {
+    let text = body.to_lowercase();
+    let credential_prompt = [
+        "password",
+        "passcode",
+        "passkey",
+        "otp",
+        "steam guard",
+        "verification",
+        "authentication",
+        "two-factor",
+        "2fa",
+        "code",
+        "パスワード",
+        "認証",
+        "確認コード",
+        "二段階",
+    ]
+    .iter()
+    .any(|word| text.contains(word));
+    if !title.eq_ignore_ascii_case("Sign in to Steam")
+        || credential_prompt
+        || !body.lines().any(|line| line.trim() == "Who's playing?")
+        || account.is_empty()
+        || !account
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
+        || !body
+            .lines()
+            .any(|line| line.trim().eq_ignore_ascii_case(account))
+    {
+        return None;
+    }
+    let mut matching = buttons
+        .iter()
+        .enumerate()
+        .filter(|(_, label)| label.eq_ignore_ascii_case(account));
+    let index = matching.next()?.0;
+    matching.next().is_none().then_some(index)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,6 +384,73 @@ mod tests {
 
     fn buttons(labels: &[&str]) -> Vec<String> {
         labels.iter().map(|label| (*label).into()).collect()
+    }
+
+    #[test]
+    fn saved_account_chooser_requires_the_configured_unique_account_and_no_credential_form() {
+        let body = "Sign in to Steam\nWho's playing?\nMakhmeto\nmakhmeto\nyoki poki\nmashfromjackal\nAdd Account\n";
+        let labels = buttons(&["Makhmeto", "yoki poki"]);
+        assert_eq!(
+            saved_account_choice("Sign in to Steam", body, &labels, "makhmeto"),
+            Some(0)
+        );
+        for account in ["", "unknown", "mashfromjackal", "Sign in"] {
+            assert_eq!(
+                saved_account_choice("Sign in to Steam", body, &labels, account),
+                None
+            );
+        }
+        assert_eq!(
+            saved_account_choice("Steam", body, &labels, "makhmeto"),
+            None
+        );
+        assert_eq!(
+            saved_account_choice(
+                "Sign in to Steam",
+                "Account name Password Sign in",
+                &labels,
+                "makhmeto"
+            ),
+            None
+        );
+        assert_eq!(
+            saved_account_choice(
+                "Sign in to Steam",
+                body,
+                &buttons(&["Makhmeto", "MAKHMETO"]),
+                "makhmeto"
+            ),
+            None
+        );
+        assert_eq!(
+            saved_account_choice(
+                "Sign in to Steam",
+                body,
+                &buttons(&["Add Account"]),
+                "makhmeto"
+            ),
+            None
+        );
+        for prompt in [
+            "Password",
+            "OTP",
+            "Steam Guard",
+            "Enter verification code",
+            "QR code",
+            "パスワード",
+            "認証コード",
+        ] {
+            assert_eq!(
+                saved_account_choice(
+                    "Sign in to Steam",
+                    &format!("{body}{prompt}\n"),
+                    &labels,
+                    "makhmeto"
+                ),
+                None,
+                "mixed credential prompt {prompt}"
+            );
+        }
     }
     fn stopped(action: Action) {
         assert!(matches!(action, Action::Stop(reason) if !reason.is_empty()));
@@ -675,6 +803,33 @@ mod tests {
             decide("Browser", ACTUAL, &buttons(&["Play anyway"]), true),
             Action::None
         );
+    }
+
+    #[test]
+    fn empty_measured_launch_placeholder_waits_without_authorizing_a_button() {
+        assert_eq!(
+            decide("Steam - Game Launch Failed", "", &[], false),
+            Action::Wait
+        );
+        for (title, body, labels, proof) in [
+            ("Steam - Game Launch Failed", "", vec![], true),
+            (
+                "Steam - Game Launch Failed",
+                "",
+                buttons(&["Play anyway"]),
+                false,
+            ),
+            (
+                "Steam - Game Launch Failed",
+                "Unexpected failure",
+                vec![],
+                false,
+            ),
+            ("Steam - Unable to Sync", "", vec![], false),
+            ("Steam - Other Warning", "", vec![], false),
+        ] {
+            stopped(decide(title, body, &labels, proof));
+        }
     }
 
     #[test]

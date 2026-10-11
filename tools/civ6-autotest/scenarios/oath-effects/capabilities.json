@@ -1,0 +1,170 @@
+{
+  "name": "Oath effects: short official-API capability diagnosis; no effect pass",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "e4117d8c-4112-4f75-9a50-7d159e361fa4"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620944,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',0); BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~=\"CIVILIZATION_JAC_ODA\" then error('human house mismatch') end; HideGameSetup(); return 'audit setup built'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local l=Game:GetProperty('JAC_AGES_LEDGER'); local p=Players[0]; return l and l.houses and l.houses.p0 and p and p:GetCities():GetCapitalCity()~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal p=Players[0]; local c=assert(p and p:GetCities():GetCapitalCity(),'human house lacks a real capital')\nlocal function member(receiver,name)\n if receiver==nil then return nil,'receiver unavailable' end\n local ok,value=pcall(function() return receiver[name] end)\n if ok then return value,nil else return nil,tostring(value) end\nend\nlocal function object(receiver,name)\n local f=member(receiver,name); if type(f)~='function' then return nil end\n local ok,value=pcall(f,receiver); if ok then return value end\nend\nlocal q=object(c,'GetBuildQueue'); local g=object(c,'GetGrowth'); local parts={}\nlocal function probe(receiver,label,name,args,official)\n local f,lookup_error=member(receiver,name); local exists=type(f)=='function'\n local ok,value=false,nil\n if exists then ok,value=pcall(f,receiver,unpack(args)) end\n local good=ok and finite(value)\n parts[#parts+1]='{\"receiver\":'..jstr(label)..',\"method\":'..jstr(name)..',\"arguments\":['..table.concat(args,',')..'],\"exists\":'..tostring(exists)..',\"call_ok\":'..tostring(ok)..',\"return_type\":'..jstr(type(value))..',\"finite_numeric\":'..tostring(good)..',\"value\":'..(good and string.format('%.9f',value) or 'null')..',\"error\":'..(lookup_error and jstr(lookup_error) or exists and not ok and jstr(value) or 'null')..',\"official_usage\":'..tostring(official)..',\"quantity_contract\":'..jstr(official and 'documented_observation' or 'unknown_do_not_accept')..'}'\nend\nfor _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do\n local row=assert(GameInfo.Yields['YIELD_'..kind]); probe(c,'city','GetYield',{row.Index},true)\n -- Candidate APIs are called only here. A numeric result does not establish units or scope.\n probe(c,'city','GetBaseYield',{row.Index},false); probe(c,'city','GetYieldModifier',{row.Index},false)\nend\nfor _,name in ipairs({'GetOverallGrowthModifier','GetOtherGrowthModifier','GetHousingGrowthModifier','GetHappinessGrowthModifier','GetFoodSurplus','GetLoyaltyGrowthModifier'}) do probe(g,'growth',name,{},true) end\nprobe(q,'queue','GetCurrentProductionTypeHash',{},true)\nlocal unit=assert(GameInfo.Units.UNIT_SPEARMAN); local building=assert(GameInfo.Buildings.BUILDING_WALLS)\nfor _,name in ipairs({'GetUnitProgress','GetUnitCost'}) do probe(q,'queue',name,{unit.Index},true) end\nfor _,name in ipairs({'GetBuildingProgress','GetBuildingCost'}) do probe(q,'queue',name,{building.Index},true) end\nprobe(q,'queue','GetProductionModifier',{},false); probe(c,'city','GetProductionModifier',{},false)\nreturn '{\"context\":'..jstr(\"GameCore_Tuner\")..',\"owner\":0,\"city\":'..c:GetID()..',\"accepted\":false,\"yield_quantity_basis\":\"unresolved\",\"production_quantity_basis\":\"requires_unmodified_observed_baseline\",\"probes\":['..table.concat(parts,',')..']}'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal p=Players[0]; local c=assert(p and p:GetCities():GetCapitalCity(),'human house lacks a real capital')\nlocal function member(receiver,name)\n if receiver==nil then return nil,'receiver unavailable' end\n local ok,value=pcall(function() return receiver[name] end)\n if ok then return value,nil else return nil,tostring(value) end\nend\nlocal function object(receiver,name)\n local f=member(receiver,name); if type(f)~='function' then return nil end\n local ok,value=pcall(f,receiver); if ok then return value end\nend\nlocal q=object(c,'GetBuildQueue'); local g=object(c,'GetGrowth'); local parts={}\nlocal function probe(receiver,label,name,args,official)\n local f,lookup_error=member(receiver,name); local exists=type(f)=='function'\n local ok,value=false,nil\n if exists then ok,value=pcall(f,receiver,unpack(args)) end\n local good=ok and finite(value)\n parts[#parts+1]='{\"receiver\":'..jstr(label)..',\"method\":'..jstr(name)..',\"arguments\":['..table.concat(args,',')..'],\"exists\":'..tostring(exists)..',\"call_ok\":'..tostring(ok)..',\"return_type\":'..jstr(type(value))..',\"finite_numeric\":'..tostring(good)..',\"value\":'..(good and string.format('%.9f',value) or 'null')..',\"error\":'..(lookup_error and jstr(lookup_error) or exists and not ok and jstr(value) or 'null')..',\"official_usage\":'..tostring(official)..',\"quantity_contract\":'..jstr(official and 'documented_observation' or 'unknown_do_not_accept')..'}'\nend\nfor _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do\n local row=assert(GameInfo.Yields['YIELD_'..kind]); probe(c,'city','GetYield',{row.Index},true)\n -- Candidate APIs are called only here. A numeric result does not establish units or scope.\n probe(c,'city','GetBaseYield',{row.Index},false); probe(c,'city','GetYieldModifier',{row.Index},false)\nend\nfor _,name in ipairs({'GetOverallGrowthModifier','GetOtherGrowthModifier','GetHousingGrowthModifier','GetHappinessGrowthModifier','GetFoodSurplus','GetLoyaltyGrowthModifier'}) do probe(g,'growth',name,{},true) end\nprobe(q,'queue','GetCurrentProductionTypeHash',{},true)\nlocal unit=assert(GameInfo.Units.UNIT_SPEARMAN); local building=assert(GameInfo.Buildings.BUILDING_WALLS)\nfor _,name in ipairs({'GetUnitProgress','GetUnitCost'}) do probe(q,'queue',name,{unit.Index},true) end\nfor _,name in ipairs({'GetBuildingProgress','GetBuildingCost'}) do probe(q,'queue',name,{building.Index},true) end\nprobe(q,'queue','GetProductionModifier',{},false); probe(c,'city','GetProductionModifier',{},false)\nreturn '{\"context\":'..jstr(\"InGame\")..',\"owner\":0,\"city\":'..c:GetID()..',\"accepted\":false,\"yield_quantity_basis\":\"unresolved\",\"production_quantity_basis\":\"requires_unmodified_observed_baseline\",\"probes\":['..table.concat(parts,',')..']}'\n"
+    }
+  ]
+}

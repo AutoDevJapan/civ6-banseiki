@@ -27,11 +27,7 @@ pub fn retry_recovery_with(
         check()?;
         let result = recover();
         match result {
-            Err(e)
-                if e.kind == crate::ErrorKind::Io
-                    && (e.message.contains("(os error 32)")
-                        || e.message.contains("(os error 33)")) =>
-            {
+            Err(e) if e.is_windows_sharing_violation() => {
                 let left = end - clock.now();
                 if left <= 0.0 {
                     return Err(e);

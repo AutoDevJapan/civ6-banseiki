@@ -18,7 +18,7 @@ Rust実行器の `carrier_checkpoint` は、指定した借用トークンを保
 
 ### 保存意図を全クライアントへ運ぶ受信口
 
-`carrier_exchange` はRustで保存済み借用のパケットを作り、公式の `PlayerOperations.EXECUTE_SCRIPT` へ一度渡す。受信口はRustの同じフィールド定義から生成した最小のGameplay接続で、画面コンテキストの値を読まない。`Scripts/JAC_CarrierBoundary.lua` は `civ6-carrier-transport generate <出力パス>` で再生成し、MODのGameplayスクリプトとしてロードする。
+`carrier_exchange` はRustで保存済み借用のパケットを作り、公式の `PlayerOperations.EXECUTE_SCRIPT` へ一度渡す。受信口はRustの同じフィールド定義から生成した最小のGameplay接続で、画面コンテキストの値を読まない。`Scripts/JAC_CarrierBoundary.lua` は `civ6-carrier-transport generate <出力パス>` で再生成し、ImportFilesで用意する。唯一のGameplay入口 `JAC_Absorption_Entry.lua` が本体とフローの後にincludeし、同じ実行環境の非公開APIを使う。
 
 パケットは借用トークン・処理段階・観測トークン・手番・都市ID・所有者・座標・建物・枠を保存意図と照合する。送信者は現在手番中の人間のうち最小のプレイヤーIDとし、Gameplayでも独立に資格を照合する。UIは選ばれた人だけが送る。長さを付けた文字列でパケットのIDを定義し、同じIDの再受信では受領数を増やさない。返答不明では操作を再送しない。UIの再作成後は保存された受領を採用する前に全フィールドを照合する。
 

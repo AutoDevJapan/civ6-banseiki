@@ -6,6 +6,16 @@ const STAGING: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.lua";
 const XML: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.xml";
 const TEXT: &str = "poc/JAC_PoC_JapanMapScale/Text/JAC_JapanMapScale_Text.xml";
 
+#[test]
+fn repository_sources_are_read_from_this_worktree() {
+    let expected = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    assert_eq!(civ6_lua_tests_rs::repo_root(), expected);
+}
+
 fn fixture() -> Lua {
     fixture_with_state("")
 }

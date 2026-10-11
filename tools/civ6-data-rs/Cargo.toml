@@ -9,6 +9,7 @@ edition = "2021"
 installed-game-data = []
 
 [dependencies]
+civ6-autotest-rs = { path = "../civ6-autotest-rs" }
 anyhow = "1"
 image = { version = "0.25", default-features = false, features = ["png", "dds"] }
 indexmap = "2"

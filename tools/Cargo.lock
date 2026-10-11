@@ -249,6 +249,7 @@ dependencies = [
  "caseless",
  "chrono",
  "civ6-cli-compat-rs",
+ "civ6-oath-runtime-rs",
  "civ6-reports-rs",
  "clap",
  "crc32fast",
@@ -282,6 +283,7 @@ name = "civ6-data-rs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "civ6-autotest-rs",
  "image",
  "indexmap",
  "mlua",
@@ -319,6 +321,14 @@ dependencies = [
  "serde_json",
  "syn 2.0.119",
  "tempfile",
+]
+
+[[package]]
+name = "civ6-oath-runtime-rs"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "windows-sys",
 ]
 
 [[package]]

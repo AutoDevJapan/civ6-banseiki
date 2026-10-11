@@ -1,6 +1,10 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error};
+use civ6_autotest_rs::{
+    runner::{AutoplayOptions, HUMAN_TURN_READY_UI},
+    scenario, Error,
+};
+use mlua::Lua;
 use serde_json::json;
 use std::{
     collections::VecDeque,
@@ -23,6 +27,153 @@ fn turn_backend() -> FakeBackend {
         }
         Ok("true".into())
     })
+}
+
+#[test]
+fn initial_human_wait_closes_late_blockers_without_starting_or_ending_a_turn() {
+    // A first empty popup query does not imply the next frame stays unblocked.
+    let state = Arc::new(Mutex::new((0usize, false, false, 0usize, 0usize)));
+    let g = state.clone();
+    let fake = FakeBackend::new()
+        .states(|| {
+            Ok(vec![
+                "InGame".into(),
+                "InGameTopOptionsMenu".into(),
+                "AdvisorPopup".into(),
+            ])
+        })
+        .lua(move |context, code| {
+            let mut s = g.lock().unwrap();
+            if context == "InGame" && code == HUMAN_TURN_READY_UI {
+                s.0 += 1;
+                return Ok((s.1 && s.2).to_string());
+            }
+            if context == "InGameTopOptionsMenu" {
+                if code.contains("OnReturn()") {
+                    s.1 = true;
+                    s.3 += 1;
+                    return Ok("true".into());
+                }
+                return Ok((s.0 < 2 || s.1).to_string());
+            }
+            if context == "AdvisorPopup" {
+                if s.0 >= 2 && !s.2 {
+                    s.2 = true;
+                    s.4 += 1;
+                    return Ok("true".into());
+                }
+                return Ok("false".into());
+            }
+            panic!("unexpected startup operation {context}: {code}");
+        });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.wait_initial_human_ready(10.0).unwrap();
+    let s = state.lock().unwrap();
+    assert!(s.0 >= 3);
+    assert_eq!((s.3, s.4), (1, 1));
+    assert_eq!(h.count_code("HostGame"), 0);
+    assert_eq!(h.count_code("ACTION_ENDTURN"), 0);
+    assert!(h.log().contains("initial_human_blocker"));
+    assert!(h.log().contains("initial_human_ready"));
+}
+
+#[test]
+fn initial_human_wait_stops_at_the_original_deadline_without_faking_complete() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into()]))
+        .lua(|context, code| {
+            assert_eq!(context, "InGame");
+            assert_eq!(code, HUMAN_TURN_READY_UI);
+            Ok("false".into())
+        });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h.runner.wait_initial_human_ready(2.0).unwrap_err();
+    assert!(error.message.contains("original game-start deadline"));
+    assert_eq!(h.count_code("HostGame"), 0);
+    assert_eq!(h.count_code("ACTION_ENDTURN"), 0);
+    assert!(!h.log().contains("actual human start complete"));
+}
+
+#[test]
+fn end_turn_closes_an_advisor_that_appears_after_the_only_request() {
+    let state = Arc::new(Mutex::new((67_i64, false, 0_usize, 0_usize)));
+    let game = state.clone();
+    let fake = FakeBackend::new()
+        .states(|| {
+            Ok(vec![
+                "InGame".into(),
+                "GameCore_Tuner".into(),
+                "AdvisorPopup".into(),
+            ])
+        })
+        .lua(move |context, code| {
+            let mut g = game.lock().unwrap();
+            if context == "AdvisorPopup" {
+                assert!(
+                    code.contains("IsBlockingInput()") && code.contains("OnHideAdvisorDialog()")
+                );
+                if g.1 {
+                    g.1 = false;
+                    g.3 += 1;
+                    return Ok("true".into());
+                }
+                return Ok("false".into());
+            }
+            if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+                g.0 += 1;
+                g.1 = true;
+                g.2 += 1;
+                return Ok("true".into());
+            }
+            if code.trim() == "return Game.GetCurrentGameTurn()" {
+                return Ok(g.0.to_string());
+            }
+            if context == "GameCore_Tuner" && code.contains("end_turn advanced past") {
+                return Ok((g.0 == 68).to_string());
+            }
+            if code.contains("human inactive local=") {
+                return Ok((!g.1).to_string());
+            }
+            Ok("true".into())
+        });
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner
+            .run_step(&json!({"action":"end_turn","timeout":5}))
+            .unwrap(),
+        "human turn 67->68"
+    );
+    assert_eq!(*state.lock().unwrap(), (68, false, 1, 1));
+}
+
+#[test]
+fn advisor_closure_is_opt_in_and_nonblocking_advisors_are_not_dismissed() {
+    for opt_in in [false, true] {
+        for blocking in [false, true] {
+            let state = Arc::new(Mutex::new((blocking, 0_usize)));
+            let game = state.clone();
+            let fake = FakeBackend::new()
+                .states(|| Ok(vec!["InGame".into(), "AdvisorPopup".into()]))
+                .lua(move |context, code| {
+                    assert!(!code.contains("ACTION_ENDTURN"));
+                    let mut g = game.lock().unwrap();
+                    if context == "AdvisorPopup" {
+                        assert!(code.contains("IsBlockingInput()"));
+                        if g.0 {
+                            g.0 = false;
+                            g.1 += 1;
+                            return Ok("true".into());
+                        }
+                        return Ok("false".into());
+                    }
+                    Ok((!g.0).to_string())
+                });
+            let mut h = Harness::new(json!({}), fake);
+            let result = h.runner.run_step(&json!({"action":"wait_for","timeout":2,"close_diplomacy":opt_in,"condition":{"type":"lua","state_name":"InGame","code":"return human_control_restored()"}}));
+            assert_eq!(result.is_ok(), !blocking || opt_in);
+            assert_eq!(state.lock().unwrap().1, usize::from(blocking && opt_in));
+        }
+    }
 }
 
 #[test]
@@ -126,6 +277,214 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
         1
     );
+}
+
+#[test]
+fn end_turn_uses_gameplay_when_ui_turn_is_ahead_and_does_not_resend() {
+    for overshoot in [false, true] {
+        let turn = Arc::new(Mutex::new(66));
+        let game_turn = turn.clone();
+        let fake = FakeBackend::new().lua(move |state, code| {
+            if code.trim() == "return Game.GetCurrentGameTurn()" {
+                return Ok(if state == "GameCore_Tuner" {
+                    game_turn.lock().unwrap().to_string()
+                } else {
+                    "67".into()
+                });
+            }
+            if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+                *game_turn.lock().unwrap() = if overshoot { 68 } else { 67 };
+            }
+            if state == "GameCore_Tuner" && code.contains("end_turn advanced past") {
+                assert!(code.contains("turn == 67"));
+                if overshoot {
+                    return Err(Error::scenario(
+                        "end_turn advanced past its single-turn target",
+                    ));
+                }
+            }
+            Ok("true".into())
+        });
+        let mut h = Harness::new(json!({}), fake);
+        let result = h.runner.run_step(&json!({"action":"end_turn"}));
+        if overshoot {
+            assert!(result.unwrap_err().to_string().contains("advanced past"));
+        } else {
+            assert_eq!(result.unwrap(), "human turn 66->67");
+        }
+        assert_eq!(
+            h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+            1
+        );
+    }
+}
+
+#[test]
+fn end_turn_waits_for_human_control_after_gameplay_advances_without_resending() {
+    let turn = Arc::new(Mutex::new(66));
+    let observed = Arc::new(Mutex::new(0));
+    let game = turn.clone();
+    let polls = observed.clone();
+    let fake = FakeBackend::new().lua(move |state, code| {
+        if code.trim() == "return Game.GetCurrentGameTurn()" {
+            return Ok(game.lock().unwrap().to_string());
+        }
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+            *game.lock().unwrap() = 67;
+        }
+        if state == "InGame" && code.contains("Players[p]:IsTurnActive()") {
+            assert_eq!(code, HUMAN_TURN_READY_UI);
+            let mut n = polls.lock().unwrap();
+            *n += 1;
+            return Ok((*n >= 3).to_string());
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.run_step(&json!({"action":"end_turn"})).unwrap(),
+        "human turn 66->67"
+    );
+    assert_eq!(*observed.lock().unwrap(), 3);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        1
+    );
+}
+
+#[test]
+fn shared_human_readiness_rejects_incomplete_sent_processing_and_missing_players() {
+    let vm = Lua::new();
+    let reset = r#"
+active=true;complete=true;can_end=true;sent=false;processing=false;local_id=0;requests=0
+Game={GetLocalPlayer=function()return local_id end}
+Players={[0]={IsTurnActive=function()return active end,IsTurnActiveComplete=function()return complete end}}
+UI={CanEndTurn=function()return can_end end,HasSentTurnComplete=function()return sent end,IsProcessingMessages=function()return processing end,RequestAction=function()requests=requests+1 end}
+"#;
+    vm.load(reset).exec().unwrap();
+    assert!(vm.load(HUMAN_TURN_READY_UI).eval::<bool>().unwrap());
+    for mutation in [
+        "active=false",
+        "complete=false",
+        "can_end=false",
+        "sent=true",
+        "processing=true",
+        "local_id=-1",
+        "local_id=7",
+    ] {
+        vm.load(reset).exec().unwrap();
+        vm.load(mutation).exec().unwrap();
+        assert!(
+            !vm.load(HUMAN_TURN_READY_UI).eval::<bool>().unwrap(),
+            "{mutation}"
+        );
+        assert_eq!(vm.load("return requests").eval::<i64>().unwrap(), 0);
+    }
+}
+
+#[test]
+fn end_turn_rejects_overshoot_during_human_control_wait() {
+    let turn = Arc::new(Mutex::new(66));
+    let game = turn.clone();
+    let fake = FakeBackend::new().lua(move |state, code| {
+        if code.trim() == "return Game.GetCurrentGameTurn()" {
+            return Ok(game.lock().unwrap().to_string());
+        }
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+            *game.lock().unwrap() = 67;
+        }
+        if state == "InGame" && code.contains("Players[p]:IsTurnActive()") {
+            *game.lock().unwrap() = 68;
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h
+        .runner
+        .run_step(&json!({"action":"end_turn"}))
+        .unwrap_err();
+    assert!(error.to_string().contains("66->68"));
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        1
+    );
+}
+
+#[test]
+fn diagnostic_observation_is_bounded_and_never_acceptance() {
+    let step = json!({"action":"observe_for","seconds":120,"timeout":135});
+    let data = json!({"name":"diagnosis","diagnostic_only":true,"steps":[step.clone()]});
+    scenario::validate_scenario(&data).unwrap();
+    let mut h = Harness::new(data.clone(), FakeBackend::new());
+    let detail = h.runner.run_step(&step).unwrap();
+    assert!(detail.contains("no acceptance"));
+    assert_eq!(h.clock.at(), 120.0);
+    assert!(h.calls().is_empty());
+    h.runner.result_passed = true;
+    h.runner.write_result().unwrap();
+    let result: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(h.runner.output.join("result.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(result["observation_completed"], true);
+    assert_eq!(result["passed"], false);
+    assert_eq!(result["acceptance_passed"], false);
+    for value in [
+        json!(false),
+        json!(1),
+        json!("true"),
+        serde_json::Value::Null,
+    ] {
+        let mut rejected = data.clone();
+        rejected["diagnostic_only"] = value;
+        assert!(scenario::validate_scenario(&rejected).is_err());
+    }
+    for seconds in [json!(0), json!(121), json!(true)] {
+        let mut rejected = data.clone();
+        rejected["steps"][0]["seconds"] = seconds;
+        assert!(scenario::validate_scenario(&rejected).is_err());
+    }
+    let mut rejected = data.clone();
+    rejected["steps"][0]["timeout"] = 120.into();
+    assert!(scenario::validate_scenario(&rejected).is_err());
+    rejected = data.clone();
+    rejected["judge_profile"] = "growth".into();
+    assert!(scenario::validate_scenario(&rejected).is_err());
+    rejected = data;
+    rejected["steps"][0]["action"] = "pause".into();
+    assert!(scenario::validate_scenario(&rejected).is_err());
+}
+
+#[test]
+fn completed_diagnostic_run_has_nonzero_exit_and_false_acceptance() {
+    let data = json!({"name":"observation only","diagnostic_only":true,"steps":[
+        {"action":"ui_lua","state_name":"InGame","code":"return true"},
+        {"action":"observe_for","seconds":120,"timeout":135},
+        {"action":"ui_lua","state_name":"GameCore_Tuner","code":"return 'state after stall'"}
+    ]});
+    let mut h = Harness::new(data, FakeBackend::new());
+    h.runner.output = h.root.path().join("complete-diagnostic");
+    h.runner.auto_restart = false;
+    for name in ["Lua.log", "Database.log", "Modding.log"] {
+        std::fs::write(h.runner.logs.join(name), "").unwrap();
+    }
+    assert_eq!(h.runner.run().unwrap(), 3);
+    let result: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(h.runner.output.join("result.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(result["completed_steps"], 3);
+    assert_eq!(result["observation_completed"], true);
+    assert_eq!(result["passed"], false);
+    assert_eq!(result["acceptance_passed"], false);
+    assert!(h
+        .calls()
+        .iter()
+        .any(|(_, code)| code == "return 'state after stall'"));
+    assert!(h
+        .calls()
+        .iter()
+        .all(|(_, code)| !code.contains("ACTION_ENDTURN")));
 }
 
 #[test]

@@ -8,6 +8,29 @@ use std::{
     path::{Path, PathBuf},
 };
 
+// Steam briefly opens these logs without sharing during rotation. Wait only
+// for that Windows condition; a denied read is never an empty observation.
+#[cfg(windows)]
+fn open_log(path: &Path) -> std::io::Result<File> {
+    let started = std::time::Instant::now();
+    loop {
+        match File::open(path) {
+            Err(error)
+                if matches!(error.raw_os_error(), Some(32 | 33))
+                    && started.elapsed() < std::time::Duration::from_secs(2) =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            result => return result,
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn open_log(path: &Path) -> std::io::Result<File> {
+    File::open(path)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncState {
@@ -28,7 +51,7 @@ pub struct LogCursor {
 }
 impl LogCursor {
     pub fn mark(path: &Path) -> Result<Self> {
-        match File::open(path) {
+        match open_log(path) {
             Ok(mut file) => Self::capture(&mut file),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
@@ -145,7 +168,7 @@ impl Monitor {
         Ok(Self::from_cursor(path, cursor))
     }
     pub fn poll(&mut self) -> Result<()> {
-        let mut file = match File::open(&self.path) {
+        let mut file = match open_log(&self.path) {
             Ok(file) => file,
             Err(e)
                 if e.kind() == std::io::ErrorKind::NotFound && self.cursor.generation.is_none() =>
@@ -316,7 +339,7 @@ pub fn fresh_release(cursor: &LogCursor) -> Result<bool> {
     fresh_release_at(&path, cursor)
 }
 fn fresh_release_at(path: &Path, cursor: &LogCursor) -> Result<bool> {
-    let mut f = File::open(path)?;
+    let mut f = open_log(path)?;
     let len = cursor.validate(&mut f)?;
     if len - cursor.offset > 1024 * 1024 {
         return Err(Error::input(
@@ -353,6 +376,58 @@ pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn sharing_violation_recovers_and_reads_fresh_completion() {
+        use std::{io::Write, os::windows::fs::OpenOptionsExt};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cloud_log.txt");
+        std::fs::write(&path, "old generation\n").unwrap();
+        let mut monitor = Monitor::new(path.clone()).unwrap();
+        monitor.feed("[AppID 289070] Starting sync (up,)\n");
+        let mut locked = std::fs::OpenOptions::new()
+            .append(true)
+            .share_mode(0)
+            .open(&path)
+            .unwrap();
+        writeln!(locked, "[AppID 289070] Successfully synced").unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            drop(locked);
+        });
+        monitor.poll().unwrap();
+        release.join().unwrap();
+        assert_eq!(monitor.states.get(&289070), Some(&SyncState::Complete));
+        assert!(!monitor.pending());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn persistent_sharing_violation_preserves_cursor_and_pending_state() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cloud_log.txt");
+        std::fs::write(&path, "old generation\n").unwrap();
+        let mut monitor = Monitor::new(path.clone()).unwrap();
+        monitor.feed("[AppID 289070] Starting sync (up,)\n");
+        let cursor = serde_json::to_value(&monitor.cursor).unwrap();
+        let locked = std::fs::OpenOptions::new()
+            .write(true)
+            .share_mode(0)
+            .open(&path)
+            .unwrap();
+        let started = std::time::Instant::now();
+        let error = monitor.poll().unwrap_err();
+        assert_eq!(error.kind, crate::ErrorKind::Io);
+        assert!(started.elapsed() >= std::time::Duration::from_secs(2));
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        assert!(monitor.pending());
+        assert_eq!(serde_json::to_value(&monitor.cursor).unwrap(), cursor);
+        drop(locked);
+        monitor.poll().unwrap();
+        assert!(monitor.pending());
+    }
+
     #[test]
     fn stage_failures_are_journaled_and_only_issued_launch_can_recover() {
         for failure in [

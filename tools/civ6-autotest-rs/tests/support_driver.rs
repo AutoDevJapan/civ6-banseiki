@@ -100,7 +100,13 @@ impl FakeBackend {
                     Ok("true".into())
                 }
             }),
-            on_states: Box::new(|| Ok(vec!["InGame".into(), "FrontEnd".into()])),
+            on_states: Box::new(|| {
+                Ok(vec![
+                    "InGame".into(),
+                    "FrontEnd".into(),
+                    "GameCore_Tuner".into(),
+                ])
+            }),
             on_process: Box::new(|_| Ok(Some((123, 100.0)))),
             on_window: Box::new(|_| Ok(123)),
             on_dx11: Box::new(|_| Ok(())),

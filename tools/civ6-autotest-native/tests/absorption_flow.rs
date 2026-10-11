@@ -1976,37 +1976,48 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     "#,
     )
     .exec()?;
-    let core = lua.create_table()?;
-    let meta = lua.create_table()?;
-    meta.set("__index", lua.globals())?;
-    core.set_metatable(Some(meta))?;
-    let include_env = core.clone();
-    let included = lua.create_table()?;
-    core.set(
-        "include",
-        lua.create_function(move |lua, name: String| {
-            if included.get::<bool>(name.as_str())? {
-                return Ok(());
-            }
-            let path = format!("poc/JAC_PoC_Absorption/Scripts/{name}.lua");
-            let source = fs::read_to_string(repo_path(&path)).map_err(mlua::Error::external)?;
-            lua.load(source)
+    // Civ6 gives each AddGameplayScripts action an independent environment.
+    // Execute every actual manifest entry, not just the absorption entry.
+    let entries = regex::Regex::new(
+        r"(?s)<AddGameplayScripts\b[^>]*>.*?<File>([^<]+)</File></AddGameplayScripts>",
+    )
+    .unwrap();
+    for entry in entries.captures_iter(&manifest) {
+        let core = lua.create_table()?;
+        let meta = lua.create_table()?;
+        meta.set("__index", lua.globals())?;
+        core.set_metatable(Some(meta))?;
+        let include_env = core.clone();
+        core.set(
+            "include",
+            lua.create_function(move |lua, name: String| {
+                let path = format!("poc/JAC_PoC_Absorption/Scripts/{name}.lua");
+                let source = fs::read_to_string(repo_path(&path)).map_err(mlua::Error::external)?;
+                lua.load(source)
+                    .set_name(&path)
+                    .set_environment(include_env.clone())
+                    .exec()
+            })?,
+        )?;
+        let path = format!("poc/JAC_PoC_Absorption/{}", &entry[1]);
+        let source = fs::read_to_string(repo_path(&path)).map_err(mlua::Error::external)?;
+        for _ in 0..2 {
+            lua.load(&source)
                 .set_name(&path)
-                .set_environment(include_env.clone())
+                .set_environment(core.clone())
                 .exec()?;
-            included.set(name, true)
-        })?,
-    )?;
-    let entry = fs::read_to_string(repo_path(
-        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua",
-    ))
-    .map_err(mlua::Error::external)?;
-    for _ in 0..2 {
-        lua.load(&entry).set_environment(core.clone()).exec()?;
+        }
+        lua.load(r#"
+            assert(type(JAC_AbsorptionGameplay)=='table' and type(JAC_AbsorptionFlowGameplay)=='table')
+            assert(type(JAC_NativeInventory)=='table' and type(JAC_NativeInventory.With)=='function')
+            for _,method in ipairs({'Advance','Preflight','AdvanceSnap','HasContinuation','ContinueOnly'}) do
+              assert(type(rawget(JAC_CarrierMP,method))=='function','private carrier API missing: '..method)
+            end
+        "#).set_environment(core).exec()?;
     }
     // This separate context deliberately inherits no private gameplay globals.
     lua.load(r#"
-        assert(JAC_AbsorptionGameplay==nil and JAC_AbsorptionFlowGameplay==nil)
+        assert(JAC_AbsorptionGameplay==nil and JAC_AbsorptionFlowGameplay==nil and JAC_CarrierMP==nil and JAC_NativeInventory==nil)
         assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
         assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
         assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
@@ -2014,6 +2025,17 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         assert(GameEvents.JAC_CarrierMP_Operation.Count()==1)
         assert(GameEvents.JAC_NativeInventory_Operation.Count()==1)
         assert(GameEvents.OnGameTurnStarted.Count()==2)
+        local codecs=0
+        for name,value in pairs(ExposedMembers.JAC_CarrierMP) do
+          assert((name=='Encode' or name=='Decode') and type(value)=='function')
+          codecs=codecs+1
+        end
+        assert(codecs==2)
+        local receipts=0
+        for name,value in pairs(ExposedMembers.JAC_CarrierBoundary) do
+          assert(name=='GetReceipt' and type(value)=='function');receipts=receipts+1
+        end
+        assert(receipts==1)
         local event=GameEvents.JAC_Absorption_TestCall
         GameConfiguration.IsAnyMultiplayer=function() return true end
         event.Call('mp','ENGINE','Apply',{PLAN})

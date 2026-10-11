@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData><LocalizedText>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ja_JP"><Text>誓約検査用の建造費用</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="en_US"><Text>Construction costs for oath diagnostics</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ru_RU"><Text>Стоимость строительства для проверки клятв</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ja_JP"><Text>誓約検査用の軍事建造校正</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="en_US"><Text>Military queue calibration diagnostic</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ru_RU"><Text>Проверка производства военных юнитов</Text></Row>
+<Row Tag="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Language="ja_JP"><Text>昇進分類校正用の研究前提</Text></Row><Row Tag="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Language="en_US"><Text>Research prerequisite for promotion-era diagnostics</Text></Row><Row Tag="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Language="ru_RU"><Text>Технология для проверки производства по классу и эпохе</Text></Row></LocalizedText></GameData>

@@ -921,7 +921,14 @@ fn test_transition_waits_after_unknown_reply_without_resending() {
         };
         assert_eq!(lua_count(&f, needle), 1);
         assert_eq!(f.trace().presses.len(), 1);
-        assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
+        assert_eq!(
+            lua_count(&f, "return Game ~= nil and Game.GetLocalPlayer() >= 0"),
+            1
+        );
+        assert_eq!(
+            lua_count(&f, civ6_autotest_rs::runner::HUMAN_TURN_READY_UI),
+            usize::from(action == "start_game")
+        );
     }
 }
 
@@ -1196,7 +1203,7 @@ fn test_end_turn_closes_successive_ai_statements_without_repeating_action() {
     let state_for_states = state.clone();
     backend.on_states = Box::new(move |_| {
         let (action_sent, closed) = *state_for_states.lock().unwrap();
-        let mut states = vec!["InGame".into()];
+        let mut states = vec!["InGame".into(), "GameCore_Tuner".into()];
         if action_sent && closed < 2 {
             states.push("DiplomacyActionView".into());
         }
@@ -1205,7 +1212,8 @@ fn test_end_turn_closes_successive_ai_statements_without_repeating_action() {
     let state_for_lua = state.clone();
     backend.on_lua = Box::new(move |name, code, _| {
         if code == "return Game.GetCurrentGameTurn()" {
-            return Ok("7".into());
+            let (sent, closed) = *state_for_lua.lock().unwrap();
+            return Ok(if sent && closed == 2 { "8" } else { "7" }.into());
         }
         if code.contains("ACTION_ENDTURN") {
             state_for_lua.lock().unwrap().0 = true;

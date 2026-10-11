@@ -174,9 +174,10 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     );
     assert!(ids.contains("BD7A82C5-6B38-4B69-A7F5-8DC9AF534249"));
     assert!(ids.contains("61320778-2E75-4C11-9009-94101B519ABA"));
+    assert!(ids.contains("E4117D8C-4112-4F75-9A50-7D159E361FA4"));
     assert_eq!(
         ids.len(),
-        14,
+        15,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -493,6 +494,15 @@ fn malformed_huge_turn_counters_fail_closed() {
 
 #[test]
 fn shipped_scenario_inventory_and_json_are_intact() {
+    assert_eq!(
+        civ6_autotest_rs::repo_root(),
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap(),
+        "scenario sources must belong to this worktree"
+    );
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let expected:Vec<_>="assassin-leader-save-load.json banseiki-ruleset.json bundle0-load-save.json clans-notebooks.json clans-house-names.json clans-both-ai.json custom-clans.json leader-portraits.json growth-notebooks.json sengoku-trees.json sengoku-starting-knowledge.json sengoku-calendar.json unification-victory.json unification-registry-15km.json unification-pact.json sengoku-house-names-oda.json sengoku-house-names-takeda.json sengoku-alliances.json ages-probe.json sengoku-ages.json sengoku-dark-policy.json sengoku-ages-screens.json historical-events-15km.json religion-persistence.json religion-pressure-probe.json religion-hero-delay.json house-crests.json japan-map-20km.json japan-map-15km.json japan-map-20km-takeda.json japan-map-15km-takeda.json japan-1534-relations.json probe-ally-vision.json probe-alliance-type.json probe-alliance-expiry.json probe-end-alliance.json japan-1534-relations-settlers.json japan-1534-feud-ui.json japan-resources.json japan-no-world-congress.json japan-city-names.json japan-house-city-names.json japan-map-setup-screen.json japan-map-15km-settlers.json japan-map-15km-200turn.json japan-15km-200turn-full.json japan-15km-200turn-tuning.json japan-prosperous-15km.json court-arbitration.json court-arbitration-human.json court-arbitration-ai.json probe-make-peace.json probe-era-timing-standard.json probe-era-timing-quick.json sengoku-era-reigns.json sengoku-oaths-oda.json japan-15km-20turn-full-metrics.json japan-15km-300turn-full-metrics.json sengoku-era-reigns-epic.json sengoku-era-reigns-marathon.json sengoku-era-reigns-beyond-nine.json great-people-zero-musicians.json resources-calendar-epic.json".split_whitespace().map(str::to_string).collect();
     let expected_names: Vec<_> = expected
@@ -566,6 +576,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "multiplayer-japan-staging-assignment.json",
                 "multiplayer-japan-staging-diagnostic.json",
                 "mod-selection-rollback.json",
+                "oath-native-apply-observation-134.json",
+                "oath-native-lifecycle-observation-134.json",
                 "banseiki-pool-hotseat.json",
                 "banseiki-pool-single-player.json",
                 "banseiki-pool-bridge.json",

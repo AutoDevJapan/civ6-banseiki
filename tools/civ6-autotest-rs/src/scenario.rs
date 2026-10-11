@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 17] = [
+pub const ACTIONS: &[&str] = &[
     "restart_game",
     "enable_mods",
     "configure",
@@ -14,6 +14,14 @@ pub const ACTIONS: [&str; 17] = [
     "end_turn",
     "choose_dedication",
     "ui_lua",
+    "oath_exact_removal",
+    "oath_trace_install",
+    "oath_trace_prepare",
+    "oath_trace_ready",
+    "oath_trace_start",
+    "oath_trace_snapshot",
+    "oath_trace_stop",
+    "oath_trace_finalize",
     "carrier_checkpoint",
     "carrier_exchange",
     "screenshot",
@@ -22,6 +30,7 @@ pub const ACTIONS: [&str; 17] = [
     "load",
     "wait_for",
     "pause",
+    "observe_for",
     "manual",
 ];
 pub fn lua_string(value: &str) -> String {
@@ -89,6 +98,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             "judge_profile must be bundle0, generic, growth or japan_map",
         ));
     }
+    if data.get("diagnostic_only").is_some_and(|v| !v.is_boolean())
+        || (data["diagnostic_only"] == true && profile != "generic")
+    {
+        return Err(Error::scenario(
+            "diagnostic_only must be boolean and use the generic profile",
+        ));
+    }
     if profile == "growth" && data["expected_units"].as_i64().is_none_or(|n| n <= 0) {
         return Err(Error::scenario(
             "growth scenario needs a positive expected_units count",
@@ -120,6 +136,33 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
+            "oath_trace_install"
+            | "oath_trace_prepare"
+            | "oath_trace_ready"
+            | "oath_trace_start"
+            | "oath_trace_snapshot"
+            | "oath_trace_stop"
+            | "oath_trace_finalize" => {
+                if data["diagnostic_only"] != true || session != SessionType::SinglePlayer {
+                    return Err(fail(
+                        "oath observer requires a single-player diagnostic".into(),
+                    ));
+                }
+                crate::oath_observation::validate_step(step)?;
+            }
+            "oath_exact_removal" => {
+                if data["diagnostic_only"] != true
+                    || session != SessionType::SinglePlayer
+                    || step
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .any(|key| key != "action" && key != "timeout" && key != "scope")
+                {
+                    return Err(fail("oath_exact_removal requires a single-player diagnostic and only accepts timeout and a known scope".into()));
+                }
+                crate::oath_exact_removal::Scope::from_step(step)?;
+            }
             "restart_game"
                 if step
                     .as_object()
@@ -324,6 +367,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 bool_flags(&["exact_name", "metrics"])?;
             }
             "wait_for" => {
+                if step.get("close_diplomacy").is_some_and(|v| !v.is_boolean()) {
+                    return Err(fail("wait_for close_diplomacy must be boolean".into()));
+                }
                 let c = &step["condition"];
                 match c["type"].as_str() {
                     Some("lua") => {
@@ -361,6 +407,21 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 10.0) =>
             {
                 return Err(fail("pause seconds must be in (0, 10]".into()));
+            }
+            "observe_for" => {
+                if data["diagnostic_only"] != true {
+                    return Err(fail("observe_for requires diagnostic_only: true".into()));
+                }
+                let seconds = step["seconds"]
+                    .as_f64()
+                    .filter(|n| n.is_finite() && *n > 0.0 && *n <= 120.0)
+                    .ok_or_else(|| fail("observation seconds must be in (0, 120]".into()))?;
+                if !step["timeout"]
+                    .as_f64()
+                    .is_some_and(|n| n.is_finite() && n > seconds)
+                {
+                    return Err(fail("observation timeout must exceed its duration".into()));
+                }
             }
             "manual" => {
                 if step["prompt"].as_str().is_none_or(|s| s.trim().is_empty()) {

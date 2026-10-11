@@ -17,7 +17,58 @@ use std::{
 
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
+/// Official ActionPanel treats activation, message processing, and an end-turn
+/// request as distinct states. Generators and the runner share these predicates.
+pub const CORE_PLAYER0_READY: &str =
+    "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()";
+pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false";
+/// An observer starts before the dedication popup's official choice; that
+/// modal may forbid ending the turn even while the actor's turn is complete.
+pub const OATH_OBSERVER_READY_UI: &str = "local p=Game.GetLocalPlayer(); return p==0 and Players[p] and Players[p]:IsHuman() and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and not UI.HasSentTurnComplete()";
+
 pub trait Backend: Send {
+    fn oath_trace_failure_snapshot(&mut self) -> Result<Option<Value>> {
+        Ok(None)
+    }
+    fn oath_trace_remaining(&mut self) -> Result<Option<f64>> {
+        Ok(None)
+    }
+    fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
+        Err(Error::input(
+            "shared lifecycle observer session unavailable",
+        ))
+    }
+    fn oath_trace_finalize(&mut self, _timeout: f64) -> Result<Value> {
+        Err(Error::input(
+            "final lifecycle capture unavailable on this backend",
+        ))
+    }
+    fn oath_trace_operation(
+        &mut self,
+        _operation: crate::oath_observation::Operation,
+        _install: Option<&crate::oath_observation::Install>,
+    ) -> Result<Value> {
+        Err(Error::input(
+            "native oath observation unavailable on this backend",
+        ))
+    }
+    fn oath_exact_removal_scope(
+        &mut self,
+        scope: crate::oath_exact_removal::Scope,
+    ) -> Result<Value> {
+        if scope == crate::oath_exact_removal::Scope::Legacy {
+            self.oath_exact_removal()
+        } else {
+            Err(Error::input(
+                "backend does not support naval/building exact removal",
+            ))
+        }
+    }
+    fn oath_exact_removal(&mut self) -> Result<Value> {
+        Err(Error::input(
+            "backend does not support the native exact-removal diagnostic",
+        ))
+    }
     fn begin_steam_observation(&mut self, _journal: &Path) -> Result<()> {
         Ok(())
     }
@@ -202,6 +253,8 @@ mod reliability_failure_tests {
 
 #[derive(Default)]
 pub struct SystemBackend {
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    oath_observer: Option<crate::oath_controller_windows::Session>,
     steam_session: Option<crate::steam_dialog::Session>,
     steam_sync: Option<crate::steam_sync::Monitor>,
     steam_journal: Option<PathBuf>,
@@ -214,6 +267,144 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn oath_trace_failure_snapshot(&mut self) -> Result<Option<Value>> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            self.oath_observer
+                .as_ref()
+                .map_or(Ok(None), |session| session.failure_snapshot())
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Ok(None)
+    }
+    fn oath_trace_remaining(&mut self) -> Result<Option<f64>> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            Ok(self
+                .oath_observer
+                .as_ref()
+                .and_then(|session| session.remaining_budget())
+                .map(|budget| budget.as_secs_f64()))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Ok(None)
+    }
+    fn oath_trace_exit_budget(&mut self) -> Result<Option<f64>> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            self.oath_observer
+                .as_mut()
+                .ok_or_else(|| Error::input("oath observer session missing"))?
+                .exit_request_budget()
+                .map(|budget| budget.map(|d| d.as_secs_f64()))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Err(Error::input(
+            "shared lifecycle capture requires Windows x86_64",
+        ))
+    }
+    fn oath_trace_finalize(&mut self, timeout: f64) -> Result<Value> {
+        if !timeout.is_finite() || timeout <= 0.0 || timeout > 300.0 {
+            return Err(Error::input("invalid final lifecycle timeout"));
+        }
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            // Session owns the original process handle and previously checked
+            // the real mode. The game's Lua and live startup check may no
+            // longer exist; finalization must not request them after exit.
+            self.oath_observer
+                .as_mut()
+                .ok_or_else(|| Error::input("oath observer session missing"))?
+                .finalize(std::time::Duration::from_secs_f64(timeout))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        Err(Error::input(
+            "final lifecycle capture requires Windows x86_64",
+        ))
+    }
+    fn oath_trace_operation(
+        &mut self,
+        operation: crate::oath_observation::Operation,
+        install: Option<&crate::oath_observation::Install>,
+    ) -> Result<Value> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            use crate::oath_observation::Operation;
+            let pin = self.startup_pin.as_ref().ok_or_else(|| {
+                Error::input("oath observer requires this driver's newly launched game")
+            })?;
+            pin.check_remaining()?;
+            let game = pin.game;
+            let proof = match operation {
+                Operation::Install | Operation::Prepare => {
+                    if self.oath_observer.is_some() {
+                        return Err(Error::input("oath observer already owns this session"));
+                    }
+                    let request =
+                        install.ok_or_else(|| Error::input("oath install request missing"))?;
+                    let session = crate::oath_controller_windows::Session::install_capture_mode(
+                        game,
+                        &request.dll,
+                        &request.sha256,
+                        request.max_seconds,
+                        request.callee,
+                        request.lifecycle,
+                        request.cold,
+                    )?;
+                    let proof = session.identity();
+                    self.oath_observer = Some(session);
+                    proof
+                }
+                _ => {
+                    let session = self
+                        .oath_observer
+                        .as_mut()
+                        .ok_or_else(|| Error::input("oath observer session missing"))?;
+                    match operation {
+                        Operation::Start => session.start()?,
+                        Operation::Snapshot => session.snapshot()?,
+                        Operation::Stop => session.stop()?,
+                        Operation::Ready => session.ready()?,
+                        Operation::Install | Operation::Prepare => unreachable!(),
+                        Operation::Finalize => {
+                            return Err(Error::input(
+                                "finalize requires an explicit finite timeout",
+                            ))
+                        }
+                    }
+                }
+            };
+            self.startup_pin
+                .as_ref()
+                .ok_or_else(|| Error::input("owned game pin disappeared"))?
+                .check_remaining()?;
+            Ok(proof)
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        {
+            let _ = (operation, install);
+            Err(Error::input(
+                "native oath observation requires Windows x86_64",
+            ))
+        }
+    }
+    fn oath_exact_removal_scope(
+        &mut self,
+        scope: crate::oath_exact_removal::Scope,
+    ) -> Result<Value> {
+        let pin = self.startup_pin.as_ref().ok_or_else(|| {
+            Error::input("exact-removal diagnostic requires this driver's newly launched game")
+        })?;
+        pin.check_remaining()?;
+        crate::oath_exact_removal::apply_for_scope(pin.game, scope)
+    }
+    fn oath_exact_removal(&mut self) -> Result<Value> {
+        let pin = self.startup_pin.as_ref().ok_or_else(|| {
+            Error::input("exact-removal diagnostic requires this driver's newly launched game")
+        })?;
+        pin.check_remaining()?;
+        crate::oath_exact_removal::apply(pin.game)
+    }
     fn begin_steam_observation(&mut self, journal: &Path) -> Result<()> {
         let monitor = crate::steam_sync::Monitor::new(crate::steam_sync::cloud_log())?;
         crate::steam_sync::journal(journal, "begin", &monitor)?;
@@ -313,7 +504,9 @@ impl Backend for SystemBackend {
     }
     fn release_startup_lock(&mut self) {
         self.startup_lease = None;
-        self.startup_pin = None;
+        // Recovery's lease ends here, but the retry's process identity is
+        // still needed by later diagnostics. A subsequent launch replaces
+        // the pin; dropping the backend releases it.
     }
     fn check_startup_process(&mut self, game: crate::startup::GameProcess) -> Result<()> {
         let pin = self
@@ -675,7 +868,7 @@ impl Runner {
                     )?;
                     if diplomacy_closes > 25 {
                         return Err(Error::scenario(
-                            "AI diplomacy screens keep reopening during one end_turn",
+                            "Blocking popup screens keep reopening during one end_turn",
                         ));
                     }
                 }
@@ -935,6 +1128,42 @@ impl Runner {
             "Timed out waiting for options menu to close",
         ))
     }
+    /// A loading screen can finish before optional blocking UI appears. Keep
+    /// servicing only the existing options/advisor closers until the real human
+    /// start-complete flag arrives; do not end a turn or fabricate readiness.
+    pub fn wait_initial_human_ready(&mut self, deadline: f64) -> Result<()> {
+        while self.clock.now() < deadline {
+            let ready = self.retry_idempotent(deadline, |r| {
+                r.lua("InGame", HUMAN_TURN_READY_UI, r.budget(deadline, 5.0)?)
+            })?;
+            match ready.as_str() {
+                "true" => {
+                    self.log(
+                        "initial_human_ready",
+                        "OK",
+                        "actual human start complete and UI message queue idle",
+                    )?;
+                    return Ok(());
+                }
+                "false" => {}
+                _ => {
+                    return Err(Error::scenario(format!(
+                        "unexpected initial human readiness: {ready:?}"
+                    )))
+                }
+            }
+            let menu = self.close_options_menu(deadline)?;
+            let advisor = self.dismiss_advisor_once(deadline)?;
+            if menu || advisor {
+                self.log("initial_human_blocker", "CLOSED", &format!("options={menu}, advisor={advisor}; observing readiness without replaying game start"))?;
+            }
+            self.sleep_until(deadline, 0.5);
+        }
+        Err(Error::scenario(
+            "initial human start did not complete before the original game-start deadline",
+        ))
+    }
+
     pub fn dismiss_advisor(&mut self, deadline: f64) -> Result<bool> {
         self.retry_idempotent(deadline, |r| r.dismiss_advisor_once(deadline))
     }
@@ -958,6 +1187,14 @@ impl Runner {
     pub fn close_diplomacy_once(&mut self, deadline: f64) -> Result<Vec<String>> {
         let states = self.states(self.budget(deadline, 5.0)?)?;
         let mut closed = vec![];
+        // An advisor can appear after the end-turn request and retain the UI
+        // event (AdvisorPopup.lua:232-243). Dismissing only before/after the wait
+        // deadlocks playback. The existing blocking predicate gates Continue.
+        if states.iter().any(|s| state_name_eq(s, "AdvisorPopup"))
+            && self.dismiss_advisor_once(deadline)?
+        {
+            closed.push("blocking Advisor popup".to_string());
+        }
         for (state, call, label) in POPUP_CLOSERS {
             if state_available(&states, state)
                 && self.lua(
@@ -1709,7 +1946,7 @@ impl Runner {
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
         let start = parse_integer(&self.lua(
-            "InGame",
+            "GameCore_Tuner",
             "return Game.GetCurrentGameTurn()",
             self.budget(deadline, 5.0)?,
         )?)?;
@@ -1728,21 +1965,35 @@ impl Runner {
             "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
             self.budget(deadline, 5.0)?,
         )?;
-        let condition = if let Some(human) = human {
-            format!("local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nlocal turn = Game.GetCurrentGameTurn()\nif turn > {} then error('hotseat skipped more than one round') end\nreturn turn >= {start} and id >= 0 and (id ~= {human} or turn > {start}) and p ~= nil and p:IsHuman() and p:IsTurnActive()", start + 1)
+        if let Some(human) = human {
+            let condition = format!("local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nlocal turn = Game.GetCurrentGameTurn()\nif turn > {} then error('hotseat skipped more than one round') end\nreturn turn >= {start} and id >= 0 and (id ~= {human} or turn > {start}) and p ~= nil and p:IsHuman() and p:IsTurnActive()", start + 1);
+            self.wait(
+                &json!({"type":"lua","state_name":"InGame","code":condition}),
+                self.remaining(deadline)?,
+                true,
+            )?;
+            self.accept_hotseat_turn(deadline, true)?;
         } else {
-            format!(
-                "return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",
-                start + 1
-            )
-        };
-        self.wait(
-            &json!({"type":"lua","state_name":"InGame","code":condition}),
-            self.remaining(deadline)?,
-            true,
-        )?;
-        self.accept_hotseat_turn(deadline, true)?;
+            self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":format!("local turn=Game.GetCurrentGameTurn(); if turn>{} then error('end_turn advanced past its single-turn target') end; return turn == {}",start+1,start+1)}),self.remaining(deadline)?,true)?;
+            self.wait(
+                &json!({"type":"lua","state_name":"InGame","code":HUMAN_TURN_READY_UI}),
+                self.remaining(deadline)?,
+                true,
+            )?;
+        }
         self.dismiss_advisor(deadline)?;
+        let finish = parse_integer(&self.lua(
+            "GameCore_Tuner",
+            "return Game.GetCurrentGameTurn()",
+            self.budget(deadline, 5.0)?,
+        )?)?;
+        if (human.is_none() && finish != start + 1)
+            || (human.is_some() && !(start..=start + 1).contains(&finish))
+        {
+            return Err(Error::scenario(format!(
+                "end_turn advanced beyond its single-turn target while waiting for human control: {start}->{finish}"
+            )));
+        }
         self.remaining(deadline)?;
         if let Some(human) = human {
             let next = self.lua("InGame", "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Game.GetLocalPlayer())", self.budget(deadline, 5.0)?)?;
@@ -1889,7 +2140,21 @@ impl Runner {
             } else {
                 120.0
             });
-        let deadline = self.clock.now() + timeout;
+        let mut deadline = self.clock.now() + timeout;
+        if !matches!(
+            action,
+            "oath_trace_ready" | "oath_trace_snapshot" | "oath_trace_finalize"
+        ) {
+            let budget_at = self.clock.now();
+            if let Some(remaining) = self.backend.oath_trace_remaining()? {
+                if !remaining.is_finite() || remaining <= 0.0 {
+                    return Err(Error::input(
+                        "oath observation budget expired before this step",
+                    ));
+                }
+                deadline = deadline.min(budget_at + remaining);
+            }
+        }
         match action {
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
@@ -1992,6 +2257,7 @@ impl Runner {
                     let owner_deadline = self.clock.now() + wait;
                     self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
                     self.check_start_turn(owner_deadline)?;
+                    self.wait_initial_human_ready(owner_deadline)?;
                     return Ok(
                         "owner pressed Start Game; single-player game reached InGame".into(),
                     );
@@ -2015,6 +2281,9 @@ impl Runner {
                 }
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
                 self.check_start_turn(deadline)?;
+                if session == scenario::SessionType::SinglePlayer {
+                    self.wait_initial_human_ready(deadline)?;
+                }
                 self.accept_hotseat_turn(deadline, true)?;
                 Ok(match session {
                     scenario::SessionType::SinglePlayer => "single-player game reached InGame",
@@ -2145,6 +2414,176 @@ impl Runner {
                     target.display()
                 ))
             }
+            "oath_trace_install"
+            | "oath_trace_prepare"
+            | "oath_trace_ready"
+            | "oath_trace_start"
+            | "oath_trace_snapshot"
+            | "oath_trace_stop"
+            | "oath_trace_finalize" => {
+                use crate::oath_observation::{self, Operation};
+                let operation = oath_observation::validate_step(step)?;
+                oath_observation::validate_mode(
+                    self.test_mode,
+                    self.scenario["diagnostic_only"] == true,
+                    crate::session::SessionType::from_scenario(&self.scenario)?
+                        != crate::session::SessionType::SinglePlayer,
+                )?;
+                if operation == Operation::Prepare {
+                    let verified=self.lua("FrontEnd", "if not UI.IsInFrontEnd() then error('cold diagnostic requires FrontEnd') end\nif GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nif GameConfiguration.GetValue('JAC_AUTOTEST') ~= 1 then error('actual diagnostic setting required') end\nreturn true",self.budget(deadline,5.0)?)?;
+                    if verified != "true" {
+                        return Err(Error::input(
+                            "cold actual setting confirmation was not true",
+                        ));
+                    }
+                } else if operation != Operation::Finalize {
+                    self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
+                }
+                if matches!(operation, Operation::Install | Operation::Start) {
+                    self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":CORE_PLAYER0_READY}), self.remaining(deadline)?, false)?;
+                    self.wait(
+                        &json!({"type":"lua","state_name":"InGame","code":OATH_OBSERVER_READY_UI}),
+                        self.remaining(deadline)?,
+                        false,
+                    )?;
+                }
+                let install = if matches!(operation, Operation::Install | Operation::Prepare) {
+                    Some(oath_observation::install_request(step)?)
+                } else {
+                    None
+                };
+                let path = self.output.join(format!(
+                    "oath-observation-{}-{}.json",
+                    self.completed_steps + 1,
+                    action
+                ));
+                let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+                file.write_all(&serde_json::to_vec_pretty(&json!({
+                    "action":action,"status":"reserved_before_native_call",
+                    "diagnostic_only":true,"quantity_accepted":false,"product_accepted":false
+                }))?)?;
+                file.sync_all()?;
+                self.remaining(deadline)?;
+                let proof = if operation == Operation::Finalize {
+                    let budget_at = self.clock.now();
+                    let exit_budget = self.backend.oath_trace_exit_budget()?;
+                    // A fresh Steam generation is independent of whether a
+                    // UI close is needed. Old sync cannot satisfy this close.
+                    self.backend
+                        .begin_steam_observation(&self.output.join("oath-exit-steam-sync.jsonl"))?;
+                    if let Some(budget) = exit_budget {
+                        let exit_until = deadline.min(budget_at + budget);
+                        // Two UI requests can use five seconds each, and the
+                        // existing Steam release observation needs ten seconds.
+                        // Keep five seconds for process exit and final copies.
+                        if self.remaining(exit_until)? < 25.0 {
+                            return Err(Error::input(
+                                "insufficient lifecycle budget for exit and Steam synchronization",
+                            ));
+                        }
+                        self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(exit_until, 5.0)?)?;
+                        let close_budget = self.budget(exit_until, 5.0)?;
+                        // Vanilla InGameTopOptionsMenu.OnExitGame and the
+                        // shared chain use this official request. Send once;
+                        // a lost response may mean the game already exited.
+                        match self.lua(
+                            "InGame",
+                            "Events.UserConfirmedClose()\nreturn true",
+                            close_budget,
+                        ) {
+                            Ok(_) => {}
+                            Err(error) if error.kind == ErrorKind::LuaResponseUnknown => {
+                                self.log("oath_trace_exit_request", "UNKNOWN", &error.to_string())?;
+                            }
+                            Err(error) => return Err(error),
+                        }
+                        self.disconnect();
+                    }
+                    self.backend
+                        .oath_trace_finalize(self.remaining(deadline)?.min(300.0))?
+                } else {
+                    self.backend
+                        .oath_trace_operation(operation, install.as_ref())?
+                };
+                // Even a successful observer operation never accepts an effect
+                // quantity, ruleset installation or a product requirement.
+                let proof = json!({"diagnostic_only":true,"quantity_accepted":false,
+                    "product_accepted":false,"native_observation":proof});
+                use std::io::{Seek, SeekFrom};
+                file.seek(SeekFrom::Start(0))?;
+                file.set_len(0)?;
+                file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
+                file.sync_all()?;
+                self.remaining(deadline)?;
+                if operation == Operation::Ready
+                    && proof["native_observation"]["installed_before_target_context"] != true
+                {
+                    return Err(Error::input(
+                        "cold lifecycle readiness was not confirmed; raw receipt preserved",
+                    ));
+                }
+                if operation == Operation::Finalize
+                    && (proof["native_observation"]["process_exit_observed"] != true
+                        || proof["native_observation"]["controller_deadline_expired"] != false
+                        || proof["native_observation"]["process_exit_code"] != 0)
+                {
+                    return Err(Error::unknown("final lifecycle process exit was not confirmed within budget; raw evidence preserved"));
+                }
+                if operation == Operation::Finalize {
+                    let remaining = proof["native_observation"]["controller_remaining_seconds"].as_f64()
+                        .filter(|n| n.is_finite() && *n > 0.0)
+                        .ok_or_else(|| Error::unknown("no lifecycle budget remains for Steam synchronization; raw evidence preserved"))?;
+                    let sync_until =
+                        self.clock.now() + self.remaining(deadline)?.min(remaining).min(45.0);
+                    self.wait_steam_exit(sync_until, false)?;
+                    self.remaining(sync_until)?;
+                    if proof["native_observation"].get("cold_receipt").is_some()
+                        && (proof["native_observation"]["cold_loader_context_root_observed"]
+                            != true
+                            || proof["native_observation"]["application_teardown_diagnostic"]
+                                != "observed")
+                    {
+                        return Err(Error::input("cold root or application teardown was not observed; raw capture preserved after Steam synchronization"));
+                    }
+                }
+                Ok(format!("native oath observation: {proof}"))
+            }
+            "oath_exact_removal" => {
+                let scope = crate::oath_exact_removal::Scope::from_step(step)?;
+                crate::oath_exact_removal::validate(
+                    self.test_mode,
+                    self.scenario["diagnostic_only"] == true,
+                    crate::session::SessionType::from_scenario(&self.scenario)?
+                        != crate::session::SessionType::SinglePlayer,
+                )?;
+                self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
+                self.wait(
+                    &json!({"type":"lua","state_name":"GameCore_Tuner","code":CORE_PLAYER0_READY}),
+                    self.remaining(deadline)?,
+                    false,
+                )?;
+                self.wait(
+                    &json!({"type":"lua","state_name":"InGame","code":HUMAN_TURN_READY_UI}),
+                    self.remaining(deadline)?,
+                    false,
+                )?;
+                self.remaining(deadline)?;
+                let path = self
+                    .output
+                    .join(if scope == crate::oath_exact_removal::Scope::Legacy {
+                        "oath-exact-removal.json"
+                    } else {
+                        "oath-exact-removal-naval-buildings-v1.json"
+                    });
+                let mut file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)?;
+                let proof = self.backend.oath_exact_removal_scope(scope)?;
+                file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
+                self.remaining(deadline)?;
+                Ok(format!("native exact-removal diagnostic: {proof}"))
+            }
             "ui_lua" => {
                 let mut attempts = 0;
                 let value = loop {
@@ -2233,11 +2672,33 @@ impl Runner {
                 Ok("main menu reached".into())
             }
             "wait_for" => {
-                self.wait(&step["condition"], self.remaining(deadline)?, false)?;
+                let close_diplomacy = match step.get("close_diplomacy") {
+                    None => false,
+                    Some(value) => value.as_bool().ok_or_else(|| {
+                        Error::scenario("wait_for close_diplomacy must be boolean")
+                    })?,
+                };
+                self.wait(
+                    &step["condition"],
+                    self.remaining(deadline)?,
+                    close_diplomacy,
+                )?;
                 Ok(format!("condition met: {}", step["condition"]))
             }
-            "pause" => {
-                let seconds = step["seconds"].as_f64().unwrap();
+            "pause" | "observe_for" => {
+                if action == "observe_for" && self.scenario["diagnostic_only"] != true {
+                    return Err(Error::scenario(
+                        "observe_for requires diagnostic_only: true",
+                    ));
+                }
+                let seconds = step["seconds"].as_f64().ok_or_else(|| {
+                    Error::scenario("observation or pause requires numeric seconds")
+                })?;
+                if action == "observe_for"
+                    && (!seconds.is_finite() || seconds <= 0.0 || seconds > 120.0)
+                {
+                    return Err(Error::scenario("observation seconds must be in (0, 120]"));
+                }
                 if seconds > self.remaining(deadline)? {
                     return Err(Error::scenario("Step deadline would expire during pause"));
                 }
@@ -2246,7 +2707,11 @@ impl Runner {
                 self.disconnect();
                 self.clock.sleep(seconds);
                 self.remaining(deadline)?;
-                Ok(format!("paused {seconds}s for UI animation"))
+                Ok(if action == "observe_for" {
+                    format!("observed {seconds}s; diagnostic only, no acceptance")
+                } else {
+                    format!("paused {seconds}s for UI animation")
+                })
             }
             _ => Err(Error::scenario(format!("Unknown action: {action}"))),
         }
@@ -2914,6 +3379,14 @@ impl Runner {
         self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;
         let code = match self.run_inner() {
+            Ok(0) if self.scenario["diagnostic_only"] == true => {
+                self.log(
+                    "diagnostic",
+                    "OBSERVED",
+                    "observation complete; acceptance not evaluated; exit 3",
+                )?;
+                3
+            }
             Ok(v) => v,
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
@@ -3056,6 +3529,23 @@ impl Runner {
                 Err(e) => {
                     self.failure = Some(e.to_string());
                     self.record_failure(Some(step), Some(i), &e);
+                    let save_trace = (|| -> Result<()> {
+                        if let Some(trace) = self.backend.oath_trace_failure_snapshot()? {
+                            let mut file = OpenOptions::new()
+                                .write(true)
+                                .create_new(true)
+                                .open(self.output.join("oath-observation-failure.json"))?;
+                            file.write_all(&serde_json::to_vec_pretty(&json!({"failure":e.to_string(),
+                                "native_observation":trace,"quantity_accepted":false,"product_accepted":false}))?)?;
+                            file.sync_all()?;
+                        }
+                        Ok(())
+                    })();
+                    if let Err(trace_error) = save_trace {
+                        eprintln!(
+                            "Original failure: {e}; saving owned trace failed: {trace_error}"
+                        );
+                    }
                     if e.kind == ErrorKind::Interrupted {
                         return Err(e);
                     }
@@ -3143,7 +3633,13 @@ impl Runner {
             .into_iter()
             .map(|(name, rows)| (name, metrics::summarize_turns(&rows)))
             .collect();
-        let result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"failure_boundary":self.failure_boundary,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        let mut result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"failure_boundary":self.failure_boundary,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        if self.scenario["diagnostic_only"] == true {
+            result["diagnostic_only"] = true.into();
+            result["observation_completed"] = self.result_passed.into();
+            result["passed"] = false.into();
+            result["acceptance_passed"] = false.into();
+        }
         fs::write(
             self.output.join("result.json"),
             format!("{}\n", serde_json::to_string_pretty(&result)?),
