@@ -255,7 +255,9 @@ local function AdvanceLoyalty(city, governance, pending, phase, delta)
     pending.IssuedPublication = request and request.AfterPublication
     city:SetProperty(R.GOVERNANCE_KEY, governance)
     TraceLoyalty(city, governance, pending, phase, nil, nil, "ISSUED")
+    TraceLoyalty(city, governance, pending, phase, nil, nil, "NATIVE_CALL")
     city:ChangeLoyalty(delta)
+    TraceLoyalty(city, governance, pending, phase, nil, nil, "NATIVE_RETURN")
   end
   if pending.Before == pending.Target then
     TraceLoyalty(city, governance, pending, phase, pending.Before, pending.BeforePublication, "UNCHANGED_TARGET")
