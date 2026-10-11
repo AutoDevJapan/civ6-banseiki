@@ -1333,6 +1333,12 @@ fn main_owned(
         }
         let (live_json, artifacts) = (lines[lines.len() - 2], lines[lines.len() - 1]);
         let scenario_timeout = driver::scenario_timeout(Path::new(live_json))?;
+        let auto_source = p
+            .live()
+            .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs");
+        if !auto_source.is_file() && p.live().join(".git").exists() {
+            return Err("live checkout lacks autosave isolation source; refusing to run against original autosaves".into());
+        }
         // Reserve ship's sequence directory before running the driver. This
         // works with the installed ship protocol (only two output lines) and
         // keeps its next save/load suffix unique, including failed spawns.
@@ -1363,6 +1369,16 @@ fn main_owned(
                 state.summary["source_tree"] = json!(tree);
             }
             artifacts
+        } else if auto_source.is_file() {
+            // Reserve ship's sequence root for the autosave archive, while
+            // leaving the driver's leaf absent for its CREATE_NEW contract.
+            // RESULT continues to identify the actual driver output directory.
+            let root = Path::new(artifacts);
+            fs::create_dir_all(root.parent().ok_or("artifact root has no parent")?)
+                .map_err(|e| e.to_string())?;
+            fs::create_dir(root)
+                .map_err(|e| format!("reserve ordinary artifacts {}: {e}", root.display()))?;
+            path(root.join("run"))
         } else {
             artifacts.into()
         };
@@ -1406,12 +1422,6 @@ fn main_owned(
             .managed()
             .timeout(timeout);
         command.lease = lease.clone();
-        let auto_source = p
-            .live()
-            .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs");
-        if !auto_source.is_file() && p.live().join(".git").exists() {
-            return Err("live checkout lacks autosave isolation source; refusing to run against original autosaves".into());
-        }
         if auto_source.is_file() {
             // begin can move the original folder before returning an error.
             // Arm recovery before dispatch, including unknown/timeout outcomes.
@@ -1420,16 +1430,9 @@ fn main_owned(
                 .live()
                 .join("tools/target/release/civ6-save-isolation.exe");
             let state = p.here.join("reliability-auto-state.json");
-            let archive = if options.reliability {
-                Path::new(&artifacts)
-                    .parent()
-                    .ok_or("autosave isolation artifact parent missing")?
-            } else {
-                // Each ordinary run retains its own test autosaves. Sharing
-                // the parent would collide with a previous run's test-auto.
-                fs::create_dir_all(&artifacts).map_err(|e| e.to_string())?;
-                Path::new(&artifacts)
-            };
+            let archive = Path::new(&artifacts)
+                .parent()
+                .ok_or("autosave isolation artifact parent missing")?;
             let out = r.run(
                 Call::new(args(&[
                     &path(auto),
