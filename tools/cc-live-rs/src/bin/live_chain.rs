@@ -73,6 +73,64 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 fn original_hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
+fn recovery_path(lock: &Path) -> PathBuf {
+    lock.with_file_name("appoptions-restore-state.json")
+}
+fn persist_recovery(path: &Path, value: &serde_json::Value) -> Result<(), String> {
+    // Publish durably before AppOptions can change. Existing recovery is never
+    // replaced by a new run's backup, including a partial/unknown publication.
+    let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| format!("create recovery {}: {e}", path.display()))?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| format!("persist recovery {}: {e}", path.display()))
+}
+fn recover_profile(lock_path: &Path, path: &Path, expected_token: &str) -> Result<(), String> {
+    let receipt = recovery_path(lock_path);
+    let bytes = match fs::read(&receipt) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("read AppOptions recovery: {e}")),
+    };
+    let mut lock = OpenOptions::new()
+        .read(true)
+        .share_mode(3)
+        .open(lock_path)
+        .map_err(|e| e.to_string())?;
+    let created = self_creation()?;
+    validate_owner(&read_owner(&mut lock)?, created, Some(expected_token))?;
+    let state: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("invalid AppOptions recovery; launch refused: {e}"))?;
+    if state["version"] != 1 || state["options"].as_str() != path.to_str() {
+        return Err("AppOptions recovery target/version mismatch; launch refused".into());
+    }
+    let backup = PathBuf::from(state["backup"].as_str().ok_or("recovery backup missing")?);
+    let hash = state["original_sha256"]
+        .as_str()
+        .ok_or("recovery hash missing")?;
+    // Hash and consume the same bytes; never overwrite the retained backup.
+    let original = fs::read(&backup).map_err(|e| format!("read recovery backup: {e}"))?;
+    if original_hash(&original) != hash
+        || state["original_bytes"].as_u64() != Some(original.len() as u64)
+    {
+        return Err("AppOptions recovery backup differs; launch refused".into());
+    }
+    validate_owner(&read_owner(&mut lock)?, created, Some(expected_token))?;
+    atomic_write(path, &original)?;
+    if fs::read(path).map_err(|e| e.to_string())? != original {
+        return Err("AppOptions recovery verification failed; launch refused".into());
+    }
+    fs::remove_file(&receipt).map_err(|e| format!("clear AppOptions recovery: {e}"))?;
+    println!(
+        "PROFILE RECOVERED sha256={hash} verified=true before_new_apply=true backup={}",
+        backup.display()
+    );
+    Ok(())
+}
 fn self_creation() -> Result<u64, String> {
     cc_live::chain::process_created_filetime(std::process::id())?
         .filter(|value| *value != 0)
@@ -117,10 +175,10 @@ struct Profile {
     created: u64,
     path: PathBuf,
     backup: PathBuf,
+    recovery: PathBuf,
     original: Vec<u8>,
     modified: Vec<u8>,
     hash: String,
-    write_attempted: bool,
 }
 impl Profile {
     fn prepare(
@@ -156,6 +214,16 @@ impl Profile {
             return Err("backup bytes differ from original; apply refused".into());
         }
         let hash = original_hash(&original);
+        let recovery = recovery_path(lock_path);
+        persist_recovery(
+            &recovery,
+            &serde_json::json!({
+                "version":1, "options":path, "backup":backup,
+                "original_sha256":hash, "original_bytes":original.len(),
+                "pid":std::process::id(), "pid_created_filetime":created,
+                "lock_token":token
+            }),
+        )?;
         println!("PROFILE ORIGINAL sha256={hash} backup={}", backup.display());
         Ok(Self {
             lock,
@@ -163,10 +231,10 @@ impl Profile {
             created,
             path: path.into(),
             backup: backup.into(),
+            recovery,
             original,
             modified,
             hash,
-            write_attempted: false,
         })
     }
     fn validate(&mut self) -> Result<(), String> {
@@ -185,7 +253,6 @@ impl Profile {
         if fs::read(&self.path).map_err(|e| e.to_string())? != self.original {
             return Err("AppOptions changed before apply; apply refused".into());
         }
-        self.write_attempted = true;
         atomic_write(&self.path, &self.modified)?;
         if fs::read(&self.path).map_err(|e| e.to_string())? != self.modified {
             return Err("applied graphics bytes differ; restoration required".into());
@@ -204,6 +271,8 @@ impl Profile {
         if fs::read(&self.path).map_err(|e| e.to_string())? != self.original {
             return Err("restored graphics bytes differ from original".into());
         }
+        fs::remove_file(&self.recovery)
+            .map_err(|e| format!("clear verified AppOptions recovery: {e}"))?;
         println!(
             "PROFILE RESTORED sha256={} verified=true before_lease_release=true backup={}",
             self.hash,
@@ -318,11 +387,6 @@ struct Scoped<R: ProfileRunner> {
 impl<R: ProfileRunner> Scoped<R> {
     fn restore_if_closed(&mut self, deadline: Instant) -> Result<bool, String> {
         if self.profile.is_none() {
-            return Ok(true);
-        }
-        if !self.profile.as_ref().unwrap().write_attempted {
-            drop(self.profile.take());
-            cc_live::process::finish_external_cleanup();
             return Ok(true);
         }
         if self.inner.game_running(deadline)? {
@@ -443,6 +507,13 @@ impl<R: ProfileRunner> Runner for Scoped<R> {
             let backup = self
                 .backup_dir
                 .join(format!("warp-options-{}.backup", unique_suffix()));
+            // The standard lease and the confirmed game absence span recovery.
+            // Failure leaves the old receipt intact and prevents driver launch.
+            recover_profile(
+                &self.paths.here.join("civ6.lock"),
+                &self.options,
+                expected_token,
+            )?;
             let profile = Profile::prepare(
                 &self.paths.here.join("civ6.lock"),
                 &self.options,
@@ -511,7 +582,7 @@ fn main() {
         profile: None,
         paths: paths.clone(),
         options,
-        backup_dir: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+        backup_dir: paths.here.clone(),
         restore_deadline: None,
         start_token: None,
     };

@@ -132,7 +132,9 @@ impl Runner for Model {
             return Ok(Output::default());
         }
         if call.args.get(1).is_some_and(|s| s == "live") {
-            assert_eq!(fs::read(&self.options).unwrap(), ORIGINAL);
+            if !recovery_path(&self.paths.here.join("civ6.lock")).exists() {
+                assert_eq!(fs::read(&self.options).unwrap(), ORIGINAL);
+            }
             assert!(self.paths.here.join("civ6.lock").exists());
             return Ok(match self.mode {
                 Mode::PrepareFail => Output {
@@ -177,7 +179,9 @@ impl Runner for Model {
         }))
     }
     fn before_lease_release(&mut self, _: f64) -> Result<(), String> {
-        assert_eq!(fs::read(&self.options).unwrap(), ORIGINAL);
+        if !recovery_path(&self.paths.here.join("civ6.lock")).exists() {
+            assert_eq!(fs::read(&self.options).unwrap(), ORIGINAL);
+        }
         assert!(self.paths.here.join("civ6.lock").exists());
         self.releases += 1;
         Ok(())
@@ -252,6 +256,7 @@ fn standard_chain_normal_and_driver_error_restore_before_release() {
         assert_eq!(r.inner.releases, 1);
         assert!(r.profile.is_none());
         assert_eq!(fs::read(&f.options).unwrap(), ORIGINAL);
+        assert!(!recovery_path(&f.paths.here.join("civ6.lock")).exists());
         assert_eq!(fs::read(&f.backups()[0]).unwrap(), ORIGINAL);
         assert!(!f.paths.here.join("civ6.lock").exists());
     }
@@ -516,4 +521,101 @@ fn native_identity_service_is_forwarded_and_original_sha_is_stable() {
         original_hash(b"abc"),
         "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
+}
+
+#[test]
+fn next_standard_single_run_recovers_failed_restore_before_applying_new_profile() {
+    let f = Fixture::new();
+    f.driver();
+    f.lock(&f.owner());
+    let mut previous = f.runner(Mode::Success);
+    previous
+        .start_scenario(
+            "START fixture s.json civ6=closed-before-prepare",
+            Some("fixture-owner"),
+            90.0,
+        )
+        .unwrap();
+    let old_backup = f.backups()[0].clone();
+    let receipt = recovery_path(&f.paths.here.join("civ6.lock"));
+    let blocker = OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(&f.options)
+        .unwrap();
+    assert!(previous.before_lease_release(0.001).is_err());
+    assert!(receipt.exists());
+    assert_eq!(fs::read(&old_backup).unwrap(), ORIGINAL);
+    // Simulate process exit: OS releases the pin; persisted state must survive.
+    drop(previous);
+    fs::remove_file(f.paths.here.join("civ6.lock")).unwrap();
+    let state = fs::read(&receipt).unwrap();
+    let mut blocked = f.runner(Mode::Success);
+    assert!(cc_live::chain::cli(
+        &mut blocked,
+        &f.paths,
+        &cc_live::args(&["fixture:s.json", "--stop-on-failure"])
+    )
+    .is_err());
+    assert_eq!(blocked.inner.driver_calls, 0);
+    assert_eq!(fs::read(&receipt).unwrap(), state);
+    assert_eq!(f.backups().len(), 1, "pending recovery cannot be replaced");
+    assert_eq!(fs::read(&f.options).unwrap(), MODIFIED);
+    drop(blocker);
+    let mut next = f.runner(Mode::Success);
+    assert_eq!(
+        cc_live::chain::cli(
+            &mut next,
+            &f.paths,
+            &cc_live::args(&["fixture:s.json", "--stop-on-failure"])
+        )
+        .unwrap(),
+        0
+    );
+    assert_eq!(next.inner.driver_calls, 1);
+    assert_eq!(next.inner.releases, 1);
+    assert_eq!(fs::read(&f.options).unwrap(), ORIGINAL);
+    assert!(!receipt.exists());
+    assert_eq!(f.backups().len(), 2);
+    for backup in f.backups() {
+        assert_eq!(fs::read(backup).unwrap(), ORIGINAL);
+    }
+}
+
+#[test]
+fn corrupt_or_missing_persistent_backup_blocks_new_standard_driver() {
+    for corruption in ["receipt", "hash", "backup"] {
+        let f = Fixture::new();
+        f.driver();
+        f.lock(&f.owner());
+        let mut previous = f.runner(Mode::Success);
+        previous
+            .start_scenario(
+                "START fixture s.json civ6=closed-before-prepare",
+                Some("fixture-owner"),
+                90.0,
+            )
+            .unwrap();
+        let backup = f.backups()[0].clone();
+        let receipt = recovery_path(&f.paths.here.join("civ6.lock"));
+        drop(previous);
+        fs::remove_file(f.paths.here.join("civ6.lock")).unwrap();
+        match corruption {
+            "receipt" => fs::write(&receipt, b"partial receipt").unwrap(),
+            "hash" => fs::write(&backup, b"changed backup").unwrap(),
+            _ => fs::remove_file(&backup).unwrap(),
+        }
+        let retained = fs::read(&receipt).unwrap();
+        let mut next = f.runner(Mode::Success);
+        assert!(cc_live::chain::cli(
+            &mut next,
+            &f.paths,
+            &cc_live::args(&["fixture:s.json", "--stop-on-failure"])
+        )
+        .is_err());
+        assert_eq!(next.inner.driver_calls, 0);
+        assert_eq!(fs::read(&receipt).unwrap(), retained);
+        assert_eq!(fs::read(&f.options).unwrap(), MODIFIED);
+        cc_live::process::finish_external_cleanup();
+    }
 }

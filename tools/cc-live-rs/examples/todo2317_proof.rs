@@ -59,6 +59,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .join("AppData/Local/Firaxis Games/Sid Meier's Civilization VI/AppOptions.txt");
     let seed = paths.profile.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/JAC-Reliability-Seed-1971.Civ6Save");
     let state = paths.here.join("reliability-auto-state.json");
+    let profile_state = paths.here.join("appoptions-restore-state.json");
     let executable = paths.here.join("live_chain.exe");
     if manifest(auto)? != baseline["autosaves"]
         || hash(&options)? != baseline["appoptions_sha256"]
@@ -67,6 +68,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("preflight originals differ from the saved baseline".into());
     }
     if state.exists()
+        || profile_state.exists()
         || paths.here.join("civ6.lock").exists()
         || cc_live::chain::civ6_running(&mut cc_live::process::RealRunner)?
     {
@@ -106,6 +108,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut owned = false;
     let mut archive_path = None;
     let mut renderer = None;
+    let mut profile_with_isolation = false;
     // Once spawned, observation failures are recorded; they cannot orphan the chain.
     let exit = loop {
         if let Ok(bytes) = fs::read(&state) {
@@ -128,11 +131,43 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 isolated = true;
                 archive_path = Some(archive);
+                let settings_hash = hash(&options)?;
+                if settings_hash == baseline["appoptions_sha256"] {
+                    // Settings restore at CIV6_CLOSE; autosaves stay isolated
+                    // until Steam has released them. Retain this separate phase.
+                    return Ok(json!({"phase":"autosaves-isolated-profile-restored",
+                        "originals":originals,"lease":lock,"appoptions_sha256":settings_hash}));
+                }
+                let profile_bytes = fs::read(&profile_state)?;
+                let profile: Value = serde_json::from_slice(&profile_bytes)?;
+                let backup = Path::new(profile["backup"].as_str().ok_or("profile backup missing")?);
+                if hash(backup)? != baseline["appoptions_sha256"]
+                    || profile["original_sha256"]
+                        .as_str()
+                        .map(str::to_ascii_uppercase)
+                        != baseline["appoptions_sha256"].as_str().map(str::to_owned)
+                {
+                    return Err("CPU profile original differs during autosave isolation".into());
+                }
+                let settings = fs::read_to_string(&options)?;
+                let option = |key: &str| {
+                    settings.lines().find_map(|line| {
+                        let mut words = line.split_whitespace();
+                        (words.next() == Some(key)).then(|| words.next()).flatten()
+                    })
+                };
+                if option("DeviceID") != Some("140") || option("AllowSWRenderer") != Some("1") {
+                    return Err("CPU profile is not applied during autosave isolation".into());
+                }
+                profile_with_isolation = true;
+                if !evidence.join("profile-state.raw").exists() {
+                    fs::write(evidence.join("profile-state.raw"), &profile_bytes)?;
+                }
                 if !evidence.join("isolation-state.raw").exists() {
                     fs::write(evidence.join("isolation-state.raw"), &bytes)?;
                 }
                 Ok(
-                    json!({"phase":"isolated", "originals":originals,"working_auto":manifest(auto)?,"lease":lock}),
+                    json!({"phase":"isolated", "originals":originals,"working_auto":manifest(auto)?,"lease":lock,"profile":profile,"appoptions_sha256":hash(&options)?}),
                 )
             })();
             match observed {
@@ -209,6 +244,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let seed_hash = hash(&seed)?;
     let game_absent = !cc_live::chain::civ6_running(&mut cc_live::process::RealRunner)?;
     let receipt_absent = !state.exists();
+    let profile_receipt_absent = !profile_state.exists();
     let lease_absent = !paths.here.join("civ6.lock").exists();
     let success = exit.success()
         && isolated
@@ -219,10 +255,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         && seed_hash == baseline["seed_sha256"]
         && game_absent
         && receipt_absent
+        && profile_receipt_absent
+        && profile_with_isolation
         && lease_absent
         && renderer.is_some()
         && steam_released;
-    let result = json!({"todo":2317,"pid":pid,"scenario_runs":1,"branch":argv[1],"scenario":argv[2],"installed_exe_sha256":argv[3],"exit_code":exit.code(),"success":success,"observed_isolation":isolated,"observed_owned_lease":owned,"archive":archive_path,"restored_autosaves":restored,"appoptions_sha256":settings_hash,"seed_sha256":seed_hash,"game_absent":game_absent,"recovery_receipt_absent":receipt_absent,"lease_absent":lease_absent,"cpu_renderer_observed":renderer.is_some(),"steam_released":steam_released,"observation_errors":errors});
+    let result = json!({"todo":2317,"pid":pid,"scenario_runs":1,"branch":argv[1],"scenario":argv[2],"installed_exe_sha256":argv[3],"exit_code":exit.code(),"success":success,"observed_isolation":isolated,"observed_owned_lease":owned,"archive":archive_path,"restored_autosaves":restored,"appoptions_sha256":settings_hash,"seed_sha256":seed_hash,"game_absent":game_absent,"recovery_receipt_absent":receipt_absent,"profile_receipt_absent":profile_receipt_absent,"profile_with_isolation":profile_with_isolation,"lease_absent":lease_absent,"cpu_renderer_observed":renderer.is_some(),"steam_released":steam_released,"observation_errors":errors});
     fs::write(
         evidence.join("one-run-result.json"),
         serde_json::to_vec_pretty(&result)?,
