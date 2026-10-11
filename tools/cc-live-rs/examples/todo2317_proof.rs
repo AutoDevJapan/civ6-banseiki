@@ -3,6 +3,33 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{fs, io::Read, path::Path, process::Command, time::Duration};
 
+fn lease_matches(lock: &Value, pid: u32, created: Option<u64>) -> bool {
+    created.is_some_and(|birth| birth != 0)
+        && lock["live_chain"] == true
+        && lock["pid"].as_u64() == Some(u64::from(pid))
+        && lock["chain_pid"].as_u64() == Some(u64::from(pid))
+        && lock["pid_created_filetime"].as_u64() == created
+        && lock["lock_token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
+}
+fn profile_matches(profile: &Value, lock: &Value) -> bool {
+    ["pid", "pid_created_filetime", "lock_token"]
+        .iter()
+        .all(|key| !profile[*key].is_null() && profile[*key] == lock[*key])
+}
+fn journal_name(name: &str) -> bool {
+    name.starts_with("civ6-steam-exit-") && name.ends_with(".jsonl")
+}
+fn require_fresh_journals(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(root)? {
+        if journal_name(&entry?.file_name().to_string_lossy()) {
+            return Err("evidence directory contains a previous exit journal".into());
+        }
+    }
+    Ok(())
+}
+
 fn hash(p: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let mut file = fs::File::open(p)?;
     let mut hash = Sha256::new();
@@ -77,6 +104,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if hash(&executable)? != argv[3] {
         return Err("installed chain SHA differs from reviewed candidate".into());
     }
+    // This owned evidence directory is the child's TEMP for this one invocation.
+    // Never reuse a directory containing exit journals from an earlier run.
+    require_fresh_journals(evidence)?;
     // CREATE_NEW makes a second invocation fail before launching another game.
     let stdout = fs::OpenOptions::new()
         .write(true)
@@ -91,6 +121,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .arg(format!("{}:{}", argv[1], argv[2]))
         .arg("--stop-on-failure")
         .env("CC_LIVE_CARGO", "D:/CC/Tools/codex-jobs/cargo_gate.exe")
+        .env("TEMP", evidence)
+        .env("TMP", evidence)
         .stdin(std::process::Stdio::null())
         .stdout(stdout)
         .stderr(stderr);
@@ -104,6 +136,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let started = std::time::SystemTime::now();
     let mut observations = vec![];
     let mut errors = vec![];
+    let created = match cc_live::chain::process_created_filetime(pid) {
+        Ok(created) => created,
+        Err(error) => {
+            errors.push(error);
+            None
+        }
+    };
     let mut isolated = false;
     let mut owned = false;
     let mut archive_path = None;
@@ -126,9 +165,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     return Err("isolated originals changed".into());
                 }
                 let lock: Value = serde_json::from_slice(&fs::read(paths.here.join("civ6.lock"))?)?;
-                if lock["chain_pid"] == pid && lock["live_chain"] == true {
-                    owned = true;
+                if !lease_matches(&lock, pid, created) {
+                    return Err("observed lease differs from this child PID/FILETIME/token".into());
                 }
+                owned = true;
                 isolated = true;
                 archive_path = Some(archive);
                 let settings_hash = hash(&options)?;
@@ -140,6 +180,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let profile_bytes = fs::read(&profile_state)?;
                 let profile: Value = serde_json::from_slice(&profile_bytes)?;
+                if !profile_matches(&profile, &lock) {
+                    return Err("AppOptions receipt belongs to another lease generation".into());
+                }
                 let backup = Path::new(profile["backup"].as_str().ok_or("profile backup missing")?);
                 if hash(backup)? != baseline["appoptions_sha256"]
                     || profile["original_sha256"]
@@ -217,7 +260,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         std::thread::sleep(Duration::from_secs(1));
     };
     let mut journals = vec![];
-    for entry in fs::read_dir(&paths.temp)? {
+    for entry in fs::read_dir(evidence)? {
         let entry = entry?;
         if entry
             .file_name()
@@ -225,7 +268,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .starts_with(&format!("civ6-steam-exit-{pid}-"))
         {
             let bytes = fs::read(entry.path())?;
-            fs::write(evidence.join(entry.file_name()), &bytes)?;
             journals.push(String::from_utf8_lossy(&bytes).into_owned());
         }
     }
@@ -276,5 +318,51 @@ fn main() {
     if let Err(error) = run() {
         eprintln!("{error}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn original_profile_must_belong_to_the_current_process_and_lease() {
+        let lease = json!({"live_chain":true,"pid":41,"chain_pid":41,
+            "pid_created_filetime":73,"lock_token":"current"});
+        let profile = json!({"pid":41,"pid_created_filetime":73,"lock_token":"current"});
+        assert!(lease_matches(&lease, 41, Some(73)));
+        assert!(profile_matches(&profile, &lease));
+        assert!(
+            !lease_matches(&lease, 41, Some(74)),
+            "reused PID is not the same child"
+        );
+        assert!(!lease_matches(&lease, 41, None));
+        for key in ["pid", "pid_created_filetime", "lock_token"] {
+            let mut stale = profile.clone();
+            stale[key] = if key == "lock_token" {
+                json!("previous")
+            } else {
+                json!(0)
+            };
+            assert!(!profile_matches(&stale, &lease), "{key}");
+            stale.as_object_mut().unwrap().remove(key);
+            assert!(!profile_matches(&stale, &lease), "missing {key}");
+        }
+    }
+    #[test]
+    fn previous_generation_journals_are_rejected_in_the_actual_evidence_directory() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("journal-fixture-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let journal = root.join("civ6-steam-exit-41-123-0.jsonl");
+        fs::write(&journal, br#"{"phase":"exit_sync_complete"}"#).unwrap();
+        assert!(
+            require_fresh_journals(&root).is_err(),
+            "a terminal journal from an earlier PID cannot authorize another launch"
+        );
+        fs::remove_file(journal).unwrap();
+        fs::write(root.join("Renderer.log"), b"baseline log").unwrap();
+        assert!(require_fresh_journals(&root).is_ok());
+        fs::remove_file(root.join("Renderer.log")).unwrap();
+        fs::remove_dir(root).unwrap();
     }
 }
