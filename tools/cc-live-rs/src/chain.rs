@@ -1563,19 +1563,29 @@ fn main_owned(
             let archive = Path::new(&artifacts)
                 .parent()
                 .ok_or("autosave isolation artifact parent missing")?;
+            let scenario = read_json(live_json)?;
+            let mut isolate = args(&[
+                &path(auto),
+                "--begin",
+                "--state",
+                &path(state),
+                "--archive",
+                &path(archive),
+            ]);
+            match scenario.get("session_type") {
+                None => {}
+                Some(session) if session == "single_player" => {}
+                Some(session) if session == "hotseat" => {
+                    isolate.extend(args(&["--session-type", "hotseat"]))
+                }
+                _ => return Err("unsupported autosave session; driver launch refused".into()),
+            }
             let out = r.run(
-                Call::new(args(&[
-                    &path(auto),
-                    "--begin",
-                    "--state",
-                    &path(state),
-                    "--archive",
-                    &path(archive),
-                ]))
-                .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
-                .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
-                .managed()
-                .timeout(30.0),
+                Call::new(isolate)
+                    .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                    .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                    .managed()
+                    .timeout(30.0),
             )?;
             if out.code != 0 {
                 return Err(format!(
