@@ -1029,6 +1029,162 @@ fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
     }
 }
 
+// Preparation/cleanup protection is separated from final release by the
+// regression below. Initially preserve the old access mask for the RED.
+fn open_for_owned_protection(path: &Path) -> std::io::Result<File> {
+    open_for_owned_delete(path)
+}
+
+#[cfg(all(test, windows))]
+mod close_scope_tests {
+    use super::*;
+    use std::{
+        os::windows::process::CommandExt,
+        process::{Child, Command, Stdio},
+        time::{Duration, Instant},
+    };
+
+    struct OwnedDir(std::path::PathBuf);
+    impl OwnedDir {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("todo880-close-scope-{}", new_lock_token()));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for OwnedDir {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+    struct Reader {
+        child: Child,
+        release: std::path::PathBuf,
+    }
+    impl Reader {
+        fn start(root: &Path) -> Self {
+            Self {
+                child: Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--ignored",
+                        "--exact",
+                        "chain::close_scope_tests::close_scope_sdk_reader_child",
+                    ])
+                    .env("CC_CLOSE_SCOPE_FIXTURE", root)
+                    .creation_flags(process::CREATE_NO_WINDOW)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .unwrap(),
+                release: root.join("release"),
+            }
+        }
+        fn report(&mut self, root: &Path) -> Value {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let file = root.join("report.json");
+            while !file.exists() {
+                assert!(
+                    self.child.try_wait().unwrap().is_none(),
+                    "owned reader exited before its report"
+                );
+                assert!(Instant::now() < deadline, "owned reader report deadline");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            // Child publishes its complete report with one rename.
+            read_json(file).unwrap()
+        }
+        fn finish(&mut self) {
+            fs::write(&self.release, b"release").unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if let Some(status) = self.child.try_wait().unwrap() {
+                    assert!(status.success());
+                    return;
+                }
+                assert!(Instant::now() < deadline, "owned reader reaping deadline");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
+    impl Drop for Reader {
+        fn drop(&mut self) {
+            let _ = fs::write(&self.release, b"release");
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+    #[test]
+    #[ignore = "only spawned by the owned close-scope regressions"]
+    fn close_scope_sdk_reader_child() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let Some(root) = std::env::var_os("CC_CLOSE_SCOPE_FIXTURE") else {
+            return;
+        };
+        let root = std::path::PathBuf::from(root);
+        let path = root.join("civ6.lock");
+        let pin = OpenOptions::new().read(true).share_mode(3).open(&path);
+        let report = match &pin {
+            Err(error) => json!({"pin_open_error":error.raw_os_error(),"game_launches":0}),
+            Ok(_) => {
+                let snapshot = OpenOptions::new().read(true).share_mode(1).open(&path);
+                match snapshot {
+                    Err(error) => {
+                        json!({"pin_open_error":null,"snapshot_open_error":error.raw_os_error(),"game_launches":0})
+                    }
+                    Ok(file) => {
+                        json!({"pin_open_error":null,"snapshot_open_error":null,"record":serde_json::from_reader::<_,Value>(file).unwrap(),"game_launches":0})
+                    }
+                }
+            }
+        };
+        let mut file = File::create_new(root.join("report.tmp")).unwrap();
+        serde_json::to_writer(&mut file, &report).unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+        fs::rename(root.join("report.tmp"), root.join("report.json")).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !root.join("release").exists() {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        drop(pin);
+    }
+    #[test]
+    fn close_scope_legacy_delete_handle_reproduces_sdk_child_os32() {
+        let directory = OwnedDir::new();
+        let path = directory.0.join("civ6.lock");
+        fs::write(&path, b"{}").unwrap();
+        let protection = open_for_owned_delete(&path).unwrap();
+        let mut child = Reader::start(&directory.0);
+        let report = child.report(&directory.0);
+        assert_eq!(report["pin_open_error"], 32);
+        println!("TODO880_LOCK_OS_RECEIPT={report}");
+        child.finish();
+        drop(protection);
+    }
+    #[test]
+    fn close_scope_protection_must_allow_sdk_child_read_proof_without_delete_sharing() {
+        let directory = OwnedDir::new();
+        let path = directory.0.join("civ6.lock");
+        let owner = json!({"live_chain":true,"pid":std::process::id(),"chain_pid":std::process::id(),"lock_token":"owned"});
+        fs::write(&path, owner.to_string()).unwrap();
+        let protection = open_for_owned_protection(&path).unwrap();
+        let mut child = Reader::start(&directory.0);
+        let report = child.report(&directory.0);
+        assert!(report["pin_open_error"].is_null(), "{report}");
+        assert!(report["snapshot_open_error"].is_null(), "{report}");
+        assert_eq!(report["record"], owner);
+        assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
+        child.finish();
+        drop(protection);
+        let release = open_for_owned_delete(&path).unwrap();
+        drop(release);
+        fs::remove_file(&path).unwrap();
+    }
+}
+
 #[cfg(not(windows))]
 fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
     OpenOptions::new().read(true).write(true).open(path)
