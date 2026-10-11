@@ -3,6 +3,8 @@
 //! live_chain.exe name:scenario.json [name:scenario.json ...]
 //! Log: %TEMP%/batch1/live_chain.log (lines "RESULT <name> <scenario> <exit> <artifact dir>")
 use crate::*;
+#[path = "renderer_evidence.rs"]
+mod renderer_evidence;
 use serde_json::json;
 use std::{
     fs::{self, File, OpenOptions},
@@ -310,6 +312,15 @@ fn close_civ6_with_evidence(
     p: &Paths,
     evidence: &mut Value,
 ) -> Result<(), String> {
+    close_civ6_with_renderer(r, p, evidence, None)
+}
+
+fn close_civ6_with_renderer(
+    r: &mut impl Runner,
+    p: &Paths,
+    evidence: &mut Value,
+    renderer: Option<(&renderer_evidence::Run, &str, &str)>,
+) -> Result<(), String> {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -396,6 +407,11 @@ fn close_civ6_with_evidence(
             Ok(None)
         }
     })()?;
+    // The normal exit receipt now contains the canonical game generation.
+    // Preserve the log before close, even when the later Cloud wait fails.
+    if let Some((run, token, stage)) = renderer {
+        retain_renderer(r, p, Some(token), Some(run), stage);
+    }
     let outcome = if cursor.is_some() || source.is_file() {
         close_civ6_outcome(
             &mut ExitGenerationRunner {
@@ -1264,7 +1280,7 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
         &options,
         None,
         None,
-        (&mut false, &mut None, &mut None),
+        (&mut false, &mut None, &mut None, &mut None),
     )
 }
 
@@ -1516,10 +1532,11 @@ fn main_owned(
     options: &Options,
     token: Option<&str>,
     mut reliability: Option<&mut Reliability>,
-    (game_closed, cleanup_deadline, software_profile): (
+    (game_closed, cleanup_deadline, software_profile, renderer): (
         &mut bool,
         &mut Option<f64>,
         &mut Option<crate::software_renderer::Profile>,
+        &mut Option<renderer_evidence::Run>,
     ),
 ) -> Result<i32, String> {
     if options.cleanup_only {
@@ -1586,7 +1603,7 @@ fn main_owned(
             // preparation/driver calls. Do not use a copied chain or new lock.
             let token = token.ok_or("software rendering requires an owned lease")?;
             *software_profile = Some(crate::software_renderer::Profile::apply(p, token)?);
-            r.print("CPU rendering selected: DeviceID=140 AllowSWRenderer=1; verify Renderer.log")?;
+            r.print("CPU rendering configured: DeviceID=140 AllowSWRenderer=1; actual adapter requires Renderer.log evidence")?;
         }
         let prepare_args = args(&[&ship, "live", name, scenario]);
         let prepare_timeout = time_left(r, deadline)?.min(1200.0);
@@ -1766,7 +1783,12 @@ fn main_owned(
         }
         let driver_started = r.monotonic();
         *game_closed = false;
+        // Arm before dispatch: outer cleanup also preserves evidence if run
+        // panics or any subsequent bookkeeping fails. Do not create the
+        // driver's CREATE_NEW output directory until the child has returned.
+        *renderer = token.map(|_| renderer_evidence::Run::new(Path::new(&artifacts)));
         let execution = r.run(command);
+        retain_renderer(r, p, token, renderer.as_ref(), "driver-return");
         if let Some(deadline) = lease.as_ref().and_then(|limit| limit.hard_deadline()) {
             *cleanup_deadline = Some(cleanup_deadline.unwrap().min(deadline));
             if let Some(state) = reliability.as_deref_mut() {
@@ -1803,14 +1825,19 @@ fn main_owned(
             &format!("{}{}", run.stdout, run.stderr),
         )?;
         let mut exit_evidence = json!({});
-        let closed = close_civ6_with_evidence(
+        let closed = close_civ6_with_renderer(
             &mut WithinDeadline {
                 runner: r,
                 deadline: cleanup_deadline.unwrap(),
             },
             p,
             &mut exit_evidence,
+            renderer
+                .as_ref()
+                .zip(token)
+                .map(|(run, token)| (run, token, "chain-before-close")),
         );
+        retain_renderer(r, p, token, renderer.as_ref(), "after-close");
         if let Some(state) = reliability.as_deref_mut() {
             if let Some(journal) = exit_evidence["sync_journal"].as_str() {
                 if Path::new(journal).is_file() {
@@ -1831,6 +1858,7 @@ fn main_owned(
             ));
         }
         *game_closed = true;
+        *renderer = None;
         if let Some(profile) = software_profile.as_mut() {
             profile
                 .restore()
@@ -2000,6 +2028,34 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
     Ok(0)
 }
 
+/// Evidence failures are diagnostic only: preserve the driver's original exit
+/// or error and keep cleanup running. Every caller is still inside its lease.
+fn retain_renderer(
+    r: &mut impl Runner,
+    p: &Paths,
+    token: Option<&str>,
+    run: Option<&renderer_evidence::Run>,
+    stage: &str,
+) {
+    let (Some(token), Some(run)) = (token, run) else {
+        return;
+    };
+    let saved = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let lock_path = p.here.join("civ6.lock");
+        let mut lock = File::open(&lock_path).map_err(|e| e.to_string())?;
+        if !file_is_owned(&mut lock, &lock_path, token)? {
+            return Err("Renderer capture refused: shared lease ownership changed".into());
+        }
+        lock.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        let owner: Value = serde_json::from_reader(&lock).map_err(|e| e.to_string())?;
+        run.capture(r, p, &owner, stage)
+    }))
+    .unwrap_or_else(|_| Err("Renderer capture panicked".into()));
+    if let Err(error) = saved {
+        let _ = r.error(&format!("Renderer evidence {stage}: {error}"));
+    }
+}
+
 fn cli_once(
     r: &mut impl Runner,
     p: &Paths,
@@ -2031,6 +2087,7 @@ fn cli_once(
     let mut game_closed = false;
     let mut cleanup_deadline = None;
     let mut software_profile = None;
+    let mut renderer = None;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         main_owned(
             r,
@@ -2042,11 +2099,15 @@ fn cli_once(
                 &mut game_closed,
                 &mut cleanup_deadline,
                 &mut software_profile,
+                &mut renderer,
             ),
         )
     }))
     .unwrap_or_else(|_| Err("live chain panicked".into()));
     process::clear_interrupt_for_cleanup();
+    // Still inside the acquired lease, before CPU restoration or closing the
+    // game. This is required when dispatch panicked before driver-return.
+    retain_renderer(r, p, Some(&token), renderer.as_ref(), "outer-before-close");
     // Also after a crash or failure of the chain itself. Release even when cleanup raises an error.
     let path = p.here.join("civ6.lock");
     let mut lock_released = false;
@@ -2064,7 +2125,22 @@ fn cli_once(
         // driver/panic where the owned game is still alive.
         if let Some(profile) = software_profile.as_mut() {
             if !game_closed {
-                close_civ6_with_evidence(r, p, &mut cleanup_exit)?;
+                let closed = close_civ6_with_renderer(
+                    r,
+                    p,
+                    &mut cleanup_exit,
+                    renderer
+                        .as_ref()
+                        .map(|run| (run, token.as_str(), "outer-chain-before-close")),
+                );
+                retain_renderer(
+                    r,
+                    p,
+                    Some(&token),
+                    renderer.as_ref(),
+                    "outer-profile-after-close",
+                );
+                closed?;
                 game_closed = true;
             }
             profile
@@ -2110,15 +2186,25 @@ fn cli_once(
             Ok(())
         } else {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match cleanup_deadline {
-                Some(deadline) => close_civ6_with_evidence(
+                Some(deadline) => close_civ6_with_renderer(
                     &mut WithinDeadline {
                         runner: r,
                         deadline,
                     },
                     p,
                     &mut cleanup_exit,
+                    renderer
+                        .as_ref()
+                        .map(|run| (run, token.as_str(), "outer-chain-before-close")),
                 ),
-                None => close_civ6_with_evidence(r, p, &mut cleanup_exit),
+                None => close_civ6_with_renderer(
+                    r,
+                    p,
+                    &mut cleanup_exit,
+                    renderer
+                        .as_ref()
+                        .map(|run| (run, token.as_str(), "outer-chain-before-close")),
+                ),
             }))
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
@@ -2131,6 +2217,7 @@ fn cli_once(
         } else {
             Ok(())
         };
+        retain_renderer(r, p, Some(&token), renderer.as_ref(), "outer-after-close");
         let released = delete_owned_handle(file, &path, r, &token);
         lock_released = released.is_ok();
         match (closed.and(restored), released) {
