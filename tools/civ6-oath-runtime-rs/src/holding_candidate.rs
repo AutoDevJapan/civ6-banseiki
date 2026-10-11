@@ -4,8 +4,15 @@
 //! address is not the helper address. Null never invokes the constructor.
 //! Two equal reads prove neither a holding interval, City lifetime, permanent
 //! drain nor product authority. Every model/admission flag remains false.
-use crate::call_identity::Memory;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+
+/// Allocation-free holding read port. False means incomplete/unreadable;
+/// implementations must not create error text or allocate in this callback.
+/// Any partially written output is ignored, preserving the raw helper already
+/// read and unknown sentinels for fields that were not completely copied.
+pub trait ReadInto {
+    fn read_into(&mut self, address: u64, bytes: &mut [u8]) -> bool;
+}
 
 pub const GLOBAL_RVA: u64 = 0x22d6070;
 pub const OWNER_OFFSET: u64 = 0x4a0;
@@ -61,9 +68,9 @@ impl HelperRead {
             depth: self.depth.load(Ordering::Acquire),
         }
     }
-    fn capture(&self, memory: &mut impl Memory, global: u64) -> bool {
+    fn capture(&self, memory: &mut impl ReadInto, global: u64) -> bool {
         let mut pointer = [0; 8];
-        if memory.copy(global, &mut pointer).is_err() {
+        if !memory.read_into(global, &mut pointer) {
             return false;
         }
         let helper = u64::from_le_bytes(pointer);
@@ -75,7 +82,7 @@ impl HelperRead {
             return false;
         };
         let mut words = [0; 8];
-        if memory.copy(fields, &mut words).is_err() {
+        if !memory.read_into(fields, &mut words) {
             return false;
         }
         let owner = u32::from_le_bytes(words[..4].try_into().unwrap());
@@ -110,7 +117,7 @@ pub struct ProbeSnapshot {
 impl HelperProbe {
     /// Caller supplies a source-checked global slot, never the native Getter.
     /// No allocations, locks, target-method calls or reference acquisition.
-    pub(crate) fn capture(&self, memory: &mut impl Memory, global: u64, tick: u64) {
+    pub(crate) fn capture(&self, memory: &mut impl ReadInto, global: u64, tick: u64) {
         self.tick.store(tick, Ordering::Relaxed);
         let first = self.first.capture(memory, global);
         let second = self.second.capture(memory, global);
@@ -219,11 +226,11 @@ mod tests {
         owner: u32,
         depth: u32,
     }
-    impl Memory for Mock {
-        fn copy(&mut self, at: u64, bytes: &mut [u8]) -> crate::call_identity::Result<()> {
+    impl ReadInto for Mock {
+        fn read_into(&mut self, at: u64, bytes: &mut [u8]) -> bool {
             self.reads += 1;
             if self.missing {
-                return Err(crate::call_identity::Error::input("missing"));
+                return false;
             }
             if at == 0x1000 {
                 bytes.copy_from_slice(&(if self.null { 0u64 } else { 0x2000u64 }).to_le_bytes());
@@ -233,9 +240,9 @@ mod tests {
                     &(self.depth + u32::from(self.change && self.reads > 2)).to_le_bytes(),
                 );
             } else {
-                return Err(crate::call_identity::Error::input("unexpected read"));
+                return false;
             }
-            Ok(())
+            true
         }
     }
     #[test]
@@ -280,6 +287,59 @@ mod tests {
         assert_eq!(std::mem::offset_of!(HelperProbe, second), 32);
         assert_eq!(std::mem::offset_of!(HelperRead, owner), 8);
         assert_eq!(std::mem::offset_of!(HelperRead, depth), 12);
+    }
+    #[test]
+    fn second_partial_read_keeps_first_valid_and_raw_helper_in_capture_order() {
+        struct Partial {
+            count: usize,
+            addresses: [u64; 4],
+        }
+        impl ReadInto for Partial {
+            fn read_into(&mut self, address: u64, bytes: &mut [u8]) -> bool {
+                self.addresses[self.count] = address;
+                self.count += 1;
+                match self.count {
+                    1 => bytes.copy_from_slice(&0x2000u64.to_le_bytes()),
+                    2 => {
+                        bytes[..4].copy_from_slice(&7u32.to_le_bytes());
+                        bytes[4..].copy_from_slice(&2u32.to_le_bytes());
+                    }
+                    3 => bytes.copy_from_slice(&0x3000u64.to_le_bytes()),
+                    4 => {
+                        bytes[..4].copy_from_slice(&9u32.to_le_bytes());
+                        return false; // partial RPM output is never valid data
+                    }
+                    _ => panic!("unbounded holding read"),
+                }
+                true
+            }
+        }
+        let mut memory = Partial {
+            count: 0,
+            addresses: [0; 4],
+        };
+        let probe = HelperProbe::default();
+        probe.capture(&mut memory, 0x1000, 77);
+        let value = probe.snapshot();
+        assert_eq!(memory.addresses, [0x1000, 0x24a0, 0x1000, 0x34a0]);
+        assert_eq!(value.flags, FIRST_VALID);
+        assert_eq!(
+            value.first,
+            ReadSnapshot {
+                helper: 0x2000,
+                owner: 7,
+                depth: 2
+            }
+        );
+        assert_eq!(
+            value.second,
+            ReadSnapshot {
+                helper: 0x3000,
+                owner: u32::MAX,
+                depth: u32::MAX
+            }
+        );
+        assert!(!value.owned_at_reads(7));
     }
     #[test]
     fn nonleaf_nonnull_expression_rejects_changed_global_branch_call_and_return() {

@@ -40,6 +40,22 @@ impl ProductionRow {
     }
 }
 struct Current;
+impl crate::holding_candidate::ReadInto for Current {
+    fn read_into(&mut self, address: u64, bytes: &mut [u8]) -> bool {
+        let mut read = 0;
+        let ok = unsafe {
+            ReadProcessMemory(
+                GetCurrentProcess(),
+                address as *const c_void,
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+                &mut read,
+            )
+        };
+        // Holding never constructs the identity provider's error value.
+        ok != 0 && read == bytes.len()
+    }
+}
 impl crate::call_identity::Memory for Current {
     fn copy(&mut self, address: u64, bytes: &mut [u8]) -> crate::call_identity::Result<()> {
         let mut read = 0;
