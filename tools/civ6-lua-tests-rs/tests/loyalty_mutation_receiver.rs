@@ -1,3 +1,4 @@
+use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{new_lua, read_repo};
 
 fn fixture(replacement_owner: i32) -> mlua::Lua {
@@ -58,20 +59,20 @@ fn intent_persistence_cannot_leave_the_mutation_on_an_old_city_reference() {
     let lua = fixture(0);
     let completed: bool = lua
         .load("return TestAdvance(Store.Original,Governance,Pending,'immediate',-5)")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert!(completed);
-    let values: (i32, i32, i32) = lua
+    let values: (i64, i64, i64) = lua
         .load("return Store.OldCalls,Store.NewCalls,Store.Current.Current")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert_eq!(values, (0, 1, 95));
     lua.load("TestAdvance(Store.Current,Governance,Pending,'immediate',-5)")
         .exec()
         .unwrap();
-    let calls: (i32, i32) = lua
+    let calls: (i64, i64) = lua
         .load("return Store.OldCalls,Store.NewCalls")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert_eq!(calls, (0, 1));
 }
@@ -79,13 +80,16 @@ fn intent_persistence_cannot_leave_the_mutation_on_an_old_city_reference() {
 #[test]
 fn changed_owner_after_intent_persistence_blocks_before_native_mutation() {
     let lua = fixture(2);
-    assert!(lua
+    let error = lua
         .load("return TestAdvance(Store.Original,Governance,Pending,'immediate',-5)")
-        .eval::<bool>()
-        .is_err());
-    let calls: (i32, i32) = lua
+        .strict_eval::<bool>()
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("loyalty receiver changed before mutation"));
+    let calls: (i64, i64) = lua
         .load("return Store.OldCalls,Store.NewCalls")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert_eq!(calls, (0, 0));
 }
