@@ -1029,10 +1029,163 @@ fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
     }
 }
 
-// Preparation/cleanup protection is separated from final release by the
-// regression below. Initially preserve the old access mask for the RED.
 fn open_for_owned_protection(path: &Path) -> std::io::Result<File> {
-    open_for_owned_delete(path)
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Compatible with SDK readData/ShareRW. Never request DELETE while
+        // helpers run, and never permit another handle to delete/rename.
+        options.share_mode(3);
+    }
+    options.open(path)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LockFileId(u64, u64);
+fn lock_file_id(file: &File) -> Result<LockFileId, String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+        };
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut info) } == 0 {
+            return Err(format!(
+                "inspect protected lock file ID: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(LockFileId(
+            u64::from(info.dwVolumeSerialNumber),
+            (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+        ))
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let info = file
+            .metadata()
+            .map_err(|e| format!("inspect protected lock file ID: {e}"))?;
+        Ok(LockFileId(info.dev(), info.ino()))
+    }
+}
+fn lock_actor(info: &Value) -> Value {
+    json!({"live_chain":info["live_chain"],"pid":info["pid"],"chain_pid":info["chain_pid"],
+        "pid_created_filetime":info["pid_created_filetime"],"lock_token":info["lock_token"],
+        "acquired_at":info["acquired_at"],"job":info["job"],"owner_job":info["owner_job"]})
+}
+struct CloseProtection {
+    file: File,
+    id: LockFileId,
+    actor: Value,
+    #[cfg(unix)]
+    _guard: fairness::UnixGuard,
+}
+impl CloseProtection {
+    fn check(&self, r: &mut impl Runner, path: &Path) -> Result<(), String> {
+        let current = protected_lock_snapshot(r, &self.file, path)?;
+        if lock_actor(&current) != self.actor {
+            return Err("protected lock actor identity changed".into());
+        }
+        Ok(())
+    }
+    fn release(self, r: &mut impl Runner, path: &Path, token: &str) -> Result<(), String> {
+        self.check(r, path)?;
+        let id = self.id;
+        let actor = self.actor.clone();
+        drop(self);
+        // All our deny-delete pins and all managed helper readers are gone.
+        // Reopening does not trust the pathname: bind the DELETE handle to
+        // the same file ID AND acquisition actor before disposition.
+        let mut lock =
+            open_owned_lock(r, path, token)?.ok_or("lock ownership changed at final release")?;
+        if lock_file_id(&lock.file)? != id {
+            return Err("lock file identity changed at final release".into());
+        }
+        lock.file
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| format!("rewind release identity: {e}"))?;
+        let current: Value = serde_json::from_reader(&mut lock.file)
+            .map_err(|e| format!("read release identity: {e}"))?;
+        if lock_actor(&current) != actor {
+            return Err("lock actor identity changed at final release".into());
+        }
+        delete_owned_handle(lock, path, r, token)
+    }
+}
+fn protected_lock_snapshot(r: &mut impl Runner, pin: &File, path: &Path) -> Result<Value, String> {
+    let deadline = r.monotonic() + RELEASE_WAIT_SECONDS;
+    loop {
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.share_mode(1);
+        }
+        match options.open(path) {
+            Ok(mut reader) => {
+                if lock_file_id(pin)? != lock_file_id(&reader)? {
+                    return Err("protected lock file identity changed".into());
+                }
+                let mut bytes = Vec::new();
+                (&mut reader)
+                    .take(32769)
+                    .read_to_end(&mut bytes)
+                    .map_err(|e| format!("read protected lock snapshot: {e}"))?;
+                if bytes.len() > 32768 {
+                    return Err("protected lock record too large".into());
+                }
+                return serde_json::from_slice(&bytes)
+                    .map_err(|e| format!("parse protected lock snapshot: {e}"));
+            }
+            Err(error) => {
+                if !cfg!(windows) || error.raw_os_error() != Some(32) || r.monotonic() >= deadline {
+                    return Err(format!("open protected lock snapshot: {error}"));
+                }
+                r.sleep(RELEASE_RETRY_SECONDS)?;
+            }
+        }
+    }
+}
+fn open_close_protection(
+    r: &mut impl Runner,
+    path: &Path,
+    token: &str,
+) -> Result<Option<CloseProtection>, String> {
+    #[cfg(unix)]
+    let guard = fairness::UnixGuard::acquire(path)?;
+    let file = match open_for_owned_protection(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("open read-only close protection: {error}")),
+    };
+    let info = protected_lock_snapshot(r, &file, path)?;
+    if info["live_chain"] != true
+        || info["pid"].as_u64() != Some(u64::from(std::process::id()))
+        || info["chain_pid"].as_u64() != Some(u64::from(std::process::id()))
+        || info["lock_token"].as_str() != Some(token)
+    {
+        return Ok(None);
+    }
+    #[cfg(windows)]
+    {
+        let created = process_created_filetime(std::process::id())?
+            .ok_or("close guard process identity unavailable")?;
+        if info["pid_created_filetime"].as_u64() != Some(created) {
+            return Err("close guard process FILETIME differs or is missing".into());
+        }
+    }
+    Ok(Some(CloseProtection {
+        id: lock_file_id(&file)?,
+        actor: lock_actor(&info),
+        file,
+        #[cfg(unix)]
+        _guard: guard,
+    }))
 }
 
 #[cfg(all(test, windows))]
@@ -1183,6 +1336,94 @@ mod close_scope_tests {
         drop(release);
         fs::remove_file(&path).unwrap();
     }
+    struct ScopeRunner {
+        time: f64,
+        reader: Option<Reader>,
+        waits: usize,
+    }
+    impl Runner for ScopeRunner {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("no game or external command in lock-scope test");
+        }
+        fn now(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.waits += 1;
+            if let Some(reader) = self.reader.as_mut() {
+                reader.finish();
+            }
+            self.time += seconds;
+            Ok(())
+        }
+    }
+    fn owned_record() -> Value {
+        json!({"live_chain":true,"pid":std::process::id(),"chain_pid":std::process::id(),
+            "pid_created_filetime":process_created_filetime(std::process::id()).unwrap().unwrap(),
+            "lock_token":"owned","acquired_at":1000})
+    }
+    #[test]
+    fn close_scope_final_delete_waits_for_sdk_reader_and_keeps_same_file_actor() {
+        let directory = OwnedDir::new();
+        let path = directory.0.join("civ6.lock");
+        let owner = owned_record();
+        fs::write(&path, owner.to_string()).unwrap();
+        let mut runner = ScopeRunner {
+            time: 0.0,
+            reader: None,
+            waits: 0,
+        };
+        let guard = open_close_protection(&mut runner, &path, "owned")
+            .unwrap()
+            .unwrap();
+        let mut reader = Reader::start(&directory.0);
+        assert_eq!(reader.report(&directory.0)["record"], owner);
+        runner.reader = Some(reader);
+        assert_eq!(
+            open_for_owned_delete(&path).unwrap_err().raw_os_error(),
+            Some(32)
+        );
+        guard.release(&mut runner, &path, "owned").unwrap();
+        assert_eq!(runner.waits, 1);
+        assert!(!path.exists());
+    }
+    #[test]
+    fn close_scope_actor_change_or_unknown_filetime_prevents_release() {
+        let directory = OwnedDir::new();
+        let path = directory.0.join("civ6.lock");
+        let owner = owned_record();
+        fs::write(&path, owner.to_string()).unwrap();
+        let mut runner = ScopeRunner {
+            time: 0.0,
+            reader: None,
+            waits: 0,
+        };
+        let guard = open_close_protection(&mut runner, &path, "owned")
+            .unwrap()
+            .unwrap();
+        let mut changed = owner.clone();
+        changed["lock_token"] = json!("peer");
+        fs::write(&path, changed.to_string()).unwrap();
+        assert!(guard
+            .release(&mut runner, &path, "owned")
+            .unwrap_err()
+            .contains("actor identity changed"));
+        assert_eq!(read_json(&path).unwrap(), changed);
+        fs::write(&path, owner.to_string()).unwrap();
+        let guard = open_close_protection(&mut runner, &path, "owned")
+            .unwrap()
+            .unwrap();
+        let mut changed = owner.clone();
+        changed["pid_created_filetime"] = json!(1);
+        fs::write(&path, changed.to_string()).unwrap();
+        assert!(guard
+            .check(&mut runner, &path)
+            .unwrap_err()
+            .contains("actor identity changed"));
+        drop(guard);
+        assert!(open_close_protection(&mut runner, &path, "owned").is_err());
+        assert!(path.exists());
+    }
 }
 
 #[cfg(not(windows))]
@@ -1257,44 +1498,6 @@ fn open_owned_lock(
             }
         }
     }
-}
-
-/// A persistent read-only inspector can block DELETE access. The chain still
-/// closes its own game under read protection and reports the release failure.
-#[cfg(windows)]
-fn close_owned_after_release_error(
-    r: &mut impl Runner,
-    p: &Paths,
-    path: &Path,
-    token: &str,
-    evidence: &mut Value,
-    renderer: Option<&renderer_evidence::Run>,
-) -> Result<bool, String> {
-    let mut opts = OpenOptions::new();
-    opts.read(true);
-    use std::os::windows::fs::OpenOptionsExt;
-    opts.share_mode(1);
-    let mut file = match opts.open(path) {
-        Ok(file) => file,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(false),
-        Err(e) => return Err(format!("open owned lock {} for close: {e}", path.display())),
-    };
-    if !file_is_owned(&mut file, path, token)? {
-        return Ok(false);
-    }
-    let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        close_civ6_with_renderer(
-            r,
-            p,
-            evidence,
-            renderer.map(|run| (run, token, "outer-fallback-before-close")),
-        )
-    }))
-    .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
-    retain_renderer(r, p, Some(token), renderer, "outer-fallback-after-close");
-    drop(file);
-    closed?;
-    Ok(true)
 }
 
 #[cfg(windows)]
@@ -1892,8 +2095,15 @@ fn main_owned(
         // touch mod files. Never close and replay a failed preparation.
         let protection = if let Some(token) = token {
             Some(
-                open_owned_lock(r, &p.here.join("civ6.lock"), token)?
-                    .ok_or("Civ6 lock ownership changed before preparation close")?,
+                open_close_protection(
+                    &mut WithinDeadline {
+                        runner: r,
+                        deadline,
+                    },
+                    &p.here.join("civ6.lock"),
+                    token,
+                )?
+                .ok_or("Civ6 lock ownership changed before preparation close")?,
             )
         } else {
             None
@@ -1905,6 +2115,15 @@ fn main_owned(
             },
             p,
         )?;
+        if let Some(protection) = protection.as_ref() {
+            protection.check(
+                &mut WithinDeadline {
+                    runner: r,
+                    deadline,
+                },
+                &p.here.join("civ6.lock"),
+            )?;
+        }
         drop(protection);
         *game_closed = true;
         if software_profile.is_none() {
@@ -1955,8 +2174,7 @@ fn main_owned(
                 first_failure = code;
             }
             // Preparation never launched the driver and the owned game is
-            // still closed. Release our read protection before the next
-            // iteration tries to open the lease with DELETE access again.
+            // still closed. Restore before the next preparation boundary.
             if let Some(profile) = software_profile.as_mut() {
                 profile
                     .restore()
@@ -2149,18 +2367,31 @@ fn main_owned(
             &format!("{}{}", run.stdout, run.stderr),
         )?;
         let mut exit_evidence = json!({});
-        let closed = close_civ6_with_renderer(
-            &mut WithinDeadline {
+        let closed = (|| -> Result<(), String> {
+            let mut budget = WithinDeadline {
                 runner: r,
                 deadline: cleanup_deadline.unwrap(),
-            },
-            p,
-            &mut exit_evidence,
-            renderer
-                .as_ref()
-                .zip(token)
-                .map(|(run, token)| (run, token, "chain-before-close")),
-        );
+            };
+            let protection = token
+                .map(|token| {
+                    open_close_protection(&mut budget, &p.here.join("civ6.lock"), token)
+                        .and_then(|p| p.ok_or("lock ownership changed before driver close"))
+                })
+                .transpose()?;
+            close_civ6_with_renderer(
+                &mut budget,
+                p,
+                &mut exit_evidence,
+                renderer
+                    .as_ref()
+                    .zip(token)
+                    .map(|(run, token)| (run, token, "chain-before-close")),
+            )?;
+            if let Some(protection) = protection {
+                protection.check(&mut budget, &p.here.join("civ6.lock"))?;
+            }
+            Ok(())
+        })();
         retain_renderer(r, p, token, renderer.as_ref(), "after-close");
         let saved = save_exit_evidence(Path::new(&artifacts), &mut exit_evidence);
         if let Some(state) = reliability.as_deref_mut() {
@@ -2512,7 +2743,8 @@ fn cli_once(
     // Still inside the acquired lease, before CPU restoration or closing the
     // game. This is required when dispatch panicked before driver-return.
     retain_renderer(r, p, Some(&token), renderer.as_ref(), "outer-before-close");
-    // Also after a crash or failure of the chain itself. Release even when cleanup raises an error.
+    // Cleanup runs after a driver failure, under a guard compatible with every
+    // SDK helper. DELETE is deferred until closure and restoration succeed.
     let path = p.here.join("civ6.lock");
     let mut lock_released = false;
     let cleanup_started = r.monotonic();
@@ -2525,6 +2757,8 @@ fn cli_once(
             deadline: cleanup_end,
         };
         let r = &mut budget;
+        let protection = open_close_protection(r, &path, &token)?
+            .ok_or("lock ownership changed before cleanup")?;
         // The profile denies DELETE access. Restore under its read protection
         // before opening the normal owned-delete handle, even after a failed
         // driver/panic where the owned game is still alive.
@@ -2551,46 +2785,12 @@ fn cli_once(
                 closed?;
                 game_closed = true;
             }
+            protection.check(r, &path)?;
             profile
                 .restore()
                 .map_err(|e| format!("software renderer restoration pending: {e}"))?;
             software_profile = None;
         }
-        let file = match open_owned_lock(r, &path, &token) {
-            Ok(file) => file,
-            Err(release_error) => {
-                if game_closed {
-                    return Err(release_error);
-                }
-                #[cfg(windows)]
-                {
-                    return match close_owned_after_release_error(
-                        r,
-                        p,
-                        &path,
-                        &token,
-                        &mut cleanup_exit,
-                        renderer.as_ref(),
-                    ) {
-                        Ok(true) => Err(release_error),
-                        Ok(false) => Err(format!(
-                            "{release_error}; lock ownership changed before fallback close"
-                        )),
-                        Err(close_error) => Err(format!("{release_error}; {close_error}")),
-                    };
-                }
-                #[cfg(not(windows))]
-                {
-                    return Err(release_error);
-                }
-            }
-        };
-        let Some(file) = file else {
-            return Err(format!(
-                "civ6.lock ownership changed before cleanup: {}",
-                path.display()
-            ));
-        };
         let closed = if options.cleanup_only {
             if game_closed {
                 Ok(())
@@ -2624,6 +2824,7 @@ fn cli_once(
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
         game_closed = closed.is_ok();
+        protection.check(r, &path)?;
         let restored = if game_closed && !options.cleanup_only {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 deployment::restore(r, p, &p.live())
@@ -2633,13 +2834,10 @@ fn cli_once(
             Ok(())
         };
         retain_renderer(r, p, Some(&token), renderer.as_ref(), "outer-after-close");
-        let released = delete_owned_handle(file, &path, r, &token);
+        closed.and(restored)?;
+        let released = protection.release(r, &path, &token);
         lock_released = released.is_ok();
-        match (closed.and(restored), released) {
-            (Err(close), Err(release)) => Err(format!("{close}; release failed: {release}")),
-            (Err(error), _) | (_, Err(error)) => Err(error),
-            _ => Ok(()),
-        }
+        released
     })();
     if cleanup_needed {
         if let Some(artifacts) = cleanup_artifacts {

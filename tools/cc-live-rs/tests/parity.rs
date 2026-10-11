@@ -1016,7 +1016,7 @@ fn invalid_input_returns_before_lock_or_external_calls() {
     assert!(!f.p.here.join("queue").exists());
 }
 #[test]
-fn cleanup_failure_still_releases_lock() {
+fn cleanup_failure_retains_lock_until_restoration_is_confirmed() {
     let f = Fixture::new();
     let mut r = Fake::success();
     r.replies.push_back(Ok(Output::default()));
@@ -1024,7 +1024,7 @@ fn cleanup_failure_still_releases_lock() {
     assert!(failed_prepare_cli(&mut r, &f.p)
         .unwrap_err()
         .contains("cleanup refused"));
-    assert!(!f.p.here.join("civ6.lock").exists());
+    assert!(f.p.here.join("civ6.lock").exists());
 }
 
 #[cfg(windows)]
@@ -2291,7 +2291,7 @@ fn dynamic_lease_deadline_is_shared_with_civ6_cleanup_and_lock_release() {
     assert!(r.mono <= 0.250001);
     let summary = reliability_summary(&r.inner);
     assert_eq!(summary["rounds"][0]["contention_deadline_monotonic"], 0.25);
-    assert_eq!(summary["rounds"][0]["cleanup"]["lock_released"], true);
+    assert_eq!(summary["rounds"][0]["cleanup"]["lock_released"], false);
     assert_eq!(summary["consecutive_successes"], 0);
 }
 
@@ -2380,7 +2380,7 @@ fn driver_and_cleanup_errors_are_both_reported() {
     let error = cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap_err();
     assert!(error.contains("driver failed"));
     assert!(error.contains("cleanup failed"));
-    assert!(!f.p.here.join("civ6.lock").exists());
+    assert!(f.p.here.join("civ6.lock").exists());
     let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
     assert!(evidence["primary_chain_error"]
         .as_str()
@@ -3078,16 +3078,20 @@ fn ordinary_single_run_isolates_and_recovers_with_the_same_receipt_and_argv() {
         assert!(!r.printed.iter().any(|s| s.starts_with("RELIABILITY")));
         // Settings restoration follows verified game closure and autosave
         // restoration. Either unresolved step must retain both recovery guards.
-        if software && matches!(failure, "unknown_exit" | "restore") {
+        if matches!(failure, "unknown_exit" | "restore") {
             assert!(f.p.here.join("civ6.lock").exists());
-            assert_eq!(
-                fs::read(f.p.here.join("software-renderer-original.bin")).unwrap(),
-                original_settings
-            );
-            assert_eq!(
-                fs::read(&settings).unwrap(),
-                b"DeviceID 140\r\nAllowSWRenderer 1\r\nOther 9\r\n"
-            );
+            if software {
+                assert_eq!(
+                    fs::read(f.p.here.join("software-renderer-original.bin")).unwrap(),
+                    original_settings
+                );
+                assert_eq!(
+                    fs::read(&settings).unwrap(),
+                    b"DeviceID 140\r\nAllowSWRenderer 1\r\nOther 9\r\n"
+                );
+            } else {
+                assert_eq!(fs::read(&settings).unwrap(), original_settings);
+            }
         } else {
             assert!(!f.p.here.join("civ6.lock").exists(), "{result_description}");
             assert_eq!(fs::read(&settings).unwrap(), original_settings);
