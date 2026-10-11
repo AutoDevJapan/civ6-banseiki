@@ -28,6 +28,7 @@ pub struct LeaseLimit {
     pub token: String,
     pub cleanup_reserve_seconds: f64,
     hard_deadline: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
+    unknown_since: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
 }
 impl PartialEq for LeaseLimit {
     fn eq(&self, other: &Self) -> bool {
@@ -43,6 +44,7 @@ impl LeaseLimit {
             token: token.into(),
             cleanup_reserve_seconds,
             hard_deadline: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            unknown_since: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
     pub fn hard_deadline(&self) -> Option<f64> {
@@ -52,12 +54,18 @@ impl LeaseLimit {
         self.hard_deadline()
             .map(|d| d - self.cleanup_reserve_seconds)
     }
+    pub fn observation_deadline(&self) -> Option<f64> {
+        self.unknown_since.lock().unwrap().map(|since| since + 5.0)
+    }
     pub fn record_probe(&self, probe: &LeaseProbe) {
         let mut deadline = self.hard_deadline.lock().unwrap();
         match *probe {
             LeaseProbe::Clear => *deadline = None,
             LeaseProbe::Contended(d) => *deadline = Some(deadline.map_or(d, |old| old.min(d))),
-            LeaseProbe::Unavailable => {}
+            LeaseProbe::Unavailable | LeaseProbe::TimedOut => {}
+        }
+        if matches!(probe, LeaseProbe::Clear | LeaseProbe::Contended(_)) {
+            *self.unknown_since.lock().unwrap() = None;
         }
     }
 }
@@ -66,6 +74,7 @@ pub const LEASE_YIELD: &str = "CIV6_LEASE_YIELD";
 pub enum LeaseProbe {
     Clear,
     Unavailable,
+    TimedOut,
     Contended(f64),
 }
 
@@ -77,16 +86,64 @@ pub fn observe_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeasePro
     {
         return Ok(LeaseProbe::Contended(limit.hard_deadline().unwrap()));
     }
-    let deadline = limit.work_deadline().unwrap_or(f64::MAX).min(now + 2.0);
-    let probe = lease_probe(
+    if limit.observation_deadline().is_some_and(|d| now >= d) {
+        return Err(LEASE_OBSERVATION_EXHAUSTED.into());
+    }
+    let deadline = limit
+        .work_deadline()
+        .unwrap_or(f64::MAX)
+        .min(limit.observation_deadline().unwrap_or(f64::MAX))
+        .min(now + 2.0);
+    let observation = lease_probe(
         &mut crate::chain::WithinDeadline {
             runner: r,
             deadline,
         },
         limit,
-    )?;
+    );
+    // These exact errors originate from the bounded command runner, rather
+    // than the authoritative lock/token read. Do not interpret them as Clear.
+    let probe = match observation {
+        Err(error)
+            if error == "command timed out" || error == "Civ6 scenario deadline exhausted" =>
+        {
+            LeaseProbe::TimedOut
+        }
+        other => other?,
+    };
+    if matches!(probe, LeaseProbe::Unavailable | LeaseProbe::TimedOut) {
+        let first = {
+            let mut since = limit.unknown_since.lock().unwrap();
+            let first = since.is_none();
+            since.get_or_insert(now);
+            first
+        };
+        if first && probe == LeaseProbe::TimedOut {
+            r.error("Civ6 lease observation timed out; retrying without changing ownership or the competition deadline")?;
+        }
+        if first && probe == LeaseProbe::Unavailable {
+            r.error("Civ6 lease record unavailable (missing or sharing conflict); retrying within the original 5s without changing ownership")?;
+        }
+        if limit
+            .observation_deadline()
+            .is_some_and(|d| r.monotonic() >= d)
+        {
+            return Err(LEASE_OBSERVATION_EXHAUSTED.into());
+        }
+    }
     limit.record_probe(&probe);
     Ok(probe)
+}
+
+const LEASE_OBSERVATION_EXHAUSTED: &str =
+    "Civ6 lease observation unavailable for 5s (including probe timeouts)";
+/// Startup and the running child share both absolute deadlines via LeaseLimit.
+pub fn monitor_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<(), String> {
+    observe_lease(r, limit)?;
+    if limit.work_deadline().is_some_and(|d| r.monotonic() >= d) {
+        return Err(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
+    }
+    Ok(())
 }
 
 /// Use the same live-waiter definition as acquisition, without holding the
@@ -197,9 +254,117 @@ pub struct Output {
     pub stderr: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProcessIdentity {
+    pub image: String,
+    pub created_filetime: u64,
+}
+
+/// One pinned handle supplies image, creation time and signalled exit state.
+/// Access failures remain errors; an exited process is never a live waiter.
+#[cfg(windows)]
+pub fn native_process_identity(pid: u32) -> std::io::Result<Option<ProcessIdentity>> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+    };
+    struct Handle(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        let error = std::io::Error::last_os_error();
+        return if error.raw_os_error() == Some(87) {
+            Ok(None)
+        } else {
+            Err(error)
+        };
+    }
+    let handle = Handle(raw);
+    let alive = || match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_OBJECT_0 => Ok(false),
+        WAIT_TIMEOUT => Ok(true),
+        _ => Err(std::io::Error::last_os_error()),
+    };
+    if !alive()? {
+        return Ok(None);
+    }
+    let mut created = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut exited = created;
+    let mut kernel = created;
+    let mut user = created;
+    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    let mut path = vec![0u16; 32768];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
+        let error = std::io::Error::last_os_error();
+        if !alive()? {
+            return Ok(None);
+        }
+        return Err(error);
+    }
+    let path = String::from_utf16(&path[..length as usize])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let image = path
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "waiter executable name is empty",
+            )
+        })?
+        .to_owned();
+    if !alive()? {
+        return Ok(None);
+    }
+    Ok(Some(ProcessIdentity {
+        image,
+        created_filetime: (u64::from(created.dwHighDateTime) << 32)
+            | u64::from(created.dwLowDateTime),
+    }))
+}
+
+/// If SYNCHRONIZE is unavailable, use the original bounded tasklist/creation
+/// proof instead. An access failure itself never means the waiter is absent.
+#[cfg(any(windows, test))]
+fn native_identity_or_fallback(
+    result: std::io::Result<Option<ProcessIdentity>>,
+) -> Option<Result<Option<ProcessIdentity>, String>> {
+    match result {
+        Err(error) if error.raw_os_error() == Some(5) => None,
+        other => Some(other.map_err(|error| error.to_string())),
+    }
+}
+
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
 pub trait Runner {
     fn run(&mut self, call: Call) -> Result<Output, String>;
+    /// None means this runner uses the injectable command-based fallback.
+    fn process_identity(&mut self, _pid: u32) -> Option<Result<Option<ProcessIdentity>, String>> {
+        None
+    }
     fn now(&mut self) -> f64;
     fn monotonic(&mut self) -> f64 {
         self.now()
@@ -264,6 +429,20 @@ fn interrupted() -> Result<(), String> {
 }
 
 impl Runner for RealRunner {
+    fn process_identity(&mut self, pid: u32) -> Option<Result<Option<ProcessIdentity>, String>> {
+        #[cfg(windows)]
+        {
+            if let Err(error) = interrupted() {
+                return Some(Err(error));
+            }
+            native_identity_or_fallback(native_process_identity(pid))
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = pid;
+            None
+        }
+    }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
@@ -380,7 +559,6 @@ fn wait(
 ) -> Result<i32, String> {
     let start = Instant::now();
     let mut next_probe = start;
-    let mut unavailable_since: Option<Instant> = None;
     loop {
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
             tree.stop(child)?;
@@ -395,23 +573,16 @@ fn wait(
                 lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
             } else if Instant::now() >= next_probe {
                 next_probe = Instant::now() + Duration::from_secs(2);
-                match observe_lease(&mut RealRunner, limit) {
-                    Ok(LeaseProbe::Clear) => {
-                        limit.record_probe(&LeaseProbe::Clear);
-                        unavailable_since = None;
-                    }
-                    Ok(probe @ LeaseProbe::Contended(_)) => {
-                        unavailable_since = None;
-                        limit.record_probe(&probe);
-                    }
-                    Ok(LeaseProbe::Unavailable) => {
-                        let since = *unavailable_since.get_or_insert_with(Instant::now);
-                        if since.elapsed() >= Duration::from_secs(5) {
-                            lease_error = Some("Civ6 lease state unavailable for 5s".to_string());
-                        }
-                    }
-                    Err(error) => lease_error = Some(error),
+                if let Err(error) = monitor_lease(&mut RealRunner, limit) {
+                    lease_error = Some(error);
                 }
+            }
+            if limit
+                .observation_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
+                && lease_error.is_none()
+            {
+                lease_error = Some(LEASE_OBSERVATION_EXHAUSTED.into());
             }
             if limit
                 .work_deadline()
@@ -438,5 +609,30 @@ fn wait(
             .into());
         }
         thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(test)]
+mod native_identity_tests {
+    use super::*;
+    #[test]
+    fn native_waiter_access_denial_requires_the_existing_proof_not_a_dead_result() {
+        assert!(native_identity_or_fallback(Err(std::io::Error::from_raw_os_error(5))).is_none());
+        assert_eq!(native_identity_or_fallback(Ok(None)), Some(Ok(None)));
+        let identity = ProcessIdentity {
+            image: "live_chain.exe".into(),
+            created_filetime: 41,
+        };
+        assert_eq!(
+            native_identity_or_fallback(Ok(Some(identity.clone()))),
+            Some(Ok(Some(identity)))
+        );
+        for code in [6, 87] {
+            assert!(
+                native_identity_or_fallback(Err(std::io::Error::from_raw_os_error(code)))
+                    .unwrap()
+                    .is_err()
+            );
+        }
     }
 }

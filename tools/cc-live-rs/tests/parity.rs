@@ -572,6 +572,204 @@ fn holder_inspection_failure_is_not_treated_as_a_dead_owner() {
     fs::write(f.p.jobs.join("partial/job.json"), "{").unwrap();
     assert!(holder_alive(&mut r, &f.p, &json!({"job":"partial"})).is_err());
 }
+
+struct NativeProof {
+    inner: Fake,
+    identity: Result<Option<process::ProcessIdentity>, String>,
+    queried: Vec<u32>,
+    elapsed: f64,
+}
+impl Runner for NativeProof {
+    fn run(&mut self, call: Call) -> Result<Output, String> {
+        self.inner.run(call)
+    }
+    fn process_identity(
+        &mut self,
+        pid: u32,
+    ) -> Option<Result<Option<process::ProcessIdentity>, String>> {
+        self.queried.push(pid);
+        self.inner.time += self.elapsed;
+        Some(self.identity.clone())
+    }
+    fn now(&mut self) -> f64 {
+        self.inner.now()
+    }
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.inner.sleep(seconds)
+    }
+}
+fn native_proof(identity: Result<Option<process::ProcessIdentity>, String>) -> NativeProof {
+    NativeProof {
+        inner: Fake::success(),
+        identity,
+        queried: vec![],
+        elapsed: 0.0,
+    }
+}
+
+#[test]
+fn native_waiter_identity_preserves_image_creation_and_job_authority() {
+    let f = Fixture::new();
+    f.json("jobs/active/job.json", json!({"status":"running"}));
+    let owner = json!({"job":"active","live_chain":true,"pid":123,"pid_created_filetime":41});
+    for (image, created, expected) in [
+        ("live_chain.exe", 41, true),
+        ("LIVE_CHAIN_PR86.EXE", 41, true),
+        ("live_chain.exe", 42, false),
+        ("codex.exe", 41, false),
+        ("CivilizationVI.exe", 41, false),
+        ("steam.exe", 41, false),
+    ] {
+        let mut r = native_proof(Ok(Some(process::ProcessIdentity {
+            image: image.into(),
+            created_filetime: created,
+        })));
+        assert_eq!(holder_alive(&mut r, &f.p, &owner).unwrap(), expected);
+        assert_eq!(r.queried, [123], "native proof must actually be consulted");
+        assert!(r.inner.calls.is_empty());
+    }
+    let mut gone = native_proof(Ok(None));
+    assert!(!holder_alive(&mut gone, &f.p, &owner).unwrap());
+    assert_eq!(gone.queried, [123]);
+    let mut missing_stamp = native_proof(Ok(Some(process::ProcessIdentity {
+        image: "live_chain.exe".into(),
+        created_filetime: 41,
+    })));
+    assert!(holder_alive(
+        &mut missing_stamp,
+        &f.p,
+        &json!({"live_chain":true,"pid":123})
+    )
+    .unwrap_err()
+    .contains("creation time missing"));
+    let mut denied = native_proof(Err("access denied".into()));
+    assert!(holder_alive(&mut denied, &f.p, &owner).is_err());
+    assert_eq!(denied.queried, [123]);
+    f.json("jobs/active/job.json", json!({"status":"succeeded"}));
+    let mut ended = native_proof(Err("must not query an ended job".into()));
+    assert!(!holder_alive(&mut ended, &f.p, &owner).unwrap());
+    assert!(ended.queried.is_empty());
+    // A positive fallback control proves that the command boundary is wired.
+    let mut legacy = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+    assert!(holder_alive(&mut legacy, &f.p, &json!({"live_chain":true,"pid":123})).unwrap());
+    assert_eq!(legacy.calls.len(), 1);
+}
+
+#[test]
+fn native_waiter_probe_is_forwarded_and_keeps_the_absolute_observation_deadline() {
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json(
+        "here/queue/waiter.json",
+        json!({"pid":123,"live_chain":true,"pid_created_filetime":41,"since":1000}),
+    );
+    let identity = Ok(Some(process::ProcessIdentity {
+        image: "live_chain.exe".into(),
+        created_filetime: 41,
+    }));
+    let mut r = native_proof(identity);
+    r.inner.time = 1000.0;
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    assert_eq!(
+        process::observe_lease(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Contended(2800.0)
+    );
+    assert_eq!(r.queried, [123]);
+    assert!(r.inner.calls.is_empty());
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    r.elapsed = 2.5;
+    assert_eq!(
+        process::observe_lease(&mut r, &limit).unwrap(),
+        process::LeaseProbe::TimedOut
+    );
+    assert_eq!(limit.observation_deadline(), Some(1005.0));
+    assert!(process::observe_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.inner.time, 1005.0);
+}
+
+#[cfg(windows)]
+#[test]
+fn native_waiter_query_reads_current_process_from_one_handle() {
+    let id = std::process::id();
+    let identity = process::native_process_identity(id).unwrap().unwrap();
+    assert_eq!(
+        identity.created_filetime,
+        process_created_filetime(id).unwrap().unwrap()
+    );
+    assert_eq!(
+        identity.image,
+        std::env::current_exe()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+    );
+    assert!(process::native_process_identity(u32::MAX)
+        .unwrap()
+        .is_none());
+}
+#[cfg(windows)]
+#[test]
+#[ignore = "only spawned by native_waiter_real_runner_rejects_an_exited_259_process"]
+fn native_identity_exit_259_helper() {
+    let Some(root) = std::env::var_os("CC_LIVE_NATIVE_EXIT_TEST") else {
+        return;
+    };
+    let root = PathBuf::from(root);
+    fs::write(root.join("ready"), "ready").unwrap();
+    let started = std::time::Instant::now();
+    while !root.join("exit").exists() {
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    std::process::exit(259);
+}
+
+#[cfg(windows)]
+#[test]
+fn native_waiter_real_runner_rejects_an_exited_259_process() {
+    use std::os::windows::process::CommandExt;
+    struct OwnedChild(std::process::Child);
+    impl Drop for OwnedChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let f = Fixture::new();
+    let mut child = OwnedChild(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "native_identity_exit_259_helper"])
+            .env("CC_LIVE_NATIVE_EXIT_TEST", &f.root)
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let started = std::time::Instant::now();
+    while !f.root.join("ready").exists() {
+        assert!(started.elapsed() < std::time::Duration::from_secs(20));
+        assert!(child.0.try_wait().unwrap().is_none());
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let owner = json!({"pid":child.0.id()});
+    assert!(holder_alive(&mut process::RealRunner, &f.p, &owner).unwrap());
+    fs::write(f.root.join("exit"), "exit").unwrap();
+    assert_eq!(child.0.wait().unwrap().code(), Some(259));
+    // Keep Child's process handle open: this is a signalled handle, not merely
+    // an invalid PID. A STILL_ACTIVE/259 comparison would falsely accept it.
+    assert!(process::native_process_identity(child.0.id())
+        .unwrap()
+        .is_none());
+    assert!(!holder_alive(&mut process::RealRunner, &f.p, &owner).unwrap());
+}
+
 #[test]
 fn short_waiter_precedes_older_long_waiter() {
     let f = Fixture::new();
@@ -631,6 +829,32 @@ fn same_priority_is_first_come_first_served() {
         json!({"job":"other","long":0,"since":1}),
     );
     f.json("jobs/other/job.json", json!({"status":"running"}));
+    assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+}
+#[test]
+fn dispatched_job_in_queue_uses_arrival_order_instead_of_blocking_earlier_waiter() {
+    let f = Fixture::new();
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":1}),
+    );
+    let peer = f.json(
+        "here/queue/peer.json",
+        json!({"job":"peer","long":0,"since":2}),
+    );
+    for job in ["mine", "peer"] {
+        f.json(&format!("jobs/{job}/job.json"), json!({"status":"running"}));
+    }
+    f.json(
+        "todo/todo.json",
+        json!({"items":[{
+            "status":"doing","needs":["civ6"],"scheduler":{"job":"peer"}
+        }]}),
+    );
+    assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+    assert!(!my_turn(&mut Fake::success(), &f.p, &peer).unwrap());
+    // Until the dispatched job registers, its reservation is still honoured.
+    fs::remove_file(peer).unwrap();
     assert!(!my_turn(&mut Fake::success(), &f.p, &me).unwrap());
 }
 #[test]
@@ -1448,7 +1672,16 @@ fn default_chain_retains_failure_even_after_a_later_success() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 7);
     // Two normal closes (6 commands each), preparation and scenario = 14 calls.
-    r.replies.extend(ready_chain(&f, 0).replies);
+    let mut second = ready_chain(&f, 0);
+    second.replies[READY_PREPARE_REPLY] = Ok(Output {
+        stdout: format!(
+            "{}\n{}\n",
+            path(f.root.join("scenario.json")),
+            path(f.root.join("artifacts-second"))
+        ),
+        ..Output::default()
+    });
+    r.replies.extend(second.replies);
     assert_eq!(
         cli(&mut r, &f.p, &args(&["a:s.json", "b:s.json"])).unwrap(),
         7
@@ -1456,6 +1689,8 @@ fn default_chain_retains_failure_even_after_a_later_success() {
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 2);
     assert_eq!(r.printed.last().unwrap(), "CHAIN FAILED");
     assert!(!r.printed.iter().any(|s| s == "CHAIN DONE"));
+    assert!(f.root.join("artifacts/exit-evidence.json").is_file());
+    assert!(f.root.join("artifacts-second/exit-evidence.json").is_file());
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 
@@ -1595,6 +1830,173 @@ fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
         process::lease_probe(&mut r, &limit).unwrap(),
         process::LeaseProbe::Contended(2800.0)
     );
+}
+
+struct ProbeTimeoutRunner(Fake);
+impl Runner for ProbeTimeoutRunner {
+    fn run(&mut self, call: Call) -> Result<Output, String> {
+        assert_eq!(call.args[0], "tasklist");
+        let budget = call.timeout.unwrap();
+        assert!(budget > 0.0 && budget <= 2.0);
+        let output = self.0.run(call);
+        if output.as_ref().is_err_and(|e| e == "command timed out") {
+            self.0.time += budget;
+        }
+        output
+    }
+    fn now(&mut self) -> f64 {
+        self.0.now()
+    }
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.0.sleep(seconds)
+    }
+    fn error(&mut self, text: &str) -> Result<(), String> {
+        self.0.error(text)
+    }
+}
+fn probe_timeout_fixture() -> (Fixture, ProbeTimeoutRunner, process::LeaseLimit) {
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json("here/queue/waiter.json", json!({"pid":4321,"since":1000}));
+    let mut fake = Fake::success();
+    fake.time = 1100.0;
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    (f, ProbeTimeoutRunner(fake), limit)
+}
+#[test]
+fn lease_monitor_timeout_is_unknown_and_recovers_without_extending_contention() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(2800.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(r.0.time, 1102.0);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+    assert_eq!(r.0.errors.len(), 1);
+    r.0.replies.push_back(Ok(Output {
+        stdout: "\"live_chain.exe\",\"4321\"".into(),
+        ..Output::default()
+    }));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+    // A new outage after recovery has its own bounded grace period.
+    r.0.time = 1200.0;
+    r.0.replies.push_back(Err("command timed out".into()));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(r.0.errors.len(), 2);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+}
+#[test]
+fn lease_monitor_timeout_never_extends_a_known_competition_deadline() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(1345.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.work_deadline(), Some(1105.0));
+    r.0.time = 1105.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains(process::LEASE_YIELD));
+    assert_eq!(r.0.calls.len(), 1);
+    assert_eq!(limit.hard_deadline(), Some(1345.0));
+}
+#[test]
+fn lease_monitor_yields_when_the_known_deadline_expires_inside_the_query() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(1341.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+    let error = process::monitor_lease(&mut r, &limit).unwrap_err();
+    assert!(error.contains(process::LEASE_YIELD), "{error}");
+    assert_eq!(r.0.time, 1101.0);
+    assert_eq!(r.0.calls[0].timeout, Some(1.0));
+    assert_eq!(limit.hard_deadline(), Some(1341.0));
+}
+#[test]
+fn lease_monitor_authoritative_owner_change_is_fatal_after_a_timeout() {
+    let (f, mut r, limit) = probe_timeout_fixture();
+
+    r.0.replies.push_back(Err("command timed out".into()));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"replacement","acquired_at":1102}),
+    );
+    assert_eq!(
+        process::monitor_lease(&mut r, &limit).unwrap_err(),
+        "Civ6 lease ownership changed while child was running"
+    );
+    assert_eq!(r.0.calls.len(), 1);
+}
+#[test]
+fn lease_monitor_persistent_timeout_is_bounded_and_not_driver_timeout() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+
+    for _ in 0..3 {
+        r.0.replies.push_back(Err("command timed out".into()));
+    }
+    process::monitor_lease(&mut r, &limit).unwrap();
+    process::monitor_lease(&mut r, &limit).unwrap();
+    let error = process::monitor_lease(&mut r, &limit).unwrap_err();
+    assert!(
+        error.contains("lease observation unavailable for 5s"),
+        "{error}"
+    );
+    assert!(!error.contains("command timed out"));
+    assert_eq!(r.0.time, 1105.0);
+    assert_eq!(r.0.errors.len(), 1);
+}
+#[test]
+fn lease_monitor_non_timeout_query_failure_remains_fatal() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    r.0.replies.push_back(Err("permission denied".into()));
+    assert_eq!(
+        process::monitor_lease(&mut r, &limit).unwrap_err(),
+        "permission denied"
+    );
+    assert_eq!(r.0.time, 1100.0);
+}
+#[test]
+fn lease_monitor_startup_outage_deadline_survives_clone_into_the_child() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    for _ in 0..3 {
+        r.0.replies.push_back(Err("command timed out".into()));
+    }
+    // The initial check is exactly the same function called before driver launch.
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.observation_deadline(), Some(1105.0));
+    let child_limit = limit.clone();
+    process::monitor_lease(&mut r, &child_limit).unwrap();
+    assert!(process::monitor_lease(&mut r, &child_limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.0.time, 1105.0);
+    assert_eq!(
+        r.0.calls
+            .iter()
+            .map(|c| c.timeout.unwrap())
+            .collect::<Vec<_>>(),
+        vec![2.0, 2.0, 1.0]
+    );
+    r.0.time = 1110.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.0.calls.len(), 3); // No new query can reset the expired outage.
+}
+#[test]
+fn lease_monitor_missing_lock_uses_the_same_absolute_outage_deadline() {
+    let (f, mut r, limit) = probe_timeout_fixture();
+    fs::remove_file(f.p.here.join("civ6.lock")).unwrap();
+    process::monitor_lease(&mut r, &limit).unwrap();
+    r.0.time = 1105.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert!(r.0.calls.is_empty());
 }
 
 #[cfg(windows)]
@@ -1945,6 +2347,11 @@ fn driver_timeout_keeps_failure_log_and_releases_lock() {
         .contains("partial startup diagnostic"));
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 1);
     assert!(!f.p.here.join("civ6.lock").exists());
+    let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
+    assert!(evidence["primary_chain_error"]
+        .as_str()
+        .unwrap()
+        .contains("partial startup diagnostic"));
 }
 
 #[test]
@@ -1957,6 +2364,15 @@ fn driver_and_cleanup_errors_are_both_reported() {
     assert!(error.contains("driver failed"));
     assert!(error.contains("cleanup failed"));
     assert!(!f.p.here.join("civ6.lock").exists());
+    let evidence = read_json(f.root.join("artifacts/exit-evidence-cleanup.json")).unwrap();
+    assert!(evidence["primary_chain_error"]
+        .as_str()
+        .unwrap()
+        .contains("driver failed"));
+    assert!(evidence["cleanup_error"]
+        .as_str()
+        .unwrap()
+        .contains("cleanup failed"));
 }
 
 #[test]
@@ -3872,6 +4288,10 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
     };
     let error = cli(&mut r, &f.p, &["a:s.json".into(), "b:s.json".into()]).unwrap_err();
     assert!(error.contains("ownership changed"), "{error}");
+    assert!(
+        !f.root.join("artifacts/exit-evidence-cleanup.json").exists(),
+        "a second preparation failure must not be saved as the first run's exit"
+    );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
     assert_eq!(
         r.fake
