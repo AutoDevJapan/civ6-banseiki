@@ -3904,7 +3904,7 @@ mod native_transport {
     }
 
     #[test]
-    fn shipped_binding_matches_rust_and_is_loaded_once_in_gameplay() {
+    fn shipped_binding_matches_rust_and_is_imported_for_entry_vm() {
         let script = repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_CarrierBoundary.lua");
         assert_eq!(
             fs::read_to_string(script).unwrap(),
@@ -3930,6 +3930,15 @@ mod native_transport {
             entries[0].attribute("criteria"),
             Some("JAC_Absorption_Banseiki")
         );
+        // Runtime registration, duplicate include, save/reload and the old
+        // independent-VM failure are exercised by absorption_flow's real
+        // modinfo loader. This check only covers the generated asset contract.
+        assert!(!doc
+            .descendants()
+            .any(|node| node.has_tag_name("AddGameplayScripts")
+                && node
+                    .children()
+                    .any(|file| file.text() == Some("Scripts/JAC_CarrierBoundary.lua"))));
         assert_eq!(
             doc.descendants()
                 .filter(|node| node.has_tag_name("AddGameplayScripts"))

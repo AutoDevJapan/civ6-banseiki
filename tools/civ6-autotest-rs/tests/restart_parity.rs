@@ -438,6 +438,20 @@ fn close_failure_stops_steam_launch() {
 }
 
 #[test]
+fn reporter_exiting_between_image_check_and_stop_does_not_block_steam() {
+    let mut b = MockLifecycle {
+        reporter_script: VecDeque::from([BTreeSet::from([7]), BTreeSet::new()]),
+        reporter_path: Some(REPORTER.into()),
+        reporter_terminate_error: Some("reporter disappeared before termination".into()),
+        ..Default::default()
+    };
+    restart::launch_via_steam_with(&mut b).unwrap();
+    assert_eq!(b.uri, ["steam://launch/289070/option2"]);
+    assert!(b.reporter_terminated.is_empty());
+    assert!(b.reporter_script.is_empty());
+}
+
+#[test]
 fn only_dx11_window_is_accepted_after_launch() {
     for (name, accepted) in [
         ("civilizationvi.exe", true),

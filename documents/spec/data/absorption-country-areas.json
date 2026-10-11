@@ -1,0 +1,31 @@
+{
+  "status": "暫定。現1534地図の地理配分を面積積分した分類用参照値。史実の直轄領の確定面積ではない",
+  "source": "https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_admin_0_countries.zip",
+  "source_sha256": "ce1ac7036499a0edd641fbc093cd209a98f96a49d2eca8480aaacad35138a7f6",
+  "method": "Natural Earth Japan land; Lambert azimuthal equal-area (6371.0088 km); 1 km2 square midpoint integration; original castle WGS84 positions plus current province anchors; nearest anchor; latitude>=41.8 AINU, <29.2 RYUKYU",
+  "basis_date": "1534年の現製品の地理配分。海岸線はNatural Earth 10m。ゲーム中の領土増減では変更しない",
+  "areas_km2": {
+    "AINU": 76941,
+    "AMAGO": 7312,
+    "ASAKURA": 4045,
+    "ASHIKAGA": 55813,
+    "ASHINA": 12649,
+    "CHOSOKABE": 5677,
+    "DATE": 59088,
+    "HOJO": 11052,
+    "HONGANJI": 3582,
+    "IMAGAWA": 7744,
+    "MATSUDAIRA": 4003,
+    "MIYOSHI": 9720,
+    "MORI": 4950,
+    "NAGAO": 9880,
+    "ODA": 1202,
+    "OTOMO": 19446,
+    "OUCHI": 21785,
+    "ROKKAKU": 2592,
+    "RYUKYU": 3303,
+    "SHIMAZU": 13194,
+    "TAKEDA": 12278,
+    "YAMANOUCHI_UESUGI": 26969
+  }
+}

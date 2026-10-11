@@ -1,0 +1,1264 @@
+{
+  "name": "Product merger admission with human recipient",
+  "judge_profile": "generic",
+  "loadscreen_autostart": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "state_name": "InGame",
+      "code": "local p=Players[Game.GetLocalPlayer()];local city=p:GetCities():GetCapitalCity();local objects={Buildings=city:GetBuildings(),PlayerCulture=p:GetCulture(),GreatPeople=Game.GetGreatPeople()};if Game.GetCulture then objects.GameCulture=Game.GetCulture() end;if Game.GetGreatWorks then objects.GreatWorks=Game.GetGreatWorks() end;local out={};for name,obj in pairs(objects) do for _,method in ipairs({'CreateGreatWork','RemoveGreatWork','MoveGreatWork','TransferGreatWork','SetGreatWork','SetGreatWorkInSlot','GetGreatWorkInSlot','GetGreatWorkType'}) do local ok,value=pcall(function() return obj[method] end);out[#out+1]=name..'.'..method..'='..(ok and type(value) or 'unavailable') end end;table.sort(out);print('[JAC_NATIVE_WORK_METHODS] '..table.concat(out,','));return table.concat(out,',')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nassert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI','wrong ruleset')\nlocal selected=GameConfiguration.GetCalendarType()\nassert(selected=='CALENDAR_STANDARD_FROM_START_ERA' or selected==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA'),'wrong start-era calendar')\nassert(GameInfo.StartEras['ERA_ANCIENT'].Year==1534,'wrong start-era year')\nlocal turn=Game.GetCurrentGameTurn()\nassert(turn==GameConfiguration.GetStartTurn(),'not the actual start turn')\nlocal date=Calendar.MakeYearStr(turn)\nlocal numbers={};for number in tostring(date):gmatch('%d+') do numbers[#numbers+1]=number end\nassert(#numbers==1 and numbers[1]=='1534','wrong actual start date: '..tostring(date))\nreturn 'verified start date='..date\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil and ExposedMembers.JAC_HeroReadAPI and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal P=assert(JAC_AbsorptionProductGameplay)\nlocal from,to\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n  local civ=PlayerConfigurations[player:GetID()]:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then from=player:GetID() elseif civ=='CIVILIZATION_JAC_ODA' then to=player:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman(),'ordinary source actor required')\n-- Use an actual bilateral friendship for the fixture, not a forged relation\n-- ledger. This keeps the source from declaring war during the AI envoy turns.\nPlayers[from]:GetDiplomacy():SetHasMet(to)\nPlayers[to]:GetDiplomacy():SetHasMet(from)\nPlayers[from]:GetDiplomacy():SetHasDeclaredFriendship(to,true)\nPlayers[to]:GetDiplomacy():SetHasDeclaredFriendship(from,true)\nlocal failures,checked={},0\nfor _,other in ipairs(PlayerManager.GetAliveMajors()) do\n  if other:GetID()~=to and not other:IsHuman() then\n    local candidate=P.Get(other:GetID(),to);checked=checked+1\n    if candidate.Status=='UNAVAILABLE' then failures[#failures+1]=tostring(other:GetID())..': '..tostring(candidate.Error) end\n  end\nend\nassert(checked>0 and #failures==0,'native country reads unavailable: '..table.concat(failures,' | '))\nlocal view=P.Get(from,to);assert(view.Status=='AVAILABLE',view.Error)\nassert(view.Mode=='MERGER' and view.Country.Profile.LeaderType==PlayerConfigurations[from]:GetLeaderTypeName())\nassert(view.Country.AreaKm2>0 and (view.Country.AreaKm2<10000)==false)\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',{From=from,To=to,Mode=view.Mode,Initial=JAC_AbsorptionGameplay.Rules.Copy(view)})\nreturn 'ordinary country, current leader, geographic area, personality and trait verified'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nassert(t.To==Game.GetLocalPlayer());LuaEvents.TopPanel_OpenDiplomacyActionView(t.From);return 'ordinary admission screen opened'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden() and type(JAC_AbsorptionDiplomacyAction)=='function'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionDiplomacyAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal p=Players[t.To]\nlocal treasury=p:GetTreasury();treasury:ChangeGoldBalance(-treasury:GetGoldBalance())\n-- Keep the separate official token pool, rather than assigning a fake count.\nlocal influence=p:GetInfluence();influence:ChangeTokensToGive(-influence:GetTokensToGive())\nreturn 'actual deposit funds and unassigned envoy pool are unmet'\n"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal v=JAC_AbsorptionProductGameplay.Get(t.From,t.To)\nassert(v.Status~='STARTED','unmet actual product demands started absorption')\nassert(Players[t.To]:GetTreasury():GetGoldBalance()<v.Deposit.Gold,'unmet deposit fixture did not hold')\nlocal cap=Players[t.To]:GetCities():GetCapitalCity()\n-- Supply real native troops with normal unit definitions. No reader/ready\n-- flags or diagnostic requirements are installed.\nlocal kind\nfor def in GameInfo.Units() do\n  local combat=math.max(def.Combat or 0,def.RangedCombat or 0)\n  if combat>0 and (not kind or combat>kind.Power or combat==kind.Power and def.UnitType<kind.Type) then kind={Type=def.UnitType,Power=combat} end\nend\nassert(kind,'normal combat unit missing')\nlocal minimum=0;local metric\nfor _,row in ipairs(v.Rows) do if row.Kind=='PRODUCT_METRIC' then minimum=row.Minimum;metric=row.ID end end\nassert(metric and minimum>0,'ordinary leader demand missing')\nlocal count=metric=='leader:PEAK_COMBAT' and math.ceil(minimum/kind.Power)+2 or minimum+2\nfor i=1,count do UnitManager.InitUnitValidAdjacentHex(t.To,kind.Type,cap:GetX(),cap:GetY(),20) end\nif v.Envoys then Players[t.To]:GetInfluence():ChangeTokensToGive(v.Envoys.Required+2) end\nreturn 'real troops and official envoy pool prepared; actual deposit remains unmet for waiting save'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-product-merger-human-waiting"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-product-merger-human-waiting",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_AbsorptionProduct~=nil and Players[Game.GetLocalPlayer()]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal v=JAC_AbsorptionProductGameplay.Get(t.From,t.To)\nassert(v.Status~='STARTED','waiting save did not preserve unmet real funds')\nlocal gold=v.Deposit.Gold+10000;local faith=v.Deposit.Faith+10000\nPlayers[t.To]:GetTreasury():ChangeGoldBalance(gold-Players[t.To]:GetTreasury():GetGoldBalance())\nPlayers[t.To]:GetReligion():ChangeFaithBalance(faith-JAC_AbsorptionGameplay.PlayerFaithBalance(t.To))\nt.GoldBefore=Players[t.To]:GetTreasury():GetGoldBalance();t.FaithBefore=JAC_AbsorptionGameplay.PlayerFaithBalance(t.To)\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)\nreturn 'waiting save restored; real deposit supplied for ordinary admission'\n"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 1200
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\n\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nreturn v.Status=='STARTED'\n"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function InventoryEvidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  local entries={}\n  for _,e in ipairs(flow.Entries or {}) do\n    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),\n      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),\n      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}\n  end\n  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,\n    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}\nend\nlocal function P1Evidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  assert(flow.Phase1Complete,'first-stage journal is incomplete')\n  local evidence=InventoryEvidence(flow)\n  evidence.Phase1Complete=flow.Phase1Complete\n  for i,e in ipairs(flow.Entries or {}) do\n    local entry=evidence.Entries[i]\n    entry.EscapeOutcome=e.EscapeOutcome\n    entry.P1Chance=e.P1Chance\n    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}\n  end\n  return evidence\nend\n\n\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\nlocal pair=assert(state.Pairs[t.From..':'..t.To]);local receipt=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID))\nassert(receipt.Status=='STARTED' and receipt.Plan.Mode==t.Mode and receipt.Plan.LeaderProfile.LeaderType==t.Initial.Country.Profile.LeaderType)\nlocal escrow=assert(state.Escrows[pair.ID]);assert(escrow.Gold>0 and (escrow.Status=='HELD' or escrow.Status=='CONSUMED'))\nassert(escrow.CollectGold.Done and escrow.CollectGold.Before-escrow.CollectGold.After==escrow.Gold,'real gold leg did not settle')\nif escrow.Faith>0 then assert(escrow.CollectFaith.Done and escrow.CollectFaith.Before-escrow.CollectFaith.After==escrow.Faith) end\nlocal flow=assert(JAC_AbsorptionFlowGameplay.Get(receipt.FlowID));assert(flow.Phase1Complete)\nt.OfferID=pair.ID;t.FlowID=receipt.FlowID;t.Snapshot=JAC_AbsorptionGameplay.Canonical(P1Evidence(flow))\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)\nreturn 'ordinary product requirements, actual deposit, and first-stage flow accepted'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-product-merger-human-choice"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-product-merger-human-choice",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_AbsorptionProduct~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function InventoryEvidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  local entries={}\n  for _,e in ipairs(flow.Entries or {}) do\n    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),\n      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),\n      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}\n  end\n  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,\n    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}\nend\nlocal function P1Evidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  assert(flow.Phase1Complete,'first-stage journal is incomplete')\n  local evidence=InventoryEvidence(flow)\n  evidence.Phase1Complete=flow.Phase1Complete\n  for i,e in ipairs(flow.Entries or {}) do\n    local entry=evidence.Entries[i]\n    entry.EscapeOutcome=e.EscapeOutcome\n    entry.P1Chance=e.P1Chance\n    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}\n  end\n  return evidence\nend\n\n\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local flow=JAC_AbsorptionFlowGameplay.Get(t.FlowID)\nassert(JAC_AbsorptionGameplay.Canonical(P1Evidence(flow))==t.Snapshot,'saved product P1 changed')\nlocal before=Players[t.To]:GetTreasury():GetGoldBalance()\nJAC_AbsorptionAdmissionGameplay.Request('leader-offer',t.OfferID,t.From,t.To)\nassert(JAC_AbsorptionGameplay.Canonical(P1Evidence(JAC_AbsorptionFlowGameplay.Get(t.FlowID)))==t.Snapshot)\nassert(Players[t.To]:GetTreasury():GetGoldBalance()==before,'product replay charged twice')\nreturn 'product save/load and duplicate admission preserve first-stage rolls and payment'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')\nJAC_PRODUCT_COMPLETION_CHOICE=nil\nlocal preferred={UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}\nfor _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then\n  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false\n  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end\n  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')\n  JAC_PRODUCT_COMPLETION_CHOICE={FlowID=f.ID,AssetID=e.ID,Action=action};return 'ordinary human choice submitted'\nend end\nreturn 'all human choices already submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\nlocal ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open());assert(ui.Resolve(),'normal resolution handler rejected');return 'normal human resolution submitted'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "\nlocal function TraceCompletionWait(flowID,offerID)\n  local A=JAC_AbsorptionGameplay\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  local tx=A.GetState().Transactions[flowID]\n  local trace={FlowID=flowID,OfferID=offerID,Phase=f and f.Phase,WaitingFor=f and f.WaitingFor,\n    FlowError=f and f.Error,EscrowStatus=e and e.Status,TransferStatus=tx and tx.Status,\n    TransferError=tx and tx.Error,AwaitingPreparation=tx and tx.AwaitingPreparation,\n    AwaitingFinalUI=tx and tx.AwaitingFinalUI,SourceReadyToken=tx and tx.SourceReadyToken,\n    SourceSpreadReads=tx and tx.SourceSpreadReads,NativeDealUI=tx and tx.NativeDealUI,\n    CityLoyaltyPending=tx and tx.CityLoyaltyPending,NativeWorks=tx and tx.NativeWorks}\n  local recipient=f and Players and Players[f.To]\n  if recipient then\n    trace.FlowOperation=recipient:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')\n    trace.ProductOperation=recipient:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1')\n  end\n  if tx then\n    trace.UnitMapFrozen=tx.UnitMapFrozen;trace.SourceRosterMoved=tx.SourceRosterMoved\n    trace.Units={};trace.Cities={};trace.PlotCount=#(tx.Plots or {})\n    for _,u in ipairs(tx.Units or {}) do\n      trace.Units[#trace.Units+1]={ID=u.ID,Destination=u.Destination,KeepUnit=u.KeepUnit,\n        CandidateID=u.CandidateID,NativeRestored=u.NativeRestored,CoreStagedTurn=u.CoreStagedTurn,\n        TransferRestoredTurn=u.TransferRestoredTurn,PlacementComplete=u.PlacementComplete,\n        HeroSpawnIntent=u.HeroSpawnIntent,SpreadReads=u.SpreadReads}\n    end\n    for _,c in ipairs(tx.Cities or {}) do\n      trace.Cities[#trace.Cities+1]={ID=c.ID,X=c.X,Y=c.Y,TransferTurn=c.TransferTurn,\n        PropertiesPrepared=c.TransferredProperties~=nil}\n    end\n  end\n  local text=A.Canonical(trace)\n  JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}\n  if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then\n    -- Civ6 truncates a print at 2047 bytes. Frame complete, single-line UTF-8\n    -- chunks so every asset remains observable, including escaped error text.\n    local escaped=text:gsub('\\\\','\\\\\\\\'):gsub('\\r','\\\\r'):gsub('\\n','\\\\n'):gsub('\\t','\\\\t')\n    local chunks={};local first=1\n    while first<=#escaped do\n      local last=math.min(first+1499,#escaped)\n      while last<#escaped do\n        local byte=escaped:byte(last+1)\n        if byte<128 or byte>191 then break end\n        last=last-1\n      end\n      chunks[#chunks+1]=escaped:sub(first,last);first=last+1\n    end\n    JAC_PRODUCT_COMPLETION_TRACE_SERIAL=(JAC_PRODUCT_COMPLETION_TRACE_SERIAL or 0)+1\n    for i,chunk in ipairs(chunks) do\n      print('JAC_PRODUCT_COMPLETION_WAIT '..JAC_PRODUCT_COMPLETION_TRACE_SERIAL..' '..i..'/'..#chunks..' '..chunk)\n    end\n    JAC_PRODUCT_COMPLETION_TRACE[flowID]=text\n  end\nend\nlocal function CompletionReady(flowID,offerID)\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  if f and f.Phase=='BLOCKED' then error(f.Error or 'asset transfer blocked') end\n  return f and (f.Phase=='RESULT' or f.Phase=='DONE') and e and e.Status=='CONSUMED'\nend\nlocal function CompletionEvidence(flowID,offerID)\n  local A=JAC_AbsorptionGameplay;local R=A.Rules\n  local f=assert(JAC_AbsorptionFlowGameplay.Get(flowID),'completed flow missing')\n  local s=assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))\n  local e=assert(s.Escrows[offerID],'completed escrow missing')\n  local n=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',offerID),'completed admission missing')\n  assert(n.Status=='STARTED' and n.FlowID==flowID and R.Equal(n.Plan,f.Request),'completed admission changed')\n  assert((f.Phase=='RESULT' or f.Phase=='DONE') and f.Phase1Complete and f.FinalRollsComplete\n    and type(f.CompletedTurn)=='number' and not f.Error and not f.WaitingFor,'flow is not complete')\n  assert(e.ID==offerID and e.Status=='CONSUMED' and e.From==f.From and e.To==f.To,'completed payer changed')\n  local deposit=assert(f.Request.ProductDeposit,'original product deposit missing')\n  assert(deposit.OfferID==offerID and deposit.From==e.From and deposit.To==e.To\n    and deposit.Gold==e.Gold and deposit.Faith==e.Faith\n    and deposit.Policy=='CONSUME_ON_VERIFIED_RESULT_V2','original product deposit changed')\n  local tx=assert(A.GetState().Transactions[flowID],'completed transfer missing')\n  assert(tx.ID==flowID and tx.Status=='COMPLETE' and tx.From==f.From and tx.To==f.To and tx.Mode==f.Mode\n    and R.Equal(tx.Request,f.AppliedPlan),'complete asset-transfer receipt changed')\n  local c=assert(e.Consumption,'consumption receipt missing')\n  assert(c.FlowID==flowID and c.From==e.From and c.To==e.To and c.CompletedTurn==f.CompletedTurn\n    and c.Policy=='CONSUME_ON_VERIFIED_RESULT_V2' and c.Gold==e.Gold and c.Faith==e.Faith\n    and c.LegacyRefunded and c.LegacyRefunded.Gold==0 and c.LegacyRefunded.Faith==0,'consumption receipt changed')\n  for _,currency in ipairs({'Gold','Faith'}) do\n    if e[currency]>0 then\n      local leg=assert(e['Collect'..currency],'actual payment leg missing')\n      assert(leg.Done and leg.Before-leg.After==e[currency],'actual payment leg changed')\n    end\n  end\n  local transfer=R.Copy(tx);transfer.VerificationUI=nil\n  return {FirstStage=P1Evidence(f),Entries=R.Copy(f.Entries),AppliedPlan=R.Copy(f.AppliedPlan),\n    CompletedTurn=f.CompletedTurn,Transfer=transfer,Escrow=R.Copy(e),\n    Gold=Players[f.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(f.To)}\nend\n\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');if t then TraceCompletionWait(t.FlowID,t.OfferID) end;return t and CompletionReady(t.FlowID,t.OfferID)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function InventoryEvidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  local entries={}\n  for _,e in ipairs(flow.Entries or {}) do\n    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),\n      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),\n      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}\n  end\n  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,\n    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}\nend\nlocal function P1Evidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  assert(flow.Phase1Complete,'first-stage journal is incomplete')\n  local evidence=InventoryEvidence(flow)\n  evidence.Phase1Complete=flow.Phase1Complete\n  for i,e in ipairs(flow.Entries or {}) do\n    local entry=evidence.Entries[i]\n    entry.EscapeOutcome=e.EscapeOutcome\n    entry.P1Chance=e.P1Chance\n    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}\n  end\n  return evidence\nend\n\n\nlocal function TraceCompletionWait(flowID,offerID)\n  local A=JAC_AbsorptionGameplay\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  local tx=A.GetState().Transactions[flowID]\n  local trace={FlowID=flowID,OfferID=offerID,Phase=f and f.Phase,WaitingFor=f and f.WaitingFor,\n    FlowError=f and f.Error,EscrowStatus=e and e.Status,TransferStatus=tx and tx.Status,\n    TransferError=tx and tx.Error,AwaitingPreparation=tx and tx.AwaitingPreparation,\n    AwaitingFinalUI=tx and tx.AwaitingFinalUI,SourceReadyToken=tx and tx.SourceReadyToken,\n    SourceSpreadReads=tx and tx.SourceSpreadReads,NativeDealUI=tx and tx.NativeDealUI,\n    CityLoyaltyPending=tx and tx.CityLoyaltyPending,NativeWorks=tx and tx.NativeWorks}\n  local recipient=f and Players and Players[f.To]\n  if recipient then\n    trace.FlowOperation=recipient:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')\n    trace.ProductOperation=recipient:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1')\n  end\n  if tx then\n    trace.UnitMapFrozen=tx.UnitMapFrozen;trace.SourceRosterMoved=tx.SourceRosterMoved\n    trace.Units={};trace.Cities={};trace.PlotCount=#(tx.Plots or {})\n    for _,u in ipairs(tx.Units or {}) do\n      trace.Units[#trace.Units+1]={ID=u.ID,Destination=u.Destination,KeepUnit=u.KeepUnit,\n        CandidateID=u.CandidateID,NativeRestored=u.NativeRestored,CoreStagedTurn=u.CoreStagedTurn,\n        TransferRestoredTurn=u.TransferRestoredTurn,PlacementComplete=u.PlacementComplete,\n        HeroSpawnIntent=u.HeroSpawnIntent,SpreadReads=u.SpreadReads}\n    end\n    for _,c in ipairs(tx.Cities or {}) do\n      trace.Cities[#trace.Cities+1]={ID=c.ID,X=c.X,Y=c.Y,TransferTurn=c.TransferTurn,\n        PropertiesPrepared=c.TransferredProperties~=nil}\n    end\n  end\n  local text=A.Canonical(trace)\n  JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}\n  if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then\n    -- Civ6 truncates a print at 2047 bytes. Frame complete, single-line UTF-8\n    -- chunks so every asset remains observable, including escaped error text.\n    local escaped=text:gsub('\\\\','\\\\\\\\'):gsub('\\r','\\\\r'):gsub('\\n','\\\\n'):gsub('\\t','\\\\t')\n    local chunks={};local first=1\n    while first<=#escaped do\n      local last=math.min(first+1499,#escaped)\n      while last<#escaped do\n        local byte=escaped:byte(last+1)\n        if byte<128 or byte>191 then break end\n        last=last-1\n      end\n      chunks[#chunks+1]=escaped:sub(first,last);first=last+1\n    end\n    JAC_PRODUCT_COMPLETION_TRACE_SERIAL=(JAC_PRODUCT_COMPLETION_TRACE_SERIAL or 0)+1\n    for i,chunk in ipairs(chunks) do\n      print('JAC_PRODUCT_COMPLETION_WAIT '..JAC_PRODUCT_COMPLETION_TRACE_SERIAL..' '..i..'/'..#chunks..' '..chunk)\n    end\n    JAC_PRODUCT_COMPLETION_TRACE[flowID]=text\n  end\nend\nlocal function CompletionReady(flowID,offerID)\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  if f and f.Phase=='BLOCKED' then error(f.Error or 'asset transfer blocked') end\n  return f and (f.Phase=='RESULT' or f.Phase=='DONE') and e and e.Status=='CONSUMED'\nend\nlocal function CompletionEvidence(flowID,offerID)\n  local A=JAC_AbsorptionGameplay;local R=A.Rules\n  local f=assert(JAC_AbsorptionFlowGameplay.Get(flowID),'completed flow missing')\n  local s=assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))\n  local e=assert(s.Escrows[offerID],'completed escrow missing')\n  local n=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',offerID),'completed admission missing')\n  assert(n.Status=='STARTED' and n.FlowID==flowID and R.Equal(n.Plan,f.Request),'completed admission changed')\n  assert((f.Phase=='RESULT' or f.Phase=='DONE') and f.Phase1Complete and f.FinalRollsComplete\n    and type(f.CompletedTurn)=='number' and not f.Error and not f.WaitingFor,'flow is not complete')\n  assert(e.ID==offerID and e.Status=='CONSUMED' and e.From==f.From and e.To==f.To,'completed payer changed')\n  local deposit=assert(f.Request.ProductDeposit,'original product deposit missing')\n  assert(deposit.OfferID==offerID and deposit.From==e.From and deposit.To==e.To\n    and deposit.Gold==e.Gold and deposit.Faith==e.Faith\n    and deposit.Policy=='CONSUME_ON_VERIFIED_RESULT_V2','original product deposit changed')\n  local tx=assert(A.GetState().Transactions[flowID],'completed transfer missing')\n  assert(tx.ID==flowID and tx.Status=='COMPLETE' and tx.From==f.From and tx.To==f.To and tx.Mode==f.Mode\n    and R.Equal(tx.Request,f.AppliedPlan),'complete asset-transfer receipt changed')\n  local c=assert(e.Consumption,'consumption receipt missing')\n  assert(c.FlowID==flowID and c.From==e.From and c.To==e.To and c.CompletedTurn==f.CompletedTurn\n    and c.Policy=='CONSUME_ON_VERIFIED_RESULT_V2' and c.Gold==e.Gold and c.Faith==e.Faith\n    and c.LegacyRefunded and c.LegacyRefunded.Gold==0 and c.LegacyRefunded.Faith==0,'consumption receipt changed')\n  for _,currency in ipairs({'Gold','Faith'}) do\n    if e[currency]>0 then\n      local leg=assert(e['Collect'..currency],'actual payment leg missing')\n      assert(leg.Done and leg.Before-leg.After==e[currency],'actual payment leg changed')\n    end\n  end\n  local transfer=R.Copy(tx);transfer.VerificationUI=nil\n  return {FirstStage=P1Evidence(f),Entries=R.Copy(f.Entries),AppliedPlan=R.Copy(f.AppliedPlan),\n    CompletedTurn=f.CompletedTurn,Transfer=transfer,Escrow=R.Copy(e),\n    Gold=Players[f.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(f.To)}\nend\n\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal r=JAC_AbsorptionGameplay.RequestVerification(t.FlowID);t.VerificationToken=r and r.Token or nil;Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t);return 'request exact transferred-asset verification'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'));local r=ExposedMembers.JAC_HeroReadAPI;return not t.VerificationToken or r and r.GetObservation and r.GetObservation(t.VerificationToken)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function InventoryEvidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  local entries={}\n  for _,e in ipairs(flow.Entries or {}) do\n    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),\n      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),\n      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}\n  end\n  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,\n    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}\nend\nlocal function P1Evidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  assert(flow.Phase1Complete,'first-stage journal is incomplete')\n  local evidence=InventoryEvidence(flow)\n  evidence.Phase1Complete=flow.Phase1Complete\n  for i,e in ipairs(flow.Entries or {}) do\n    local entry=evidence.Entries[i]\n    entry.EscapeOutcome=e.EscapeOutcome\n    entry.P1Chance=e.P1Chance\n    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}\n  end\n  return evidence\nend\n\n\nlocal function TraceCompletionWait(flowID,offerID)\n  local A=JAC_AbsorptionGameplay\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  local tx=A.GetState().Transactions[flowID]\n  local trace={FlowID=flowID,OfferID=offerID,Phase=f and f.Phase,WaitingFor=f and f.WaitingFor,\n    FlowError=f and f.Error,EscrowStatus=e and e.Status,TransferStatus=tx and tx.Status,\n    TransferError=tx and tx.Error,AwaitingPreparation=tx and tx.AwaitingPreparation,\n    AwaitingFinalUI=tx and tx.AwaitingFinalUI,SourceReadyToken=tx and tx.SourceReadyToken,\n    SourceSpreadReads=tx and tx.SourceSpreadReads,NativeDealUI=tx and tx.NativeDealUI,\n    CityLoyaltyPending=tx and tx.CityLoyaltyPending,NativeWorks=tx and tx.NativeWorks}\n  local recipient=f and Players and Players[f.To]\n  if recipient then\n    trace.FlowOperation=recipient:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')\n    trace.ProductOperation=recipient:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1')\n  end\n  if tx then\n    trace.UnitMapFrozen=tx.UnitMapFrozen;trace.SourceRosterMoved=tx.SourceRosterMoved\n    trace.Units={};trace.Cities={};trace.PlotCount=#(tx.Plots or {})\n    for _,u in ipairs(tx.Units or {}) do\n      trace.Units[#trace.Units+1]={ID=u.ID,Destination=u.Destination,KeepUnit=u.KeepUnit,\n        CandidateID=u.CandidateID,NativeRestored=u.NativeRestored,CoreStagedTurn=u.CoreStagedTurn,\n        TransferRestoredTurn=u.TransferRestoredTurn,PlacementComplete=u.PlacementComplete,\n        HeroSpawnIntent=u.HeroSpawnIntent,SpreadReads=u.SpreadReads}\n    end\n    for _,c in ipairs(tx.Cities or {}) do\n      trace.Cities[#trace.Cities+1]={ID=c.ID,X=c.X,Y=c.Y,TransferTurn=c.TransferTurn,\n        PropertiesPrepared=c.TransferredProperties~=nil}\n    end\n  end\n  local text=A.Canonical(trace)\n  JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}\n  if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then\n    -- Civ6 truncates a print at 2047 bytes. Frame complete, single-line UTF-8\n    -- chunks so every asset remains observable, including escaped error text.\n    local escaped=text:gsub('\\\\','\\\\\\\\'):gsub('\\r','\\\\r'):gsub('\\n','\\\\n'):gsub('\\t','\\\\t')\n    local chunks={};local first=1\n    while first<=#escaped do\n      local last=math.min(first+1499,#escaped)\n      while last<#escaped do\n        local byte=escaped:byte(last+1)\n        if byte<128 or byte>191 then break end\n        last=last-1\n      end\n      chunks[#chunks+1]=escaped:sub(first,last);first=last+1\n    end\n    JAC_PRODUCT_COMPLETION_TRACE_SERIAL=(JAC_PRODUCT_COMPLETION_TRACE_SERIAL or 0)+1\n    for i,chunk in ipairs(chunks) do\n      print('JAC_PRODUCT_COMPLETION_WAIT '..JAC_PRODUCT_COMPLETION_TRACE_SERIAL..' '..i..'/'..#chunks..' '..chunk)\n    end\n    JAC_PRODUCT_COMPLETION_TRACE[flowID]=text\n  end\nend\nlocal function CompletionReady(flowID,offerID)\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  if f and f.Phase=='BLOCKED' then error(f.Error or 'asset transfer blocked') end\n  return f and (f.Phase=='RESULT' or f.Phase=='DONE') and e and e.Status=='CONSUMED'\nend\nlocal function CompletionEvidence(flowID,offerID)\n  local A=JAC_AbsorptionGameplay;local R=A.Rules\n  local f=assert(JAC_AbsorptionFlowGameplay.Get(flowID),'completed flow missing')\n  local s=assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))\n  local e=assert(s.Escrows[offerID],'completed escrow missing')\n  local n=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',offerID),'completed admission missing')\n  assert(n.Status=='STARTED' and n.FlowID==flowID and R.Equal(n.Plan,f.Request),'completed admission changed')\n  assert((f.Phase=='RESULT' or f.Phase=='DONE') and f.Phase1Complete and f.FinalRollsComplete\n    and type(f.CompletedTurn)=='number' and not f.Error and not f.WaitingFor,'flow is not complete')\n  assert(e.ID==offerID and e.Status=='CONSUMED' and e.From==f.From and e.To==f.To,'completed payer changed')\n  local deposit=assert(f.Request.ProductDeposit,'original product deposit missing')\n  assert(deposit.OfferID==offerID and deposit.From==e.From and deposit.To==e.To\n    and deposit.Gold==e.Gold and deposit.Faith==e.Faith\n    and deposit.Policy=='CONSUME_ON_VERIFIED_RESULT_V2','original product deposit changed')\n  local tx=assert(A.GetState().Transactions[flowID],'completed transfer missing')\n  assert(tx.ID==flowID and tx.Status=='COMPLETE' and tx.From==f.From and tx.To==f.To and tx.Mode==f.Mode\n    and R.Equal(tx.Request,f.AppliedPlan),'complete asset-transfer receipt changed')\n  local c=assert(e.Consumption,'consumption receipt missing')\n  assert(c.FlowID==flowID and c.From==e.From and c.To==e.To and c.CompletedTurn==f.CompletedTurn\n    and c.Policy=='CONSUME_ON_VERIFIED_RESULT_V2' and c.Gold==e.Gold and c.Faith==e.Faith\n    and c.LegacyRefunded and c.LegacyRefunded.Gold==0 and c.LegacyRefunded.Faith==0,'consumption receipt changed')\n  for _,currency in ipairs({'Gold','Faith'}) do\n    if e[currency]>0 then\n      local leg=assert(e['Collect'..currency],'actual payment leg missing')\n      assert(leg.Done and leg.Before-leg.After==e[currency],'actual payment leg changed')\n    end\n  end\n  local transfer=R.Copy(tx);transfer.VerificationUI=nil\n  return {FirstStage=P1Evidence(f),Entries=R.Copy(f.Entries),AppliedPlan=R.Copy(f.AppliedPlan),\n    CompletedTurn=f.CompletedTurn,Transfer=transfer,Escrow=R.Copy(e),\n    Gold=Players[f.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(f.To)}\nend\n\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nassert(JAC_AbsorptionGameplay.Verify(t.FlowID,true));t.CompletedEvidence=JAC_AbsorptionGameplay.Canonical(CompletionEvidence(t.FlowID,t.OfferID));Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t);return 'complete asset transfer and consumed deposit verified'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-product-merger-human-complete",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-product-merger-human-complete",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');return t~=nil and JAC_AbsorptionGameplay~=nil and JAC_AbsorptionFlowGameplay~=nil and JAC_AbsorptionProductGameplay~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function InventoryEvidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  local entries={}\n  for _,e in ipairs(flow.Entries or {}) do\n    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),\n      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),\n      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}\n  end\n  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,\n    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}\nend\nlocal function P1Evidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  assert(flow.Phase1Complete,'first-stage journal is incomplete')\n  local evidence=InventoryEvidence(flow)\n  evidence.Phase1Complete=flow.Phase1Complete\n  for i,e in ipairs(flow.Entries or {}) do\n    local entry=evidence.Entries[i]\n    entry.EscapeOutcome=e.EscapeOutcome\n    entry.P1Chance=e.P1Chance\n    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}\n  end\n  return evidence\nend\n\n\nlocal function TraceCompletionWait(flowID,offerID)\n  local A=JAC_AbsorptionGameplay\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  local tx=A.GetState().Transactions[flowID]\n  local trace={FlowID=flowID,OfferID=offerID,Phase=f and f.Phase,WaitingFor=f and f.WaitingFor,\n    FlowError=f and f.Error,EscrowStatus=e and e.Status,TransferStatus=tx and tx.Status,\n    TransferError=tx and tx.Error,AwaitingPreparation=tx and tx.AwaitingPreparation,\n    AwaitingFinalUI=tx and tx.AwaitingFinalUI,SourceReadyToken=tx and tx.SourceReadyToken,\n    SourceSpreadReads=tx and tx.SourceSpreadReads,NativeDealUI=tx and tx.NativeDealUI,\n    CityLoyaltyPending=tx and tx.CityLoyaltyPending,NativeWorks=tx and tx.NativeWorks}\n  local recipient=f and Players and Players[f.To]\n  if recipient then\n    trace.FlowOperation=recipient:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')\n    trace.ProductOperation=recipient:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1')\n  end\n  if tx then\n    trace.UnitMapFrozen=tx.UnitMapFrozen;trace.SourceRosterMoved=tx.SourceRosterMoved\n    trace.Units={};trace.Cities={};trace.PlotCount=#(tx.Plots or {})\n    for _,u in ipairs(tx.Units or {}) do\n      trace.Units[#trace.Units+1]={ID=u.ID,Destination=u.Destination,KeepUnit=u.KeepUnit,\n        CandidateID=u.CandidateID,NativeRestored=u.NativeRestored,CoreStagedTurn=u.CoreStagedTurn,\n        TransferRestoredTurn=u.TransferRestoredTurn,PlacementComplete=u.PlacementComplete,\n        HeroSpawnIntent=u.HeroSpawnIntent,SpreadReads=u.SpreadReads}\n    end\n    for _,c in ipairs(tx.Cities or {}) do\n      trace.Cities[#trace.Cities+1]={ID=c.ID,X=c.X,Y=c.Y,TransferTurn=c.TransferTurn,\n        PropertiesPrepared=c.TransferredProperties~=nil}\n    end\n  end\n  local text=A.Canonical(trace)\n  JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}\n  if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then\n    -- Civ6 truncates a print at 2047 bytes. Frame complete, single-line UTF-8\n    -- chunks so every asset remains observable, including escaped error text.\n    local escaped=text:gsub('\\\\','\\\\\\\\'):gsub('\\r','\\\\r'):gsub('\\n','\\\\n'):gsub('\\t','\\\\t')\n    local chunks={};local first=1\n    while first<=#escaped do\n      local last=math.min(first+1499,#escaped)\n      while last<#escaped do\n        local byte=escaped:byte(last+1)\n        if byte<128 or byte>191 then break end\n        last=last-1\n      end\n      chunks[#chunks+1]=escaped:sub(first,last);first=last+1\n    end\n    JAC_PRODUCT_COMPLETION_TRACE_SERIAL=(JAC_PRODUCT_COMPLETION_TRACE_SERIAL or 0)+1\n    for i,chunk in ipairs(chunks) do\n      print('JAC_PRODUCT_COMPLETION_WAIT '..JAC_PRODUCT_COMPLETION_TRACE_SERIAL..' '..i..'/'..#chunks..' '..chunk)\n    end\n    JAC_PRODUCT_COMPLETION_TRACE[flowID]=text\n  end\nend\nlocal function CompletionReady(flowID,offerID)\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  if f and f.Phase=='BLOCKED' then error(f.Error or 'asset transfer blocked') end\n  return f and (f.Phase=='RESULT' or f.Phase=='DONE') and e and e.Status=='CONSUMED'\nend\nlocal function CompletionEvidence(flowID,offerID)\n  local A=JAC_AbsorptionGameplay;local R=A.Rules\n  local f=assert(JAC_AbsorptionFlowGameplay.Get(flowID),'completed flow missing')\n  local s=assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))\n  local e=assert(s.Escrows[offerID],'completed escrow missing')\n  local n=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',offerID),'completed admission missing')\n  assert(n.Status=='STARTED' and n.FlowID==flowID and R.Equal(n.Plan,f.Request),'completed admission changed')\n  assert((f.Phase=='RESULT' or f.Phase=='DONE') and f.Phase1Complete and f.FinalRollsComplete\n    and type(f.CompletedTurn)=='number' and not f.Error and not f.WaitingFor,'flow is not complete')\n  assert(e.ID==offerID and e.Status=='CONSUMED' and e.From==f.From and e.To==f.To,'completed payer changed')\n  local deposit=assert(f.Request.ProductDeposit,'original product deposit missing')\n  assert(deposit.OfferID==offerID and deposit.From==e.From and deposit.To==e.To\n    and deposit.Gold==e.Gold and deposit.Faith==e.Faith\n    and deposit.Policy=='CONSUME_ON_VERIFIED_RESULT_V2','original product deposit changed')\n  local tx=assert(A.GetState().Transactions[flowID],'completed transfer missing')\n  assert(tx.ID==flowID and tx.Status=='COMPLETE' and tx.From==f.From and tx.To==f.To and tx.Mode==f.Mode\n    and R.Equal(tx.Request,f.AppliedPlan),'complete asset-transfer receipt changed')\n  local c=assert(e.Consumption,'consumption receipt missing')\n  assert(c.FlowID==flowID and c.From==e.From and c.To==e.To and c.CompletedTurn==f.CompletedTurn\n    and c.Policy=='CONSUME_ON_VERIFIED_RESULT_V2' and c.Gold==e.Gold and c.Faith==e.Faith\n    and c.LegacyRefunded and c.LegacyRefunded.Gold==0 and c.LegacyRefunded.Faith==0,'consumption receipt changed')\n  for _,currency in ipairs({'Gold','Faith'}) do\n    if e[currency]>0 then\n      local leg=assert(e['Collect'..currency],'actual payment leg missing')\n      assert(leg.Done and leg.Before-leg.After==e[currency],'actual payment leg changed')\n    end\n  end\n  local transfer=R.Copy(tx);transfer.VerificationUI=nil\n  return {FirstStage=P1Evidence(f),Entries=R.Copy(f.Entries),AppliedPlan=R.Copy(f.AppliedPlan),\n    CompletedTurn=f.CompletedTurn,Transfer=transfer,Escrow=R.Copy(e),\n    Gold=Players[f.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(f.To)}\nend\n\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal r=JAC_AbsorptionGameplay.RequestVerification(t.FlowID);t.VerificationToken=r and r.Token or nil;Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t);return 'request exact transferred-asset verification'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'));local r=ExposedMembers.JAC_HeroReadAPI;return not t.VerificationToken or r and r.GetObservation and r.GetObservation(t.VerificationToken)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function InventoryEvidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  local entries={}\n  for _,e in ipairs(flow.Entries or {}) do\n    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),\n      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),\n      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}\n  end\n  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,\n    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}\nend\nlocal function P1Evidence(flow)\n  local R=JAC_AbsorptionGameplay.Rules\n  assert(flow.Phase1Complete,'first-stage journal is incomplete')\n  local evidence=InventoryEvidence(flow)\n  evidence.Phase1Complete=flow.Phase1Complete\n  for i,e in ipairs(flow.Entries or {}) do\n    local entry=evidence.Entries[i]\n    entry.EscapeOutcome=e.EscapeOutcome\n    entry.P1Chance=e.P1Chance\n    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}\n  end\n  return evidence\nend\n\n\nlocal function TraceCompletionWait(flowID,offerID)\n  local A=JAC_AbsorptionGameplay\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  local tx=A.GetState().Transactions[flowID]\n  local trace={FlowID=flowID,OfferID=offerID,Phase=f and f.Phase,WaitingFor=f and f.WaitingFor,\n    FlowError=f and f.Error,EscrowStatus=e and e.Status,TransferStatus=tx and tx.Status,\n    TransferError=tx and tx.Error,AwaitingPreparation=tx and tx.AwaitingPreparation,\n    AwaitingFinalUI=tx and tx.AwaitingFinalUI,SourceReadyToken=tx and tx.SourceReadyToken,\n    SourceSpreadReads=tx and tx.SourceSpreadReads,NativeDealUI=tx and tx.NativeDealUI,\n    CityLoyaltyPending=tx and tx.CityLoyaltyPending,NativeWorks=tx and tx.NativeWorks}\n  local recipient=f and Players and Players[f.To]\n  if recipient then\n    trace.FlowOperation=recipient:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')\n    trace.ProductOperation=recipient:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1')\n  end\n  if tx then\n    trace.UnitMapFrozen=tx.UnitMapFrozen;trace.SourceRosterMoved=tx.SourceRosterMoved\n    trace.Units={};trace.Cities={};trace.PlotCount=#(tx.Plots or {})\n    for _,u in ipairs(tx.Units or {}) do\n      trace.Units[#trace.Units+1]={ID=u.ID,Destination=u.Destination,KeepUnit=u.KeepUnit,\n        CandidateID=u.CandidateID,NativeRestored=u.NativeRestored,CoreStagedTurn=u.CoreStagedTurn,\n        TransferRestoredTurn=u.TransferRestoredTurn,PlacementComplete=u.PlacementComplete,\n        HeroSpawnIntent=u.HeroSpawnIntent,SpreadReads=u.SpreadReads}\n    end\n    for _,c in ipairs(tx.Cities or {}) do\n      trace.Cities[#trace.Cities+1]={ID=c.ID,X=c.X,Y=c.Y,TransferTurn=c.TransferTurn,\n        PropertiesPrepared=c.TransferredProperties~=nil}\n    end\n  end\n  local text=A.Canonical(trace)\n  JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}\n  if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then\n    -- Civ6 truncates a print at 2047 bytes. Frame complete, single-line UTF-8\n    -- chunks so every asset remains observable, including escaped error text.\n    local escaped=text:gsub('\\\\','\\\\\\\\'):gsub('\\r','\\\\r'):gsub('\\n','\\\\n'):gsub('\\t','\\\\t')\n    local chunks={};local first=1\n    while first<=#escaped do\n      local last=math.min(first+1499,#escaped)\n      while last<#escaped do\n        local byte=escaped:byte(last+1)\n        if byte<128 or byte>191 then break end\n        last=last-1\n      end\n      chunks[#chunks+1]=escaped:sub(first,last);first=last+1\n    end\n    JAC_PRODUCT_COMPLETION_TRACE_SERIAL=(JAC_PRODUCT_COMPLETION_TRACE_SERIAL or 0)+1\n    for i,chunk in ipairs(chunks) do\n      print('JAC_PRODUCT_COMPLETION_WAIT '..JAC_PRODUCT_COMPLETION_TRACE_SERIAL..' '..i..'/'..#chunks..' '..chunk)\n    end\n    JAC_PRODUCT_COMPLETION_TRACE[flowID]=text\n  end\nend\nlocal function CompletionReady(flowID,offerID)\n  local f=JAC_AbsorptionFlowGameplay.Get(flowID)\n  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\n  local e=s and s.Escrows and s.Escrows[offerID]\n  if f and f.Phase=='BLOCKED' then error(f.Error or 'asset transfer blocked') end\n  return f and (f.Phase=='RESULT' or f.Phase=='DONE') and e and e.Status=='CONSUMED'\nend\nlocal function CompletionEvidence(flowID,offerID)\n  local A=JAC_AbsorptionGameplay;local R=A.Rules\n  local f=assert(JAC_AbsorptionFlowGameplay.Get(flowID),'completed flow missing')\n  local s=assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))\n  local e=assert(s.Escrows[offerID],'completed escrow missing')\n  local n=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',offerID),'completed admission missing')\n  assert(n.Status=='STARTED' and n.FlowID==flowID and R.Equal(n.Plan,f.Request),'completed admission changed')\n  assert((f.Phase=='RESULT' or f.Phase=='DONE') and f.Phase1Complete and f.FinalRollsComplete\n    and type(f.CompletedTurn)=='number' and not f.Error and not f.WaitingFor,'flow is not complete')\n  assert(e.ID==offerID and e.Status=='CONSUMED' and e.From==f.From and e.To==f.To,'completed payer changed')\n  local deposit=assert(f.Request.ProductDeposit,'original product deposit missing')\n  assert(deposit.OfferID==offerID and deposit.From==e.From and deposit.To==e.To\n    and deposit.Gold==e.Gold and deposit.Faith==e.Faith\n    and deposit.Policy=='CONSUME_ON_VERIFIED_RESULT_V2','original product deposit changed')\n  local tx=assert(A.GetState().Transactions[flowID],'completed transfer missing')\n  assert(tx.ID==flowID and tx.Status=='COMPLETE' and tx.From==f.From and tx.To==f.To and tx.Mode==f.Mode\n    and R.Equal(tx.Request,f.AppliedPlan),'complete asset-transfer receipt changed')\n  local c=assert(e.Consumption,'consumption receipt missing')\n  assert(c.FlowID==flowID and c.From==e.From and c.To==e.To and c.CompletedTurn==f.CompletedTurn\n    and c.Policy=='CONSUME_ON_VERIFIED_RESULT_V2' and c.Gold==e.Gold and c.Faith==e.Faith\n    and c.LegacyRefunded and c.LegacyRefunded.Gold==0 and c.LegacyRefunded.Faith==0,'consumption receipt changed')\n  for _,currency in ipairs({'Gold','Faith'}) do\n    if e[currency]>0 then\n      local leg=assert(e['Collect'..currency],'actual payment leg missing')\n      assert(leg.Done and leg.Before-leg.After==e[currency],'actual payment leg changed')\n    end\n  end\n  local transfer=R.Copy(tx);transfer.VerificationUI=nil\n  return {FirstStage=P1Evidence(f),Entries=R.Copy(f.Entries),AppliedPlan=R.Copy(f.AppliedPlan),\n    CompletedTurn=f.CompletedTurn,Transfer=transfer,Escrow=R.Copy(e),\n    Gold=Players[f.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(f.To)}\nend\n\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal A=JAC_AbsorptionGameplay;assert(A.Verify(t.FlowID,true));assert(A.Canonical(CompletionEvidence(t.FlowID,t.OfferID))==t.CompletedEvidence,'completed transfer or settlement changed on reload');JAC_AbsorptionAdmissionGameplay.Request('leader-offer',t.OfferID,t.From,t.To);assert(A.Canonical(CompletionEvidence(t.FlowID,t.OfferID))==t.CompletedEvidence,'completed replay changed assets or charged again');return 'complete transfer, consumed deposit and exact assets survive save/load and replay'"
+    }
+  ]
+}

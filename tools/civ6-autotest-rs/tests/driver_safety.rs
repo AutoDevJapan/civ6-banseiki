@@ -81,10 +81,7 @@ fn test_owner_start_opens_setup_without_hosting_and_waits_long() {
     assert!(code.contains("/FrontEnd/MainMenu/AdvancedSetup"));
     assert!(!code.contains("HostGame"));
     assert!(!code.contains("SetToDefaults"));
-    assert_eq!(
-        t.presses,
-        vec![(civ6_autotest_rs::click::VK_ESCAPE, 3600.0)]
-    );
+    assert!(t.presses.is_empty());
 }
 
 #[test]
@@ -107,10 +104,7 @@ fn test_load_wait_sends_one_escape_even_if_ingame_state_exists() {
         .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
         .unwrap();
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
-    assert_eq!(
-        f.trace().presses,
-        vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
-    );
+    assert!(f.trace().presses.is_empty());
 }
 
 #[test]
@@ -118,7 +112,7 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
     let f = Fixture::new();
     let mut backend = f.backend();
     backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
-    let mut runner = f.direct_runner(json!({}), backend);
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
     ready(&f, &mut runner);
     runner
         .enter_game_after_loadscreen(0, 1.0, None, false)
@@ -130,42 +124,303 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
 }
 
 #[test]
-fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
-    for (reached_ingame, log_writable) in
-        [(true, true), (true, false), (false, true), (false, false)]
-    {
-        let f = Fixture::new();
-        let mut backend = f.backend();
-        backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
-        backend.on_lua = Box::new(move |_, code, _| {
-            if code.contains("OnActivateButtonClicked") {
-                Err(Error::unknown(
-                    "loading context disappeared after Begin Game",
-                ))
-            } else if code.contains("Game.GetLocalPlayer") {
-                Ok(reached_ingame.to_string())
-            } else {
-                Ok("true".into())
-            }
-        });
-        let mut runner = f.direct_runner(json!({}), backend);
-        if !log_writable {
-            fs::create_dir(f.output.join("steps.jsonl")).unwrap();
+fn escape_activation_uses_native_input_once_and_waits_for_readiness() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |state, code, _| {
+        assert_ne!(state, "LoadScreen", "activation must use native input");
+        if code.contains("Game.GetLocalPlayer") {
+            reads += 1;
+            return Ok(if reads == 1 { "false" } else { "true" }.into());
         }
-        ready(&f, &mut runner);
-        let result = runner.enter_game_after_loadscreen(0, 3.0, None, false);
-        if reached_ingame {
-            result.unwrap();
-        } else {
-            error_has(
-                result.unwrap_err(),
-                ErrorKind::Scenario,
-                "outcome undecidable",
-            );
-        }
-        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
-        assert!(f.trace().presses.is_empty());
+        Ok("true".into())
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    runner
+        .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+        .unwrap();
+    assert_eq!(
+        f.trace().presses,
+        vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
+    );
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    let rows = transition_observations(&f);
+    let last = rows.last().unwrap();
+    assert_eq!(last["phase"], "ingame_ready");
+    assert_eq!(
+        last["observation"]["begin_game_response"]["status"],
+        "input_sent"
+    );
+}
+
+#[test]
+fn loadscreen_input_rejects_unknown_methods() {
+    for input in [json!("escpae"), json!(true), json!(null)] {
+        let error = validate_scenario(
+            &json!({"name":"input setup","loadscreen_input":input,"steps":[{"action":"end_turn"}]}),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("loadscreen_input"), "{error}");
     }
+}
+
+#[test]
+fn failed_native_activation_is_not_retried_or_replaced_by_lua() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_press = Some(Box::new(|_, _| {
+        Err(Error::input("native activation failed"))
+    }));
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::Input,
+        "native activation failed",
+    );
+    assert_eq!(
+        f.trace().presses,
+        vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
+    );
+    assert!(f.trace().lua.is_empty());
+}
+
+#[test]
+fn unknown_begin_game_reply_waits_for_readiness_without_resending_activation() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("OnActivateButtonClicked()") {
+            Err(Error::unknown("begin game acknowledgment lost"))
+        } else if code.contains("Game.GetLocalPlayer") {
+            reads += 1;
+            Ok(if reads == 1 { "false" } else { "true" }.into())
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
+    ready(&f, &mut runner);
+    runner
+        .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+        .unwrap();
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    assert!(f.trace().presses.is_empty());
+    let evidence = transition_observations(&f);
+    let final_row = evidence.last().unwrap();
+    assert_eq!(final_row["phase"], "ingame_ready");
+    assert_eq!(
+        final_row["observation"]["begin_game_response"]["status"],
+        "unknown"
+    );
+    assert!(final_row["observation"]["begin_game_response"]["error"]
+        .as_str()
+        .unwrap()
+        .contains("acknowledgment lost"));
+}
+
+#[test]
+fn unknown_begin_game_reply_without_readiness_keeps_original_deadline_and_failure() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        if code.contains("OnActivateButtonClicked()") {
+            Err(Error::unknown("begin game acknowledgment lost"))
+        } else {
+            Ok("false".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
+    ready(&f, &mut runner);
+    let error = runner
+        .enter_game_after_loadscreen(0, 600.0, Some(3.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.message.contains("outcome undecidable"), "{error}");
+    assert!(error.message.contains("acknowledgment lost"), "{error}");
+    assert_eq!(f.clock.now(), 3.0);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert!(f.trace().presses.is_empty());
+    let evidence = transition_observations(&f);
+    assert_eq!(evidence.last().unwrap()["phase"], "timeout");
+    assert_eq!(
+        evidence.last().unwrap()["observation"]["begin_game_sent"],
+        true
+    );
+    assert!(evidence.iter().all(|row| row["deadline"] == 3.0));
+}
+
+#[test]
+fn confirmed_begin_game_lua_error_still_fails_without_readiness_or_resend() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        assert!(code.contains("OnActivateButtonClicked()"));
+        Err(Error::lua("begin game callback failed"))
+    });
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::LuaExecution,
+        "callback failed",
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 0);
+    assert!(f.trace().presses.is_empty());
+}
+
+#[test]
+fn unknown_readiness_reply_is_rechecked_without_repeating_begin_game() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("Game.GetLocalPlayer") {
+            reads += 1;
+            if reads == 1 {
+                return Err(Error::unknown("readiness reply lost"));
+            }
+        }
+        Ok("true".into())
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    runner
+        .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+        .unwrap();
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    assert_eq!(f.trace().presses.len(), 1);
+    let evidence = transition_observations(&f);
+    assert!(evidence.iter().any(|row| row["observation"]["last_error"]
+        .as_str()
+        .is_some_and(|error| error.contains("readiness reply lost"))));
+    assert_eq!(evidence.last().unwrap()["phase"], "ingame_ready");
+}
+
+#[test]
+fn permanently_unknown_readiness_reply_times_out_without_repeating_activation() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        if code.contains("Game.GetLocalPlayer") {
+            Err(Error::unknown("readiness reply lost"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    let error = runner
+        .enter_game_after_loadscreen(0, 600.0, Some(3.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.message.contains("readiness reply lost"), "{error}");
+    assert_eq!(f.clock.now(), 3.0);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
+    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(
+        transition_observations(&f).last().unwrap()["phase"],
+        "timeout"
+    );
+}
+
+#[test]
+fn confirmed_advisor_error_still_fails_once_after_readiness_confirmation() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "LoadScreen".into(),
+            "InGame".into(),
+            "AdvisorPopup".into(),
+        ])
+    });
+    backend.on_lua = Box::new(|state, _, _| {
+        if state == "AdvisorPopup" {
+            Err(Error::lua("advisor dismissal failed"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::LuaExecution,
+        "advisor dismissal failed",
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
+    assert_eq!(
+        f.trace()
+            .lua
+            .iter()
+            .filter(|call| call.0 == "AdvisorPopup")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn confirmed_readiness_lua_error_is_recorded_once_without_ui_cleanup() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "LoadScreen".into(),
+            "InGame".into(),
+            "AdvisorPopup".into(),
+        ])
+    });
+    backend.on_lua = Box::new(|state, code, _| {
+        assert_ne!(
+            state, "AdvisorPopup",
+            "cleanup must not run after a failed readiness probe"
+        );
+        if code.contains("Game.GetLocalPlayer") {
+            Err(Error::lua("readiness predicate failed"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::LuaExecution,
+        "readiness predicate failed",
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
+    assert_eq!(f.trace().presses.len(), 1);
+    let evidence = transition_observations(&f);
+    let last = evidence.last().unwrap();
+    assert_eq!(last["phase"], "error");
+    assert!(last["observation"]["last_error"]
+        .as_str()
+        .unwrap()
+        .contains("readiness predicate failed"));
 }
 
 #[test]
@@ -180,8 +435,270 @@ fn test_load_wait_never_sends_escape_before_load_complete_log() {
         ErrorKind::Scenario,
         "entering the game",
     );
-    assert!(f.trace().state_queries.is_empty());
+    assert!(!f.trace().state_queries.is_empty());
+    assert!(
+        f.trace().lua.is_empty(),
+        "pre-marker observation must be read-only"
+    );
     assert!(f.trace().presses.is_empty());
+}
+
+fn transition_observations(f: &Fixture) -> Vec<Value> {
+    fs::read_to_string(f.output.join("transition-observations.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+#[test]
+fn pre_marker_wait_records_changed_states_and_lua_errors_without_treating_ingame_as_success() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    let clock = f.clock.clone();
+    backend.on_states = Box::new(move |_| {
+        Ok(if clock.now() < 1.0 {
+            vec!["FrontEnd".into(), "AdvancedSetup".into()]
+        } else {
+            vec!["InGame".into(), "LoadScreen".into()]
+        })
+    });
+    let lua = f.logs.join("Lua.log");
+    f.clock.on_sleep(move |_| {
+        if !fs::read_to_string(&lua)
+            .unwrap()
+            .contains("host observer exception")
+        {
+            append(&lua, "FrontEnd: host observer exception\n");
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    let error = runner
+        .enter_game_after_loadscreen(0, 3.0, Some(3.0), true)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    for expected in [
+        "LoadScreen",
+        "InGame",
+        "host observer exception",
+        "outcome undecidable",
+    ] {
+        assert!(error.message.contains(expected), "{error}");
+    }
+    let evidence = transition_observations(&f);
+    let changed: Vec<_> = evidence
+        .iter()
+        .filter(|v| v["phase"] == "loading")
+        .collect();
+    assert_eq!(
+        changed.len(),
+        3,
+        "stable polls must not append duplicate observations: {evidence:?}"
+    );
+    assert!(changed[0]["observation"]["states"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v == "FrontEnd"));
+    assert_eq!(evidence.last().unwrap()["phase"], "timeout");
+    for row in &evidence {
+        assert_eq!(row["session_id"], f.output.to_string_lossy().as_ref());
+        assert!(row["monotonic_seconds"].as_f64().unwrap() <= 3.0);
+        assert_eq!(row["deadline"], 3.0);
+    }
+    assert!(f.trace().lua.is_empty() && f.trace().presses.is_empty());
+    assert_eq!(f.clock.now(), 3.0);
+}
+
+#[test]
+fn pre_marker_state_query_consumes_only_original_deadline_and_reports_its_last_error() {
+    let f = Fixture::new();
+    f.clock.set(10.0);
+    let clock = f.clock.clone();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(move |budget| {
+        assert!(budget > 0.0 && budget <= 2.0);
+        clock.advance(budget);
+        Err(Error::tuner("last native state query failed"))
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    let error = runner
+        .enter_game_after_loadscreen(0, 600.0, Some(12.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(
+        error.message.contains("last native state query failed"),
+        "{error}"
+    );
+    assert_eq!(f.clock.now(), 12.0);
+    assert_eq!(f.trace().state_queries, vec![2.0]);
+    assert!(f.trace().lua.is_empty() && f.trace().presses.is_empty());
+    assert_eq!(
+        transition_observations(&f).last().unwrap()["deadline"],
+        12.0
+    );
+}
+
+#[test]
+fn host_unknown_is_sent_once_and_its_error_reaches_loading_timeout_evidence() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["FrontEnd".into(), "AdvancedSetup".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        assert!(code.contains("Network.HostGame"));
+        Err(Error::unknown("Host outcome unknown after command send"))
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    let error = runner
+        .run_step(&json!({"action":"start_game","timeout":3}))
+        .unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("Host outcome unknown after command send"),
+        "{error}"
+    );
+    assert!(
+        error.message.contains("AdvancedSetup") && error.message.contains("outcome undecidable"),
+        "{error}"
+    );
+    assert_eq!(lua_count(&f, "Network.HostGame"), 1);
+    assert!(f.trace().presses.is_empty());
+    assert_eq!(f.clock.now(), 3.0);
+    let rows = transition_observations(&f);
+    assert!(rows.iter().any(|v| v["phase"] == "host_response"
+        && v["observation"]["error"] == "Host outcome unknown after command send"));
+}
+
+#[test]
+fn official_host_lua_marks_before_after_and_exception_with_the_same_session_and_clock() {
+    for fail in [false, true] {
+        let f = Fixture::new();
+        f.clock.set(7.0);
+        let output = f.output.to_string_lossy().into_owned();
+        let executed = Arc::new(Mutex::new((0_usize, Vec::<String>::new())));
+        let observed = executed.clone();
+        let path = f.logs.join("Lua.log");
+        let mut backend = f.backend();
+        backend.on_lua = Box::new(move |_, code, _| {
+            if !code.contains("Network.HostGame") {
+                return Ok("true".into());
+            }
+            let lua = mlua::Lua::new();
+            lua.load("UI={IsInFrontEnd=function() return true end};GameConfiguration={IsAnyMultiplayer=function() return false end};ServerType={SERVER_TYPE_NONE=0}").exec().unwrap();
+            let host = observed.clone();
+            let network = lua.create_table().unwrap();
+            network
+                .set(
+                    "HostGame",
+                    lua.create_function(move |_, _: i64| {
+                        host.lock().unwrap().0 += 1;
+                        if fail {
+                            Err(mlua::Error::RuntimeError("official Host exception".into()))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            lua.globals().set("Network", network).unwrap();
+            let prints = observed.clone();
+            lua.globals()
+                .set(
+                    "print",
+                    lua.create_function(move |_, text: String| {
+                        prints.lock().unwrap().1.push(text);
+                        Ok(())
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let response = lua.load(code).eval::<bool>();
+            for text in &observed.lock().unwrap().1 {
+                append(&path, &format!("{text}\n"));
+            }
+            if fail {
+                Err(Error::lua(response.unwrap_err().to_string()))
+            } else {
+                response.unwrap();
+                Err(Error::unknown("after host response disappeared"))
+            }
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+        let error = runner
+            .run_step(&json!({"action":"start_game","timeout":1}))
+            .unwrap_err();
+        let observed = executed.lock().unwrap();
+        assert_eq!(observed.0, 1);
+        assert_eq!(
+            observed.1.len(),
+            2,
+            "missing official FrontEnd markers: {:?}",
+            observed.1
+        );
+        assert!(observed.1[0].contains("phase=before"));
+        assert!(observed.1[1].contains(if fail {
+            "phase=exception"
+        } else {
+            "phase=after"
+        }));
+        for marker in &observed.1 {
+            assert!(
+                marker.contains(&output) && marker.contains("monotonic=7"),
+                "{marker}"
+            );
+        }
+        assert_eq!(
+            error.kind,
+            if fail {
+                ErrorKind::LuaExecution
+            } else {
+                ErrorKind::Scenario
+            }
+        );
+        if fail {
+            assert!(error.message.contains("official Host exception"));
+        }
+        assert_eq!(lua_count(&f, "Network.HostGame"), 1);
+        assert!(f.trace().presses.is_empty());
+    }
+}
+
+#[test]
+fn post_marker_timeout_retains_last_game_predicate_and_does_not_reactivate_loadscreen() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        Ok(if code.contains("Game.GetLocalPlayer") {
+            "false"
+        } else {
+            "true"
+        }
+        .into())
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    let error = runner
+        .enter_game_after_loadscreen(0, 3.0, Some(3.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(
+        error.message.contains("local player") && error.message.contains("false"),
+        "{error}"
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    let rows = transition_observations(&f);
+    assert!(rows
+        .iter()
+        .any(|v| v["observation"]["game_ready"] == "false"));
+    assert_eq!(f.clock.now(), 3.0);
 }
 
 #[test]
@@ -201,7 +718,47 @@ fn test_load_wait_sends_begin_game_escape_only_once() {
     runner
         .enter_game_after_loadscreen(0, 5.0, None, false)
         .unwrap();
-    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(f.trace().presses.len(), 0);
+}
+
+#[test]
+fn ingame_readiness_never_sends_global_input_even_with_joining_contexts_present() {
+    for mixed in [false, true] {
+        for ready_player in [false, true] {
+            let f = Fixture::new();
+            let mut backend = f.backend();
+            backend.on_states = Box::new(move |_| {
+                Ok(if mixed {
+                    vec!["FrontEnd".into(), "JoiningRoom".into(), "InGame".into()]
+                } else {
+                    vec!["InGame".into()]
+                })
+            });
+            backend.on_press = Some(Box::new(|_, _| panic!("InGame readiness is read-only")));
+            backend.on_lua = Box::new(move |_, code, _| {
+                Ok(if code.contains("Game.GetLocalPlayer") && !ready_player {
+                    "false".into()
+                } else {
+                    "true".into()
+                })
+            });
+            let mut runner = f.direct_runner(json!({}), backend);
+            ready(&f, &mut runner);
+            let result = runner.enter_game_after_loadscreen(0, 3.0, Some(3.0), false);
+            if ready_player {
+                result.unwrap();
+            } else {
+                error_has(
+                    result.unwrap_err(),
+                    ErrorKind::Scenario,
+                    "entering the game",
+                );
+            }
+            assert!(f.trace().presses.is_empty());
+            assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+            assert!(lua_count(&f, "Game.GetLocalPlayer") > 0);
+        }
+    }
 }
 
 #[test]
@@ -221,7 +778,7 @@ fn test_load_wait_reconnects_when_frontend_state_list_is_stale() {
     runner
         .enter_game_after_loadscreen(0, 1.0, None, false)
         .unwrap();
-    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(f.trace().presses.len(), 0);
     assert!(f.trace().disconnects >= 1);
 }
 
@@ -239,7 +796,43 @@ fn test_load_wait_timeout_never_repeats_escape() {
         ErrorKind::Scenario,
         "entering the game",
     );
-    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(f.trace().presses.len(), 0);
+}
+
+#[test]
+fn completion_marker_never_sends_escape_to_joining_room_or_unknown_states() {
+    for unknown_states in [false, true] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        let clock = f.clock.clone();
+        backend.on_states = Box::new(move |_| {
+            if civ6_autotest_rs::time::Clock::now(&*clock) < 2.0 {
+                Ok(if unknown_states {
+                    vec![]
+                } else {
+                    vec!["FrontEnd".into(), "JoiningRoom".into()]
+                })
+            } else {
+                Ok(vec!["LoadScreen".into(), "InGame".into()])
+            }
+        });
+        let key_clock = f.clock.clone();
+        backend.on_press = Some(Box::new(move |_, _| {
+            assert!(
+                civ6_autotest_rs::time::Clock::now(&*key_clock) >= 2.0,
+                "Esc would cancel JoiningRoom before the native game context arrived"
+            );
+            Ok(())
+        }));
+        let mut runner = f.direct_runner(json!({}), backend);
+        ready(&f, &mut runner);
+        runner
+            .enter_game_after_loadscreen(0, 5.0, None, false)
+            .unwrap();
+        assert_eq!(f.trace().presses.len(), 1);
+        assert!(f.trace().disconnects > 0);
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+    }
 }
 
 #[test]
@@ -279,7 +872,7 @@ fn test_transition_lua_errors_stop_without_retrying_mutations() {
             .iter()
             .all(|(_, code, _)| code == "return ContextPtr:IsHidden()"));
         assert_eq!(lua_count(&f, "CloseImmediately"), 1);
-        assert_eq!(f.trace().presses.len(), 1);
+        assert_eq!(f.trace().presses.len(), 0);
         if kind == ErrorKind::LuaExecution {
             assert!(f.clock.sleeps().is_empty());
         }
@@ -310,7 +903,11 @@ fn test_transition_detects_lua_log_rotation_and_truncation_before_input() {
                 .unwrap_err(),
         );
         assert!(f.trace().presses.is_empty());
-        assert!(f.trace().state_queries.is_empty());
+        assert!(!f.trace().state_queries.is_empty());
+        assert!(
+            f.trace().lua.is_empty(),
+            "rotation must still stop before mutating input"
+        );
     }
 }
 
@@ -320,7 +917,7 @@ fn test_transition_detects_lua_log_rotation_after_escape() {
     let lua = f.logs.join("Lua.log");
     fs::write(&lua, "old loading history\n").unwrap();
     let mut backend = f.backend();
-    backend.on_states = Box::new(|_| Ok(vec![]));
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into()]));
     let mut runner = f.direct_runner(json!({}), backend);
     runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
     let before = runner.loadscreen_count().unwrap();
@@ -920,7 +1517,7 @@ fn test_transition_waits_after_unknown_reply_without_resending() {
             "Network.HostGame"
         };
         assert_eq!(lua_count(&f, needle), 1);
-        assert_eq!(f.trace().presses.len(), 1);
+        assert_eq!(f.trace().presses.len(), 0);
         assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
     }
 }
@@ -1319,4 +1916,43 @@ fn test_step_deadline_prevents_late_autoplay_and_end_turn_side_effects() {
     assert_eq!(lua_count(&f, "JAC_Notebooks_Close"), 2);
     assert_eq!(lua_count(&f, "AutoplayManager.SetActive(true)"), 0);
     assert_eq!(lua_count(&f, "UI.RequestAction"), 0);
+}
+
+#[test]
+fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
+    for (reached_ingame, log_writable) in
+        [(true, true), (true, false), (false, true), (false, false)]
+    {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("OnActivateButtonClicked") {
+                Err(Error::unknown(
+                    "loading context disappeared after Begin Game",
+                ))
+            } else if code.contains("Game.GetLocalPlayer") {
+                Ok(reached_ingame.to_string())
+            } else {
+                Ok("true".into())
+            }
+        });
+        let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
+        if !log_writable {
+            fs::create_dir(f.output.join("steps.jsonl")).unwrap();
+        }
+        ready(&f, &mut runner);
+        let result = runner.enter_game_after_loadscreen(0, 3.0, None, false);
+        if reached_ingame {
+            result.unwrap();
+        } else {
+            error_has(
+                result.unwrap_err(),
+                ErrorKind::Scenario,
+                "outcome undecidable",
+            );
+        }
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
+        assert!(f.trace().presses.is_empty());
+    }
 }

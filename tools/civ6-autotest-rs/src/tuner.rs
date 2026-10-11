@@ -321,6 +321,16 @@ impl TunerClient {
     }
 
     fn request(&mut self, payload: &str, deadline: f64) -> Result<String> {
+        let result = self.request_reply(payload, deadline);
+        // Queries share one reply listener. A late or partial reply cannot be
+        // correlated with another query after a failure, so discard the socket.
+        if result.is_err() {
+            self.close();
+        }
+        result
+    }
+
+    fn request_reply(&mut self, payload: &str, deadline: f64) -> Result<String> {
         let bytes = frame_bytes(HANDSHAKE, payload)?;
         if timeout_duration(deadline).is_err() {
             return Err(Error::tuner(format!(
@@ -335,7 +345,11 @@ impl TunerClient {
                 )));
             }
             let frame = recv_frame(self.socket()?, Some(deadline))?;
-            if frame.payload.is_empty()
+            // The second header word is the reply listener, not a message
+            // type. SDK Connection.RouteMessages sends unsolicited L/O
+            // updates to listener 0, separately from our query listener 4.
+            if frame.tag != HANDSHAKE
+                || frame.payload.is_empty()
                 || frame.payload.starts_with("O ")
                 || frame.payload.starts_with("O\0")
             {

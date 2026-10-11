@@ -15,6 +15,33 @@ mod inventory;
 
 const MOD: &str = "poc/JAC_PoC_Absorption";
 
+#[test]
+fn native_loyalty_loss_uses_official_one_shot_city_effects() {
+    let db = civ6_lua_tests_rs::official::official_db();
+    let original = query_json(&db, "SELECT * FROM Modifiers ORDER BY ModifierId");
+    db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
+        .unwrap();
+    let unchanged = query_json(&db, "SELECT * FROM Modifiers WHERE ModifierId NOT LIKE 'JAC_ABSORPTION_LOYALTY_LOSS_%' ORDER BY ModifierId");
+    assert_eq!(
+        original, unchanged,
+        "native effects must not replace existing game modifiers"
+    );
+    let rows = query_json(&db, "SELECT m.ModifierId, m.RunOnce, m.Permanent, d.CollectionType, d.EffectType, a.Name, CAST(a.Value AS INTEGER) AS Amount FROM Modifiers m JOIN DynamicModifiers d ON d.ModifierType=m.ModifierType JOIN ModifierArguments a ON a.ModifierId=m.ModifierId WHERE m.ModifierId LIKE 'JAC_ABSORPTION_LOYALTY_LOSS_%' ORDER BY Amount");
+    assert_eq!(rows.len(), 4);
+    for (row, amount) in rows.iter().zip([-15, -5, -2, -1]) {
+        assert_eq!(
+            row["ModifierId"],
+            format!("JAC_ABSORPTION_LOYALTY_LOSS_{}", -amount)
+        );
+        assert_eq!(row["RunOnce"], 1);
+        assert_eq!(row["Permanent"], 1);
+        assert_eq!(row["CollectionType"], "COLLECTION_OWNER");
+        assert_eq!(row["EffectType"], "EFFECT_GRANT_CITY_LOYALTY");
+        assert_eq!(row["Name"], "Amount");
+        assert_eq!(row["Amount"], amount);
+    }
+}
+
 fn failure(message: impl Into<String>) -> mlua::Error {
     mlua::Error::RuntimeError(message.into())
 }
@@ -339,7 +366,29 @@ fn boundaries(lua: &Lua) {
         "READ",
         lua.create_function(|_, args: MultiValue| {
             let path = String::from_value(argument(&args, 0)?)?;
-            Ok(read_repo(path))
+            let source = read_repo(&path);
+            if path.ends_with("JAC_Absorption_HeroKeys.lua") {
+                // Historical doubles supplied UI-only getters on collection
+                // wrappers. Model the UI's physical lookup with those same
+                // objects, including nil until its publication boundary.
+                Ok(format!(
+                    "local readPlayers, coreCities = Players, CityManager\n\
+                     local CityManager = {{GetCityAt=function(x,y)\n\
+                       local city=coreCities.GetCityAt(x,y)\n\
+                       local player=city and readPlayers[city:GetOwner()]\n\
+                       local view=player and player:GetCities():FindID(city:GetID())\n\
+                       if not view then return nil end\n\
+                       return setmetatable({{\n\
+                         GetOwner=view.GetOwner or function() return city:GetOwner() end,\n\
+                         GetID=view.GetID or function() return city:GetID() end,\n\
+                         GetX=view.GetX or function() return city:GetX() end,\n\
+                         GetY=view.GetY or function() return city:GetY() end\n\
+                       }},{{__index=view}})\n\
+                     end}}\n{source}"
+                ))
+            } else {
+                Ok(source)
+            }
         })
         .unwrap(),
     )
@@ -774,14 +823,20 @@ fn package_manifest() {
             "Scripts/JAC_Absorption_Gameplay.lua",
             "Scripts/JAC_Absorption_Flow.lua",
             "Scripts/JAC_Absorption_Entry.lua",
+            "Scripts/JAC_Absorption_Admission.lua",
+            "Scripts/JAC_Absorption_Product.lua",
             "Scripts/JAC_CarrierBoundary.lua",
             "Scripts/JAC_NativeInventory.lua",
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
             "UI/JAC_CarrierMP_UI.lua",
+            "UI/JAC_Absorption_HeroKeys.xml",
+            "UI/JAC_Absorption_AdmissionUI.lua",
+            "UI/JAC_Absorption_CityStates.lua",
+            "UI/JAC_Absorption_ProductNativeRead.lua",
+            "Text/JAC_Absorption_Admission_Text.xml",
             "UI/JAC_NativeInventory_UI.lua",
-            "UI/JAC_Absorption_HeroKeys.xml"
         ])
     );
     for file in files {
@@ -796,7 +851,9 @@ fn package_manifest() {
         dependencies,
         string_set([
             "4873eb62-8ccc-4574-b784-dda455e74e68",
+            "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
             "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+            "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
             "8424840C-92EF-4426-A9B4-B4E0CB818049"
         ])
     );
@@ -967,7 +1024,10 @@ fn absorption_inventory_preserves_all_120_methods_and_117_embedded_assertions() 
         ])
     );
     assert_eq!(assertions, 117);
-    assert_eq!(registered.len(), 125);
+    assert!(
+        registered.contains("absorption::native_loyalty_loss_uses_official_one_shot_city_effects")
+    );
+    assert_eq!(registered.len(), 126);
 }
 
 #[test]

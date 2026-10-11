@@ -651,6 +651,38 @@ fn turn_activity_difference_never_changes_saved_provider_or_nonce() {
 }
 
 #[test]
+fn reentrant_inventory_publication_does_not_duplicate_the_synchronized_observation() {
+    let lua = world(2, 3);
+    lua.load(
+        r#"
+      assert(_VERSION=='Lua 5.1')
+      PLAN.Mode='CONQUEST';PLAN.FlowPolicy=true
+      for _,c in pairs(CITIES) do c.GetCulturalIdentity=function() return {} end end
+      JAC_AbsorptionGameplay.Apply(PLAN)
+      local send=UI.RequestPlayerOperation
+      local nested=false
+      UI.RequestPlayerOperation=function(...)
+        send(...)
+        if not nested then nested=true;Events.GameCoreEventPublishComplete.Emit();nested=false end
+      end
+      assert(PUBLISH() and #SENT==1,'one native cache publication sent more than one observation')
+      local request=ExposedMembers.JAC_NativeInventory.GetPending()[1]
+      assert(request and SENT[1].Nonce==request.Nonce and SENT[1].Turn==request.Turn)
+      assert(TRANSFERS==0 and MOVES==0,'UI publication mutated native assets')
+      local guard=assert(JAC_AbsorptionPublicationGuard)
+      guard.Active=true;local count=#SENT;PUBLISH()
+      assert(#SENT==count,'another active UI observer allowed a nested inventory publication')
+      guard.Active=false
+      SEND_THROW=true;PUBLISH();SEND_THROW=false
+      local before=#SENT;assert(PUBLISH() and #SENT==before+1,
+        'failed send permanently retained the publication guard')
+    "#,
+    )
+    .exec()
+    .unwrap();
+}
+
+#[test]
 fn ui_only_city_loyalty_and_district_reads_are_synchronized_before_and_after_change() {
     let a = world(2, 3);
     let b = world(3, 3);

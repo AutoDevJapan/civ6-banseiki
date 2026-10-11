@@ -32,6 +32,11 @@ impl FakeTuner {
         let log = Arc::clone(&received);
         let server = thread::spawn(move || {
             let (mut connection, _) = listener.accept().expect("accept fake tuner");
+            // Deliberately fragmented frames must not depend on the platform's
+            // Nagle/delayed-ACK timers to reach the client within its deadline.
+            connection
+                .set_nodelay(true)
+                .expect("disable fake tuner Nagle");
             while let Ok(frame) = recv_frame(&mut connection, None) {
                 let payload = frame.payload.clone();
                 log.lock().unwrap().push(frame);
@@ -39,6 +44,15 @@ impl FakeTuner {
                     if noisy_queries {
                         send_split(&mut connection, HANDSHAKE, "");
                         send_split(&mut connection, COMMAND, "O unsolicited game output");
+                        // SDK Connection.DefaultRequestHandler routes listener 0
+                        // state notifications separately from the query listener.
+                        send_split(&mut connection, 0, "L\0");
+                        send_split(
+                            &mut connection,
+                            0,
+                            "L\x000\x00JoiningRoom\x0017\x00LoadScreen",
+                        );
+                        send_split(&mut connection, COMMAND, "unrelated query reply");
                     }
                     let answer = if payload == "APP:" {
                         "Civilization VI"
@@ -91,15 +105,19 @@ fn extract_token(payload: &str) -> &str {
 }
 
 fn send_split(connection: &mut TcpStream, tag: i32, payload: &str) {
+    try_send_split(connection, tag, payload).unwrap();
+}
+
+fn try_send_split(connection: &mut TcpStream, tag: i32, payload: &str) -> std::io::Result<()> {
     let body = payload.as_bytes();
     let mut wire = Vec::new();
     wire.extend_from_slice(&((body.len() + 1) as u32).to_le_bytes());
     wire.extend_from_slice(&tag.to_le_bytes());
     wire.extend_from_slice(body);
     wire.push(0);
-    connection.write_all(&wire[..3]).unwrap();
-    connection.write_all(&wire[3..9]).unwrap();
-    connection.write_all(&wire[9..]).unwrap();
+    connection.write_all(&wire[..3])?;
+    connection.write_all(&wire[3..9])?;
+    connection.write_all(&wire[9..])
 }
 
 fn tcp_pair() -> (TcpStream, TcpStream) {
@@ -110,6 +128,119 @@ fn tcp_pair() -> (TcpStream, TcpStream) {
 }
 
 const NAMED_STATES: &str = "3\0FrontEnd\x0017\0InGame\x0041\0GameCore_Tuner";
+
+#[test]
+fn state_notifications_never_become_query_replies_or_change_the_command_index() {
+    let fake = FakeTuner::start(LuaReply::Ok, NAMED_STATES, true);
+    let mut client = TunerClient::connect(fake.port, 1.0).unwrap();
+    assert_eq!(client.identity, "Civilization VI");
+    assert_eq!(
+        client.list_states(1.0).unwrap(),
+        ["FrontEnd", "InGame", "GameCore_Tuner"]
+    );
+    assert_eq!(
+        client.run_lua("InGame", "return true", 1.0).unwrap().value,
+        "true"
+    );
+    client.close();
+    let commands: Vec<_> = fake
+        .finish()
+        .into_iter()
+        .filter(|frame| frame.tag == COMMAND)
+        .collect();
+    assert_eq!(commands.len(), 1);
+    assert!(commands[0].payload.starts_with("CMD:17:"));
+}
+
+#[test]
+fn unrelated_listener_cannot_complete_a_query_or_authorize_lua() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let (mut connection, _) = listener.accept().unwrap();
+        connection.set_nodelay(true).unwrap();
+        connection
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut received = Vec::new();
+        while let Ok(frame) = recv_frame(&mut connection, None) {
+            let answer = if frame.payload == "APP:" {
+                "Civilization VI"
+            } else {
+                NAMED_STATES
+            };
+            received.push(frame);
+            send_split(&mut connection, 0, answer);
+        }
+        received
+    });
+    let error = TunerClient::connect(port, 0.2)
+        .err()
+        .expect("wrong listener must not establish a connection");
+    assert_eq!(error.kind, ErrorKind::Tuner);
+    let received = server.join().unwrap();
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].payload, "APP:");
+}
+
+#[test]
+fn a_timed_out_query_cannot_leave_a_late_reply_for_the_next_command() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (release_late, await_timeout) = std::sync::mpsc::channel();
+    let (report_attempt, await_attempt) = std::sync::mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut connection, _) = listener.accept().unwrap();
+        connection.set_nodelay(true).unwrap();
+        connection
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut received = Vec::new();
+        for answer in ["Civilization VI", NAMED_STATES] {
+            received.push(recv_frame(&mut connection, None).unwrap());
+            send_split(&mut connection, HANDSHAKE, answer);
+        }
+        received.push(recv_frame(&mut connection, None).unwrap());
+        await_timeout.recv_timeout(Duration::from_secs(2)).unwrap();
+        let attempted = try_send_split(&mut connection, HANDSHAKE, "3\0FrontEnd\099\0InGame");
+        report_attempt.send(attempted).unwrap();
+        while let Ok(frame) = recv_frame(&mut connection, None) {
+            let answer = if frame.tag == COMMAND {
+                format!("{}|OK|true", extract_token(&frame.payload))
+            } else {
+                NAMED_STATES.to_owned()
+            };
+            let tag = frame.tag;
+            received.push(frame);
+            let _ = try_send_split(&mut connection, tag, &answer);
+        }
+        received
+    });
+    let mut client = TunerClient::connect(port, 1.0).unwrap();
+    assert_eq!(client.list_states(0.02).unwrap_err().kind, ErrorKind::Tuner);
+    release_late.send(()).unwrap();
+    // Attempt the late reply only after timeout, and wait for that attempt
+    // before the next command. A correctly closed peer can reject the write.
+    let attempted = await_attempt.recv_timeout(Duration::from_secs(2)).unwrap();
+    if let Err(error) = attempted {
+        assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::NotConnected
+            ),
+            "unexpected fixture send error: {error}"
+        );
+    }
+    let result = client.run_lua("InGame", "return true", 0.2);
+    client.close();
+    let received = server.join().unwrap();
+    assert_eq!(result.unwrap_err().kind, ErrorKind::Tuner);
+    assert_eq!(received.len(), 3);
+    assert!(received.iter().all(|frame| frame.tag == HANDSHAKE));
+}
 
 #[test]
 fn japan_wrappers_receive_commands_at_the_observed_context_indices() {

@@ -531,6 +531,7 @@ fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_re
         reads.ObserveCity(request)
         assert(reads.GetObservation(request.Token)==nil,'unpublished city cache was accepted')
         Players[2].GetCities=cities
+        Events.GameCoreEventPublishComplete.Emit()
         reads.ObserveCity(request)
         assert(reads.GetObservation(request.Token).Value==87)
         Events.GameCoreEventPublishComplete.Emit()

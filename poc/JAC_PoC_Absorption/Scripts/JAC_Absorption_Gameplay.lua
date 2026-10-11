@@ -11,6 +11,7 @@ local unitRebinders, cityRebinders = {}, {}
 local adapters = {}
 
 local function Log(text) print("[JAC_ABSORPTION] " .. text) end
+local uiWaitReasons = {}
 local function State()
   local state = R.Copy(Game:GetProperty(R.STATE_KEY) or { Version = 1, Transactions = {}, Archive = {}, Recalls = {} })
   assert(state.Version == 1, "unsupported absorption save version")
@@ -65,13 +66,94 @@ A.GetPropertyKeys = function()
   return { PERSON_KEY = R.PERSON_KEY, TOKEN_KEY = R.TOKEN_KEY }
 end
 A.GetUIPhase = function() return R.Copy(Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")) end
-local function CityRead(city, method, ...)
-  if Multiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
-    return JAC_NativeInventory.ReadCity(city, method, ...)
-  end
+local cityReadContext
+local function CityReadRequest(city, method, building, slot, extra)
+  local owner, id, x, y = city:GetOwner(), city:GetID(), city:GetX(), city:GetY()
+  assert(type(owner) == 'number' and owner >= 0 and Players[owner], 'Core city owner is invalid')
+  assert(type(id) == 'number' and id >= 0 and type(x) == 'number' and x >= 0
+    and type(y) == 'number' and y >= 0, 'Core city identity is invalid')
+  return { Owner = owner, ID = id, X = x, Y = y, Method = method,
+    Building = building, Slot = slot, Extra = extra }
+end
+local function ReadCityRequest(request)
   local reads = ExposedMembers.JAC_HeroReadAPI
-  assert(reads and reads.ReadCity, "UI city read API unavailable")
-  return reads.ReadCity(city:GetOwner(), city:GetID(), method, ...)
+  local ok, value = pcall(function()
+    local method = request.Method == 'NATIVE_SLOTS' and 'FindCompatibleNativeSlots'
+      or request.Method == 'NATIVE_WORK' and 'ReadNativeWork'
+      or request.Method == 'CARRIER_PLOTS' and 'ReadCarrierPlots' or 'ReadCity'
+    assert(reads and reads[method], 'UI city cache is not ready: read API unavailable method=' .. request.Method)
+    if method == 'FindCompatibleNativeSlots' then
+      return reads[method](request.Owner, request.ObjectType)
+    elseif method == 'ReadNativeWork' then
+      return reads[method](request.Owner, request.ID, request.Index, request.X, request.Y)
+    elseif method == 'ReadCarrierPlots' then
+      return reads[method](request.Owner, request.ID, request.X, request.Y)
+    end
+    return reads.ReadCity(request.Owner, request.ID, request.Method,
+      request.Building, request.Slot, request.Extra, request.X, request.Y)
+  end)
+  if not ok or value == nil then
+    if cityReadContext then cityReadContext.Failed = R.Copy(request) end
+    if not ok and request.Method == 'NATIVE_SLOTS' then
+      error('UI city cache is not ready: native slot query failed: ' .. tostring(value), 0)
+    end
+    if not ok then error(value, 0) end
+    error('UI city cache is not ready: getter returned no value method=' .. request.Method, 0)
+  end
+  if request.Works then
+    assert(type(value) == 'number' and value >= 0 and value == math.floor(value), 'invalid UI work slot count')
+    for slot = 0, value - 1 do
+      local work = R.Copy(request)
+      work.Method, work.Slot, work.Works = 'WORK', slot, nil
+      assert(type(ReadCityRequest(work)) == 'number', 'invalid UI work slot value')
+    end
+  end
+  if request.Method == 'WORK' and type(value) == 'number' and value >= 0 and reads.ReadNativeWork then
+    local native = { Owner = request.Owner, ID = request.ID, X = request.X, Y = request.Y,
+      Method = 'NATIVE_WORK', Index = value }
+    ReadCityRequest(native)
+  end
+  return value
+end
+local function ValidateSlotCity(request, slot)
+  local city = CityManager.GetCityAt(slot.X, slot.Y)
+  if city then assert(Players[city:GetOwner()], 'Core native slot city owner is invalid') end
+  if not city or slot.Owner ~= request.Owner or city:GetOwner() ~= request.Owner
+    or city:GetID() ~= slot.City or city:GetX() ~= slot.X or city:GetY() ~= slot.Y then
+    if cityReadContext then cityReadContext.Failed = R.Copy(request) end
+    error('UI city cache is not ready: native slot candidate identity differs from Core', 0)
+  end
+  return city
+end
+local function ValidateReadRequest(request)
+  assert(Players[request.Owner], 'Core city read owner is invalid')
+  if request.Method == 'NATIVE_SLOTS' then return end
+  local city = assert(CityManager.GetCityAt(request.X, request.Y), 'requested Core city disappeared')
+  assert(Players[city:GetOwner()] and city:GetOwner() == request.Owner
+    and city:GetID() == request.ID and city:GetX() == request.X and city:GetY() == request.Y,
+    'requested Core city identity changed')
+end
+local function ReadCityRequests(requests)
+  for _, request in ipairs(requests) do
+    ValidateReadRequest(request)
+    local value = ReadCityRequest(request)
+    if request.Method == 'NATIVE_SLOTS' then
+      for _, slot in ipairs(value) do ValidateSlotCity(request, slot) end
+    end
+  end
+end
+local function WithCityReads(operation, ...)
+  local previous, context = cityReadContext, {}
+  cityReadContext = context
+  local ok, result = pcall(operation, ...)
+  cityReadContext = previous
+  return ok, result, context.Failed
+end
+local function CityRead(city, method, building, slot, extra)
+  if Multiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+    return JAC_NativeInventory.ReadCity(city, method, building, slot, extra)
+  end
+  return ReadCityRequest(CityReadRequest(city, method, building, slot, extra))
 end
 local function ValidLoyalty(value)
   assert(type(value) == "number" and value == value and value >= 0 and value <= 100,
@@ -88,18 +170,25 @@ end
 function A.CityLoyalty(city)
   return CoreCityLoyalty(city) or ValidLoyalty(CityRead(city, "LOYALTY"))
 end
-local function RequestLoyaltyRead(city, governance, phase)
+local function RequestLoyaltyRead(city, governance, phase, afterPublication)
   if CoreCityLoyalty(city) ~= nil then return end
   if Multiplayer() then return end
   local request = governance.LoyaltyRead
   local turn = Game.GetCurrentGameTurn()
-  if request and request.Phase == phase and request.Turn == turn then return end
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  local publication = reads and reads.GetPublication and reads.GetPublication() or 0
+  local floor = math.max(afterPublication or 0, publication)
+  if request and request.Phase == phase and request.Turn == turn
+    and request.Owner == city:GetOwner() and request.ID == city:GetID()
+    and request.X == city:GetX() and request.Y == city:GetY()
+    and request.AfterPublication and request.AfterPublication >= (afterPublication or 0) then return request end
   governance.LoyaltyRead = { Phase = phase, Owner = city:GetOwner(), ID = city:GetID(),
-    Turn = turn, Token = governance.ID .. ":city:"
+    X = city:GetX(), Y = city:GetY(), Turn = turn, AfterPublication = floor, Token = governance.ID .. ":city:"
       .. city:GetX() .. ":" .. city:GetY() .. ":" .. turn .. ":" .. phase }
   city:SetProperty(R.GOVERNANCE_KEY, governance)
+  return governance.LoyaltyRead
 end
-local function PublishedLoyalty(city, governance, phase)
+local function PublishedLoyalty(city, governance, phase, afterPublication)
   local direct = CoreCityLoyalty(city)
   if direct ~= nil then return direct end
   if Multiplayer() then
@@ -114,42 +203,89 @@ local function PublishedLoyalty(city, governance, phase)
     if not ok then error(value,0) end
     return value
   end
-  RequestLoyaltyRead(city, governance, phase)
+  RequestLoyaltyRead(city, governance, phase, afterPublication)
   local request = governance.LoyaltyRead
   local reads = ExposedMembers.JAC_HeroReadAPI
   local observed = reads and reads.GetObservation and reads.GetObservation(request.Token)
-  if not observed then return nil end
+  if not observed or observed.X ~= request.X or observed.Y ~= request.Y then return nil end
   assert(observed.Owner == request.Owner and observed.ID == request.ID
     and observed.Turn == request.Turn and city:GetOwner() == request.Owner
     and city:GetID() == request.ID, "city loyalty observation identity changed")
-  return ValidLoyalty(observed.Value)
+  -- A token identifies the logical read, not a native cache publication. Old
+  -- token-only observations and reads from the issuing callback are not proof.
+  if type(observed.Publication) ~= "number" or observed.Publication <= request.AfterPublication then return nil end
+  assert(observed.Publication < math.huge and observed.Publication == math.floor(observed.Publication),
+    "invalid city loyalty publication")
+  return ValidLoyalty(observed.Value), observed.Publication
+end
+local loyaltyDiagnostics = {}
+local function TraceLoyalty(city, governance, pending, phase, current, publication, status)
+  local text = "loyalty id=" .. governance.ID .. " phase=" .. phase .. " status=" .. status
+    .. " owner=" .. city:GetOwner() .. " city=" .. city:GetID() .. " x=" .. city:GetX() .. " y=" .. city:GetY()
+    .. " turn=" .. Game.GetCurrentGameTurn() .. " before=" .. tostring(pending.Before)
+    .. " target=" .. tostring(pending.Target) .. " current=" .. tostring(current)
+    .. " issued=" .. tostring(pending.Issued == true) .. " publication=" .. tostring(publication)
+    .. " issuedPublication=" .. tostring(pending.IssuedPublication)
+    .. " lastPublication=" .. tostring(pending.LastPublication) .. " rechecks=" .. tostring(pending.Rechecks or 0)
+  local key = governance.ID .. ":" .. city:GetX() .. ":" .. city:GetY() .. ":" .. phase
+  if loyaltyDiagnostics[key] ~= text then Log(text); loyaltyDiagnostics[key] = text end
 end
 local function AdvanceLoyalty(city, governance, pending, phase, delta)
   if pending.Before == nil then
-    local before = PublishedLoyalty(city, governance, phase .. ":before")
-    if before == nil then return false end
+    local before, publication = PublishedLoyalty(city, governance, phase .. ":before")
+    if before == nil then TraceLoyalty(city, governance, pending, phase, nil, nil, "WAIT_BEFORE"); return false end
     pending.Before, pending.Target = before, math.max(0, math.min(100, before + delta))
+    pending.BeforePublication = publication
+    city:SetProperty(R.GOVERNANCE_KEY, governance)
+  end
+  if pending.Issued and not Multiplayer() and CoreCityLoyalty(city) == nil
+    and pending.IssuedPublication == nil then
+    -- Legacy saves counted tokens without publication evidence. Preserve the
+    -- issued setter, but start the two genuine after-read checks from a barrier.
+    pending.Rechecks, pending.LastPublication = nil, nil
+    local request = RequestLoyaltyRead(city, governance, phase .. ":after:0", pending.BeforePublication)
+    pending.IssuedPublication = request.AfterPublication
     city:SetProperty(R.GOVERNANCE_KEY, governance)
   end
   if not pending.Issued and pending.Before ~= pending.Target then
     -- Both the intent and a distinct after-read request exist before the
     -- native setter. A crash after the call can reconcile without a new call.
+    local receiver = { Owner = city:GetOwner(), ID = city:GetID(),
+      X = city:GetX(), Y = city:GetY(), Turn = Game.GetCurrentGameTurn() }
     pending.Issued = true
-    RequestLoyaltyRead(city, governance, phase .. ":after:0")
+    local request = RequestLoyaltyRead(city, governance, phase .. ":after:0", pending.BeforePublication)
+    pending.IssuedPublication = request and request.AfterPublication
     city:SetProperty(R.GOVERNANCE_KEY, governance)
+    TraceLoyalty(city, governance, pending, phase, nil, nil, "ISSUED")
+    -- Resolve the mutation receiver after the UI read and durable property writes.
+    city = assert(CityManager.GetCityAt(receiver.X, receiver.Y), "loyalty receiver disappeared")
+    assert(city:GetOwner() == receiver.Owner and city:GetID() == receiver.ID
+      and city:GetX() == receiver.X and city:GetY() == receiver.Y
+      and Game.GetCurrentGameTurn() == receiver.Turn, "loyalty receiver changed before mutation")
+    TraceLoyalty(city, governance, pending, phase, nil, nil, "NATIVE_CALL")
     city:ChangeLoyalty(delta)
+    TraceLoyalty(city, governance, pending, phase, nil, nil, "NATIVE_RETURN")
   end
-  if pending.Before == pending.Target then return true end
+  if pending.Before == pending.Target then
+    TraceLoyalty(city, governance, pending, phase, pending.Before, pending.BeforePublication, "UNCHANGED_TARGET")
+    return true
+  end
   local suffix = tostring(pending.Rechecks or 0)
-  local current = PublishedLoyalty(city, governance, phase .. ":after:" .. suffix)
-  if current == nil then return false end
+  local current, publication = PublishedLoyalty(city, governance, phase .. ":after:" .. suffix,
+    pending.LastPublication or pending.IssuedPublication)
+  if current == nil then TraceLoyalty(city, governance, pending, phase, nil, nil, "WAIT_AFTER"); return false end
+  if publication and pending.LastPublication and publication <= pending.LastPublication then return false end
+  TraceLoyalty(city, governance, pending, phase, current, publication, "OBSERVED")
   if current == pending.Target then return true end
   assert(current == pending.Before, "city loyalty changed during interrupted adjustment")
   if (pending.Rechecks or 0) >= 1 then
+    pending.FailedPublication, pending.FailedValue = publication, current
+    city:SetProperty(R.GOVERNANCE_KEY, governance)
+    TraceLoyalty(city, governance, pending, phase, current, publication, "BLOCKED")
     error("city loyalty change was not observed after two fresh publications")
   end
-  pending.Rechecks = 1
-  RequestLoyaltyRead(city, governance, phase .. ":after:1")
+  pending.Rechecks, pending.LastPublication = 1, publication
+  RequestLoyaltyRead(city, governance, phase .. ":after:1", publication)
   city:SetProperty(R.GOVERNANCE_KEY, governance)
   return false
 end
@@ -275,8 +411,12 @@ function A.OwnedGreatWorkSlots(owner)
             local workType = buildings.GetGreatWorkTypeFromIndex
               and buildings:GetGreatWorkTypeFromIndex(index)
             local reads = ExposedMembers.JAC_HeroReadAPI
-            local published = reads and reads.ReadNativeWork
-              and reads.ReadNativeWork(owner, city:GetID(), index)
+            local published
+            if reads and reads.ReadNativeWork then
+              local request = CityReadRequest(city, 'NATIVE_WORK')
+              request.Index = index
+              published = ReadCityRequest(request)
+            end
             workType = workType or published and published.Type
             local definition = workType and GameInfo.GreatWorks[workType]
             local provenance = Game.GetGreatWorkDataFromIndex
@@ -383,11 +523,9 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
     avoidCapital)
   assert(type(source.ObjectType) == "string" and source.ObjectType ~= "",
     "native Great Work object type unavailable")
-  local reads = ExposedMembers.JAC_HeroReadAPI
-  assert(reads and type(reads.FindCompatibleNativeSlots) == "function",
-    "native Great Work destination slot reader unavailable")
-  local ok, slots = pcall(reads.FindCompatibleNativeSlots, owner, source.ObjectType)
-  if not ok then error("JAC_ABSORPTION_WAITING_UI", 0) end
+  assert(Players[owner], 'Core native slot owner is invalid')
+  local request = { Owner = owner, Method = 'NATIVE_SLOTS', ObjectType = source.ObjectType }
+  local slots = ReadCityRequest(request)
   assert(type(slots) == "table", "native Great Work destination slot list unavailable")
   local valid = {}
   for row in GameInfo.GreatWork_ValidSubTypes() do
@@ -406,7 +544,7 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
   end
   for _, slot in ipairs(slots) do
     local key = slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot
-    local city = CityManager.GetCityAt(slot.X, slot.Y)
+    local city = ValidateSlotCity(request, slot)
     if not reserved[key] and not occupiedCities[slot.X .. ":" .. slot.Y]
       and not (reservedCities and reservedCities[slot.X .. ":" .. slot.Y])
       and not (capital and slot.X == capital:GetX() and slot.Y == capital:GetY())
@@ -414,8 +552,6 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
       and (not (emptyCityOnly or avoidCapital)
         or #UnitsOnCityCenter(slot.X, slot.Y, owner) == 0)
       and (not emptyCityOnly or movableBuildings[slot.Building]) then
-      assert(city and city:GetOwner() == owner and city:GetID() == slot.City
-        and slot.Owner == owner, "native Great Work destination city changed")
       assert(city:GetBuildings():HasBuilding(slot.Building)
         and type(slot.Slot) == "number" and slot.Slot >= 0
         and slot.Slot < WorkSlots(city, slot.Building)
@@ -935,6 +1071,70 @@ local function CityNeedsUI(city)
     or not city:GetDistricts().Members
 end
 
+-- These are present-tense read requests, not additions to a historical city
+-- snapshot. In particular, old district coverage remains untouched.
+local function CityUIRequests(city)
+  local requests = {}
+  local function Add(method, building, slot, works)
+    local request = CityReadRequest(city, method, building, slot)
+    request.Works = works
+    requests[#requests + 1] = request
+  end
+  if not city:GetReligion().GetReligionsInCity then Add('RELIGIONS') end
+  if not city:GetDistricts().Members then Add('DISTRICTS') end
+  local buildings = city:GetBuildings()
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  if not buildings.GetNumGreatWorkSlots or not buildings.GetGreatWorkInSlot
+    or reads and reads.ReadNativeWork then
+    for info in GameInfo.Buildings() do
+      if buildings:HasBuilding(info.Index) then
+        if not buildings.GetNumGreatWorkSlots then Add('SLOTS', info.Index, nil, true)
+        else
+          for slot = 0, buildings:GetNumGreatWorkSlots(info.Index) - 1 do
+            if not buildings.GetGreatWorkInSlot then Add('WORK', info.Index, slot)
+            else
+              local index = buildings:GetGreatWorkInSlot(info.Index, slot)
+              if index and index >= 0 then
+                local request = CityReadRequest(city, 'NATIVE_WORK')
+                request.Index = index
+                requests[#requests + 1] = request
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  return requests
+end
+local function SourceCityRequests(owner)
+  local requests = {}
+  for _, city in Players[owner]:GetCities():Members() do
+    assert(city:GetOwner() == owner, 'Core source city owner is invalid')
+    for _, request in ipairs(CityUIRequests(city)) do requests[#requests + 1] = request end
+  end
+  return requests
+end
+local function TransferredCityRequests(tx)
+  local requests = {}
+  for _, snap in ipairs(tx.Cities) do
+    -- Reacquire after TransferCity: the engine may replace the city and its ID.
+    local city = assert(CityManager.GetCityAt(snap.X, snap.Y), 'transferred Core city disappeared')
+    assert(city:GetOwner() == tx.To, 'transferred Core city owner is invalid')
+    assert(city:GetX() == snap.X and city:GetY() == snap.Y, 'transferred Core city coordinates changed')
+    assert(not snap.TransferredCityID or city:GetID() == snap.TransferredCityID,
+      'transferred absorption city identity changed')
+    for _, request in ipairs(CityUIRequests(city)) do requests[#requests + 1] = request end
+  end
+  return requests
+end
+local function ArmCityRead(state, tx, request)
+  state.CityReadSerial = (state.CityReadSerial or 0) + 1
+  tx.CityReadUI = { Token = tx.ID .. ':city-read:' .. state.CityReadSerial,
+    Turn = Game.GetCurrentGameTurn(), Reads = { R.Copy(request) } }
+  Save(state)
+end
+
 local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
   assert(type(plan) == "table" and type(plan.ID) == "string" and plan.ID ~= "", "transaction ID required")
   assert(type(plan.From) == "number" and type(plan.To) == "number" and plan.From ~= plan.To, "distinct factions required")
@@ -950,8 +1150,9 @@ local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
       assert(city.ChangeLoyalty, "native city loyalty setter unavailable")
       if CoreCityLoyalty(city) == nil and not Multiplayer() then
         local reads = ExposedMembers.JAC_HeroReadAPI
-        assert(reads and reads.GetObservation,
-          "published UI city loyalty reads unavailable")
+        if not reads or not reads.GetObservation then
+          error('UI city cache is not ready: loyalty read API unavailable', 0)
+        end
       end
     end
   end
@@ -1144,6 +1345,9 @@ local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
   local capital = source:GetCities():GetCapitalCity()
   local leader = { ID = leaderID, Kind = "GREAT_PERSON", Owner = plan.From,
     LeaderType = PlayerConfigurations[plan.From]:GetLeaderTypeName(), Persistent = true,
+    Personality = plan.LeaderProfile and plan.LeaderProfile.Personality,
+    Trait = plan.LeaderProfile and plan.LeaderProfile.Trait,
+    CountryID = plan.LeaderProfile and plan.LeaderProfile.CountryID,
     Representation = R.LEADER_REPRESENTATION_POC, Unit = { Owner = plan.From, ID = -1 } }
   tx.SourceRoster[leaderID] = leader
   local decision = Decision(plan.Leader)
@@ -1467,6 +1671,7 @@ local function TransferAbsorbedCity(state, tx, snap)
   end
   city = assert(CityManager.GetCityAt(snap.X, snap.Y), "transfer removed city")
   assert(city:GetOwner() == tx.To, "city transfer did not change owner")
+  assert(city:GetX() == snap.X and city:GetY() == snap.Y, "transfer changed city coordinates")
   if snap.TransferredCityID then
     assert(city:GetID() == snap.TransferredCityID, "transferred absorption city identity changed")
   else snap.TransferredCityID = city:GetID(); Save(state) end
@@ -2038,10 +2243,7 @@ local function NativeCarrierState(city, carrier)
   end
   local built = assert(assets[building.BuildingType], "native carrier building lost")
   built.Works[carrier.Slot] = -1 -- the one work being moved is the expected difference
-  local reads = ExposedMembers.JAC_HeroReadAPI
-  assert(reads and reads.ReadCarrierPlots,
-    "native carrier purchased plots cannot be observed")
-  local plots = reads.ReadCarrierPlots(city:GetOwner(), city:GetID())
+  local plots = ReadCityRequest(CityReadRequest(city, 'CARRIER_PLOTS'))
   local units = UnitsOnCityCenter(carrier.X, carrier.Y, carrier.Owner)
   return { Name = city:GetName(), Population = city:GetPopulation(),
     Assets = assets, Religion = Religion(city), Loyalty = A.CityLoyalty(city),
@@ -2501,6 +2703,19 @@ local function MoveNativeWorks(state, tx)
 end
 
 local function Execute(state, tx)
+  if tx.CityReadUI and not Multiplayer() then
+    local request, reads = tx.CityReadUI, ExposedMembers.JAC_HeroReadAPI
+    -- Validate Core identity even if the UI player/API is not published yet.
+    for _, read in ipairs(request.Reads) do
+      ValidateReadRequest(read)
+    end
+    if not reads or not reads.GetObservation or not reads.GetObservation(request.Token) then
+      error('JAC_ABSORPTION_WAITING_UI', 0)
+    end
+    ReadCityRequests(request.Reads)
+    tx.CityReadUI = nil
+    Save(state)
+  end
   MoveNativeWorks(state, tx) -- no unit deletion or city transfer precedes external-work proof
   -- Ordinary units can be staged without affecting ownership. Native heroes require their origin city.
   for _, snap in ipairs(tx.Units) do
@@ -2602,8 +2817,8 @@ local function Execute(state, tx)
       governance.ImmediatePending = governance.ImmediatePending or {}
       if not AdvanceLoyalty(city, governance, governance.ImmediatePending,
         "immediate", governance.LoyaltyDelta) then
-        tx.CityLoyaltyPending = { X = snap.X, Y = snap.Y,
-          Token = governance.LoyaltyRead and governance.LoyaltyRead.Token }
+        if Multiplayer() then tx.CityLoyaltyPending = { X = snap.X, Y = snap.Y }
+        else tx.CityLoyaltyPending = R.Copy(governance.LoyaltyRead) end
         Save(state)
         error("JAC_ABSORPTION_WAITING_UI", 0)
       end
@@ -2644,11 +2859,19 @@ local function Execute(state, tx)
   end
   if needsCityUI and not Multiplayer() then
       local reads = ExposedMembers.JAC_HeroReadAPI
-      if not reads or not reads.GetObservation or not reads.GetObservation(tx.ID .. ":final") then
+      local requests = TransferredCityRequests(tx)
+      if not tx.FinalUI or tx.FinalUI.Turn ~= Game.GetCurrentGameTurn()
+        or not R.Equal(tx.FinalUI.Reads, requests) then
+        tx.FinalUI = { Token = tx.ID .. ':final', Turn = Game.GetCurrentGameTurn(), Reads = requests }
+      end
+      if not reads or not reads.GetObservation or not reads.GetObservation(tx.FinalUI.Token) then
         tx.AwaitingFinalUI = true
         Save(state)
         error("JAC_ABSORPTION_WAITING_UI", 0)
       end
+      -- A publication is a wake-up only. Prove this city's getters again in the
+      -- current UI context before moving the roster or allowing final Verify.
+      ReadCityRequests(tx.FinalUI.Reads)
       tx.AwaitingFinalUI = nil
   end
   local function finalizeCityInheritance()
@@ -2850,10 +3073,11 @@ function A.Resume(id)
   end
   if tx.AwaitingPreparation then
     if not tx.SourceSpreadReads or not tx.SourceReadyToken
-      or tx.Turn ~= Game.GetCurrentGameTurn() then
+      or not Multiplayer() and not tx.SourceCityReads or tx.Turn ~= Game.GetCurrentGameTurn() then
       tx.Turn = Game.GetCurrentGameTurn() -- no mutation exists before Prepare
       state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
       tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
+      if not Multiplayer() then tx.SourceCityReads = SourceCityRequests(tx.From) end
       tx.SourceReadyToken = tx.ID .. ":source-ready:" .. state.SourceReadSerial
       Save(state)
       return R.Copy(tx)
@@ -2863,7 +3087,7 @@ function A.Resume(id)
     local ready, prepared = pcall(Prepare, tx.Request, state, tx.SourceSpreadReads, tx.SourceReadyToken)
     state.Transactions[id] = tx
     if not ready then
-      if tostring(prepared) == "JAC_ABSORPTION_WAITING_UI" then return R.Copy(tx) end
+      if tostring(prepared) == "JAC_ABSORPTION_WAITING_UI" or NativeUIStale(prepared) then return R.Copy(tx) end
       -- Prepare is read-only. An invalid request must not reserve the factions
       -- or prevent a corrected request with the same ID from being submitted.
       state.Transactions[id] = nil
@@ -2875,18 +3099,26 @@ function A.Resume(id)
     Save(state)
   end
   for name in pairs(tx.Adapters) do assert(adapters[name], "missing absorption adapter: " .. name) end
-  local ok, result = pcall(Execute, state, tx)
+  local ok, result, failed = WithCityReads(Execute, state, tx)
   if not ok then
     if tostring(result) == "JAC_ABSORPTION_WAITING_UI" or NativeUIStale(result) then
+      if not Multiplayer() and NativeUIStale(result) and failed then ArmCityRead(state, tx, failed) end
+      local reason = tostring(result)
+      if uiWaitReasons[id] ~= reason then
+        Log("waiting id=" .. id .. " reason=" .. reason)
+        uiWaitReasons[id] = reason
+      end
       tx.Status, tx.Error = "WAITING_UI", nil
       Save(state)
       return R.Copy(tx)
     end
     tx.Status, tx.Error = "BLOCKED", tostring(result)
+    uiWaitReasons[id] = nil
     Save(state)
     Log("blocked id=" .. id .. " reason=" .. tx.Error)
     error(tx.Error)
   end
+  uiWaitReasons[id] = nil
   return result
 end
 
@@ -2900,11 +3132,12 @@ function A.Apply(plan)
   end
   local ready, tx = pcall(Prepare, plan, state)
   if not ready then
-    if tostring(tx) ~= "JAC_ABSORPTION_WAITING_UI" then error(tx) end
+    if tostring(tx) ~= "JAC_ABSORPTION_WAITING_UI" and not NativeUIStale(tx) then error(tx) end
     tx = { ID = plan.ID, From = plan.From, To = plan.To, Turn = Game.GetCurrentGameTurn(),
       Request = R.Copy(plan), Status = "WAITING_UI", AwaitingPreparation = true, Units = {}, Adapters = {} }
     state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
     tx.SourceSpreadReads = SourceSpreadReads(tx.ID, tx.From, tx.Turn, state.SourceReadSerial)
+    if not Multiplayer() then tx.SourceCityReads = SourceCityRequests(tx.From) end
     tx.SourceReadyToken = tx.ID .. ":source-ready:" .. state.SourceReadSerial
     state.Transactions[plan.ID] = tx
     Save(state)
@@ -2935,9 +3168,10 @@ function A.RequestVerification(id)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   assert(tx.Status == "COMPLETE", "absorption did not complete: " .. tx.Status)
-  if not VerificationNeedsUI(tx, true) then return nil end
+  if Multiplayer() or not VerificationNeedsUI(tx, true) then return nil end
   state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
-  tx.VerificationUI = { Token = id .. ":verify:" .. state.SourceReadSerial, Turn = Game.GetCurrentGameTurn() }
+  tx.VerificationUI = { Token = id .. ":verify:" .. state.SourceReadSerial,
+    Turn = Game.GetCurrentGameTurn(), Reads = TransferredCityRequests(tx) }
   Save(state)
   return R.Copy(tx.VerificationUI)
 end
@@ -2949,14 +3183,23 @@ function A.Verify(id, exact)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   assert(tx.Status == "COMPLETE", "absorption did not complete: " .. tx.Status)
-  if VerificationNeedsUI(tx, exact == true) and not Multiplayer() then
+  if not Multiplayer() and (tx.VerificationUI or VerificationNeedsUI(tx, exact == true)) then
     local request, reads = tx.VerificationUI, ExposedMembers.JAC_HeroReadAPI
     assert(request and request.Turn == Game.GetCurrentGameTurn() and reads and reads.GetObservation
       and reads.GetObservation(request.Token), "verification requires a published UI request")
     tx.VerificationUI = nil
     Save(state)
   end
-  Verify(tx, state, exact == true)
+  local ok, result, failed = WithCityReads(Verify, tx, state, exact == true)
+  if not ok then
+    if not Multiplayer() and NativeUIStale(result) and failed then
+      state.SourceReadSerial = (state.SourceReadSerial or 0) + 1
+      tx.VerificationUI = { Token = id .. ':verify:' .. state.SourceReadSerial,
+        Turn = Game.GetCurrentGameTurn(), Reads = { failed } }
+      Save(state)
+    end
+    error(result, 0)
+  end
   return true
 end
 

@@ -479,12 +479,23 @@ local function observe(q)
       Part=part,Parts=count,Payload=chunks[part]})
   end
 end
-local function publish()
+local function observePending()
   if not GameConfiguration.IsAnyMultiplayer() then return end
   local api=ExposedMembers.JAC_NativeInventory;if not api then return end
   for _,q in ipairs(api.GetPending()) do local ok,err=pcall(observe,q)
     if not ok then print('[JAC_NATIVE_INVENTORY_WAITING] '..tostring(err)) end
   end
+end
+local publicationGuard=JAC_AbsorptionPublicationGuard or {}
+JAC_AbsorptionPublicationGuard=publicationGuard -- shared by observers in this UI context only
+local function publish()
+  -- Sending a synchronized observation can reenter publish-complete before
+  -- this native cache advances. New intents must wait for the next boundary.
+  if publicationGuard.Active then return end
+  publicationGuard.Active=true
+  local ok,err=pcall(observePending)
+  publicationGuard.Active=false
+  if not ok then error(err,0) end
 end
 Events.GameCoreEventPublishComplete.Add(publish)
 Events.LoadScreenClose.Add(publish)

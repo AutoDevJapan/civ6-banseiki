@@ -8,6 +8,203 @@ use std::{
 };
 use support_driver::{FakeBackend, Harness, ManualClock};
 
+#[test]
+fn start_calendar_read_reconnects_after_transient_tuner_failure_without_replaying_start() {
+    let calls = Arc::new(Mutex::new(0));
+    let reads = Arc::clone(&calls);
+    let mut backend = FakeBackend::new();
+    backend.on_lua = Box::new(move |state, code| {
+        assert_eq!(state, "InGame");
+        assert!(code.contains("GameConfiguration.GetStartTurn()"));
+        let mut count = reads.lock().unwrap();
+        *count += 1;
+        if *count == 1 {
+            Err(Error::tuner("FireTuner response timed out after 0/8 bytes"))
+        } else {
+            Ok("16603|1|1534|true|CALENDAR_STANDARD_FROM_START_ERA|1534 AD".into())
+        }
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.ruleset = Some(scenario::BANSEIKI_RULESET.into());
+    h.runner.check_start_turn(10.0).unwrap();
+    assert_eq!(*calls.lock().unwrap(), 2);
+    assert!(h
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|name| name == "disconnect"));
+    assert!(h
+        .calls()
+        .iter()
+        .all(|(_, code)| !code.contains("Network.HostGame") && !code.contains("Network.LoadGame")));
+}
+
+#[test]
+fn start_calendar_mismatch_is_authoritative_and_is_not_retried() {
+    let reads = Arc::new(Mutex::new(0));
+    let calls = Arc::clone(&reads);
+    let mut backend = FakeBackend::new();
+    backend.on_lua = Box::new(move |_, _| {
+        *calls.lock().unwrap() += 1;
+        Ok("16603|2|1534|true|CALENDAR_STANDARD_FROM_START_ERA|1534 AD".into())
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.ruleset = Some(scenario::BANSEIKI_RULESET.into());
+    let error = h.runner.check_start_turn(10.0).unwrap_err();
+    assert!(error.message.contains("must display turn 1"));
+    assert_eq!(*reads.lock().unwrap(), 1);
+}
+
+#[test]
+fn start_calendar_transport_failure_uses_the_original_deadline() {
+    let clock = Arc::new(ManualClock::default());
+    let elapsed = Arc::clone(&clock);
+    let reads = Arc::new(Mutex::new(0));
+    let calls = Arc::clone(&reads);
+    let mut backend = FakeBackend::new();
+    backend.on_lua = Box::new(move |_, _| {
+        *calls.lock().unwrap() += 1;
+        elapsed.advance(2.0);
+        Err(Error::tuner("read unavailable"))
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.clock = clock.clone();
+    h.runner.ruleset = Some(scenario::BANSEIKI_RULESET.into());
+    assert!(h.runner.check_start_turn(2.0).is_err());
+    assert_eq!(*reads.lock().unwrap(), 1);
+    assert_eq!(clock.at(), 2.0);
+}
+
+#[test]
+fn configured_human_pool_survives_defaults_without_changing_participants() {
+    let step = json!({"action":"configure","ruleset":"RULESET_JAC_BANSEIKI","human_pool":"JAC_ALL_POOLS",
+        "map_size":"MAPSIZE_DUEL","map_script":"Continents.lua","speed":"GAMESPEED_STANDARD","seed":620981,"city_states":1,
+        "players":[{"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false},
+                   {"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}]});
+    scenario::validate_scenario(&json!({"name":"pool setup","steps":[step.clone()]})).unwrap();
+    let lua = mlua::Lua::new();
+    lua.load(r#"
+UI={IsInFrontEnd=function() return true end}
+SlotStatus={SS_TAKEN=1,SS_COMPUTER=2}
+GameConfiguration={SetToDefaults=function() VALUES={} end,SetRuleSet=function(r) RULE=r end,
+ UpdateEnabledMods=function() end,SetValue=function(k,v) VALUES[k]=v end,GetValue=function(k) return VALUES[k] end,
+ SetGameSpeedType=function() end,GetHiddenPlayerCount=function() return 4 end,
+ SetParticipatingPlayerCount=function(n) PARTICIPANTS=n end}
+MapConfiguration={SetMapSize=function() end,SetValue=function(k,v) if k=='MAP_SCRIPT' then SCRIPT=v end end,SetMaxMajorPlayers=function(n) MAJORS=n end}
+PlayerConfigurations={}
+for actor=0,1 do local p={}; PlayerConfigurations[actor]=p
+ function p:SetSlotStatus(v) self.Slot=v end
+ function p:SetLeaderTypeName(v) self.Leader=v end
+ function p:SetCivilizationTypeName(v) self.Civ=v end
+ function p:GetLeaderTypeName() return self.Leader end
+ function p:GetCivilizationTypeName() return self.Civ end
+end
+"#).exec().unwrap();
+    assert!(lua
+        .load(scenario::configure_code(&step))
+        .eval::<bool>()
+        .unwrap());
+    lua.load(r#"assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS' and SCRIPT=='Continents.lua');assert(MAJORS==2 and PARTICIPANTS==6)
+assert(PlayerConfigurations[0].Slot==2 and PlayerConfigurations[0].Leader=='LEADER_JAC_TAKEDA_NOBUTORA')
+assert(PlayerConfigurations[1].Slot==1 and PlayerConfigurations[1].Leader=='LEADER_JAC_ODA_NOBUHIDE')"#).exec().unwrap();
+    for (ruleset, pool) in [
+        ("RULESET_STANDARD", json!("JAC_ALL_POOLS")),
+        ("RULESET_JAC_BANSEIKI", json!("invented")),
+        ("RULESET_JAC_BANSEIKI", json!(true)),
+    ] {
+        let mut invalid = step.clone();
+        invalid["ruleset"] = json!(ruleset);
+        invalid["human_pool"] = pool;
+        let error = scenario::validate_scenario(&json!({"name":"pool setup","steps":[invalid]}))
+            .unwrap_err();
+        assert!(error.message.contains("human_pool"), "{error}");
+    }
+    for script in [
+        json!("../Continents.lua"),
+        json!(true),
+        json!("Continents.Civ6Map"),
+    ] {
+        let mut invalid = step.clone();
+        invalid["map_script"] = script;
+        let error = scenario::validate_scenario(&json!({"name":"map setup","steps":[invalid]}))
+            .unwrap_err();
+        assert!(error.message.contains("map_script"), "{error}");
+    }
+    let mut conflict = step.clone();
+    conflict["map_file"] =
+        json!("{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map");
+    assert!(
+        scenario::validate_scenario(&json!({"name":"map setup","steps":[conflict]}))
+            .unwrap_err()
+            .message
+            .contains("map_script")
+    );
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    h.runner.run_step(&step).unwrap();
+    let calls = h.calls();
+    let configure = calls
+        .iter()
+        .position(|c| {
+            c.1.contains("GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL'")
+                && c.1.contains("MapConfiguration.SetValue('MAP_SCRIPT'")
+        })
+        .unwrap();
+    let build = calls
+        .iter()
+        .position(|c| c.1.contains("BuildHeadlessGameSetup()"))
+        .unwrap();
+    assert!(
+        configure < build,
+        "native selectable domains must be computed after map and pool configuration"
+    );
+}
+
+#[test]
+fn end_turn_wait_dismisses_advisor_that_appears_after_the_first_poll() {
+    let state = Arc::new(Mutex::new((false, false)));
+    let events = state.clone();
+    let backend = FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into(), "AdvisorPopup".into()]))
+        .lua(move |name, code| {
+            let mut state = events.lock().unwrap();
+            if name == "AdvisorPopup" && code.contains("OnHideAdvisorDialog") {
+                if state.0 {
+                    state.0 = false;
+                    state.1 = true;
+                    return Ok("true".into());
+                }
+                return Ok("false".into());
+            }
+            if name == "InGame" && code == "return TURN_COMPLETE" {
+                if state.1 {
+                    return Ok("true".into());
+                }
+                state.0 = true;
+                return Ok("false".into());
+            }
+            Ok("false".into())
+        });
+    let mut harness = Harness::new(json!({}), backend);
+    harness
+        .runner
+        .wait(
+            &json!({"type":"lua","state_name":"InGame","code":"return TURN_COMPLETE"}),
+            5.0,
+            true,
+        )
+        .unwrap();
+    assert!(state.lock().unwrap().1);
+    let calls = harness.calls();
+    let first = calls
+        .iter()
+        .position(|(_, c)| c == "return TURN_COMPLETE")
+        .unwrap();
+    assert!(calls[first + 1..]
+        .iter()
+        .any(|(s, c)| s == "AdvisorPopup" && c.contains("OnHideAdvisorDialog")));
+}
+
 fn turn_backend() -> FakeBackend {
     let turn = Arc::new(Mutex::new(1));
     FakeBackend::new().lua(move |_, code| {
@@ -195,16 +392,73 @@ fn test_start_turn_guard() {
     let mut h = Harness::new(json!({}), FakeBackend::new().lua(|_, _| Ok("16603".into())));
     h.runner.check_start_turn(60.0).unwrap();
     assert!(h.calls().is_empty());
-    h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
-    assert!(h
-        .runner
-        .check_start_turn(60.0)
-        .unwrap_err()
-        .to_string()
-        .contains("start turn is 16603, expected 1"));
-    let mut h = Harness::new(json!({}), FakeBackend::new().lua(|_, _| Ok("1".into())));
-    h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
-    h.runner.check_start_turn(60.0).unwrap();
+    for (start, current, normalized, era_year, calendar, date, accepted) in [
+        (
+            16603,
+            16603,
+            true,
+            1534,
+            "'CALENDAR_STANDARD_FROM_START_ERA'",
+            "1534 AD",
+            true,
+        ),
+        (
+            1,
+            1,
+            false,
+            1534,
+            "'CALENDAR_STANDARD_FROM_START_ERA'",
+            "1534年",
+            true,
+        ),
+        (16603, 16603, true, 1534, "12345", "1534 г.", true),
+        (16603, 16603, false, 1534, "12345", "1534 AD", false),
+        (16603, 16604, true, 1534, "12345", "1534 AD", false),
+        (1, 2, false, 1534, "12345", "1534 AD", false),
+        (0, 0, true, 1534, "12345", "1534 AD", false),
+        (1, 1, false, -4000, "12345", "4000 BC", false),
+        (1, 1, false, 1534, "'CALENDAR_DEFAULT'", "1534 AD", false),
+        (1, 1, false, 1534, "12346", "1534 AD", false),
+        (1, 1, false, 1534, "12345", "11534 AD", false),
+        (1, 1, false, 1534, "12345", "4000 BC / 1534 AD", false),
+        (1, 1, false, 1534, "12345", "", false),
+    ] {
+        let backend = FakeBackend::new().lua(move |state, code| {
+            assert_eq!(state, "InGame");
+            let lua = mlua::Lua::new();
+            lua.load(format!(
+                "GameConfiguration={{GetStartTurn=function() return {start} end,GetCalendarType=function() return {calendar} end}};
+                 Game={{GetCurrentGameTurn=function() return {current} end}};
+                 GameCapabilities={{HasCapability=function(_, ...) return {normalized} end}};
+                 GameInfo={{StartEras={{ERA_ANCIENT={{Year={era_year}}}}}}};
+                 DB={{MakeHash=function() return 12345 end}};
+                 Calendar={{MakeYearStr=function() return {} end}}", serde_json::to_string(date).unwrap()
+            ))
+            .exec()
+            .map_err(|e| Error::scenario(e.to_string()))?;
+            lua.load(code)
+                .eval::<String>()
+                .map_err(|e| Error::scenario(e.to_string()))
+        });
+        let mut h = Harness::new(json!({}), backend);
+        h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
+        assert_eq!(h.runner.check_start_turn(60.0).is_ok(), accepted);
+    }
+    for response in [
+        "16603",
+        "1|",
+        "nan|1",
+        "1|1|extra",
+        "1|1|1534|true|C",
+        "1|1|1534|true|C|1534 AD|extra",
+    ] {
+        let mut h = Harness::new(
+            json!({}),
+            FakeBackend::new().lua(move |_, _| Ok(response.into())),
+        );
+        h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
+        assert!(h.runner.check_start_turn(60.0).is_err(), "{response}");
+    }
 }
 
 #[test]

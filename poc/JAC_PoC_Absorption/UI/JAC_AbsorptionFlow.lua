@@ -1,5 +1,6 @@
 -- Human-facing view of saved flow snapshots. Only the gameplay operation changes a flow.
 include("InstanceManager")
+include("JAC_Absorption_ProductNativeRead")
 
 local entryInstances = InstanceManager:new("AbsorptionEntry", "Root", Controls.Entries)
 local actionInstances = InstanceManager:new("AbsorptionAction", "Root", Controls.Actions)
@@ -8,6 +9,31 @@ local targets, focusKey, rendered = {}, nil, {}
 
 local function L(tag, ...)
   return Locale.Lookup("LOC_JAC_ABS_FLOW_" .. tag, ...)
+end
+
+local DisplayLocaleKey = (function()
+  local keys={["JAC_PERSONALITY_BOLD"]="LOC_JAC_ADMISSION_PERSONALITY_BOLD",["JAC_PERSONALITY_BRAVE"]="LOC_JAC_ADMISSION_PERSONALITY_BRAVE",["JAC_PERSONALITY_CALM"]="LOC_JAC_ADMISSION_PERSONALITY_CALM",["JAC_PERSONALITY_CAREFUL"]="LOC_JAC_ADMISSION_PERSONALITY_CAREFUL",["JAC_PERSONALITY_FICKLE"]="LOC_JAC_ADMISSION_PERSONALITY_FICKLE",["JAC_PERSONALITY_GENTLE"]="LOC_JAC_ADMISSION_PERSONALITY_GENTLE",["JAC_PERSONALITY_JOLLY"]="LOC_JAC_ADMISSION_PERSONALITY_JOLLY",["JAC_PERSONALITY_LOYAL"]="LOC_JAC_ADMISSION_PERSONALITY_LOYAL",["JAC_TRAIT_ADEPT"]="LOC_JAC_ADMISSION_TRAIT_ADEPT",["JAC_TRAIT_ASCETIC"]="LOC_JAC_ADMISSION_TRAIT_ASCETIC",["JAC_TRAIT_ASTUTE"]="LOC_JAC_ADMISSION_TRAIT_ASTUTE",["JAC_TRAIT_DEVOUT"]="LOC_JAC_ADMISSION_TRAIT_DEVOUT",["JAC_TRAIT_FIERCE"]="LOC_JAC_ADMISSION_TRAIT_FIERCE",["JAC_TRAIT_MUNDANE"]="LOC_JAC_ADMISSION_TRAIT_MUNDANE",["JAC_TRAIT_SHREWD"]="LOC_JAC_ADMISSION_TRAIT_SHREWD",["JAC_TRAIT_VALIANT"]="LOC_JAC_ADMISSION_TRAIT_VALIANT",["LOC_JAC_PERSONALITY_BOLD"]="LOC_JAC_ADMISSION_PERSONALITY_BOLD",["LOC_JAC_PERSONALITY_BRAVE"]="LOC_JAC_ADMISSION_PERSONALITY_BRAVE",["LOC_JAC_PERSONALITY_CALM"]="LOC_JAC_ADMISSION_PERSONALITY_CALM",["LOC_JAC_PERSONALITY_CAREFUL"]="LOC_JAC_ADMISSION_PERSONALITY_CAREFUL",["LOC_JAC_PERSONALITY_FICKLE"]="LOC_JAC_ADMISSION_PERSONALITY_FICKLE",["LOC_JAC_PERSONALITY_GENTLE"]="LOC_JAC_ADMISSION_PERSONALITY_GENTLE",["LOC_JAC_PERSONALITY_JOLLY"]="LOC_JAC_ADMISSION_PERSONALITY_JOLLY",["LOC_JAC_PERSONALITY_LOYAL"]="LOC_JAC_ADMISSION_PERSONALITY_LOYAL",["LOC_JAC_TRAIT_ADEPT"]="LOC_JAC_ADMISSION_TRAIT_ADEPT",["LOC_JAC_TRAIT_ASCETIC"]="LOC_JAC_ADMISSION_TRAIT_ASCETIC",["LOC_JAC_TRAIT_ASTUTE"]="LOC_JAC_ADMISSION_TRAIT_ASTUTE",["LOC_JAC_TRAIT_DEVOUT"]="LOC_JAC_ADMISSION_TRAIT_DEVOUT",["LOC_JAC_TRAIT_FIERCE"]="LOC_JAC_ADMISSION_TRAIT_FIERCE",["LOC_JAC_TRAIT_MUNDANE"]="LOC_JAC_ADMISSION_TRAIT_MUNDANE",["LOC_JAC_TRAIT_SHREWD"]="LOC_JAC_ADMISSION_TRAIT_SHREWD",["LOC_JAC_TRAIT_VALIANT"]="LOC_JAC_ADMISSION_TRAIT_VALIANT",["\229\134\183\233\157\153"]="LOC_JAC_ADMISSION_PERSONALITY_CALM",["\229\135\161\228\186\186"]="LOC_JAC_ADMISSION_TRAIT_MUNDANE",["\229\139\135\230\149\162"]="LOC_JAC_ADMISSION_PERSONALITY_BRAVE",["\229\164\169\230\137\141"]="LOC_JAC_ADMISSION_TRAIT_ADEPT",["\229\188\183\230\176\151"]="LOC_JAC_ADMISSION_PERSONALITY_BOLD",["\229\191\160\229\174\159"]="LOC_JAC_ADMISSION_PERSONALITY_LOYAL",["\230\133\142\233\135\141"]="LOC_JAC_ADMISSION_PERSONALITY_CAREFUL",["\230\149\153\232\128\133"]="LOC_JAC_ADMISSION_TRAIT_DEVOUT",["\230\173\166\228\186\186"]="LOC_JAC_ADMISSION_TRAIT_VALIANT",["\230\184\169\229\142\154"]="LOC_JAC_ADMISSION_PERSONALITY_GENTLE",["\231\173\150\229\163\171"]="LOC_JAC_ADMISSION_TRAIT_ASTUTE",["\232\135\170\231\148\177"]="LOC_JAC_ADMISSION_PERSONALITY_FICKLE",["\233\153\189\230\176\151"]="LOC_JAC_ADMISSION_PERSONALITY_JOLLY",["\233\156\138\231\165\158"]="LOC_JAC_ADMISSION_TRAIT_ASCETIC",["\233\172\188\231\165\158"]="LOC_JAC_ADMISSION_TRAIT_FIERCE",["\233\173\148\231\165\158"]="LOC_JAC_ADMISSION_TRAIT_SHREWD"}
+  return function(value) return keys[value] or value end
+end)()
+
+local function DepositText()
+  local saved = flow and flow.Request and flow.Request.ProductDeposit
+  local api = ExposedMembers and ExposedMembers.JAC_AbsorptionProduct
+  local ok, view = false, nil
+  if flow and api and api.Get then ok, view = pcall(api.Get, flow.From, flow.To) end
+  local amounts = ok and view and view.Deposit or saved
+  if not amounts or ((amounts.Gold or 0) == 0 and (amounts.Faith or 0) == 0) then return nil end
+  local settlement
+  for _,row in ipairs(ok and view and view.Rows or {}) do
+    if row.Kind == 'PRODUCT_DEPOSIT' then settlement = row.Settlement end
+  end
+  local tag = settlement == 'CONSUMED' and 'CONSUMED' or settlement == 'LEGACY_SETTLED' and 'LEGACY_SETTLED'
+    or settlement == 'RETURNED' and 'RETURNED' or settlement == 'RETURNING' and 'RETURNING'
+    or settlement == 'HELD' and 'HELD' or 'VERIFYING_SETTLEMENT'
+  local function Text(key) return Locale.Lookup('LOC_JAC_ADMISSION_' .. key) end
+  return Text('DEPOSIT') .. ' ' .. Text('GOLD') .. ' ' .. tostring(amounts.Gold or 0)
+    .. ' / ' .. Text('FAITH') .. ' ' .. tostring(amounts.Faith or 0) .. ' (' .. Text(tag) .. ')'
+    .. '[NEWLINE]' .. Text('ESCROW_POLICY')
 end
 
 local function Localized(value)
@@ -22,7 +48,8 @@ local function Localized(value)
   local known = { ADMINISTRATION=true, DILIGENT=true, LOYAL=true, DEVOUT=true,
     ARMOR=true, GOVERNOR=true, EQUIPMENT=true, ARTIFACT=true, COLLECTION=true }
   if known[s] then return L("VALUE_" .. s) end
-  return s:sub(1, 4) == "LOC_" and Locale.Lookup(s) or s
+  local key = DisplayLocaleKey(s)
+  return key:sub(1, 4) == "LOC_" and Locale.Lookup(key) or s
 end
 
 local function EntryName(entry)
@@ -409,6 +436,8 @@ Draw = function()
   else
     Controls.Hint:SetText(L(flow.Phase == "BLOCKED" and "BLOCKED_HINT" or "WAIT_HINT"))
   end
+  rendered.deposit = DepositText()
+  if rendered.deposit then Controls.Hint:SetText(Controls.Hint:GetText() .. "[NEWLINE]" .. rendered.deposit) end
   rendered.hint = Controls.Hint:GetText()
   AddTarget("close", Close)
 

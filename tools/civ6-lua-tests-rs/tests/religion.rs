@@ -34,6 +34,20 @@ macro_rules! call { ($h:expr, $name:literal $(, $arg:expr)* $(,)?) => { $h.call(
 
 fn install_absorption_adapter(h: &Harness) {
     let globals = h.lua.globals();
+    let native_sources = h.lua.create_table().unwrap();
+    for name in [
+        "JAC_Absorption_Rules",
+        "JAC_CarrierBoundary",
+        "JAC_NativeInventory",
+    ] {
+        native_sources
+            .set(
+                name,
+                read_repo(format!("poc/JAC_PoC_Absorption/Scripts/{name}.lua")),
+            )
+            .unwrap();
+    }
+    globals.set("ABS_NATIVE_SOURCES", native_sources).unwrap();
     globals
         .set(
             "RP_SOURCE",
@@ -52,6 +66,18 @@ fn install_absorption_adapter(h: &Harness) {
             read_repo("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua"),
         )
         .unwrap();
+    globals
+        .set(
+            "ABS_ADMISSION_SOURCE",
+            read_repo("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua"),
+        )
+        .unwrap();
+    globals
+        .set(
+            "ABS_PRODUCT_SOURCE",
+            read_repo("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua"),
+        )
+        .unwrap();
     h.exec(
         r#"
         JAC_ReligionPersistenceGameplay=nil
@@ -62,19 +88,36 @@ fn install_absorption_adapter(h: &Harness) {
           end}
         JAC_AbsorptionFlowGameplay={}
         GameEvents.JAC_Absorption_TestCall={Add=function() end}
+        GameEvents.JAC_Absorption_AdmissionRequested={Add=function(f) ADMISSION_REQUEST_HOOK=f end}
+        GameEvents.JAC_Absorption_LeaderOffer={Add=function(f) ADMISSION_OFFER_HOOK=f end}
+        GameEvents.JAC_AbsorptionProduct_Operation={Add=function(f) PRODUCT_OPERATION_HOOK=f end}
+        GameEvents.JAC_CarrierBoundary_Operation={Add=function(f) BOUNDARY_OPERATION_HOOK=f end}
+        GameEvents.JAC_CarrierMP_Operation={Add=function(f) CARRIER_OPERATION_HOOK=f end}
+        GameEvents.JAC_NativeInventory_Operation={Add=function(f) INVENTORY_OPERATION_HOOK=f end}
+        ExposedMembers=ExposedMembers or {}
         GameConfiguration.IsAnyMultiplayer=function() return false end
+        local included={}
         include=function(name)
-          -- This fixture isolates the religion adapter. Its engine and
-          -- carrier/inventory handlers are exercised by their own suites.
-          if name=='JAC_Absorption_Gameplay' or name=='JAC_Absorption_Flow'
-            or name=='JAC_CarrierBoundary' or name=='JAC_NativeInventory' then return end
+          if name=='JAC_Absorption_Gameplay' or name=='JAC_Absorption_Flow' then return end
+          if included[name] then return end
           local source=name=='JAC_ReligionPersistence' and RP_SOURCE
             or name=='JAC_RP_AbsorptionAdapter' and RP_ADAPTER_SOURCE
+            or name=='JAC_Absorption_Admission' and ABS_ADMISSION_SOURCE
+            or name=='JAC_Absorption_Product' and ABS_PRODUCT_SOURCE
+            or ABS_NATIVE_SOURCES[name]
           assert(source, 'unexpected VFS include: '..name)
           assert(loadstring(source))()
+          included[name]=true
         end
         assert(loadstring(ABS_ENTRY_SOURCE))()
         assert(ADAPTER and JAC_ReligionPersistenceGameplay)
+        assert(JAC_AbsorptionAdmissionGameplay)
+        assert(ADMISSION_REQUEST_HOOK==JAC_AbsorptionAdmissionGameplay.Request)
+        assert(ADMISSION_OFFER_HOOK==JAC_AbsorptionAdmissionGameplay.DefineOffer)
+        assert(JAC_AbsorptionProductGameplay and PRODUCT_OPERATION_HOOK)
+        assert(ExposedMembers.JAC_AbsorptionProduct.Command==nil)
+        assert(JAC_CarrierMP.Advance and BOUNDARY_OPERATION_HOOK and CARRIER_OPERATION_HOOK)
+        assert(JAC_NativeInventory.With and INVENTORY_OPERATION_HOOK)
         "#,
     );
 }

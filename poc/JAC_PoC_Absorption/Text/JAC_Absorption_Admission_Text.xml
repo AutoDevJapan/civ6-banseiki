@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_ADMISSION_READING" Language="ja_JP"><Text>要求を読み取り中</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_READING" Language="en_US"><Text>Reading requirements</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_READING" Language="ru_RU"><Text>Загрузка условий</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_INTERRUPTED_CANCEL" Language="ja_JP"><Text>開始処理が中断しています。登録の取消し操作が使えます。</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_INTERRUPTED_CANCEL" Language="en_US"><Text>Admission is interrupted. Cancellation is available.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_INTERRUPTED_CANCEL" Language="ru_RU"><Text>Присоединение прервано. Доступна отмена заявки.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_UNAVAILABLE" Language="ja_JP"><Text>この相手の要求条件を現在表示できません。</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_UNAVAILABLE" Language="en_US"><Text>This faction's requirements are currently unavailable.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_UNAVAILABLE" Language="ru_RU"><Text>Условия этой державы пока недоступны.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_INTERRUPTED" Language="ja_JP"><Text>処理が中断しています。保存した内容を保持しています。</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_INTERRUPTED" Language="en_US"><Text>Processing is interrupted. Saved records are retained.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_INTERRUPTED" Language="ru_RU"><Text>Обработка прервана. Сохранённые записи удерживаются.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RETURNED" Language="ja_JP"><Text>返却済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RETURNED" Language="en_US"><Text>Returned</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RETURNED" Language="ru_RU"><Text>Возвращено</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONSUMED" Language="ja_JP"><Text>消費済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONSUMED" Language="en_US"><Text>Consumed</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONSUMED" Language="ru_RU"><Text>Израсходовано</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_LEGACY_SETTLED" Language="ja_JP"><Text>旧版の返却分を除き精算済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_LEGACY_SETTLED" Language="en_US"><Text>Settled, excluding legacy refunds</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_LEGACY_SETTLED" Language="ru_RU"><Text>Расчёт завершён с учётом возвратов прежней версии</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VERIFYING_SETTLEMENT" Language="ja_JP"><Text>費用の精算を確認中</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VERIFYING_SETTLEMENT" Language="en_US"><Text>Verifying cost settlement</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VERIFYING_SETTLEMENT" Language="ru_RU"><Text>Проверка расчёта расходов</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RETURNING" Language="ja_JP"><Text>返却を確認中</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RETURNING" Language="en_US"><Text>Verifying return</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RETURNING" Language="ru_RU"><Text>Проверка возврата</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_COLLECTING" Language="ja_JP"><Text>預託を確認中</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_COLLECTING" Language="en_US"><Text>Verifying deposit</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_COLLECTING" Language="ru_RU"><Text>Проверка залога</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_HELD" Language="ja_JP"><Text>預託済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_HELD" Language="en_US"><Text>Deposited</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_HELD" Language="ru_RU"><Text>Залог внесён</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_NOT_PAID" Language="ja_JP"><Text>未預託</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_NOT_PAID" Language="en_US"><Text>Not deposited</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_NOT_PAID" Language="ru_RU"><Text>Залог не внесён</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_GOLD" Language="ja_JP"><Text>金</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_GOLD" Language="en_US"><Text>Gold</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_GOLD" Language="ru_RU"><Text>Золото</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_FAITH" Language="ja_JP"><Text>信仰</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_FAITH" Language="en_US"><Text>Faith</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_FAITH" Language="ru_RU"><Text>Вера</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_UNREVIEWED" Language="ja_JP"><Text>未確認</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_UNREVIEWED" Language="en_US"><Text>Unverified</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_UNREVIEWED" Language="ru_RU"><Text>Не проверено</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ENVOYS" Language="ja_JP"><Text>使節</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ENVOYS" Language="en_US"><Text>Envoys</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ENVOYS" Language="ru_RU"><Text>Послы</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REQUIRED_ENVOYS" Language="ja_JP"><Text>必要使節</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REQUIRED_ENVOYS" Language="en_US"><Text>Required envoys</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REQUIRED_ENVOYS" Language="ru_RU"><Text>Требуется послов</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="ja_JP"><Text>条件達成時に保証金を預け、成立時の費用として消費。成立前の取消し・条件置換では実払分を返却</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="en_US"><Text>Deposit when conditions are met; consume as a cost when admission is verified. Refund actual payments for cancellation or changed terms before admission.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="ru_RU"><Text>Залог вносится после выполнения условий и расходуется при подтверждении присоединения. При отмене или изменении условий до присоединения возвращаются фактические платежи.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CANCEL" Language="ja_JP"><Text>登録を取り消す</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CANCEL" Language="en_US"><Text>Cancel registration</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CANCEL" Language="ru_RU"><Text>Отменить заявку</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_STARTED" Language="ja_JP"><Text>取込みを開始済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_STARTED" Language="en_US"><Text>Admission started</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_STARTED" Language="ru_RU"><Text>Присоединение начато</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REGISTER_SMALL" Language="ja_JP"><Text>条件達成時の取り込みを登録</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REGISTER_SMALL" Language="en_US"><Text>Register admission when conditions are met</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REGISTER_SMALL" Language="ru_RU"><Text>Заявка на присоединение при выполнении условий</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REGISTER_MERGER" Language="ja_JP"><Text>条件達成時の合併を登録</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REGISTER_MERGER" Language="en_US"><Text>Register merger when conditions are met</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_REGISTER_MERGER" Language="ru_RU"><Text>Заявка на объединение при выполнении условий</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONDITIONS" Language="ja_JP"><Text>取り込みの条件</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONDITIONS" Language="en_US"><Text>Admission conditions</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONDITIONS" Language="ru_RU"><Text>Условия присоединения</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ALL_CONDITIONS" Language="ja_JP"><Text>すべての条件と必要使節を満たす</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ALL_CONDITIONS" Language="en_US"><Text>Meet every condition and the envoy requirement</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ALL_CONDITIONS" Language="ru_RU"><Text>Выполнить все условия и направить послов</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SMALL_COUNTRY" Language="ja_JP"><Text>小国</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SMALL_COUNTRY" Language="en_US"><Text>Small country</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SMALL_COUNTRY" Language="ru_RU"><Text>Малая страна</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SEND_ENVOY" Language="ja_JP"><Text>使節を1人送る</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SEND_ENVOY" Language="en_US"><Text>Send one envoy</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SEND_ENVOY" Language="ru_RU"><Text>Отправить одного посла</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SEND_ENVOY_HELP" Language="ja_JP"><Text>未配属の使節を1人消費して、この小国に送る</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SEND_ENVOY_HELP" Language="en_US"><Text>Assign one unassigned envoy to this small country</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_SEND_ENVOY_HELP" Language="ru_RU"><Text>Направить одного свободного посла в эту малую страну</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_OPEN_SMALL" Language="ja_JP"><Text>小国の条件と使節を確認</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_OPEN_SMALL" Language="en_US"><Text>View small-country conditions and envoys</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_OPEN_SMALL" Language="ru_RU"><Text>Условия малой страны и послы</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VASSAL" Language="ja_JP"><Text>主従関係 {1} / {2}</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VASSAL" Language="en_US"><Text>Vassal relationship {1} / {2}</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VASSAL" Language="ru_RU"><Text>Отношения вассалитета {1} / {2}</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ALLIANCE" Language="ja_JP"><Text>他国との同盟 {1}</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ALLIANCE" Language="en_US"><Text>Alliance with {1}</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ALLIANCE" Language="ru_RU"><Text>Союз с {1}</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_OTHER_COUNTRY" Language="ja_JP"><Text>他国</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_OTHER_COUNTRY" Language="en_US"><Text>Another country</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_OTHER_COUNTRY" Language="ru_RU"><Text>Другая страна</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RESERVE" Language="ja_JP"><Text>預託後も保つ金の備蓄</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RESERVE" Language="en_US"><Text>Gold reserve retained after deposit</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RESERVE" Language="ru_RU"><Text>Резерв золота после внесения залога</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_DEPOSIT" Language="ja_JP"><Text>受け渡しの保証金</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_DEPOSIT" Language="en_US"><Text>Transfer deposit</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_DEPOSIT" Language="ru_RU"><Text>Залог передачи</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_IDENTITY" Language="ja_JP"><Text>現在の国と指導者</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_IDENTITY" Language="en_US"><Text>Current country and leader</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_IDENTITY" Language="ru_RU"><Text>Текущая страна и правитель</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TERMS" Language="ja_JP"><Text>提示した条件の版</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TERMS" Language="en_US"><Text>Published version of the conditions</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TERMS" Language="ru_RU"><Text>Опубликованная версия условий</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_FROZEN_RELATIONS" Language="ja_JP"><Text>開始時に照合した関係と第三国の前提</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_FROZEN_RELATIONS" Language="en_US"><Text>Relationships and third-party prerequisites verified at start</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_FROZEN_RELATIONS" Language="ru_RU"><Text>Отношения и условия третьих стран, проверенные при запуске</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RELATIONS" Language="ja_JP"><Text>既存の関係と第三国の前提</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RELATIONS" Language="en_US"><Text>Existing relationships and third-party prerequisites</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_RELATIONS" Language="ru_RU"><Text>Текущие отношения и условия третьих стран</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_COMBAT_UNITS" Language="ja_JP"><Text>統率する戦闘部隊</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_COMBAT_UNITS" Language="en_US"><Text>Controlled combat units</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_COMBAT_UNITS" Language="ru_RU"><Text>Подчинённые боевые отряды</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_PEAK_COMBAT" Language="ja_JP"><Text>決戦部隊の戦闘力</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_PEAK_COMBAT" Language="en_US"><Text>Battle force strength</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_PEAK_COMBAT" Language="ru_RU"><Text>Боевая мощь войск</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_ACCESS" Language="ja_JP"><Text>相手への外交アクセス</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_ACCESS" Language="en_US"><Text>Diplomatic access to the faction</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_ACCESS" Language="ru_RU"><Text>Дипломатический доступ к державе</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_TECHNOLOGIES" Language="ja_JP"><Text>習得した技術</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_TECHNOLOGIES" Language="en_US"><Text>Researched technologies</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_TECHNOLOGIES" Language="ru_RU"><Text>Изученные технологии</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_POPULATION" Language="ja_JP"><Text>都市の成長</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_POPULATION" Language="en_US"><Text>City growth</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_POPULATION" Language="ru_RU"><Text>Рост городов</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_FAITH_YIELD" Language="ja_JP"><Text>毎手番の信仰</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_FAITH_YIELD" Language="en_US"><Text>Faith per turn</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_FAITH_YIELD" Language="ru_RU"><Text>Вера за ход</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_FOOD_YIELD" Language="ja_JP"><Text>毎手番の食料</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_FOOD_YIELD" Language="en_US"><Text>Food per turn</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_FOOD_YIELD" Language="ru_RU"><Text>Пища за ход</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_SCIENCE_YIELD" Language="ja_JP"><Text>毎手番の科学</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_SCIENCE_YIELD" Language="en_US"><Text>Science per turn</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_METRIC_SCIENCE_YIELD" Language="ru_RU"><Text>Наука за ход</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_BRAVE" Language="ja_JP"><Text>勇敢</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_BRAVE" Language="en_US"><Text>Brave</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_BRAVE" Language="ru_RU"><Text>Храбрый</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_CALM" Language="ja_JP"><Text>冷静</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_CALM" Language="en_US"><Text>Calm</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_CALM" Language="ru_RU"><Text>Хладнокровный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_CAREFUL" Language="ja_JP"><Text>慎重</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_CAREFUL" Language="en_US"><Text>Careful</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_CAREFUL" Language="ru_RU"><Text>Осторожный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_JOLLY" Language="ja_JP"><Text>陽気</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_JOLLY" Language="en_US"><Text>Jolly</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_JOLLY" Language="ru_RU"><Text>Жизнерадостный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_GENTLE" Language="ja_JP"><Text>温厚</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_GENTLE" Language="en_US"><Text>Gentle</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_GENTLE" Language="ru_RU"><Text>Мягкий</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_BOLD" Language="ja_JP"><Text>強気</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_BOLD" Language="en_US"><Text>Bold</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_BOLD" Language="ru_RU"><Text>Напористый</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_FICKLE" Language="ja_JP"><Text>自由</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_FICKLE" Language="en_US"><Text>Fickle</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_FICKLE" Language="ru_RU"><Text>Переменчивый</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_LOYAL" Language="ja_JP"><Text>忠実</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_LOYAL" Language="en_US"><Text>Loyal</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_PERSONALITY_LOYAL" Language="ru_RU"><Text>Верный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_VALIANT" Language="ja_JP"><Text>武人</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_VALIANT" Language="en_US"><Text>Valiant</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_VALIANT" Language="ru_RU"><Text>Доблестный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_FIERCE" Language="ja_JP"><Text>鬼神</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_FIERCE" Language="en_US"><Text>Fierce</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_FIERCE" Language="ru_RU"><Text>Грозный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ASTUTE" Language="ja_JP"><Text>策士</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ASTUTE" Language="en_US"><Text>Astute</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ASTUTE" Language="ru_RU"><Text>Хитроумный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_SHREWD" Language="ja_JP"><Text>魔神</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_SHREWD" Language="en_US"><Text>Shrewd</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_SHREWD" Language="ru_RU"><Text>Сверхъестественный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_DEVOUT" Language="ja_JP"><Text>教者</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_DEVOUT" Language="en_US"><Text>Devout</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_DEVOUT" Language="ru_RU"><Text>Просветитель</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ASCETIC" Language="ja_JP"><Text>霊神</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ASCETIC" Language="en_US"><Text>Ascetic</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ASCETIC" Language="ru_RU"><Text>Духовный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_MUNDANE" Language="ja_JP"><Text>凡人</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_MUNDANE" Language="en_US"><Text>Mundane</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_MUNDANE" Language="ru_RU"><Text>Обычный</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ADEPT" Language="ja_JP"><Text>天才</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ADEPT" Language="en_US"><Text>Adept</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_TRAIT_ADEPT" Language="ru_RU"><Text>Гений</Text></Row>
+  </LocalizedText>
+</GameData>

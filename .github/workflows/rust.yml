@@ -16,6 +16,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # Tests and release binaries coexist on the runner. Keep test artifacts
+      # small; resource reports below help diagnose any linker failure.
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Install Rust
@@ -25,7 +31,13 @@ jobs:
       - name: Run all Rust and Lua tests
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
       - name: Build all tools
-        run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
+        shell: pwsh
+        run: |
+          if (-not $IsWindows) { df -h .; df -i .; free -m }
+          & cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
+          $buildExit = $LASTEXITCODE
+          if (-not $IsWindows) { df -h .; df -i .; free -m }
+          exit $buildExit
       - name: Check existing scenario JSON
         shell: pwsh
         run: |

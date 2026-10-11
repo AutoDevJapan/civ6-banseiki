@@ -5,13 +5,16 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 17] = [
+pub const ACTIONS: [&str; 20] = [
+    "native_observer_ready",
+    "native_observer_finish",
     "restart_game",
     "enable_mods",
     "configure",
     "start_game",
     "autoplay",
     "end_turn",
+    "repeat_until",
     "choose_dedication",
     "ui_lua",
     "carrier_checkpoint",
@@ -60,10 +63,28 @@ pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(normalized))
 }
 pub fn validate_scenario(data: &Value) -> Result<()> {
+    if data
+        .get("loadscreen_input")
+        .is_some_and(|v| v != "lua" && v != "escape")
+    {
+        return Err(Error::scenario("loadscreen_input must be lua or escape"));
+    }
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
     }
     let session = SessionType::from_scenario(data)?;
+    if let Some(value) = data.get("loadscreen_autostart") {
+        if !value.is_boolean() || (value == true && session != SessionType::SinglePlayer) {
+            return Err(Error::scenario(
+                "loadscreen_autostart must be boolean and requires single-player",
+            ));
+        }
+        if value == true && data.get("loadscreen_input").is_some() {
+            return Err(Error::scenario(
+                "loadscreen_autostart cannot accompany loadscreen_input",
+            ));
+        }
+    }
     if let Some(nonce) = data.get("hotseat_bridge_nonce") {
         if session != SessionType::Hotseat
             || !nonce
@@ -120,6 +141,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
+            "native_observer_ready" | "native_observer_finish" => {
+                crate::native_observer_ready::validate_step(step)?
+            }
             "restart_game"
                 if step
                     .as_object()
@@ -154,6 +178,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             "configure" => {
                 bool_flags(&["build_setup"])?;
+                if let Some(pool) = step.get("human_pool") {
+                    if step["ruleset"] != BANSEIKI_RULESET
+                        || (pool != "JAC_BANSEIKI_ONLY" && pool != "JAC_ALL_POOLS")
+                    {
+                        return Err(fail("human_pool requires a supported Banseiki pool".into()));
+                    }
+                }
                 for key in ["ruleset", "map_size", "speed"] {
                     if !type_id(&step[key]) {
                         return Err(fail(format!("invalid {key}")));
@@ -169,6 +200,16 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
                 }) {
                     return Err(fail("invalid map_file".into()));
+                }
+                if let Some(script) = step.get("map_script") {
+                    if step.get("map_file").is_some()
+                        || !matches(r"^[A-Za-z][A-Za-z0-9_]*\.lua$", script)
+                    {
+                        return Err(fail(
+                            "map_script requires a Lua filename and cannot accompany map_file"
+                                .into(),
+                        ));
+                    }
                 }
                 if step
                     .get("city_states")
@@ -242,6 +283,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         return Err(fail(format!("{key} must be positive")));
                     }
                 }
+            }
+            "repeat_until" => {
+                validate_repeat_step(data, step).map_err(|e| fail(e.to_string()))?;
             }
             "choose_dedication"
                 if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) =>
@@ -383,6 +427,71 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     }
     Ok(())
 }
+/// Repetition is finite and cannot contain another loop or frontend transition.
+/// Embedded Lua is compiled by Lua 5.1 during preflight, without executing it.
+pub fn validate_repeat_step(data: &Value, step: &Value) -> Result<()> {
+    if !step["max_iterations"]
+        .as_u64()
+        .is_some_and(|n| (1..=64).contains(&n))
+    {
+        return Err(Error::scenario(
+            "repeat_until max_iterations must be an integer from 1 to 64",
+        ));
+    }
+    let children = step["steps"]
+        .as_array()
+        .filter(|s| !s.is_empty() && s.len() <= 16)
+        .ok_or_else(|| Error::scenario("repeat_until needs 1 to 16 steps"))?;
+    if children.len() < 2
+        || children[0]["action"] != "end_turn"
+        || children[0]["turns"] != 1
+        || children[0].get("test_turns").is_some_and(|v| v != 1)
+        || children[1]["action"] != "wait_for"
+        || children.iter().skip(1).any(|s| s["action"] == "end_turn")
+    {
+        return Err(Error::scenario(
+            "repeat_until starts with exactly one end_turn(turns=1) followed by wait_for",
+        ));
+    }
+    for child in children {
+        if !matches!(
+            child["action"].as_str(),
+            Some("end_turn" | "wait_for" | "ui_lua")
+        ) || child.get("capture_as").is_some()
+            || child.get("equals_capture").is_some()
+        {
+            return Err(Error::scenario(
+                "repeat_until only accepts end_turn, wait_for and ui_lua without captures",
+            ));
+        }
+    }
+    if step["condition"]["type"] != "lua" || step["condition"].get("equals").is_some() {
+        return Err(Error::scenario(
+            "repeat_until needs a Lua condition returning a boolean",
+        ));
+    }
+    let mut validation = data.clone();
+    let mut steps = children.clone();
+    steps.push(json!({"action":"wait_for","condition":step["condition"]}));
+    validation["steps"] = steps.into();
+    validate_scenario(&validation)?;
+    let lua = mlua::Lua::new();
+    for child in validation["steps"].as_array().unwrap() {
+        let code = if child["action"] == "ui_lua" {
+            child["code"].as_str()
+        } else if child["action"] == "wait_for" && child["condition"]["type"] == "lua" {
+            child["condition"]["code"].as_str()
+        } else {
+            None
+        };
+        if let Some(code) = code {
+            lua.load(code)
+                .into_function()
+                .map_err(|e| Error::scenario(format!("repeat_until Lua 5.1 syntax: {e}")))?;
+        }
+    }
+    Ok(())
+}
 pub fn fast_forward_scenario(data: &Value) -> Value {
     let mut data = data.clone();
     if let Some(steps) = data["steps"].as_array_mut() {
@@ -437,10 +546,24 @@ pub fn configure_code_for_session(step: &Value, session: SessionType) -> String 
         ),
         "GameConfiguration.UpdateEnabledMods()".into(),
     ];
+    // Apply the real setup option before BuildHeadlessGameSetup computes the
+    // selectable leader domain used by official DLC content criteria.
+    if let Some(pool) = step["human_pool"].as_str() {
+        lines.push(format!(
+            "GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL', {})",
+            lua_string(pool)
+        ));
+    }
     if let Some(file) = step["map_file"].as_str() {
         lines.push(format!(
             "MapConfiguration.SetValue('MAP_SCRIPT', {})",
             lua_string(file)
+        ));
+    }
+    if let Some(script) = step["map_script"].as_str() {
+        lines.push(format!(
+            "MapConfiguration.SetValue('MAP_SCRIPT', {})",
+            lua_string(script)
         ));
     }
     lines.extend([format!("MapConfiguration.SetMapSize({})",lua_string(step["map_size"].as_str().unwrap())),format!("GameConfiguration.SetGameSpeedType({})",lua_string(step["speed"].as_str().unwrap())),format!("MapConfiguration.SetValue('RANDOM_SEED', {})",step["seed"]),format!("GameConfiguration.SetValue('GAME_SYNC_RANDOM_SEED', {})",step["seed"]),format!("MapConfiguration.SetMaxMajorPlayers({})",players.len()),format!("GameConfiguration.SetParticipatingPlayerCount({} + GameConfiguration.GetHiddenPlayerCount())",players.len())]);

@@ -15,9 +15,43 @@ use std::{
     sync::Arc,
 };
 
+#[path = "loadscreen_autostart.rs"]
+pub mod autostart;
+
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
+    fn request_native_observer(&mut self, path: &Path) -> Result<()> {
+        crate::native_observer_ready::request_observer(path)
+    }
+    fn native_observer_completion(
+        &mut self,
+        path: &Path,
+    ) -> Result<Option<crate::native_observer_ready::ControllerCompletion>> {
+        crate::native_observer_ready::controller_completion(path)
+    }
+    fn native_observer_manifest(&mut self, path: &Path) -> Result<Option<Vec<u8>>> {
+        crate::native_observer_ready::read_manifest(path)
+    }
+    fn native_observer_exit(
+        &mut self,
+        path: &Path,
+        game_pid: u32,
+        game_created: u64,
+    ) -> Result<crate::native_observer_finish::ExitRead> {
+        crate::native_observer_finish::read_exit_status(path, game_pid, game_created)
+    }
+    fn pin_native_observer(
+        &mut self,
+        manifest: &crate::native_observer_ready::Manifest,
+    ) -> Result<Box<dyn crate::native_observer_ready::Session>> {
+        crate::native_observer_ready::pin(manifest)
+    }
+    fn require_native_observer_connection(&mut self) -> Result<()> {
+        Err(Error::tuner(
+            "native observer needs an existing FireTuner connection",
+        ))
+    }
     fn begin_steam_observation(&mut self, _journal: &Path) -> Result<()> {
         Ok(())
     }
@@ -350,6 +384,14 @@ impl Backend for SystemBackend {
         }
         Ok(())
     }
+    fn require_native_observer_connection(&mut self) -> Result<()> {
+        if self.client.is_none() {
+            return Err(Error::tuner(
+                "native observer needs an existing FireTuner connection",
+            ));
+        }
+        Ok(())
+    }
     fn disconnect(&mut self) {
         if let Some(mut c) = self.client.take() {
             c.close();
@@ -491,11 +533,20 @@ pub struct Runner {
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
     failure_boundary: Option<Value>,
+    stop_on_unknown_wait: bool,
     pub lua_captures: BTreeMap<String, String>,
     pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
     pub backend: Box<dyn Backend>,
     pub clock: Arc<dyn Clock>,
+    transition_response: Value,
+    native_observer_started: bool,
+    native_observer_pending: Option<PathBuf>,
+    native_observer_session: Option<(
+        PathBuf,
+        crate::native_observer_ready::Manifest,
+        Box<dyn crate::native_observer_ready::Session>,
+    )>,
 }
 impl Runner {
     pub fn new(scenario: Value, output: PathBuf, logs: PathBuf, saves: PathBuf, port: u16) -> Self {
@@ -541,11 +592,155 @@ impl Runner {
             result_checks: vec![],
             failure: None,
             failure_boundary: None,
+            stop_on_unknown_wait: false,
             lua_captures: BTreeMap::new(),
             carrier_captures: BTreeMap::new(),
             ruleset: None,
             backend,
             clock,
+            transition_response: Value::Null,
+            native_observer_started: false,
+            native_observer_pending: None,
+            native_observer_session: None,
+        }
+    }
+    fn native_observer_ready(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        use crate::native_observer_ready::{parse_manifest, validate_step, ACK_LUA};
+        if self.native_observer_started {
+            return Err(Error::input(
+                "native observer action already started in this runner",
+            ));
+        }
+        self.native_observer_started = true;
+        validate_step(step)?;
+        let path = Path::new(text(step, "handoff"));
+        self.backend.request_native_observer(path)?;
+        self.native_observer_pending = Some(path.to_path_buf());
+        let manifest = loop {
+            self.remaining(deadline)?;
+            if let Some(bytes) = self.backend.native_observer_manifest(path)? {
+                break parse_manifest(path, &bytes)?;
+            }
+            self.sleep_until(deadline, 0.2);
+        };
+        self.remaining(deadline)?;
+        let mut session = self.backend.pin_native_observer(&manifest)?;
+        let game_pid = self
+            .backend
+            .single_process(0.0)?
+            .map(|p| p.0)
+            .ok_or_else(|| Error::input("native observer needs exactly one running game"))?;
+        session.check(&manifest, game_pid)?;
+        self.backend.require_native_observer_connection()?;
+        let budget = self.remaining(deadline)?;
+        let states = self.backend.list_states(budget)?;
+        let index = state_position(states.iter().map(String::as_str), "InGame")
+            .ok_or_else(|| Error::tuner("native observer needs a unique InGame Lua state"))?;
+        let game_pid = self
+            .backend
+            .single_process(0.0)?
+            .map(|p| p.0)
+            .ok_or_else(|| Error::input("native observer game disappeared"))?;
+        // Same retained process handles and pinned lease, after connection preparation.
+        session.check(&manifest, game_pid)?;
+        let budget = self.remaining(deadline)?;
+        // No lua()/states() retry path: never reconnect, disconnect, or resend.
+        let response = self.backend.run_lua(&states[index], ACK_LUA, budget);
+        session.after_ack();
+        self.native_observer_session = Some((path.to_path_buf(), manifest, session));
+        let response = response?;
+        if response != "native observer ready acknowledged" {
+            return Err(Error::lua(
+                "unexpected native observer acknowledgement response",
+            ));
+        }
+        Ok(response)
+    }
+    fn drain_native_observer(&mut self) -> Result<()> {
+        let Some(path) = self.native_observer_pending.clone() else {
+            return Ok(());
+        };
+        let deadline = self.clock.now() + 120.0;
+        loop {
+            if self.clock.now() >= deadline {
+                return Err(Error::scenario(
+                    "native observer completion deadline expired",
+                ));
+            }
+            if let Some(completion) = self.backend.native_observer_completion(&path)? {
+                self.native_observer_pending = None;
+                return match completion {
+                    crate::native_observer_ready::ControllerCompletion::Exited(0) => Ok(()),
+                    other => Err(Error::scenario(format!(
+                        "native observer completion: {other:?}"
+                    ))),
+                };
+            }
+            // Once interrupted, ordinary step waits stop immediately. Cleanup
+            // still drains the already-started observer before returning.
+            self.clock
+                .sleep((deadline - self.clock.now()).clamp(0.0, 0.2));
+        }
+    }
+    fn native_observer_finish(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        crate::native_observer_ready::validate_step(step)?;
+        let (path, manifest, mut session) =
+            self.native_observer_session.take().ok_or_else(|| {
+                Error::scenario("native observer finish needs one acknowledged session")
+            })?;
+        if path != Path::new(text(step, "handoff")) {
+            return Err(Error::scenario(
+                "native observer finish handoff differs from acknowledgement",
+            ));
+        }
+        let output = Path::new(
+            manifest
+                .ready_path
+                .strip_suffix(".ready")
+                .ok_or_else(|| Error::scenario("native observer output path missing"))?,
+        );
+        let mut last_sharing_error = None;
+        loop {
+            self.remaining(deadline).map_err(|error| {
+                if let (ErrorKind::Scenario, Some(sharing)) = (error.kind, &last_sharing_error) {
+                    Error::scenario(format!("{error}; native observer output read: {sharing}"))
+                } else {
+                    error
+                }
+            })?;
+            let game_pid = self
+                .backend
+                .single_process(0.0)?
+                .map(|p| p.0)
+                .ok_or_else(|| Error::input("native observer game disappeared before cleanup"))?;
+            let alive = session.check_finish(&manifest, game_pid)?;
+            match self.backend.native_observer_exit(
+                output,
+                manifest.game_pid,
+                manifest.game_created,
+            )? {
+                crate::native_observer_finish::ExitRead::Complete(_) => {
+                    self.remaining(deadline)?;
+                    return Ok(
+                        "native observer restored, continued and detached before game closure"
+                            .into(),
+                    );
+                }
+                crate::native_observer_finish::ExitRead::SharingViolation(error) => {
+                    if last_sharing_error.as_ref() != Some(&error) {
+                        eprintln!("native observer output sharing violation; waiting within the original deadline: {error}");
+                    }
+                    last_sharing_error = Some(error);
+                }
+                crate::native_observer_finish::ExitRead::Pending => {
+                    if !alive {
+                        return Err(Error::scenario(
+                            "native observer exited without a complete cleanup record",
+                        ));
+                    }
+                }
+            }
+            self.sleep_until(deadline, 0.2);
         }
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
@@ -612,6 +807,12 @@ impl Runner {
         match fetch(self) {
             Err(e) if retryable(&e) => {
                 self.disconnect();
+                // Keep the backend's actual last error when it exhausted the
+                // query budget; a second fetch would only replace it with a
+                // generic expired-deadline message without observing anything.
+                if self.clock.now() >= deadline {
+                    return Err(e);
+                }
                 fetch(self)
             }
             other => other,
@@ -665,6 +866,9 @@ impl Runner {
         };
         while self.clock.now() < end {
             if close_diplomacy {
+                // A blocking advisor can appear after END TURN has already
+                // been sent. Dismiss it during the bounded wait as well.
+                self.dismiss_advisor(end)?;
                 let closed = self.close_diplomacy(end)?;
                 if !closed.is_empty() {
                     diplomacy_closes += closed.len();
@@ -729,6 +933,9 @@ impl Runner {
                 Ok(false) => {}
                 Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
                 Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    if self.stop_on_unknown_wait {
+                        return Err(e);
+                    }
                     if !self.unblock_ingame(text(condition, "state_name"), end, unblocked)? {
                         return Err(e);
                     }
@@ -1573,6 +1780,106 @@ impl Runner {
             .matches(LOADSCREEN_READY)
             .count())
     }
+    fn transition_observation(
+        &self,
+        phase: &str,
+        deadline: f64,
+        observation: &Value,
+    ) -> Result<()> {
+        // The existing output directory is this run's identity. Do not start a
+        // second diagnostic session or infer game success from these records.
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.output.join("transition-observations.jsonl"))?;
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "session_id":self.output.to_string_lossy(),
+                "monotonic_seconds":self.clock.now(),"deadline":deadline,
+                "phase":phase,"observation":observation
+            })
+        )?;
+        Ok(())
+    }
+    fn transition_reply(
+        &mut self,
+        operation: &str,
+        deadline: f64,
+        reply: &Result<String>,
+    ) -> Result<()> {
+        self.transition_response = match reply {
+            Ok(value) => json!({"operation":operation,"status":"acknowledged","reply":value}),
+            Err(error) => {
+                json!({"operation":operation,"status":if error.kind==ErrorKind::LuaResponseUnknown {"unknown"} else {"error"},
+                "error":error.to_string(),"error_kind":format!("{:?}",error.kind)})
+            }
+        };
+        self.transition_observation(
+            &format!("{operation}_response"),
+            deadline,
+            &self.transition_response,
+        )
+    }
+    fn loading_log_observation(&self, snapshot: &mut Value) -> Result<usize> {
+        let content = self.log_since_same_generation(
+            "Lua.log",
+            self.baseline
+                .as_ref()
+                .ok_or_else(|| Error::scenario("No log baseline for transition"))?,
+        )?;
+        let count = content.matches(LOADSCREEN_READY).count();
+        // Bounded last lines carry native Host markers and Lua exceptions; the
+        // generation guard remains the same one used by the readiness test.
+        let mut lines: Vec<_> = content.lines().rev().take(5).collect();
+        lines.reverse();
+        let tail: String = lines
+            .join("\n")
+            .chars()
+            .rev()
+            .take(4096)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        snapshot["lua_log_bytes"] = content.len().into();
+        snapshot["lua_tail"] = tail.into();
+        snapshot["loadscreen_markers"] = count.into();
+        Ok(count)
+    }
+    fn loading_states(&mut self, end: f64, snapshot: &mut Value) -> Result<Vec<String>> {
+        let result = self.states(self.budget(end, 5.0)?);
+        match result {
+            Ok(states) => {
+                snapshot["states"] = json!(states);
+                snapshot["state_error"] = Value::Null;
+                Ok(states)
+            }
+            Err(error)
+                if retryable(&error)
+                    || (error.kind == ErrorKind::Scenario && self.clock.now() >= end) =>
+            {
+                snapshot["state_error"] = error.to_string().into();
+                snapshot["last_error"] = error.to_string().into();
+                self.disconnect();
+                Ok(vec![])
+            }
+            Err(error) => Err(error),
+        }
+    }
+    fn changed_loading_observation(
+        &self,
+        end: f64,
+        snapshot: &Value,
+        reported: &mut Value,
+    ) -> Result<()> {
+        if snapshot != reported {
+            self.transition_observation("loading", end, snapshot)?;
+            *reported = snapshot.clone();
+        }
+        Ok(())
+    }
     pub fn enter_game_after_loadscreen(
         &mut self,
         before: usize,
@@ -1581,63 +1888,98 @@ impl Runner {
         response_unknown: bool,
     ) -> Result<()> {
         let end = deadline.unwrap_or_else(|| self.clock.now() + timeout);
+        let mut response_unknown = response_unknown;
         let mut sent = false;
-        let mut begin_unknown = false;
         let mut last = "loading screen not ready".to_string();
+        let mut snapshot = json!({"transition_response":self.transition_response,"states":[],"state_error":null,
+            "last_error":null,"game_ready":null,"begin_game_sent":false});
+        let mut reported = Value::Null;
         while self.clock.now() < end {
-            let count = self.loadscreen_count()?;
+            let count = self.loading_log_observation(&mut snapshot)?;
             if !sent {
                 if count <= before {
+                    // Before the native completion marker, observe only. Even
+                    // an InGame state is not permission to activate or succeed.
+                    self.loading_states(end, &mut snapshot)?;
+                    self.changed_loading_observation(end, &snapshot, &mut reported)?;
                     self.sleep_until(end, 0.5);
                     continue;
                 }
                 self.remaining(end)?;
-                let states = match self.states(self.budget(end, 5.0)?) {
-                    Ok(v) => v,
-                    Err(e) if retryable(&e) => vec![],
-                    Err(e) => return Err(e),
-                };
-                if state_available(&states, "LoadScreen") {
-                    let begin = self.lua(
-                        "LoadScreen",
-                        "OnActivateButtonClicked()\nreturn true",
-                        self.budget(end, 5.0)?,
-                    );
-                    match begin {
-                        Ok(_) => last = "Begin Game pressed via LoadScreen Lua".into(),
-                        Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
-                            // The loading context can disappear before its reply.
-                            // Observe InGame; never replay the accepted Begin Game.
-                            begin_unknown = true;
-                            last = format!("Begin Game response unknown; observing InGame: {e}");
-                            if let Err(log_error) = self.log("loadscreen_begin", "UNKNOWN", &last) {
-                                eprintln!("{last}; writing transition log failed: {log_error}");
-                            }
-                        }
-                        Err(e) => return Err(e),
-                    }
-                } else {
-                    self.remaining(end)?;
-                    self.backend.press_key(crate::click::VK_ESCAPE, end)?;
-                    last = "Esc sent on loading screen".into();
+                let states = self.loading_states(end, &mut snapshot)?;
+                self.changed_loading_observation(end, &snapshot, &mut reported)?;
+                if self.clock.now() >= end {
+                    break;
                 }
-                sent = true;
-                self.disconnect();
+                if !state_available(&states, "LoadScreen") && !state_available(&states, "InGame") {
+                    // A completion log can precede the new native context.
+                    // Esc in JoiningRoom exits the session; a failed/stale
+                    // state query must never authorize that global input.
+                    last = "waiting for a native game or load-screen context".into();
+                    self.disconnect();
+                    self.sleep_until(end, 0.5);
+                    continue;
+                }
+                if state_available(&states, "LoadScreen")
+                    && self.scenario["loadscreen_autostart"] != true
+                {
+                    // Only this context owns the Begin Game input. InGame on
+                    // its own needs a readiness read, never a global Esc.
+                    // Use the official keyboard path outside a FireTuner Lua call.
+                    // Keep direct Lua activation as an explicit diagnostic only.
+                    if self.scenario["loadscreen_input"] == "lua" {
+                        let response = self.lua(
+                            "LoadScreen",
+                            "OnActivateButtonClicked()\nreturn true",
+                            self.budget(end, 5.0)?,
+                        );
+                        match response {
+                            Ok(reply) => {
+                                snapshot["begin_game_response"] =
+                                    json!({"status":"acknowledged","reply":reply});
+                                last = "Begin Game pressed via LoadScreen Lua".into();
+                            }
+                            Err(error) if error.kind == ErrorKind::LuaResponseUnknown => {
+                                // Activation may already have closed its Lua state.
+                                // Never send it again; confirm InGame readiness under
+                                // the same deadline instead of treating a lost reply
+                                // as proof that loading failed.
+                                snapshot["begin_game_response"] = json!({"status":"unknown",
+                                    "error":error.to_string(),"error_kind":"LuaResponseUnknown"});
+                                response_unknown = true;
+                                last = "Begin Game reply unknown; awaiting InGame readiness".into();
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    } else {
+                        self.remaining(end)?;
+                        self.backend.press_key(crate::click::VK_ESCAPE, end)?;
+                        snapshot["begin_game_response"] =
+                            json!({"status":"input_sent","method":"escape"});
+                        last = "Esc sent on loading screen".into();
+                    }
+                    sent = true;
+                    snapshot["begin_game_sent"] = true.into();
+                    self.disconnect();
+                }
             }
             let check = (|| -> Result<bool> {
-                if state_available(&self.states(self.budget(end, 5.0)?)?, "InGame") {
-                    if self.lua(
+                if self
+                    .loading_states(end, &mut snapshot)?
+                    .iter()
+                    .any(|s| state_name_eq(s, "InGame"))
+                {
+                    let ready = self.lua(
                         "InGame",
                         "return Game ~= nil and Game.GetLocalPlayer() >= 0",
                         self.budget(end, 5.0)?,
-                    )? == "true"
-                    {
-                        self.close_options_menu(end)?;
-                        self.dismiss_advisor(end)?;
-                        self.remaining(end)?;
+                    )?;
+                    snapshot["game_ready"] = ready.clone().into();
+                    if ready == "true" {
                         return Ok(true);
                     }
-                    last = "InGame exists; waiting for the local player".into();
+                    last =
+                        format!("InGame exists; waiting for the local player; predicate={ready:?}");
                 } else {
                     last = "InGame state not available yet".into();
                     self.disconnect();
@@ -1645,31 +1987,55 @@ impl Runner {
                 Ok(false)
             })();
             match check {
-                Ok(true) => return Ok(()),
+                Ok(true) => {
+                    // This probe only reads state. Keep UI operations outside
+                    // its retry boundary so an operation failure cannot make
+                    // us restart the preparation or readiness checks.
+                    let cleanup: Result<()> = (|| {
+                        self.close_options_menu(end)?;
+                        self.dismiss_advisor(end)?;
+                        self.remaining(end)?;
+                        Ok(())
+                    })();
+                    if let Err(error) = cleanup {
+                        snapshot["last_error"] = error.to_string().into();
+                        self.transition_observation("error", end, &snapshot)?;
+                        return Err(error);
+                    }
+                    self.transition_observation("ingame_ready", end, &snapshot)?;
+                    return Ok(());
+                }
                 Ok(false) => {}
-                Err(e)
-                    if matches!(
-                        e.kind,
-                        ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
-                    ) =>
-                {
-                    return Err(e)
+                Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    last = e.to_string();
+                    snapshot["last_error"] = last.clone().into();
+                    snapshot["game_ready"] = Value::Null;
+                    self.disconnect();
+                }
+                Err(e) if e.kind == ErrorKind::LuaExecution => {
+                    snapshot["last_error"] = e.to_string().into();
+                    self.transition_observation("error", end, &snapshot)?;
+                    return Err(e);
                 }
                 Err(e) if retryable(&e) => {
                     last = e.to_string();
+                    snapshot["last_error"] = last.clone().into();
                     self.disconnect();
                 }
                 Err(e) => return Err(e),
             }
+            self.changed_loading_observation(end, &snapshot, &mut reported)?;
             self.sleep_until(end, 2.0);
         }
-        let uncertain = if response_unknown || begin_unknown {
+        self.loading_log_observation(&mut snapshot)?;
+        self.transition_observation("timeout", end, &snapshot)?;
+        let uncertain = if response_unknown {
             "; outcome undecidable after unknown Lua response"
         } else {
             ""
         };
         Err(Error::scenario(format!(
-            "Timed out after {timeout}s entering the game; last: {last}{uncertain}"
+            "Timed out after {timeout}s entering the game; last: {last}; observation: {snapshot}{uncertain}"
         )))
     }
     pub fn save_path(&self, name: &str) -> PathBuf {
@@ -1691,13 +2057,34 @@ impl Runner {
         if self.ruleset.as_deref() != Some(scenario::BANSEIKI_RULESET) {
             return Ok(());
         }
-        let value = self.lua(
+        // Read-only verification may race the final loading work even after
+        // InGame reports readiness. Reconnect within the original step deadline;
+        // never replay Host/Load or retry an authoritative calendar mismatch.
+        let value = self.retry_idempotent(deadline, |this| this.lua(
             "InGame",
-            "return tostring(GameConfiguration.GetStartTurn())",
-            self.budget(deadline, 5.0)?,
-        )?;
-        if value.trim().trim_matches('"') != "1" {
-            return Err(Error::scenario(format!("{} start turn is {value}, expected 1: the calendar override was not applied (configure without build_setup?)",scenario::BANSEIKI_RULESET)));
+            "local start=GameConfiguration.GetStartTurn();local turn=Game.GetCurrentGameTurn();if GameCapabilities.HasCapability('CAPABILITY_DISPLAY_NORMALIZED_TURN') then turn=turn-start+1 end;local era=GameInfo.StartEras['ERA_ANCIENT'];local calendar=GameConfiguration.GetCalendarType();local selected=calendar=='CALENDAR_STANDARD_FROM_START_ERA' or calendar==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA');return table.concat({tostring(start),tostring(turn),tostring(era and era.Year),tostring(selected),tostring(calendar),tostring(Calendar.MakeYearStr(Game.GetCurrentGameTurn()))},'|')",
+            this.budget(deadline, 5.0)?,
+        ))?;
+        // The Sengoku calendar legitimately starts near raw turn 16603.
+        // Match both the official normalized turn and its actual calendar date.
+        let observation = value.trim().trim_matches('"');
+        let fields: Vec<_> = observation.split('|').collect();
+        let valid = fields.len() == 6
+            && fields[0].parse::<i64>().is_ok_and(|start| start >= 1)
+            && fields[1].parse::<i64>() == Ok(1)
+            && fields[2].parse::<i64>() == Ok(1534)
+            && fields[3] == "true"
+            && {
+                let mut numbers = fields[5]
+                    .split(|c: char| !c.is_ascii_digit())
+                    .filter(|s| !s.is_empty());
+                numbers.next() == Some("1534") && numbers.next().is_none()
+            };
+        if !valid {
+            return Err(Error::scenario(format!(
+                "{} start observation {value} must display turn 1 in year 1534 with the Sengoku start-era calendar",
+                scenario::BANSEIKI_RULESET
+            )));
         }
         Ok(())
     }
@@ -1859,6 +2246,57 @@ impl Runner {
         self.close_diplomacy(deadline)?;
         Ok(Some(value))
     }
+    fn start_game_step(&mut self, timeout: f64, deadline: f64) -> Result<String> {
+        self.transition_response = Value::Null;
+        let session = scenario::SessionType::from_scenario(&self.scenario)?;
+        if self.owner_start && session == scenario::SessionType::Hotseat {
+            return Err(Error::scenario("owner_start only supports single-player"));
+        }
+        let before = self.loadscreen_count()?;
+        if self.owner_start {
+            self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nUIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\nreturn true",self.budget(deadline,5.0)?)?;
+            println!("OWNER ACTION: press Start Game on the Create Game screen");
+            let wait = timeout.max(3600.0);
+            let owner_deadline = self.clock.now() + wait;
+            self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
+            self.check_start_turn(owner_deadline)?;
+            return Ok("owner pressed Start Game; single-player game reached InGame".into());
+        }
+        let marker = scenario::lua_string(&format!(
+            "JAC_AUTOTEST_HOST|session={}|monotonic={}",
+            self.output.to_string_lossy(),
+            self.clock.now()
+        ));
+        // The official HostGame call runs once. Its returned value is
+        // not a readiness proof, and Lua exceptions are never retried.
+        let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nlocal marker={marker}\nprint(marker .. '|phase=before')\nlocal ok,err=pcall(function() Network.HostGame(ServerType.{}) end)\nif not ok then print(marker .. '|phase=exception|' .. tostring(err));error(err) end\nprint(marker .. '|phase=after')\nreturn true", session.guard_code(), session.server_type());
+        let response = self.send_frontend_transition(&code, deadline);
+        self.transition_reply("host", deadline, &response)?;
+        let mut unknown = match response {
+            Ok(_) => false,
+            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                println!("HostGame response interrupted during transition: {e}");
+                true
+            }
+            Err(e) => return Err(e),
+        };
+        if session == scenario::SessionType::Hotseat {
+            self.log(
+                "hotseat_host",
+                if unknown { "UNKNOWN" } else { "ACKNOWLEDGED" },
+                "HostGame sent once; preparing to query the staging Lua states",
+            )?;
+            unknown |= self.launch_hotseat_staging(before, deadline)?;
+        }
+        self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+        self.check_start_turn(deadline)?;
+        self.accept_hotseat_turn(deadline, true)?;
+        Ok(match session {
+            scenario::SessionType::SinglePlayer => "single-player game reached InGame",
+            scenario::SessionType::Hotseat => "hotseat game reached InGame; start-turn accepted",
+        }
+        .into())
+    }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
         self.run_step_with_frontend_check(step, || Ok(()))
     }
@@ -1884,13 +2322,17 @@ impl Runner {
         }
         let timeout = step["timeout"]
             .as_f64()
-            .unwrap_or(if action == "restart_game" {
+            .unwrap_or(if action == "native_observer_ready" {
+                240.0
+            } else if action == "restart_game" {
                 360.0
             } else {
                 120.0
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "native_observer_ready" => self.native_observer_ready(step, deadline),
+            "native_observer_finish" => self.native_observer_finish(step, deadline),
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
@@ -1980,49 +2422,7 @@ impl Runner {
                 ))
             }
             "start_game" => {
-                let session = scenario::SessionType::from_scenario(&self.scenario)?;
-                if self.owner_start && session == scenario::SessionType::Hotseat {
-                    return Err(Error::scenario("owner_start only supports single-player"));
-                }
-                let before = self.loadscreen_count()?;
-                if self.owner_start {
-                    self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nUIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\nreturn true",self.budget(deadline,5.0)?)?;
-                    println!("OWNER ACTION: press Start Game on the Create Game screen");
-                    let wait = timeout.max(3600.0);
-                    let owner_deadline = self.clock.now() + wait;
-                    self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
-                    self.check_start_turn(owner_deadline)?;
-                    return Ok(
-                        "owner pressed Start Game; single-player game reached InGame".into(),
-                    );
-                }
-                let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nNetwork.HostGame(ServerType.{})\nreturn true", session.guard_code(), session.server_type());
-                let mut unknown = match self.send_frontend_transition(&code, deadline) {
-                    Ok(_) => false,
-                    Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
-                        println!("HostGame response interrupted during transition: {e}");
-                        true
-                    }
-                    Err(e) => return Err(e),
-                };
-                if session == scenario::SessionType::Hotseat {
-                    self.log(
-                        "hotseat_host",
-                        if unknown { "UNKNOWN" } else { "ACKNOWLEDGED" },
-                        "HostGame sent once; preparing to query the staging Lua states",
-                    )?;
-                    unknown |= self.launch_hotseat_staging(before, deadline)?;
-                }
-                self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
-                self.check_start_turn(deadline)?;
-                self.accept_hotseat_turn(deadline, true)?;
-                Ok(match session {
-                    scenario::SessionType::SinglePlayer => "single-player game reached InGame",
-                    scenario::SessionType::Hotseat => {
-                        "hotseat game reached InGame; start-turn accepted"
-                    }
-                }
-                .into())
+                self.with_loadscreen_autostart(deadline, |r| r.start_game_step(timeout, deadline))
             }
             "autoplay" => {
                 let options = AutoplayOptions {
@@ -2063,6 +2463,7 @@ impl Runner {
                 }
                 Ok(results.join("; "))
             }
+            "repeat_until" => self.repeat_until(step, deadline),
             "carrier_exchange" => {
                 let token = text(step, "token");
                 let candidate = text(step, "candidate");
@@ -2216,7 +2617,9 @@ impl Runner {
                 Ok(target.display().to_string())
             }
             "save" => self.save_step(step, deadline),
-            "load" => self.load_step(step, timeout, deadline),
+            "load" => {
+                self.with_loadscreen_autostart(deadline, |r| r.load_step(step, timeout, deadline))
+            }
             "exit_to_menu" => {
                 self.lua(
                     "InGame",
@@ -2307,6 +2710,81 @@ impl Runner {
         }
         Ok(target.display().to_string())
     }
+    fn repeat_until(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        scenario::validate_repeat_step(&self.scenario, step)?;
+        self.stop_on_unknown_wait = true;
+        let result = self.repeat_until_inner(step, deadline);
+        self.stop_on_unknown_wait = false;
+        result
+    }
+    fn repeat_until_inner(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        let limit = step["max_iterations"].as_u64().unwrap();
+        let condition = &step["condition"];
+        for completed in 0..=limit {
+            let value = self.lua(
+                text(condition, "state_name"),
+                text(condition, "code"),
+                self.budget(deadline, 5.0)?,
+            )?;
+            self.remaining(deadline)?;
+            self.log(
+                "repeat_until_condition",
+                "OK",
+                &format!("iterations={completed} value={value}"),
+            )?;
+            match value.as_str() {
+                "true" => return Ok(format!("condition met after {completed} iterations")),
+                "false" => {}
+                _ => {
+                    return Err(Error::scenario(format!(
+                        "repeat_until condition must return a boolean; got {value}"
+                    )))
+                }
+            }
+            if completed == limit {
+                break;
+            }
+            for (index, child) in step["steps"].as_array().unwrap().iter().enumerate() {
+                let action = format!(
+                    "repeat_until iteration={} child={} {}",
+                    completed + 1,
+                    index + 1,
+                    text(child, "action")
+                );
+                self.log(&action, "START", &serde_json::to_string(child)?)?;
+                let mut bounded = child.clone();
+                bounded["timeout"] = child["timeout"]
+                    .as_f64()
+                    .unwrap_or(120.0)
+                    .min(self.remaining(deadline)?)
+                    .into();
+                if child["action"] != "wait_for" {
+                    self.log_step_baseline = Some(judge::snapshot_logs(&self.logs)?);
+                    self.log_matches_consumed.clear();
+                }
+                match self.run_step(&bounded) {
+                    Ok(detail) => {
+                        self.remaining(deadline)?;
+                        self.log(&action, "OK", &detail)?;
+                    }
+                    Err(error) => {
+                        if let Err(log_error) = self.log(&action, "FAIL", &error.to_string()) {
+                            eprintln!("Original failure: {error}; writing repeated step log failed: {log_error}");
+                        }
+                        // Preserve the child failure and its error kind. An unknown
+                        // mutating reply never advances or replays this sequence.
+                        let mut failed = child.clone();
+                        failed["repeat_until"] = json!({"iteration":completed + 1,"child":index + 1,"parent_step":self.completed_steps + 1});
+                        self.record_failure(Some(&failed), None, &error);
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        Err(Error::scenario(format!(
+            "repeat_until exhausted {limit} iterations; condition remained false"
+        )))
+    }
     fn load_step(&mut self, step: &Value, timeout: f64, deadline: f64) -> Result<String> {
         let name = self.save_name(step)?;
         let path = self.save_path(&name);
@@ -2320,7 +2798,9 @@ impl Runner {
         let code = scenario::load_code(&name, session);
         let before = self.loadscreen_count()?;
         let started = self.clock.now();
-        let mut unknown = match self.send_frontend_transition(&code, deadline) {
+        let response = self.send_frontend_transition(&code, deadline);
+        self.transition_reply("load", deadline, &response)?;
+        let mut unknown = match response {
             Ok(_) => false,
             Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                 println!("LoadGame response interrupted during transition: {e}");
@@ -2913,7 +3393,7 @@ impl Runner {
         let scenario_name = text(&self.scenario, "name").to_owned();
         self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;
-        let code = match self.run_inner() {
+        let mut code = match self.run_inner() {
             Ok(v) => v,
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
@@ -2932,6 +3412,18 @@ impl Runner {
                 1
             }
         };
+        if let Err(error) = self.drain_native_observer() {
+            self.result_passed = false;
+            code = 1;
+            self.record_failure(
+                Some(&json!({"action":"native_observer_cleanup"})),
+                None,
+                &error,
+            );
+            let earlier = self.failure.take().unwrap_or_default();
+            self.failure = Some(format!("{earlier}; native observer cleanup: {error}"));
+            self.log("native_observer_cleanup", "FAIL", &error.to_string())?;
+        }
         if !self.result_passed && self.failure.is_none() {
             self.failure = Some("Run did not finish".into());
         }
@@ -2947,7 +3439,11 @@ impl Runner {
                 Err(e) => println!("Could not save run log slices: {e}"),
             }
         }
-        self.disconnect();
+        // A native handoff borrows the established transport; leave its lifecycle
+        // to the controller/runner owner, including after a failed acknowledgement.
+        if !self.native_observer_started {
+            self.disconnect();
+        }
         if let Err(e) = self.write_result() {
             println!("Could not save result summary: {e}");
             if self.result_passed {
@@ -2979,6 +3475,10 @@ impl Runner {
     }
     fn run_inner(&mut self) -> Result<i32> {
         let mut frontend_ready = false;
+        let native_handoff_first = matches!(
+            self.scenario["steps"][0]["action"].as_str(),
+            Some("native_observer_ready" | "native_observer_finish")
+        );
         // Installation errors are independent of process freshness. The chain
         // disables automatic restarts, but must still reject missing MODs before
         // spending a shared game slot launching Steam.
@@ -2987,7 +3487,7 @@ impl Runner {
         if !stale.is_empty() {
             return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
         }
-        if self.auto_restart {
+        if self.auto_restart && !native_handoff_first {
             let newest = self.backend.newest_mod(&folders)?;
             let process = self.backend.single_process(30.0)?;
             if let Some(reason) =
@@ -3019,7 +3519,7 @@ impl Runner {
         self.write_baseline()?;
         let steps = self.scenario["steps"].as_array().unwrap().clone();
         let first = &steps[0];
-        if first["action"] != "restart_game" {
+        if first["action"] != "restart_game" && !native_handoff_first {
             if !frontend_ready && self.backend.single_process(30.0)?.is_none() {
                 self.log("launch", "START", "Civ VI is not running")?;
                 let detail = self.restart_game(360.0)?;

@@ -5,7 +5,7 @@ use rusqlite::{params_from_iter, types::Value as SqlValue, Connection};
 use std::collections::{BTreeMap, BTreeSet};
 
 const DOMAIN: &str = "Players:Expansion2_Players";
-const ORIGINAL: [&str; 7] = [
+const ORIGINAL: [&str; 8] = [
     "LEADER_JAC_ODA_NOBUHIDE",
     "LEADER_JAC_TAKEDA_NOBUTORA",
     "LEADER_CLEOPATRA",
@@ -13,6 +13,7 @@ const ORIGINAL: [&str; 7] = [
     "LEADER_LUDWIG",
     "LEADER_SEJONG",
     "LEADER_HAMMURABI",
+    "LEADER_MENELIK",
 ];
 
 fn rows<'a, 'input>(doc: &'a Document<'input>, parent: &str) -> Vec<Node<'a, 'input>> {
@@ -129,11 +130,11 @@ fn audited_exclusion_is_exact_and_applies_to_every_banseiki_slot() {
         re.find_iter(query.attribute("SQL").unwrap())
             .map(|m| m.as_str())
             .collect::<Vec<_>>(),
-        ["'LEADER_SEJONG'", "'LEADER_HAMMURABI'"]
+        ["'LEADER_SEJONG'", "'LEADER_HAMMURABI'", "'LEADER_MENELIK'"]
     );
     let expected: BTreeSet<String> = ORIGINAL
         .into_iter()
-        .filter(|&s| !["LEADER_SEJONG", "LEADER_HAMMURABI"].contains(&s))
+        .filter(|&s| !["LEADER_SEJONG", "LEADER_HAMMURABI", "LEADER_MENELIK"].contains(&s))
         .map(str::to_string)
         .collect();
     for player_id in [0, 1, 2] {

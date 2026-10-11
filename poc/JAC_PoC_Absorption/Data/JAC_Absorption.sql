@@ -37,3 +37,16 @@ INSERT INTO GreatWork_ValidSubTypes (GreatWorkSlotType, GreatWorkObjectType)
 SELECT 'GREATWORKSLOT_JAC_ABSORPTION_CACHE', GreatWorkObjectType FROM GreatWorkObjectTypes;
 INSERT INTO Building_GreatWorks (BuildingType, GreatWorkSlotType, NumSlots)
 VALUES ('BUILDING_JAC_ABSORPTION_CACHE', 'GREATWORKSLOT_JAC_ABSORPTION_CACHE', 1);
+
+-- Native one-shot loyalty effects. The official Bread and Circuses completion
+-- uses this effect with RunOnce/Permanent; callers must retain issuance receipts.
+INSERT INTO Modifiers (ModifierId, ModifierType, RunOnce, Permanent) VALUES
+('JAC_ABSORPTION_LOYALTY_LOSS_1', 'MODIFIER_SINGLE_CITY_GRANT_LOYALTY', 1, 1),
+('JAC_ABSORPTION_LOYALTY_LOSS_2', 'MODIFIER_SINGLE_CITY_GRANT_LOYALTY', 1, 1),
+('JAC_ABSORPTION_LOYALTY_LOSS_5', 'MODIFIER_SINGLE_CITY_GRANT_LOYALTY', 1, 1),
+('JAC_ABSORPTION_LOYALTY_LOSS_15', 'MODIFIER_SINGLE_CITY_GRANT_LOYALTY', 1, 1);
+INSERT INTO ModifierArguments (ModifierId, Name, Value) VALUES
+('JAC_ABSORPTION_LOYALTY_LOSS_1', 'Amount', -1),
+('JAC_ABSORPTION_LOYALTY_LOSS_2', 'Amount', -2),
+('JAC_ABSORPTION_LOYALTY_LOSS_5', 'Amount', -5),
+('JAC_ABSORPTION_LOYALTY_LOSS_15', 'Amount', -15);

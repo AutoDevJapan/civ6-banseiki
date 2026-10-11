@@ -1,13 +1,14 @@
--- One AddGameplayScripts entry: include executes both modules in this context.
+-- One AddGameplayScripts entry: include executes all modules in this context.
 -- No gameplay dependency is obtained through a cross-context function table.
 if JAC_AbsorptionEntryLoaded then return end
 include("JAC_Absorption_Gameplay")
-include("JAC_Absorption_Flow")
--- The carrier and inventory handlers need the private gameplay API. Civ VI
--- gives each AddGameplayScripts entry a separate Lua context, so load them
--- from this entry after the engine instead of registering separate entries.
+-- These bindings capture the engine's private globals; LoadOrder cannot share
+-- them between separate AddGameplayScripts VMs. Load before their consumers.
 include("JAC_CarrierBoundary")
 include("JAC_NativeInventory")
+include("JAC_Absorption_Flow")
+include("JAC_Absorption_Admission")
+include("JAC_Absorption_Product")
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 if GameInfo.JAC_RP_Religions then
   JAC_RP_AdapterInclude = true

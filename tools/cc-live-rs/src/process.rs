@@ -28,6 +28,7 @@ pub struct LeaseLimit {
     pub token: String,
     pub cleanup_reserve_seconds: f64,
     hard_deadline: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
+    unknown_since: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
 }
 impl PartialEq for LeaseLimit {
     fn eq(&self, other: &Self) -> bool {
@@ -43,6 +44,7 @@ impl LeaseLimit {
             token: token.into(),
             cleanup_reserve_seconds,
             hard_deadline: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            unknown_since: std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
     pub fn hard_deadline(&self) -> Option<f64> {
@@ -52,12 +54,18 @@ impl LeaseLimit {
         self.hard_deadline()
             .map(|d| d - self.cleanup_reserve_seconds)
     }
+    pub fn observation_deadline(&self) -> Option<f64> {
+        self.unknown_since.lock().unwrap().map(|since| since + 5.0)
+    }
     pub fn record_probe(&self, probe: &LeaseProbe) {
         let mut deadline = self.hard_deadline.lock().unwrap();
         match *probe {
             LeaseProbe::Clear => *deadline = None,
             LeaseProbe::Contended(d) => *deadline = Some(deadline.map_or(d, |old| old.min(d))),
-            LeaseProbe::Unavailable => {}
+            LeaseProbe::Unavailable | LeaseProbe::TimedOut => {}
+        }
+        if matches!(probe, LeaseProbe::Clear | LeaseProbe::Contended(_)) {
+            *self.unknown_since.lock().unwrap() = None;
         }
     }
 }
@@ -66,6 +74,7 @@ pub const LEASE_YIELD: &str = "CIV6_LEASE_YIELD";
 pub enum LeaseProbe {
     Clear,
     Unavailable,
+    TimedOut,
     Contended(f64),
 }
 
@@ -77,16 +86,61 @@ pub fn observe_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeasePro
     {
         return Ok(LeaseProbe::Contended(limit.hard_deadline().unwrap()));
     }
-    let deadline = limit.work_deadline().unwrap_or(f64::MAX).min(now + 2.0);
-    let probe = lease_probe(
+    if limit.observation_deadline().is_some_and(|d| now >= d) {
+        return Err(LEASE_OBSERVATION_EXHAUSTED.into());
+    }
+    let deadline = limit
+        .work_deadline()
+        .unwrap_or(f64::MAX)
+        .min(limit.observation_deadline().unwrap_or(f64::MAX))
+        .min(now + 2.0);
+    let observation = lease_probe(
         &mut crate::chain::WithinDeadline {
             runner: r,
             deadline,
         },
         limit,
-    )?;
+    );
+    // These exact errors originate from the bounded command runner, rather
+    // than the authoritative lock/token read. Do not interpret them as Clear.
+    let probe = match observation {
+        Err(error)
+            if error == "command timed out" || error == "Civ6 scenario deadline exhausted" =>
+        {
+            LeaseProbe::TimedOut
+        }
+        other => other?,
+    };
+    if matches!(probe, LeaseProbe::Unavailable | LeaseProbe::TimedOut) {
+        let first = {
+            let mut since = limit.unknown_since.lock().unwrap();
+            let first = since.is_none();
+            since.get_or_insert(now);
+            first
+        };
+        if first && probe == LeaseProbe::TimedOut {
+            r.error("Civ6 lease observation timed out; retrying without changing ownership or the competition deadline")?;
+        }
+        if limit
+            .observation_deadline()
+            .is_some_and(|d| r.monotonic() >= d)
+        {
+            return Err(LEASE_OBSERVATION_EXHAUSTED.into());
+        }
+    }
     limit.record_probe(&probe);
     Ok(probe)
+}
+
+const LEASE_OBSERVATION_EXHAUSTED: &str =
+    "Civ6 lease observation unavailable for 5s (including probe timeouts)";
+/// Startup and the running child share both absolute deadlines via LeaseLimit.
+pub fn monitor_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<(), String> {
+    observe_lease(r, limit)?;
+    if limit.work_deadline().is_some_and(|d| r.monotonic() >= d) {
+        return Err(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
+    }
+    Ok(())
 }
 
 /// Use the same live-waiter definition as acquisition, without holding the
@@ -94,36 +148,13 @@ pub fn observe_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeasePro
 pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe, String> {
     let anchor = r.monotonic();
     let now = r.now();
-    #[cfg(unix)]
-    let guard = crate::fairness::UnixGuard::acquire(&limit.paths.here.join("civ6.lock"))?;
-    let mut options = std::fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        options.share_mode(1);
-    }
-    // Recovery pins a read-only handle. A monitor must be another reader,
-    // rather than requesting write access and mistaking that pin for failure.
-    let file = match options.open(limit.paths.here.join("civ6.lock")) {
-        Ok(file) => file,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(LeaseProbe::Unavailable),
-        #[cfg(windows)]
-        Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => return Ok(LeaseProbe::Unavailable),
-        Err(e) => return Err(e.to_string()),
+    let path = limit.paths.here.join("civ6.lock");
+    let Some(snapshot) = crate::fairness::Snapshot::open(&path)
+        .map_err(|e| format!("monitor lease initial snapshot: {e}"))?
+    else {
+        return Ok(LeaseProbe::Unavailable);
     };
-    let mut bytes = Vec::new();
-    (&file)
-        .take(32769)
-        .read_to_end(&mut bytes)
-        .map_err(|e| e.to_string())?;
-    if bytes.len() > 32768 {
-        return Err("Civ6 lease record too large".into());
-    }
-    let owner: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    drop(file);
-    #[cfg(unix)]
-    drop(guard);
+    let owner = snapshot.info()?;
     if owner["lock_token"].as_str() != Some(limit.token.as_str()) {
         return Err("Civ6 lease ownership changed while child was running".into());
     }
@@ -134,6 +165,18 @@ pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe
         &crate::fairness::todo_path(&limit.paths),
         now,
     )?;
+    // A probe can outlive its original owner. Validate again before publishing
+    // Clear or a deadline; a stale successful probe cannot revive an old lease.
+    let Some(current) = crate::fairness::Snapshot::open(&path)
+        .map_err(|e| format!("monitor lease final snapshot: {e}"))?
+    else {
+        return Ok(LeaseProbe::Unavailable);
+    };
+    if !snapshot.same_file(&current)?
+        || !crate::fairness::same_acquisition(&owner, &current.info()?)
+    {
+        return Err("Civ6 lease ownership changed while child was running".into());
+    }
     let Some(since) = competitor else {
         return Ok(LeaseProbe::Clear);
     };
@@ -189,9 +232,58 @@ pub struct Output {
     pub stderr: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ProcessIdentity {
+    pub image: String,
+    pub created_filetime: Option<u64>,
+}
+
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
 pub trait Runner {
     fn run(&mut self, call: Call) -> Result<Output, String>;
+    /// Prepare read-only native services before acquiring shared game ownership.
+    fn prepare_process_queries(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+    /// The command fallback keeps non-Windows runners and fixtures injectable.
+    /// Windows uses one pinned handle, without spawning tasklist per waiter.
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        timeout: f64,
+    ) -> Result<Option<ProcessIdentity>, String> {
+        let out = self.run(
+            Call::new(crate::args(&[
+                "tasklist",
+                "/FI",
+                &format!("PID eq {pid}"),
+                "/FO",
+                "CSV",
+                "/NH",
+            ]))
+            .timeout(timeout),
+        )?;
+        if out.code != 0 {
+            return Err(format!(
+                "Could not inspect the Civ6 lock holder: {}",
+                crate::tail(&out.stderr, 300)
+            ));
+        }
+        Ok(out.stdout.lines().find_map(|line| {
+            let (image, fields) = line.strip_prefix('"')?.split_once("\",")?;
+            let listed = fields
+                .split(',')
+                .next()?
+                .trim()
+                .trim_matches('"')
+                .parse::<u32>()
+                .ok()?;
+            (listed == pid).then(|| ProcessIdentity {
+                image: image.into(),
+                created_filetime: None,
+            })
+        }))
+    }
     fn now(&mut self) -> f64;
     fn monotonic(&mut self) -> f64 {
         self.now()
@@ -210,6 +302,398 @@ pub trait Runner {
     }
 }
 pub struct RealRunner;
+
+#[cfg(any(windows, test))]
+mod identity_reader {
+    use super::*;
+    use std::sync::mpsc::{self, SyncSender};
+
+    type Identity = Result<Option<ProcessIdentity>, String>;
+    struct Request {
+        pid: u32,
+        deadline: Instant,
+        reply: SyncSender<Identity>,
+    }
+
+    /// One read-only worker and one queued request, even if a native call stalls.
+    /// A timed-out reply belongs to its abandoned receiver and cannot authorize
+    /// a later observation. No lock-file or game operation runs on this worker.
+    pub(super) struct Reader {
+        requests: SyncSender<Request>,
+    }
+    impl Reader {
+        pub(super) fn new(
+            query: impl Fn(u32) -> Identity + Send + 'static,
+        ) -> Result<Self, String> {
+            let (requests, incoming) = mpsc::sync_channel::<Request>(1);
+            thread::Builder::new()
+                .name("civ6-process-reader".into())
+                .spawn(move || {
+                    while let Ok(request) = incoming.recv() {
+                        let result = if Instant::now() >= request.deadline {
+                            Err("command timed out".into())
+                        } else {
+                            query(request.pid)
+                        };
+                        // A cancelled caller must never hold up the next query.
+                        let _ = request.reply.try_send(result);
+                    }
+                })
+                .map_err(|error| format!("start native process reader: {error}"))?;
+            Ok(Self { requests })
+        }
+        #[cfg(test)]
+        pub(super) fn lookup(&self, pid: u32, timeout: f64) -> Identity {
+            if !timeout.is_finite() || timeout <= 0.0 {
+                return Err("command timed out".into());
+            }
+            let deadline = Instant::now() + Duration::from_secs_f64(timeout.min(30.0));
+            self.lookup_until(pid, deadline)
+        }
+        pub(super) fn lookup_until(&self, pid: u32, deadline: Instant) -> Identity {
+            if Instant::now() >= deadline {
+                return Err("command timed out".into());
+            }
+            let (reply, result) = mpsc::sync_channel(1);
+            self.requests
+                .try_send(Request {
+                    pid,
+                    deadline,
+                    reply,
+                })
+                .map_err(|error| match error {
+                    mpsc::TrySendError::Full(_) => "command timed out".to_owned(),
+                    mpsc::TrySendError::Disconnected(_) => {
+                        "native process reader exited".to_owned()
+                    }
+                })?;
+            let value = result
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+                .map_err(|error| match error {
+                    mpsc::RecvTimeoutError::Timeout => "command timed out".to_owned(),
+                    mpsc::RecvTimeoutError::Disconnected => {
+                        "native process reader exited".to_owned()
+                    }
+                })?;
+            if Instant::now() >= deadline {
+                return Err("command timed out".into());
+            }
+            value
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::sync::{atomic::AtomicUsize, Arc};
+
+        #[test]
+        fn slow_native_call_times_out_and_its_reply_is_not_reused() {
+            let (entered, observed) = mpsc::sync_channel(1);
+            let (release, blocked) = mpsc::sync_channel(1);
+            let blocked = std::sync::Mutex::new(blocked);
+            let reader = Reader::new(move |pid| {
+                if pid == 1 {
+                    entered.send(()).unwrap();
+                    let _ = blocked.lock().unwrap().recv_timeout(Duration::from_secs(2));
+                }
+                Ok(Some(ProcessIdentity {
+                    image: pid.to_string(),
+                    created_filetime: Some(pid.into()),
+                }))
+            })
+            .unwrap();
+            let started = Instant::now();
+            assert_eq!(reader.lookup(1, 0.05).unwrap_err(), "command timed out");
+            observed.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(1));
+            release.send(()).unwrap();
+            assert_eq!(
+                reader.lookup(2, 1.0).unwrap().unwrap().created_filetime,
+                Some(2)
+            );
+        }
+
+        #[test]
+        fn stalled_reader_has_one_worker_and_a_bounded_queue() {
+            let (entered, observed) = mpsc::sync_channel(1);
+            let (release, blocked) = mpsc::sync_channel(1);
+            let blocked = std::sync::Mutex::new(blocked);
+            let calls = Arc::new(AtomicUsize::new(0));
+            let queries = Arc::clone(&calls);
+            let reader = Reader::new(move |_| {
+                queries.fetch_add(1, Ordering::SeqCst);
+                entered.send(()).unwrap();
+                let _ = blocked.lock().unwrap().recv_timeout(Duration::from_secs(2));
+                Ok(None)
+            })
+            .unwrap();
+            assert_eq!(reader.lookup(1, 0.05).unwrap_err(), "command timed out");
+            observed.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert_eq!(reader.lookup(2, 0.01).unwrap_err(), "command timed out");
+            for pid in 3..100 {
+                assert_eq!(reader.lookup(pid, 0.01).unwrap_err(), "command timed out");
+            }
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            release.send(()).unwrap();
+        }
+
+        #[test]
+        fn preparation_uses_the_original_deadline_and_does_not_dispatch_expired_work() {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let queries = Arc::clone(&calls);
+            let reader = Reader::new(move |_| {
+                queries.fetch_add(1, Ordering::SeqCst);
+                Ok(None)
+            })
+            .unwrap();
+            reader.lookup(1, 1.0).unwrap();
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            let expired = Instant::now() - Duration::from_millis(1);
+            assert_eq!(
+                reader.lookup_until(2, expired).unwrap_err(),
+                "command timed out"
+            );
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        }
+    }
+}
+
+#[cfg(windows)]
+static NATIVE_READER: std::sync::OnceLock<Result<identity_reader::Reader, String>> =
+    std::sync::OnceLock::new();
+
+#[cfg(windows)]
+fn bounded_windows_process_identity(
+    pid: u32,
+    timeout: f64,
+) -> Result<Option<ProcessIdentity>, String> {
+    if !timeout.is_finite() || timeout <= 0.0 {
+        return Err("command timed out".into());
+    }
+    let deadline = Instant::now() + Duration::from_secs_f64(timeout.min(30.0));
+    // The owned phase must never wait on cold initialization or its mutex.
+    NATIVE_READER
+        .get()
+        .ok_or("native process reader was not prepared before ownership")?
+        .as_ref()
+        .map_err(Clone::clone)?
+        .lookup_until(pid, deadline)
+}
+
+#[cfg(windows)]
+fn process_open_failure(
+    pid: u32,
+    error: std::io::Error,
+) -> Result<Option<ProcessIdentity>, String> {
+    match error.raw_os_error() {
+        Some(87) => Ok(None),
+        // A stale PID can now belong to a protected process. Snapshot lookup
+        // preserves the old image rejection without a tasklist subprocess.
+        Some(5) => snapshot_process_identity(pid),
+        _ => Err(format!("inspect Civ6 queue process {pid}: {error}")),
+    }
+}
+
+#[cfg(windows)]
+fn snapshot_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+        System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            TH32CS_SNAPPROCESS,
+        },
+    };
+    struct Snapshot(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Snapshot {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(format!(
+            "inspect Civ6 queue process snapshot: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let snapshot = Snapshot(raw);
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut found = unsafe { Process32FirstW(snapshot.0, &mut entry) };
+    loop {
+        if found == 0 {
+            let error = std::io::Error::last_os_error();
+            return if error.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                Ok(None)
+            } else {
+                Err(format!("inspect Civ6 queue process snapshot: {error}"))
+            };
+        }
+        if entry.th32ProcessID == pid {
+            let end = entry
+                .szExeFile
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(entry.szExeFile.len());
+            let image = String::from_utf16(&entry.szExeFile[..end]).map_err(|e| e.to_string())?;
+            // Snapshot proves the image only. A matching chain still needs the
+            // original creation-time check; denied access never grants a lease.
+            return Ok(Some(ProcessIdentity {
+                image,
+                created_filetime: None,
+            }));
+        }
+        found = unsafe { Process32NextW(snapshot.0, &mut entry) };
+    }
+}
+
+#[cfg(windows)]
+fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+    };
+    struct Handle(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        return process_open_failure(pid, std::io::Error::last_os_error());
+    }
+    let handle = Handle(raw);
+    let alive = || match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_TIMEOUT => Ok(true),
+        0 => Ok(false),
+        _ => Err(format!(
+            "inspect Civ6 waiter process {pid} state: {}",
+            std::io::Error::last_os_error()
+        )),
+    };
+    if !alive()? {
+        return Ok(None);
+    }
+    let mut path = vec![0u16; 32768];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
+        return Err(format!(
+            "inspect Civ6 waiter process {pid} image: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let path = String::from_utf16(&path[..length as usize]).map_err(|e| e.to_string())?;
+    let image = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|p| p.to_str())
+        .ok_or("waiter image has no file name")?
+        .to_owned();
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
+    {
+        return Err(format!(
+            "inspect Civ6 waiter process {pid} creation time: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    if !alive()? {
+        return Ok(None);
+    }
+    Ok(Some(ProcessIdentity {
+        image,
+        created_filetime: Some(
+            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime),
+        ),
+    }))
+}
+
+#[cfg(all(test, windows))]
+mod native_identity_tests {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+
+    #[test]
+    fn current_process_identity_uses_one_handle_and_no_commands() {
+        RealRunner.prepare_process_queries().unwrap();
+        let identity = RealRunner
+            .process_identity(std::process::id(), 2.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            identity.image,
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(
+            identity.created_filetime,
+            crate::chain::process_created_filetime(std::process::id()).unwrap()
+        );
+        assert!(identity.created_filetime.unwrap() > 0);
+    }
+
+    #[test]
+    fn denied_process_query_uses_image_snapshot_without_granting_creation_identity() {
+        let identity =
+            process_open_failure(std::process::id(), std::io::Error::from_raw_os_error(5))
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            identity.image,
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(identity.created_filetime, None);
+        assert_eq!(
+            process_open_failure(u32::MAX, std::io::Error::from_raw_os_error(87)).unwrap(),
+            None
+        );
+        assert!(
+            process_open_failure(std::process::id(), std::io::Error::from_raw_os_error(6))
+                .unwrap_err()
+                .contains("queue process")
+        );
+    }
+
+    #[test]
+    fn exited_owned_process_and_invalid_pid_are_not_live_waiters() {
+        let mut child = Command::new("cmd.exe")
+            .args(["/c", "exit", "0"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+        assert_eq!(windows_process_identity(child.id()).unwrap(), None);
+        assert_eq!(windows_process_identity(u32::MAX).unwrap(), None);
+    }
+}
 
 pub fn install_interrupt_handler() {
     #[cfg(windows)]
@@ -256,6 +740,22 @@ fn interrupted() -> Result<(), String> {
 }
 
 impl Runner for RealRunner {
+    #[cfg(windows)]
+    fn prepare_process_queries(&mut self) -> Result<(), String> {
+        NATIVE_READER
+            .get_or_init(|| identity_reader::Reader::new(windows_process_identity))
+            .as_ref()
+            .map(|_| ())
+            .map_err(Clone::clone)
+    }
+    #[cfg(windows)]
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        timeout: f64,
+    ) -> Result<Option<ProcessIdentity>, String> {
+        bounded_windows_process_identity(pid, timeout)
+    }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
@@ -284,6 +784,7 @@ impl Runner for RealRunner {
             if let (false, Err(error)) = (call.kill_tree, &status) {
                 return Err(error.clone());
             }
+            #[cfg(windows)]
             drop(tree);
             let bytes = reader
                 .join()
@@ -313,6 +814,7 @@ impl Runner for RealRunner {
         if let (false, Err(error)) = (call.kill_tree, &status) {
             return Err(error.clone());
         }
+        #[cfg(windows)]
         drop(tree);
         let stdout = decode(
             &out.join()
@@ -372,7 +874,6 @@ fn wait(
 ) -> Result<i32, String> {
     let start = Instant::now();
     let mut next_probe = start;
-    let mut unavailable_since: Option<Instant> = None;
     loop {
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
             tree.stop(child)?;
@@ -387,23 +888,16 @@ fn wait(
                 lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
             } else if Instant::now() >= next_probe {
                 next_probe = Instant::now() + Duration::from_secs(2);
-                match observe_lease(&mut RealRunner, limit) {
-                    Ok(LeaseProbe::Clear) => {
-                        limit.record_probe(&LeaseProbe::Clear);
-                        unavailable_since = None;
-                    }
-                    Ok(probe @ LeaseProbe::Contended(_)) => {
-                        unavailable_since = None;
-                        limit.record_probe(&probe);
-                    }
-                    Ok(LeaseProbe::Unavailable) => {
-                        let since = *unavailable_since.get_or_insert_with(Instant::now);
-                        if since.elapsed() >= Duration::from_secs(5) {
-                            lease_error = Some("Civ6 lease state unavailable for 5s".to_string());
-                        }
-                    }
-                    Err(error) => lease_error = Some(error),
+                if let Err(error) = monitor_lease(&mut RealRunner, limit) {
+                    lease_error = Some(error);
                 }
+            }
+            if limit
+                .observation_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
+                && lease_error.is_none()
+            {
+                lease_error = Some(LEASE_OBSERVATION_EXHAUSTED.into());
             }
             if limit
                 .work_deadline()
