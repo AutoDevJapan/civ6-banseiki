@@ -797,17 +797,19 @@ pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String
         {
             return Ok(false);
         }
-        // A dispatched waiter must reach live_chain before a yielding chain resumes.
+        // Dispatch gets one bounded arrival window. A long-lived worker's
+        // analysis after releasing Civ6 must not reserve the game forever;
+        // subsequent runs compete through the actual protected queue/lock.
         if item["status"] == "doing"
             && fairness::needs_civ6(&item)
-            && chain_job_active(p, &item["scheduler"]["job"])?
+            && chain_job_reservation_active(p, &item["scheduler"]["job"], now)?
         {
             return Ok(false);
         }
     }
     Ok(true)
 }
-fn chain_job_active(p: &Paths, job: &Value) -> Result<bool, String> {
+fn chain_job_reservation_active(p: &Paths, job: &Value, now: f64) -> Result<bool, String> {
     let Some(job) = job.as_str() else {
         return Ok(false);
     };
@@ -815,10 +817,24 @@ fn chain_job_active(p: &Paths, job: &Value) -> Result<bool, String> {
     if !path.exists() {
         return Ok(false);
     }
-    Ok(matches!(
-        read_json(path)?["status"].as_str(),
+    let state = read_json(path)?;
+    if !matches!(
+        state["status"].as_str(),
         Some("queued" | "starting" | "running")
-    ))
+    ) {
+        return Ok(false);
+    }
+    let started = state["started_at"]
+        .as_str()
+        .or_else(|| state["created_at"].as_str())
+        .ok_or("dispatched Civ6 worker lacks arrival time")?;
+    let started = chrono::DateTime::parse_from_rfc3339(started)
+        .map_err(|e| format!("invalid dispatched Civ6 arrival time: {e}"))?
+        .timestamp() as f64;
+    if started > now {
+        return Err("dispatched Civ6 arrival time is in the future".into());
+    }
+    Ok(now < started + fairness::LEASE_SECONDS)
 }
 fn remove_if_exists(p: &Path) -> Result<(), String> {
     match fs::remove_file(p) {

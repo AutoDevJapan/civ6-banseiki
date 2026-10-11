@@ -4352,6 +4352,38 @@ fn live_chain_finishes_scenario_then_requeues_fifo_before_next() {
 }
 
 #[test]
+fn dispatched_worker_priority_expires_after_one_lease_and_actual_queue_still_wins() {
+    let f = Fixture::new();
+    f.json(
+        "todo/todo.json",
+        json!({"items":[{"id":995,"status":"doing","needs":["civ6"],"scheduler":{"job":"peer"}}]}),
+    );
+    f.json(
+        "jobs/peer/job.json",
+        json!({"status":"running","started_at":"1970-01-01T00:16:40Z"}),
+    );
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","pid":123,"since":2800,"long":0,"fifo":true}),
+    );
+    let mut r = Fake {
+        time: 2799.,
+        ..Fake::default()
+    };
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+    r.time = 2800.;
+    assert!(my_turn(&mut r, &f.p, &me).unwrap());
+    f.json(
+        "here/queue/peer.json",
+        json!({"job":"peer","since":2700,"long":0,"fifo":true}),
+    );
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+    f.json("jobs/peer/job.json", json!({"status":"succeeded"}));
+    assert!(my_turn(&mut r, &f.p, &me).unwrap());
+    assert!(!f.p.here.join("queue/peer.json").exists());
+}
+
+#[test]
 fn ready_scheduler_item_counts_as_competitor_and_blocks_requeued_chain() {
     let f = Fixture::new();
     f.json("todo/todo.json", json!({"items":[{"id":437,"created_s":1000,"status":"todo","dispatchable":true,"spec":"s.md","needs":["civ6"]}]}));
