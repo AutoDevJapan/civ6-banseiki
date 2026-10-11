@@ -226,6 +226,26 @@ fn fixed_frontend_accepts_checked_packet_after_synchronous_stock_show() {
 }
 
 #[test]
+fn frontend_keeps_wrapped_update_when_stock_show_precedes_engine_frontend_state() {
+    let lua = frontend_session(1);
+    lua.load("SYNC_INCLUDE_SHOW=true;FRONT=false")
+        .exec()
+        .unwrap();
+    lua.load(witness::frontend_binding()).exec().unwrap();
+    lua.load("assert(SHOWS==1);FRONT=true;UPDATE(0.01)")
+        .exec()
+        .unwrap();
+    let lines: Vec<String> = lua.globals().get("LINES").unwrap();
+    assert!(lines
+        .iter()
+        .any(|line| line.contains("JAC_NC_FRONTEND_AVAILABLE|")));
+    send_frontend_packet(&lua, 1);
+    lua.load("assert(INPUT(1,0x7E));assert(LOADS==1 and LEAVES==1)")
+        .exec()
+        .unwrap();
+}
+
+#[test]
 fn frontend_generated_block_is_idempotent_and_rejects_ambiguous_markers() {
     let source = witness::frontend_menu_binding("include(\"MainMenu\")\n").unwrap();
     assert_eq!(witness::frontend_menu_binding(&source).unwrap(), source);

@@ -104,4 +104,6 @@ ContextPtr:SetInputHandler(function(input)
  if not ok then failed=true;emit('FAIL',r,'FRONTEND_LOAD',err) end
  return true
 end,true)
-if visible() then announce();ContextPtr:SetUpdate(OnUpdate) end
+-- Stock Show can run before the engine's frontend flag becomes true.
+-- Preserve its active update even then, so the later transition is observed.
+if not ContextPtr:IsHidden() then announce();ContextPtr:SetUpdate(OnUpdate) end
