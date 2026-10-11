@@ -1170,7 +1170,10 @@ impl Backend for SystemBackend {
             ));
         }
         crate::native_order::validate_audit_options(step)?;
-        self.check_startup_lock()?;
+        // Startup deliberately releases its lease when launch finishes. Audit
+        // acquires its own read proof and holds it through helper completion.
+        let mut audit_lease = crate::startup::RecoveryLease::acquire()?;
+        audit_lease.check()?;
         if self
             .live_lease_budget()?
             .is_some_and(|remaining| remaining <= budget + 5.0)
@@ -1183,7 +1186,16 @@ impl Backend for SystemBackend {
         let (pid, started) = self
             .single_process(0.0)?
             .ok_or_else(|| Error::input("Civ6 is absent"))?;
-        crate::native_order::audit_thread_visibility(pid, started, output, step, budget)
+        audit_lease.check()?;
+        let result =
+            crate::native_order::audit_thread_visibility(pid, started, output, step, budget);
+        match (result, audit_lease.check()) {
+            (result, Ok(())) => result,
+            (Ok(_), Err(error)) => Err(error),
+            (Err(error), Err(ownership)) => Err(Error::input(format!(
+                "{error}; thread audit lease changed: {ownership}"
+            ))),
+        }
     }
     fn native_order_phase(&mut self, phase: &str) -> Result<()> {
         self.native_order

@@ -492,3 +492,23 @@ shutdownとWaitの4地点は0hitで、待機・全排出の成功へ数えない
 候補PID、作成時刻、終了状態と照会エラーを記録する。PIDが別appへ再利用されていても、別app名とフルパスを記録へ出さず、画像の一致可否だけを残す。原の退出要求と旧保存を再送・書換えしていない。
 
 新しい4ケースが成功し、利用側の関連265件は省略0で成功、共有実行器193件は成功（従来の専用子入口3件は対象外）。両crateの全target Clippyも警告0。別モデルが固定差分と診断のマスクを確認しMust0だった。修正版のrelease、標準配備と原未達の実機条件は別に確認する。原7条件0/7・未マージを維持する。
+
+### 2026-10-12：原Windows記録からハードウェア観測のクラッシュを確認
+
+ffebb120と標準759A453F…で新しい記録名を一度実行した。再起動・COS1読取・ターン1読取・観測器準備の4手順が成功し、準備は0.950秒だった。メニュー退出のACK trueの後、実ゲーム607180/FILETIME134362280377956711のほかに同名176648が列挙された。後者はOpenProcessでエラー5となり、PID・照会エラーを保存して停止した。未知の候補を除外したり、退出要求を再送したりしていない。
+
+Windows Application Error 1000とWER 1001を確認したところ、06:36:09の実607180（hex943cc）はGameCore_XP2_FinalRelease.dllのRVA63E160で例外80000004によりクラッシュしていた。前の実211016（hex33848）も05:54:17に同じRVAと例外で落ちていた。このRVAは今回の最初の固定HW観測点である。監視JSONLには該当SINGLE_STEPイベントがなく、正常system attach breakpointとmodule通知、その後の復元だけが残った。候補列挙の修正だけではこのクラッシュを解消していない。
+
+同じハードウェア観測の再実行を停止した。次は所有するOS fixtureで例外配信経路を調べ、実ゲームではthreadの状態を読むだけのauditへ変更する。デバッガーへ通知しないthreadの可能性は、実測前に確定とは書かない。状態照会の一次資料は[MicrosoftのNtQueryInformationThread](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryinformationthread)と[System InformerのTHREADINFOCLASS](https://github.com/winsiderss/phnt/blob/master/ntpsapi.h)。実ゲームのthread hide設定変更・解除や、新しい機能hookを足して結果を作り直さない。
+
+原29ファイルは所有2a51c893…へ全SHA一致で保全した。標準の後始末がゲームの不在後に原本を復旧し、原auto30、AppOptions、COS1のSHAが全一致した。lockと復旧待ちの残存は0。本ジョブの実機は3回を保持し、元7条件0/7・未マージを維持する。
+
+### 2026-10-12：所有子のhidden負例と非介入のthread audit
+
+e7114ed1に、所有するテスト子だけをhiddenにするOS負例と、class17のBOOLEANを読む照会を追加した。visibleからhiddenへ変更した同じ所有threadを照会し、DRを書かずに拒否する検査が成功した。別の負例では所有hidden threadへHW点を置くと、SINGLE_STEPイベントがデバッガーへ届かず、子が80000004で終了した。初回はexit debug eventだけを待って30秒で失敗したため、同じ所有process HANDLEの終了signalとGetExitCodeProcessを照合する検査へ修正した。イベントを捏造していない。この再現は原ゲームのhidden状態の認定ではなく、同じ症状を起こすOS経路の証拠である。
+
+実ゲームのDR捕捉は初回visibleでも拒否する。途中のhidden化を初回falseだけで排除できないためであり、hidden threadを飛ばして全producerの観測を主張しない。新しいCLI audit-thread-visibilityと診断action audit_thread_visibilityは、標準lease、所有PID/FILETIMEとthread ownerを確認して状態を読む。DebugActiveProcess、DR・target memory書込、suspend、実ゲームへのhide setter、DLL注入は0。専用audit receiptにunknownと不完全なsnapshotを残し、捕捉成功やroot、新世代、再構築、全排出、有効化の許可を与えない。
+
+別モデルのMust1は、正常起動後に解放されたstartup leaseへの依存だった。診断用のread-only RecoveryLeaseを別に取得し、取得直後、PID照合後、helper完了後に保持handleで検証する形へ修正した。実SystemBackendの解放後経路の回帰を追加し、関連13件成功・省略0、追審Must0。観測器全108件成功（従来専用子入口1件は対象外）、利用側関連81件成功・省略0。両全target Clippy警告0、release3を確認した。範囲が重なる81と13は合算しない。
+
+次の実機は元COS1を読み、非介入のauditと正式メニュー退出、同じプロセスの読込を確認する。元3実機の支払い・任務・退出要求を再送しない。全7製品条件は0/7、未マージのまま維持する。

@@ -9,6 +9,45 @@ fn audit() -> Value {
     json!({"action":"audit_thread_visibility","name":"visibility","max_seconds":15,
         "source_dll":"D:/owned/fixed.dll","source_dll_sha256":"a".repeat(64)})
 }
+#[cfg(windows)]
+#[test]
+fn real_backend_audit_reacquires_after_startup_lease_release() {
+    use civ6_autotest_rs::runner::{Backend, SystemBackend};
+    use std::{os::windows::process::CommandExt, path::Path, process::Command};
+    const CHILD: &str = "JAC_AUDIT_RELEASED_LEASE_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let result = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "real_backend_audit_reacquires_after_startup_lease_release",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .env(civ6_autotest_rs::startup::CHAIN_PID_ENV, "0")
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        return;
+    }
+    let mut backend = SystemBackend::default();
+    backend.release_startup_lock();
+    let error = backend
+        .audit_thread_visibility(Path::new("D:/must-not-create-audit"), &audit(), 15.0)
+        .unwrap_err();
+    // Production must attempt fresh chain authorization, not fail because the
+    // launch lease was correctly released. Owner 0 rejects before any game API.
+    assert!(
+        error
+            .message
+            .contains("live-chain owner PID was not supplied"),
+        "{error}"
+    );
+}
 #[test]
 fn thread_audit_is_finite_and_cannot_overlap_a_capture_or_supply_setters() {
     native_order::validate_audit_options(&audit()).unwrap();

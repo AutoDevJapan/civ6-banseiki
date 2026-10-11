@@ -2925,9 +2925,10 @@ mod tests {
                     let name: Vec<u16> = "ntdll.dll".encode_utf16().chain(Some(0)).collect();
                     let module = unsafe { GetModuleHandleW(name.as_ptr()) };
                     assert!(!module.is_null());
-                    let export =
-                        unsafe { GetProcAddress(module, b"NtSetInformationThread\0".as_ptr()) }
-                            .unwrap();
+                    let export = unsafe {
+                        GetProcAddress(module, c"NtSetInformationThread".as_ptr().cast())
+                    }
+                    .unwrap();
                     let set: unsafe extern "system" fn(
                         HANDLE,
                         i32,
@@ -3025,6 +3026,16 @@ mod tests {
             let mut steps = 0u32;
             let deadline = Instant::now() + Duration::from_secs(30);
             while Instant::now() < deadline {
+                // A hidden last thread may suppress the exit debug event too.
+                // Observe the owned process HANDLE, not a fabricated event.
+                if unsafe { WaitForSingleObject(d.game.0, 0) } == WAIT_OBJECT_0 {
+                    let mut code = 0;
+                    assert_ne!(unsafe { GetExitCodeProcess(d.game.0, &mut code) }, 0);
+                    d.lifecycle.exit_code = Some(code);
+                    d.terminal = TerminalKind::TargetExited;
+                    d.attached = false;
+                    return (steps, Some(code), hidden.evidence());
+                }
                 let mut event = DEBUG_EVENT::default();
                 if unsafe { WaitForDebugEventEx(&mut event, 50) } == 0 {
                     continue;

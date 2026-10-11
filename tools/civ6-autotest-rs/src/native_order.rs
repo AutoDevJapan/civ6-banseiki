@@ -240,7 +240,7 @@ pub fn validate_audit_receipt(
         ));
     }
     for thread in row["threads"].as_array().unwrap() {
-        if !thread["tid"].as_u64().is_some_and(|tid| tid > 0)
+        if thread["tid"].as_u64().is_none_or(|tid| tid == 0)
             || thread["expected_owner_pid"] != pid
             || thread["read_only"] != true
             || !matches!(
