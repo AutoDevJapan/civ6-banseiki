@@ -2018,6 +2018,9 @@ fn dynamic_lease_deadline_is_shared_with_civ6_cleanup_and_lock_release() {
         }
         fn sleep(&mut self, s: f64) -> Result<(), String> {
             self.mono += s;
+            if self.inner.closing {
+                self.inner.sleep(s)?;
+            }
             Ok(())
         }
         fn print(&mut self, s: &str) -> Result<(), String> {
@@ -2282,7 +2285,7 @@ struct ReliabilityRunner {
     quits: usize,
     running: bool,
     closing: bool,
-    exit_polls: usize,
+    exit_at: Option<f64>,
     exit_waits: usize,
     time: f64,
     waited: usize,
@@ -2297,6 +2300,7 @@ struct ReliabilityRunner {
     fail_sync: Option<&'static str>,
     sync_cursors: Vec<String>,
     sync_marks: usize,
+    game_created: u64,
     restore_calls: usize,
     waiter_during_prepare: bool,
     reschedule_after_begin_failure: f64,
@@ -2323,7 +2327,7 @@ impl ReliabilityRunner {
             quits: 0,
             running: true,
             closing: false,
-            exit_polls: 0,
+            exit_at: None,
             exit_waits: 0,
             time: 0.0,
             waited: 0,
@@ -2338,6 +2342,7 @@ impl ReliabilityRunner {
             fail_sync: None,
             sync_cursors: vec![],
             sync_marks: 0,
+            game_created: 1,
             restore_calls: 0,
             waiter_during_prepare: false,
             reschedule_after_begin_failure: 0.0,
@@ -2347,6 +2352,18 @@ impl ReliabilityRunner {
     }
 }
 impl Runner for ReliabilityRunner {
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        _: f64,
+    ) -> Result<Option<cc_live::process::ProcessIdentity>, String> {
+        Ok(
+            (pid == 11 && self.running).then(|| cc_live::process::ProcessIdentity {
+                image: "CivilizationVI.exe".into(),
+                created_filetime: Some(self.game_created),
+            }),
+        )
+    }
     fn now(&mut self) -> f64 {
         1000.0
     }
@@ -2443,13 +2460,10 @@ impl Runner for ReliabilityRunner {
             if self.unknown_exit && !self.artifacts.is_empty() {
                 return Err("game exit cannot be inspected".into());
             }
-            if self.closing {
-                if self.exit_polls > 0 {
-                    self.exit_polls -= 1;
-                } else {
-                    self.running = false;
-                    self.closing = false;
-                }
+            if self.closing && self.exit_at.is_some_and(|at| self.time >= at) {
+                self.running = false;
+                self.closing = false;
+                self.exit_at = None;
             }
             return Ok(Output {
                 stdout: if self.running {
@@ -2480,7 +2494,7 @@ impl Runner for ReliabilityRunner {
                     );
                     self.quits += 1;
                     self.closing = true;
-                    self.exit_polls = 1;
+                    self.exit_at = Some(self.time + 0.5);
                     return Ok(Output::default());
                 }
                 _ => panic!("unexpected tuner command"),
@@ -2931,7 +2945,7 @@ fn steam_exit_failure_keeps_the_original_generation_until_recovery_before_new_dr
             );
             assert_eq!(fs::read(&receipt).unwrap(), pending);
             assert_eq!(
-                r.sync_marks, 2,
+                r.sync_marks, 1,
                 "a retry must not replace the original exit generation"
             );
             assert!(r.sync_cursors.iter().all(|cursor| cursor == &generation));
@@ -2944,6 +2958,20 @@ fn steam_exit_failure_keeps_the_original_generation_until_recovery_before_new_dr
             assert_eq!(fs::read(&receipt).unwrap(), pending);
             assert_eq!(r.restore_calls, 0);
             r.fail_sync = None;
+            // Another game reused the PID after the original exit. The old
+            // cursor must not authorize its closure, restoration, or a driver.
+            r.running = true;
+            r.game_created = 2;
+            let quits_before = r.quits;
+            let cursor_calls_before = r.sync_cursors.len();
+            assert!(cli(&mut r, &f.p, &options).is_err());
+            assert!(r.running);
+            assert_eq!(r.quits, quits_before);
+            assert_eq!(r.sync_cursors.len(), cursor_calls_before);
+            assert_eq!(r.artifacts.len(), 1);
+            assert_eq!(r.restore_calls, 0);
+            assert_eq!(fs::read(&receipt).unwrap(), pending);
+            r.running = false;
             assert_eq!(cli(&mut r, &f.p, &options).unwrap(), 0);
             assert_eq!(r.artifacts.len(), 2);
             assert_eq!(r.restore_calls, 2);

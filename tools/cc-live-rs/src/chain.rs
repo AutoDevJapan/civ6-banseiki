@@ -133,6 +133,100 @@ pub fn close_civ6(r: &mut impl Runner) -> Result<(), String> {
 pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
     close_civ6_with_evidence(r, p, &mut json!({}))
 }
+
+type GameGeneration = Vec<(String, u32, u64)>;
+
+fn game_generation(r: &mut impl Runner) -> Result<GameGeneration, String> {
+    let mut games = Vec::new();
+    for image in CIV_EXECUTABLES {
+        let out = r.run(
+            Call::new(args(&[
+                "tasklist",
+                "/FI",
+                &format!("IMAGENAME eq {image}"),
+                "/FO",
+                "CSV",
+                "/NH",
+            ]))
+            .timeout(30.0),
+        )?;
+        if out.code != 0 {
+            return Err("Could not inspect Civ6 exit generation".into());
+        }
+        for line in out
+            .stdout
+            .lines()
+            .filter(|line| csv_first(line).eq_ignore_ascii_case(image))
+        {
+            let pid: u32 = line
+                .split(',')
+                .nth(1)
+                .ok_or("game PID missing")?
+                .trim_matches('"')
+                .parse()
+                .map_err(|_| "invalid game PID")?;
+            let Some(identity) = r.process_identity(pid, 2.0)? else {
+                continue;
+            };
+            let created = identity
+                .created_filetime
+                .filter(|created| *created > 0)
+                .ok_or("game creation time unavailable")?;
+            if !identity.image.eq_ignore_ascii_case(image) {
+                return Err("game identity changed during exit generation capture".into());
+            }
+            games.push((image.to_owned(), pid, created));
+        }
+    }
+    Ok(games)
+}
+
+struct ExitGenerationRunner<'a, R> {
+    runner: &'a mut R,
+    games: &'a GameGeneration,
+}
+impl<R: Runner> Runner for ExitGenerationRunner<'_, R> {
+    fn run(&mut self, mut call: Call) -> Result<Output, String> {
+        // An old cursor may never close a game that appeared after its mark.
+        // Recheck at every external observation/action in the exit protocol.
+        let current = game_generation(self.runner)?;
+        if current.iter().any(|game| !self.games.contains(game)) {
+            return Err(
+                "Civ6 exit generation changed; refusing to close or restore another game".into(),
+            );
+        }
+        if call.args.first().is_some_and(|arg| arg == "taskkill")
+            && call.args.get(1).is_some_and(|arg| arg == "/IM")
+        {
+            if let Some((_, pid, _)) = current
+                .iter()
+                .find(|(image, _, _)| image.eq_ignore_ascii_case(&call.args[2]))
+            {
+                call.args[1] = "/PID".into();
+                call.args[2] = pid.to_string();
+            } else {
+                return Ok(Output::default());
+            }
+        }
+        self.runner.run(call)
+    }
+    fn now(&mut self) -> f64 {
+        self.runner.now()
+    }
+    fn monotonic(&mut self) -> f64 {
+        self.runner.monotonic()
+    }
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.runner.sleep(seconds)
+    }
+    fn print(&mut self, text: &str) -> Result<(), String> {
+        self.runner.print(text)
+    }
+    fn error(&mut self, text: &str) -> Result<(), String> {
+        self.runner.error(text)
+    }
+}
+
 fn close_civ6_with_evidence(
     r: &mut impl Runner,
     p: &Paths,
@@ -153,15 +247,25 @@ fn close_civ6_with_evidence(
         .live()
         .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
     let receipt = p.here.join("steam-exit-recovery.json");
+    let mut expected_games: GameGeneration = Vec::new();
     let pending = match fs::read(&receipt) {
         Ok(bytes) => {
             let state: Value = serde_json::from_slice(&bytes)
                 .map_err(|e| format!("invalid pending Steam exit: {e}"))?;
-            if state["version"] != 1
+            if state["version"] != 2
                 || !state["cursor"]["cloud"].is_object()
                 || !state["cursor"]["process"].is_object()
             {
                 return Err("invalid pending Steam exit; refusing a new generation".into());
+            }
+            expected_games = serde_json::from_value(state["games"].clone())
+                .map_err(|e| format!("invalid pending game generation: {e}"))?;
+            if expected_games.is_empty()
+                || expected_games.iter().any(|(image, pid, created)| {
+                    !CIV_EXECUTABLES.contains(&image.as_str()) || *pid == 0 || *created == 0
+                })
+            {
+                return Err("pending Steam exit lacks its original game generation".into());
             }
             journal = state["journal"]
                 .as_str()
@@ -178,6 +282,10 @@ fn close_civ6_with_evidence(
             return Ok(Some(cursor));
         }
         if source.is_file() && sync_tool.is_file() {
+            expected_games = game_generation(r)?;
+            if expected_games.is_empty() {
+                return Ok(None);
+            }
             // Mark both files inside the native helper, before asking the game to exit.
             let out = r.run(
                 Call::new(args(&[&path(&sync_tool), "--mark"]))
@@ -198,7 +306,7 @@ fn close_civ6_with_evidence(
             // Keep the original pre-exit generation across failed waits and
             // process restarts. Publish before asking the game to exit.
             let bytes = serde_json::to_vec(&json!({
-                "version": 1, "cursor": value, "journal": path(&journal)
+                "version": 2, "cursor": value, "journal": path(&journal), "games": expected_games
             }))
             .map_err(|e| e.to_string())?;
             crate::software_renderer::publish_backup(&receipt, &bytes)
@@ -210,15 +318,21 @@ fn close_civ6_with_evidence(
             Ok(None)
         }
     })()?;
-    let outcome = close_civ6_outcome(r, p)?;
+    let outcome = if cursor.is_some() || source.is_file() {
+        close_civ6_outcome(
+            &mut ExitGenerationRunner {
+                runner: r,
+                games: &expected_games,
+            },
+            p,
+        )?
+    } else {
+        close_civ6_outcome(r, p)?
+    };
     evidence["game_close_outcome"] = json!(outcome);
     let printed = r.print(&format!("CIV6_CLOSE outcome={outcome}"));
     let sync_result = (|| -> Result<(), String> {
-        if outcome == "absent" && !recovering {
-            if cursor.is_some() {
-                fs::remove_file(&receipt)
-                    .map_err(|e| format!("clear unused Steam exit generation: {e}"))?;
-            }
+        if outcome == "absent" && cursor.is_none() {
             evidence["sync_phase"] = json!("not_needed_game_absent");
             return Ok(());
         }
@@ -234,7 +348,11 @@ fn close_civ6_with_evidence(
                 "--journal",
                 &path(&journal),
             ]);
-            let out = r.run(
+            let out = ExitGenerationRunner {
+                runner: r,
+                games: &expected_games,
+            }
+            .run(
                 Call::new(argv)
                     .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
                     .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))

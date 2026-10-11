@@ -80,6 +80,7 @@ struct Model {
     sync_phase: Option<&'static str>,
     broken_output: bool,
     restore_code: i32,
+    publish_collision: Option<PathBuf>,
     calls: Vec<(f64, Call)>,
     sleeps: Vec<f64>,
     printed: Vec<String>,
@@ -106,6 +107,7 @@ impl Model {
             sync_phase: None,
             broken_output: false,
             restore_code: 0,
+            publish_collision: None,
             calls: vec![],
             sleeps: vec![],
             printed: vec![],
@@ -133,6 +135,23 @@ impl Model {
     }
 }
 impl Runner for Model {
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        _: f64,
+    ) -> Result<Option<cc_live::process::ProcessIdentity>, String> {
+        self.update();
+        Ok(
+            (pid == 42 && self.running.iter().any(|running| *running)).then(|| {
+                cc_live::process::ProcessIdentity {
+                    image: chain::CIV_EXECUTABLES
+                        [self.running.iter().position(|running| *running).unwrap()]
+                    .into(),
+                    created_filetime: Some(1),
+                }
+            }),
+        )
+    }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         self.update();
         assert_eq!(call.creationflags, CREATE_NO_WINDOW);
@@ -150,11 +169,16 @@ impl Runner for Model {
         }
         self.calls.push((self.time, call.clone()));
         match call.args[0].as_str() {
-            _ if call.args.get(1).is_some_and(|arg| arg == "--mark") => Ok(Output {
-                code: self.mark_code,
-                stdout: json!({"cloud":{},"process":{}}).to_string(),
-                ..Output::default()
-            }),
+            _ if call.args.get(1).is_some_and(|arg| arg == "--mark") => {
+                if let Some(path) = &self.publish_collision {
+                    fs::write(path, b"prior record must not be replaced").unwrap();
+                }
+                Ok(Output {
+                    code: self.mark_code,
+                    stdout: json!({"cloud":{},"process":{}}).to_string(),
+                    ..Output::default()
+                })
+            }
             _ if call.args.get(1).is_some_and(|arg| arg == "--restore") => {
                 assert!(!self.running.iter().any(|running| *running));
                 if self.restore_code == 0 {
@@ -490,6 +514,73 @@ fn autosave_restore_requires_confirmed_sync_and_failed_exit_recovers_its_origina
         .iter()
         .any(|(_, c)| c.args.get(1).is_some_and(|a| a == "--cursor")));
 }
+#[test]
+fn absent_game_reporter_failure_never_publishes_an_exit_wait() {
+    let f = Fixture::new(true);
+    let source = f
+        .paths
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(source, "fixture").unwrap();
+    fs::write(
+        f.paths
+            .live()
+            .join("tools/target/release/civ6-steam-sync.exe"),
+        "fixture",
+    )
+    .unwrap();
+    let mut r = Model::new([false; 2]);
+    r.reporter_failed = true;
+    assert!(chain::close_civ6_with_paths(&mut r, &f.paths).is_err());
+    assert!(!f.paths.here.join("steam-exit-recovery.json").exists());
+    assert!(!r
+        .calls
+        .iter()
+        .any(|(_, call)| call.args.get(1).is_some_and(|arg| arg == "--mark")));
+    assert!(r.tuner_calls("lua").is_empty());
+    r.reporter_failed = false;
+    chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();
+    assert!(!f.paths.here.join("steam-exit-recovery.json").exists());
+}
+
+#[test]
+fn invalid_or_failed_exit_publication_preserves_record_without_shutdown_or_restore() {
+    for existing in [Some(b"invalid JSON".as_slice()), None] {
+        let f = Fixture::new(true);
+        let source = f
+            .paths
+            .live()
+            .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(source, "fixture").unwrap();
+        fs::write(
+            f.paths
+                .live()
+                .join("tools/target/release/civ6-steam-sync.exe"),
+            "fixture",
+        )
+        .unwrap();
+        let receipt = f.paths.here.join("steam-exit-recovery.json");
+        let mut r = Model::new([true, false]);
+        let expected = existing.unwrap_or(b"prior record must not be replaced");
+        if let Some(bytes) = existing {
+            fs::write(&receipt, bytes).unwrap();
+        } else {
+            r.publish_collision = Some(receipt.clone());
+        }
+        assert!(chain::close_civ6_with_paths(&mut r, &f.paths).is_err());
+        assert_eq!(fs::read(&receipt).unwrap(), expected);
+        assert!(r.running[0]);
+        assert!(r.tuner_calls("lua").is_empty());
+        assert_eq!(r.count("taskkill"), 0);
+        assert!(!r
+            .calls
+            .iter()
+            .any(|(_, call)| call.args.get(1).is_some_and(|arg| arg == "--restore")));
+    }
+}
+
 #[test]
 fn cleanup_only_restores_receipt_without_checkout_launch_or_touching_a_running_game() {
     let f = Fixture::new(false);
