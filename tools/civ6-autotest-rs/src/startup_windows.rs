@@ -201,14 +201,10 @@ impl RecoveryLease {
 }
 
 fn pin_record_file(path: &Path) -> std::io::Result<File> {
-    use windows_sys::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
-    // Metadata-only access allows an existing RW/ShareRead writer and future
-    // deadline updates. Omitting SHARE_DELETE still prevents release/replace.
-    OpenOptions::new()
-        .read(true)
-        .access_mode(FILE_READ_ATTRIBUTES)
-        .share_mode(3)
-        .open(path)
+    // Read-data access participates in sharing checks; attributes-only access
+    // did not prevent deletion in the owned OS regression. Allow writers but
+    // deny DELETE for the complete lease lifetime.
+    OpenOptions::new().read(true).share_mode(3).open(path)
 }
 fn record_file_identity(file: &File) -> Result<(u32, u64)> {
     use windows_sys::Win32::Storage::FileSystem::{
