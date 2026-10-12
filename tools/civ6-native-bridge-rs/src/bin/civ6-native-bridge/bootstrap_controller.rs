@@ -454,6 +454,8 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 ),
                 (b"RustBridgeBootstrapStopObservation\0", true),
                 (b"BOOTSTRAP_TRACE_POINTER\0", false),
+                (b"BOOTSTRAP_PREPARE_DIAGNOSTIC_POINTER\0", false),
+                (b"BOOTSTRAP_PREPARE_DIAGNOSTIC_SIZE\0", false),
             ],
         )?
     } else {
@@ -562,6 +564,17 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 },
             )?);
         }
+        let diagnostic_address = if req.root_only {
+            Some(root_address(
+                &game,
+                &bootstrap,
+                prepared[3],
+                prepared[4],
+                64,
+            )?)
+        } else {
+            None
+        };
         let config = Prepare {
             version: prepare_version,
             size: size_of::<Prepare>() as u32,
@@ -583,10 +596,79 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             slot,
             "RustBridgeBootstrapPrepare",
         )?;
-        write_json(
-            &mut writer,
-            json!({"type":"bootstrap_prepare","status":status,"runtime_installed":false}),
-        )?;
+        let diagnosis = diagnostic_address.map(|address| {
+            let mut bytes = [0u8; 64];
+            let mut copied = 0;
+            let ok = unsafe {
+                ReadProcessMemory(
+                    game.0,
+                    address as _,
+                    bytes.as_mut_ptr().cast(),
+                    bytes.len(),
+                    &mut copied,
+                )
+            };
+            let error = if ok == 0 {
+                Some(unsafe { GetLastError() })
+            } else {
+                None
+            };
+            let saved = preserve(
+                &req.output,
+                "bootstrap-prepare-diagnostic.bin",
+                &bytes[..copied.min(bytes.len())],
+            );
+            let words: Vec<u64> = bytes[..copied.min(bytes.len())]
+                .chunks_exact(8)
+                .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+                .collect();
+            let valid = ok != 0
+                && copied == 64
+                && saved.is_ok()
+                && words[0] == 1
+                && words[1] == 64
+                && words[2] == if status == 0 { 2 } else { 3 }
+                && words[5] == u64::from(req.pid)
+                && words[6] == req.created
+                && words[7] == u64::from(prepare_version);
+            let stage = words.get(3).copied().unwrap_or(0);
+            let reason = words.get(4).copied().unwrap_or(0);
+            let label = match stage {
+                1 => "config/input",
+                2 => "resident ownership",
+                3 => "EXE path identity",
+                4 => "EXE hash",
+                5 => "target Core already loaded",
+                6 => "menu Core path identity",
+                7 => "menu Core hash",
+                8 => "menu context identity",
+                9 => "bridge source hash",
+                10 => "capture exports/type/size/readiness",
+                11 => "bridge module pin",
+                12 => "bootstrap module pin",
+                13 => "release hotpatch prepare",
+                14 => "set hotpatch prepare",
+                15 => "loader hotpatch prepare",
+                16 => "release hotpatch publication",
+                17 => "set hotpatch publication",
+                18 => "loader hotpatch publication",
+                19 => "prepared before GO",
+                _ => "unknown stage",
+            };
+            json!({"schema":"todo880-bootstrap-prepare-diagnostic-v1","valid":valid,"raw":words,
+                "copied":copied,"read_win32_error":error,"preservation_error":saved.err(),
+                "stage":stage,"stage_name":label,"static_reason_code":reason,
+                "static_reason":match reason {0=>"accepted",1=>"dependency rejected",2=>"input/read unavailable",
+                    3=>"source SHA differs",4=>"export absent",5=>"function export type differs",6=>"data export type differs",
+                    7=>"exported capture size differs",8=>"capture pointer/span unreadable or foreign",9=>"panic",_=>"unknown"},
+                "meaning":"first Prepare result only; no runtime installation or World authority"})
+        });
+        let mut prepare_row =
+            json!({"type":"bootstrap_prepare","status":status,"runtime_installed":false});
+        if let Some(diagnosis) = diagnosis {
+            prepare_row["prepare_diagnostic"] = diagnosis;
+        }
+        write_json(&mut writer, prepare_row)?;
         if status != 0 {
             return Err("Prepare refused; no resend".into());
         }

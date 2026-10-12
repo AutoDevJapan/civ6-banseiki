@@ -5,8 +5,261 @@ use std::{
     time::{Duration, Instant},
 };
 
+type CaptureReadyFixture = fn(usize, bool) -> Result<(), String>;
 thread_local! {
     pub(super) static CORE_MODULE_OVERRIDE: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    pub(super) static CAPTURE_READY_OVERRIDE: std::cell::Cell<Option<CaptureReadyFixture>> = const {std::cell::Cell::new(None)};
+    static CAPTURE_FIXTURE_FAULT:std::cell::Cell<u32>=const {std::cell::Cell::new(0)};
+}
+
+// Only game identity/hash/loader publication dependencies are substituted.
+// Exact public selector, config identity, API/data protection, size and pointer
+// readiness validation run through production code and actual owned OS pages.
+fn capture_fixture_ready(base: usize, submission: bool) -> Result<(), String> {
+    let fault = CAPTURE_FIXTURE_FAULT.with(std::cell::Cell::get);
+    capture_ready_symbols(base, submission, |name| {
+        let install = if submission {
+            b"BridgeSubmissionObservationInstall\0".as_slice()
+        } else {
+            b"BridgeRootObservationInstall\0".as_slice()
+        };
+        let stop = if submission {
+            b"BridgeSubmissionObservationStop\0".as_slice()
+        } else {
+            b"BridgeRootObservationStop\0".as_slice()
+        };
+        let pointer = if submission {
+            b"BRIDGE_SUBMISSION_OBSERVATION_TRACE\0".as_slice()
+        } else {
+            b"BRIDGE_ROOT_OBSERVATION_TRACE\0".as_slice()
+        };
+        let size = if submission {
+            b"BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE\0".as_slice()
+        } else {
+            b"BRIDGE_ROOT_OBSERVATION_TRACE_SIZE\0".as_slice()
+        };
+        if name == install {
+            Ok(base + if fault == 2 { 0x100 } else { 0x1000 })
+        } else if name == stop {
+            if fault == 3 {
+                Err("runtime export absent".into())
+            } else {
+                Ok(base + 0x1010)
+            }
+        } else if name == pointer {
+            Ok(base + if fault == 4 { 0x1000 } else { 0x100 })
+        } else if name == size {
+            Ok(base + 0x108)
+        } else {
+            Err("runtime export absent".into())
+        }
+    })
+    .map(|_| ())
+}
+fn capture_fixture_child(name: &str) -> bool {
+    const ENV: &str = "CIV6_BOOTSTRAP_PREPARE_OWNED_CHILD";
+    if std::env::var_os(ENV).is_some() {
+        return true;
+    }
+    struct Owned(Child);
+    impl Drop for Owned {
+        fn drop(&mut self) {
+            if self.0.try_wait().ok().flatten().is_none() {
+                let _ = self.0.kill();
+            }
+            let _ = self.0.wait();
+        }
+    }
+    let mut c = Owned(
+        Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args(["--exact", &format!("windows::tests::{name}"), "--nocapture"])
+            .spawn()
+            .unwrap(),
+    );
+    let until = Instant::now() + Duration::from_secs(30);
+    loop {
+        if let Some(status) = c.0.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    false
+}
+struct CaptureImage {
+    base: usize,
+}
+impl CaptureImage {
+    fn new(submission: bool) -> Self {
+        let base = unsafe {
+            VirtualAlloc(
+                std::ptr::null(),
+                0x20000,
+                MEM_RESERVE | MEM_COMMIT,
+                PAGE_READWRITE,
+            )
+        } as usize;
+        assert_ne!(base, 0);
+        unsafe {
+            std::ptr::write((base + 0x100) as *mut u64, (base + 0x2000) as u64);
+            std::ptr::write(
+                (base + 0x108) as *mut u64,
+                if submission {
+                    protocol::SUBMISSION_BYTES as u64
+                } else {
+                    protocol::ROOT_BYTES as u64
+                },
+            );
+            // Any accidental original/runtime API call is a hard failure.
+            std::ptr::write((base + 0x1000) as *mut u8, 0xcc);
+            std::ptr::write((base + 0x1010) as *mut u8, 0xcc);
+        }
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect((base + 0x1000) as _, 0x1000, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        CAPTURE_READY_OVERRIDE.with(|v| v.set(Some(capture_fixture_ready)));
+        Self { base }
+    }
+    fn input(&self, submission: bool) -> Prepare {
+        Prepare {
+            version: if submission {
+                protocol::SUBMISSION_PREPARE_VERSION
+            } else {
+                protocol::ROOT_PREPARE_VERSION
+            },
+            size: size_of::<Prepare>() as u32,
+            pid: unsafe { GetCurrentProcessId() },
+            observation_seconds: 30,
+            created_filetime: created(),
+            bridge_module: self.base as u64,
+            bridge_sha256: [0; 32],
+            expected_menu_context: 1,
+        }
+    }
+}
+impl Drop for CaptureImage {
+    fn drop(&mut self) {
+        CAPTURE_READY_OVERRIDE.with(|v| v.set(None));
+        unsafe {
+            VirtualFree(self.base as _, 0, MEM_RELEASE);
+        }
+    }
+}
+fn prepare_diagnostic_words() -> Vec<u64> {
+    PREPARE_DIAGNOSTIC
+        .words
+        .iter()
+        .map(|v| v.load(Ordering::Acquire))
+        .collect()
+}
+#[test]
+fn fresh_submission_prepare_selector_checks_current_v4_exports_without_installing() {
+    if !capture_fixture_child(
+        "fresh_submission_prepare_selector_checks_current_v4_exports_without_installing",
+    ) {
+        return;
+    }
+    let image = CaptureImage::new(true);
+    let input = image.input(true);
+    assert_eq!(protocol::SUBMISSION_BYTES, 52096);
+    assert_eq!(RustBridgeBootstrapPrepareSubmissionObservation(&input), 0);
+    let d = prepare_diagnostic_words();
+    assert_eq!(&d[..5], &[1, 64, 2, 19, 0]);
+    assert_eq!(d[5], u64::from(input.pid));
+    assert_eq!(d[6], input.created_filetime);
+    assert_eq!(d[7], u64::from(input.version));
+    assert_eq!(
+        read(image.base + 0x2000, protocol::SUBMISSION_BYTES).unwrap(),
+        vec![0; protocol::SUBMISSION_BYTES]
+    );
+    assert!(STATE.lock().unwrap().is_none());
+    assert_eq!(TRACE.reserved.load(Ordering::Acquire), 0);
+}
+#[test]
+fn fresh_root_prepare_selector_keeps_original_root_size_without_installing() {
+    if !capture_fixture_child(
+        "fresh_root_prepare_selector_keeps_original_root_size_without_installing",
+    ) {
+        return;
+    }
+    let image = CaptureImage::new(false);
+    let input = image.input(false);
+    assert_eq!(RustBridgeBootstrapPrepareRootObservation(&input), 0);
+    assert_eq!(&prepare_diagnostic_words()[..5], &[1, 64, 2, 19, 0]);
+    assert!(STATE.lock().unwrap().is_none());
+}
+#[test]
+fn fresh_submission_prepare_rejects_legacy_size_and_preserves_first_cause() {
+    if !capture_fixture_child(
+        "fresh_submission_prepare_rejects_legacy_size_and_preserves_first_cause",
+    ) {
+        return;
+    }
+    let image = CaptureImage::new(true);
+    let input = image.input(true);
+    unsafe {
+        std::ptr::write(
+            (image.base + 0x108) as *mut u64,
+            protocol::SUBMISSION_V3_BYTES as u64,
+        );
+    }
+    assert_eq!(RustBridgeBootstrapPrepareSubmissionObservation(&input), 1);
+    assert_eq!(&prepare_diagnostic_words()[..5], &[1, 64, 3, 10, 7]);
+    let first = prepare_diagnostic_words();
+    assert_eq!(
+        RustBridgeBootstrapPrepareSubmissionObservation(std::ptr::null()),
+        1
+    );
+    assert_eq!(prepare_diagnostic_words(), first);
+    assert!(STATE.lock().unwrap().is_none());
+}
+#[test]
+fn fresh_submission_prepare_rejects_export_types_missing_symbols_and_pointer_bounds() {
+    if !capture_fixture_child(
+        "fresh_submission_prepare_rejects_export_types_missing_symbols_and_pointer_bounds",
+    ) {
+        return;
+    }
+    let image = CaptureImage::new(true);
+    let input = image.input(true);
+    for (fault, reason) in [(2, 5), (3, 4), (4, 6), (5, 8)] {
+        // Separate synthetic diagnostic attempts; production retains first cause.
+        for v in PREPARE_DIAGNOSTIC.words.iter().skip(2) {
+            v.store(0, Ordering::Release);
+        }
+        CAPTURE_FIXTURE_FAULT.with(|v| v.set(fault));
+        if fault == 5 {
+            unsafe {
+                std::ptr::write(
+                    (image.base + 0x100) as *mut u64,
+                    (image.base + 0x1fff8) as u64,
+                );
+            }
+        }
+        assert_eq!(RustBridgeBootstrapPrepareSubmissionObservation(&input), 1);
+        assert_eq!(&prepare_diagnostic_words()[..5], &[1, 64, 3, 10, reason]);
+        assert!(STATE.lock().unwrap().is_none());
+    }
+}
+#[test]
+fn fresh_submission_prepare_wrong_selector_records_config_refusal_before_dependencies() {
+    if !capture_fixture_child(
+        "fresh_submission_prepare_wrong_selector_records_config_refusal_before_dependencies",
+    ) {
+        return;
+    }
+    let image = CaptureImage::new(true);
+    let mut input = image.input(true);
+    input.version = protocol::ROOT_PREPARE_VERSION;
+    CAPTURE_FIXTURE_FAULT.with(|v| v.set(3));
+    assert_eq!(RustBridgeBootstrapPrepareSubmissionObservation(&input), 1);
+    assert_eq!(&prepare_diagnostic_words()[..5], &[1, 64, 3, 1, 1]);
+    assert!(STATE.lock().unwrap().is_none());
 }
 
 #[test]

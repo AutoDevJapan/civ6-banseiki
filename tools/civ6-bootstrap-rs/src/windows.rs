@@ -31,6 +31,117 @@ const HOLDER: usize = 0x22d6070;
 const CONTEXT: usize = 0x22d60c0;
 type Api = unsafe extern "system" fn(*mut c_void) -> u32;
 
+// Static codes only: no exception strings, filenames or personal paths cross ABI.
+#[repr(C)]
+pub struct PrepareDiagnostic {
+    words: [AtomicU64; 8],
+}
+const _: () = assert!(size_of::<PrepareDiagnostic>() == 64);
+static PREPARE_DIAGNOSTIC: PrepareDiagnostic = PrepareDiagnostic {
+    words: [
+        AtomicU64::new(1),
+        AtomicU64::new(64),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+    ],
+};
+#[unsafe(no_mangle)]
+pub static BOOTSTRAP_PREPARE_DIAGNOSTIC_POINTER: &PrepareDiagnostic = &PREPARE_DIAGNOSTIC;
+#[unsafe(no_mangle)]
+pub static BOOTSTRAP_PREPARE_DIAGNOSTIC_SIZE: u64 = 64;
+struct PrepareDiagnosis {
+    owner: bool,
+}
+impl PrepareDiagnosis {
+    fn begin() -> Self {
+        Self {
+            owner: PREPARE_DIAGNOSTIC.words[2]
+                .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok(),
+        }
+    }
+    fn stage(&self, stage: u64) {
+        if self.owner {
+            PREPARE_DIAGNOSTIC.words[3].store(stage, Ordering::Release);
+        }
+    }
+    fn finish(&self, reason: u64) {
+        if self.owner {
+            PREPARE_DIAGNOSTIC.words[4].store(reason, Ordering::Relaxed);
+            PREPARE_DIAGNOSTIC.words[2].store(if reason == 0 { 2 } else { 3 }, Ordering::Release);
+        }
+    }
+}
+fn diagnostic_reason(error: &str) -> u64 {
+    match error {
+        "unreadable in-process range" => 2,
+        "source SHA differs" => 3,
+        "runtime export absent" => 4,
+        "runtime export outside executable source module" => 5,
+        "runtime data export outside readable source module" => 6,
+        "capture exported size differs" => 7,
+        "capture trace outside readable source module" => 8,
+        _ => 1, // fixed stage identifies the failed dependency; never export arbitrary ErrString
+    }
+}
+fn capture_ready_symbols(
+    bridge: usize,
+    submission: bool,
+    mut resolve: impl FnMut(&[u8]) -> Result<usize, String>,
+) -> Result<(Api, Api), String> {
+    let names: [&[u8]; 4] = if submission {
+        [
+            b"BridgeSubmissionObservationInstall\0",
+            b"BridgeSubmissionObservationStop\0",
+            b"BRIDGE_SUBMISSION_OBSERVATION_TRACE\0",
+            b"BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE\0",
+        ]
+    } else {
+        [
+            b"BridgeRootObservationInstall\0",
+            b"BridgeRootObservationStop\0",
+            b"BRIDGE_ROOT_OBSERVATION_TRACE\0",
+            b"BRIDGE_ROOT_OBSERVATION_TRACE_SIZE\0",
+        ]
+    };
+    let install = validate_api(bridge, resolve(names[0])?)?;
+    let stop = validate_api(bridge, resolve(names[1])?)?;
+    let pointer = validate_data(bridge, resolve(names[2])?)?;
+    let size = validate_data(bridge, resolve(names[3])?)?;
+    let expected = if submission {
+        protocol::SUBMISSION_BYTES
+    } else {
+        protocol::ROOT_BYTES
+    };
+    if ptr_at(size)? != expected {
+        return Err("capture exported size differs".into());
+    }
+    let p = ptr_at(pointer)?;
+    let mut m = MEMORY_BASIC_INFORMATION::default();
+    if !p.is_multiple_of(8)
+        || unsafe { VirtualQuery(p as _, &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
+        || m.AllocationBase as usize != bridge
+        || m.State != MEM_COMMIT
+        || m.Protect & PAGE_GUARD != 0
+        || !matches!(
+            m.Protect & 0xff,
+            PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
+        )
+        || p.checked_add(expected)
+            .is_none_or(|end| end > m.BaseAddress as usize + m.RegionSize)
+        || read(p, 8).is_err()
+    {
+        return Err("capture trace outside readable source module".into());
+    }
+    // Uninstalled trace words are legitimately zero. Do not parse magic/version
+    // before the deferred loader-return install or call any runtime API here.
+    Ok((install, stop))
+}
+
 #[unsafe(no_mangle)]
 static BOOT_RELEASE_CONTINUE: AtomicUsize = AtomicUsize::new(0);
 #[unsafe(no_mangle)]
@@ -329,6 +440,10 @@ fn module(name: &str) -> usize {
 }
 fn api(module: usize, name: &[u8]) -> Result<Api, String> {
     let f = unsafe { GetProcAddress(module as _, name.as_ptr()) }.ok_or("runtime export absent")?;
+    validate_api(module, f as *const () as usize)
+}
+fn validate_api(module: usize, address: usize) -> Result<Api, String> {
+    let f = address as *const ();
     let mut m = MEMORY_BASIC_INFORMATION::default();
     if unsafe {
         VirtualQuery(
@@ -347,18 +462,27 @@ fn api(module: usize, name: &[u8]) -> Result<Api, String> {
     {
         return Err("runtime export outside executable source module".into());
     }
-    Ok(unsafe { std::mem::transmute::<unsafe extern "system" fn() -> isize, Api>(f) })
+    Ok(unsafe { std::mem::transmute::<usize, Api>(address) })
 }
 /// A pointer-sized data export of `module`; its current value is read later.
 fn data(module: usize, name: &[u8]) -> Result<usize, String> {
     let p = unsafe { GetProcAddress(module as _, name.as_ptr()) }.ok_or("runtime export absent")?
         as usize;
+    validate_data(module, p)
+}
+fn validate_data(module: usize, p: usize) -> Result<usize, String> {
     let mut m = MEMORY_BASIC_INFORMATION::default();
     if unsafe { VirtualQuery(p as _, &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
         || m.AllocationBase as usize != module
         || m.State != MEM_COMMIT
+        || m.Protect & PAGE_GUARD != 0
+        || !matches!(
+            m.Protect & 0xff,
+            PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
+        )
         || !p.is_multiple_of(8)
-        || p + 8 > m.BaseAddress as usize + m.RegionSize
+        || p.checked_add(8)
+            .is_none_or(|end| end > m.BaseAddress as usize + m.RegionSize)
         || read(p, 8).is_err()
     {
         return Err("runtime data export outside readable source module".into());
@@ -662,7 +786,17 @@ extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usiz
     result
 }
 
-fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
+fn prepare_profile(
+    input: Prepare,
+    root_only: bool,
+    diagnosis: Option<&PrepareDiagnosis>,
+) -> Result<(), String> {
+    let stage = |v| {
+        if let Some(d) = diagnosis {
+            d.stage(v);
+        }
+    };
+    stage(1);
     let submission_only = root_only && input.version == protocol::SUBMISSION_PREPARE_VERSION;
     if input.version
         != if root_only {
@@ -682,10 +816,19 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     {
         return Err("bootstrap config/identity differs".into());
     }
+    stage(2);
     let mut lock = STATE.lock().map_err(|_| "resident lock")?;
     if lock.is_some() {
         return Err("resident already prepared; no retry".into());
     }
+    #[cfg(test)]
+    if let Some(fixture) = tests::CAPTURE_READY_OVERRIDE.with(std::cell::Cell::get) {
+        if root_only {
+            stage(10);
+            return fixture(input.bridge_module as usize, submission_only);
+        }
+    }
+    stage(3);
     let exe = unsafe { GetModuleHandleW(std::ptr::null()) } as usize;
     let exe_path = path(exe)?;
     if !same(
@@ -694,10 +837,13 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     ) {
         return Err("not pinned game EXE".into());
     }
+    stage(4);
     let _exe_pin = fixed_hash(&exe_path, EXE_SHA)?;
+    stage(5);
     if module("GameCore_XP2_FinalRelease.dll") != 0 {
         return Err("cold preparation refuses an already-loaded target Core".into());
     }
+    stage(6);
     let menu_core = module("GameCore_Base_FinalRelease.dll");
     let core_path = path(menu_core)?;
     if menu_core == 0
@@ -708,7 +854,9 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     {
         return Err("Core path differs".into());
     }
+    stage(7);
     let _core_file = fixed_hash(&core_path, MENU_CORE_SHA)?;
+    stage(8);
     if input.expected_menu_context == 0
         || ptr_at(exe + CONTEXT)? != input.expected_menu_context as usize
         || ptr_at(input.expected_menu_context as usize)? != menu_core + 0x79e020
@@ -717,27 +865,46 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
         return Err("MainMenu context identity differs".into());
     }
     let bridge = input.bridge_module as usize;
+    stage(9);
     let source = pin_file(&path(bridge)?, &input.bridge_sha256)?;
-    let install = api(
-        bridge,
-        if submission_only {
-            b"BridgeSubmissionObservationInstall\0"
-        } else if root_only {
-            b"BridgeRootObservationInstall\0"
-        } else {
-            b"BridgeRuntimeInstall\0"
-        },
-    )?;
-    let stop = api(
-        bridge,
-        if submission_only {
-            b"BridgeSubmissionObservationStop\0"
-        } else if root_only {
-            b"BridgeRootObservationStop\0"
-        } else {
-            b"BridgeRuntimeStopObservation\0"
-        },
-    )?;
+    stage(10);
+    let capture = if root_only {
+        Some(capture_ready_symbols(bridge, submission_only, |name| {
+            unsafe { GetProcAddress(bridge as _, name.as_ptr()) }
+                .map(|f| f as *const () as usize)
+                .ok_or_else(|| "runtime export absent".into())
+        })?)
+    } else {
+        None
+    };
+    let install = if let Some((install, _)) = capture {
+        install
+    } else {
+        api(
+            bridge,
+            if submission_only {
+                b"BridgeSubmissionObservationInstall\0"
+            } else if root_only {
+                b"BridgeRootObservationInstall\0"
+            } else {
+                b"BridgeRuntimeInstall\0"
+            },
+        )?
+    };
+    let stop = if let Some((_, stop)) = capture {
+        stop
+    } else {
+        api(
+            bridge,
+            if submission_only {
+                b"BridgeSubmissionObservationStop\0"
+            } else if root_only {
+                b"BridgeRootObservationStop\0"
+            } else {
+                b"BridgeRuntimeStopObservation\0"
+            },
+        )?
+    };
     let close = if root_only {
         stop
     } else {
@@ -755,6 +922,7 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     };
     // Own the lifetime of saved API addresses before any runtime invocation.
     // Mode6 also pins itself, but a file handle alone is not a module reference.
+    stage(11);
     let mut runtime_module = std::ptr::null_mut();
     if unsafe {
         GetModuleHandleExW(
@@ -767,6 +935,7 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     {
         return Err("runtime module lifetime could not be retained".into());
     }
+    stage(12);
     let mut pinned = std::ptr::null_mut();
     if unsafe {
         GetModuleHandleExW(
@@ -781,16 +950,19 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     BOOT_RELEASE_CONTINUE.store(exe + RELEASE + 2, Ordering::Release);
     BOOT_SET_CONTINUE.store(exe + SET + 5, Ordering::Release);
     BOOT_LOADER_CONTINUE.store(exe + LOADER + 7, Ordering::Release);
+    stage(13);
     let a = hotpatch::prepare(
         exe + RELEASE,
         &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20],
         release_entry as *const () as usize,
     )?;
+    stage(14);
     let b = hotpatch::prepare(
         exe + SET,
         &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x20],
         set_entry as *const () as usize,
     )?;
+    stage(15);
     let c = hotpatch::prepare(
         exe + LOADER,
         &[0x48, 0x81, 0xec, 0x48, 0x02, 0, 0],
@@ -840,14 +1012,15 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
         0,
     );
     let s = lock.as_mut().unwrap();
-    for hook in &s._hooks {
+    for (i, hook) in s._hooks.iter().enumerate() {
+        stage(16 + i as u64);
         hook.publish()?;
     }
     record(11, 0, 0, 0, 0, 0, 0); // Prepared entries, not XP2/Mode6 readiness.
     Ok(())
 }
 fn prepare(input: Prepare) -> Result<(), String> {
-    prepare_profile(input, false)
+    prepare_profile(input, false, None)
 }
 
 /// Distinct explicit export AND strict input version; no old config can opt in.
@@ -862,17 +1035,36 @@ pub extern "system" fn RustBridgeBootstrapPrepareSubmissionObservation(
     prepare_capture_export(input, protocol::SUBMISSION_PREPARE_VERSION)
 }
 fn prepare_capture_export(input: *const Prepare, version: u32) -> u32 {
-    std::panic::catch_unwind(|| {
-        let bytes = read(input as usize, size_of::<Prepare>()).map_err(|_| ())?;
+    let diagnosis = PrepareDiagnosis::begin();
+    diagnosis.stage(1);
+    let result = std::panic::catch_unwind(|| {
+        let bytes = read(input as usize, size_of::<Prepare>())?;
         let config = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<Prepare>()) };
-        if config.version != version {
-            return Err(());
+        if diagnosis.owner {
+            PREPARE_DIAGNOSTIC.words[5].store(u64::from(config.pid), Ordering::Release);
+            PREPARE_DIAGNOSTIC.words[6].store(config.created_filetime, Ordering::Release);
+            PREPARE_DIAGNOSTIC.words[7].store(u64::from(config.version), Ordering::Release);
         }
-        prepare_profile(config, true).map_err(|_| ())
-    })
-    .ok()
-    .and_then(Result::ok)
-    .map_or(1, |_| 0)
+        if config.version != version {
+            return Err("bootstrap selector version differs".into());
+        }
+        prepare_profile(config, true, Some(&diagnosis))
+    });
+    match result {
+        Ok(Ok(())) => {
+            diagnosis.stage(19);
+            diagnosis.finish(0);
+            0
+        }
+        Ok(Err(error)) => {
+            diagnosis.finish(diagnostic_reason(&error));
+            1
+        }
+        Err(_) => {
+            diagnosis.finish(9);
+            1
+        }
+    }
 }
 
 /// Explicit call by the pinned owning driver in a fresh MainMenu. No DllMain
