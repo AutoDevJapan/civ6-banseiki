@@ -280,6 +280,9 @@ extern "system" fn begin(raw: *mut Saved) {
             && inv.caller != bind.manager_return
             && inv.caller != bind.local_manager_return
         {
+            if Instant::now() >= bind.until {
+                h(12).fetch_or(ROOT_CLOSED, Ordering::AcqRel);
+            }
             if acquire(false) {
                 let _release = Release;
                 unknown();
@@ -1308,6 +1311,84 @@ mod tests {
         assert_eq!(h(11).load(Ordering::Acquire), 1);
         assert_eq!(BridgeRootObservationStop(null_mut()), 0);
         assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+    }
+
+    #[test]
+    fn root_expired_unknown_manager_runs_original_without_dirtying_closed_capture() {
+        if !child("root_expired_unknown_manager_runs_original_without_dirtying_closed_capture") {
+            return;
+        }
+        initialize(config(1), 1, 1);
+        assert!(BIND
+            .set(Binding {
+                core: 1,
+                manager_return: 1 + 0x63e1d5,
+                local_manager_return: 1 + 0x63d448,
+                wait_return: 1 + 0x4a1196,
+                until: Instant::now() - Duration::from_secs(1),
+            })
+            .is_ok());
+        h(19).store(3, Ordering::Release);
+        ROOT_TEST_ORIGINALS[1].store(root_probe_manager as *const () as u64, Ordering::Release);
+        let mut data = vec![0u8; 0x500];
+        unsafe {
+            SetLastError(0x1234);
+            root_probe_driver(data.as_mut_ptr(), gateways()[1]);
+        }
+        assert_eq!(
+            u64_at(&data, 0x80),
+            1,
+            "expired capture preserves original call"
+        );
+        assert_eq!(u64_at(&data, 0x90), 0x1234);
+        assert_eq!(u64_at(&data, 0x280), u64_at(&data, 0x88));
+        assert_eq!(
+            h(14).load(Ordering::Acquire),
+            0,
+            "deadline forbids a late unknown counter"
+        );
+        assert_eq!(h(10).load(Ordering::Acquire), 0);
+        assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+        let frozen = bytes();
+        unsafe {
+            root_probe_driver(data.as_mut_ptr(), gateways()[1]);
+        }
+        assert_eq!(u64_at(&data, 0x80), 2);
+        assert_eq!(bytes(), frozen);
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+        let stopped = bytes();
+        unsafe {
+            root_probe_driver(data.as_mut_ptr(), gateways()[1]);
+        }
+        assert_eq!(u64_at(&data, 0x80), 3);
+        assert_eq!(bytes(), stopped);
+    }
+
+    #[test]
+    fn root_unknown_manager_within_budget_records_once_then_stop_freezes_it() {
+        if !child("root_unknown_manager_within_budget_records_once_then_stop_freezes_it") {
+            return;
+        }
+        bind_fixture(1, 1 + 0x63e1d5, 1 + 0x4a1196);
+        ROOT_TEST_ORIGINALS[1].store(root_probe_manager as *const () as u64, Ordering::Release);
+        let mut data = vec![0u8; 0x500];
+        unsafe {
+            root_probe_driver(data.as_mut_ptr(), gateways()[1]);
+        }
+        assert_eq!(u64_at(&data, 0x80), 1);
+        assert_eq!(
+            h(14).load(Ordering::Acquire),
+            1,
+            "unrecognized in-window call is not ignored"
+        );
+        assert_eq!(h(12).load(Ordering::Acquire), 0);
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+        let frozen = bytes();
+        unsafe {
+            root_probe_driver(data.as_mut_ptr(), gateways()[1]);
+        }
+        assert_eq!(u64_at(&data, 0x80), 2);
+        assert_eq!(bytes(), frozen);
     }
     #[test]
     fn root_displaced_shims_preserve_native_rax_inputs_and_output_state() {
