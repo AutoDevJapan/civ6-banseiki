@@ -46,9 +46,9 @@ pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
         h(i).store(v, Ordering::Release);
     }
     h(19).store(1, Ordering::Release);
-    for i in 0..2 {
+    for (i, words) in WORDS.iter().enumerate().take(2) {
         site_row(i)[0].store(site_rvas()[i] as u64, Ordering::Release);
-        site_row(i)[1].store(u64::from_le_bytes(WORDS[i]), Ordering::Release);
+        site_row(i)[1].store(u64::from_le_bytes(*words), Ordering::Release);
     }
 }
 fn commit(index: usize, mut row: [u64; 32]) {

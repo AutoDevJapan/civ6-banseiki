@@ -3010,12 +3010,12 @@ mod tests {
         assert_eq!(h(15).load(Ordering::Acquire), (1 << site) - 1);
         assert!(unsafe { restore_all() }.is_ok());
         assert_eq!(h(17).load(Ordering::Acquire), 3);
-        for i in 0..2 {
+        for (i, hook) in HOOKS.iter().enumerate().take(2) {
             assert_eq!(
                 copy_current::<8>((base + site_rvas()[i]) as u64),
                 Some(submission::WORDS[i])
             );
-            assert!(HOOKS[i].lock().unwrap().is_none());
+            assert!(hook.lock().unwrap().is_none());
         }
     }
     #[test]
