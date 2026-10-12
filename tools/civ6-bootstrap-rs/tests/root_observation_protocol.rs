@@ -32,9 +32,37 @@ fn nested_return() -> Vec<u8> {
         (96, ROOT_CLOSED),
         (120, 7),
         (184, 2),
+        (152, 3),
         (192, 6),
     ] {
         put(&mut bytes, offset, value);
+    }
+    for (i, rva, raw) in [
+        (
+            0,
+            0x63e160,
+            [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9],
+        ),
+        (
+            1,
+            0x4a1150,
+            [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83],
+        ),
+        (
+            2,
+            0x9922c0,
+            [0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83],
+        ),
+    ] {
+        for (field, value) in [
+            (0, rva),
+            (1, u64::from_le_bytes(raw)),
+            (2, u64::from_le_bytes(raw)),
+            (3, 1),
+            (4, 1),
+        ] {
+            put(&mut bytes, 256 + i * 64 + field * 8, value);
+        }
     }
     for (index, kind, edge, invocation, parent, event) in [
         (0, 1, 1, 1, 0, 1),
@@ -185,4 +213,36 @@ fn reservation_order_does_not_replace_event_order_and_seh_is_not_normal_return()
         root_trace(&empty, 23, 29).unwrap()["capture_complete"],
         false
     );
+}
+
+#[test]
+fn complete_nested_rows_need_each_fixed_site_and_successful_installation() {
+    let original = nested_return();
+    assert_eq!(
+        root_trace(&original, 23, 29).unwrap()["capture_complete"],
+        true
+    );
+    for (offset, value) in [
+        (256, 0),
+        (264, 0),
+        (272, 0),
+        (280, 0),
+        (288, 0),
+        (312, 1),
+        (296, 1),
+        (304, 1),
+        (136, 1),
+        (144, 1),
+        (320, 0),
+        (384, 0),
+        (152, 2),
+    ] {
+        let mut bad = original.clone();
+        put(&mut bad, offset, value);
+        assert_eq!(
+            root_trace(&bad, 23, 29).unwrap()["capture_complete"],
+            false,
+            "raw row nesting cannot substitute for missing site evidence at {offset}"
+        );
+    }
 }

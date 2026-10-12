@@ -51,6 +51,37 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let mut rows = Vec::new();
     let mut pairs = std::collections::BTreeMap::new();
     let mut unknown = Vec::new();
+    let site_witnesses = (0..3)
+        .map(|i| {
+            (0..8)
+                .map(|j| word(b, 256 + i * 64 + j * 8))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let expected_sites = [
+        (0x63e160, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9]),
+        (0x4a1150, [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83]),
+        (0x9922c0, [0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83]),
+    ];
+    for (index, ((rva, bytes), witness)) in expected_sites.iter().zip(&site_witnesses).enumerate() {
+        let expected = u64::from_le_bytes(*bytes);
+        if witness[0] != *rva
+            || witness[1] != expected
+            || witness[2] != expected
+            || witness[3] != 1
+            || witness[4] != 1
+            || witness[5] != 0
+            || witness[6] != 0
+            || witness[7] != 0
+        {
+            unknown.push(format!(
+                "site {index} lacks verified fixed bytes/publication"
+            ));
+        }
+    }
+    if word(b, 152)? != 3 {
+        unknown.push("root installation did not complete all three sites".into());
+    }
     let mut events = std::collections::BTreeSet::new();
     for i in 0..next {
         let p = ROOT_HEADER + i * ROOT_ROW;
@@ -166,6 +197,8 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
         && word(b, 112)? == 0
         && word(b, 120)? == 7
         && word(b, 128)? == 0
+        && word(b, 136)? == 0
+        && word(b, 144)? == 0
         && word(b, 176)? == 0
         && unknown.is_empty();
     Ok(
@@ -174,7 +207,7 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
         "reserved_rows":next,"rows":rows,"accepted_calls_stopped":stopped,
         "same_manager_wait_normal_returns":wait_pairs,
         "capture_complete":clean && wait_pairs > 0,"unknown":unknown,
-        "site_witnesses":(0..3).map(|i| (0..8).map(|j| word(b,256+i*64+j*8)).collect::<Result<Vec<_>,_>>()).collect::<Result<Vec<_>,_>>()?,
+        "site_witnesses":site_witnesses,
         "not_established_by_this_capture":["native producer admission seal","pending publication or cancellation",
             "rePush absence","host indirect target and arena join path","all six other domains exited",
             "synchronous4A7AD0/5E2D0 and higher callers exited","world lifetime","runtime activation authority"]}),
