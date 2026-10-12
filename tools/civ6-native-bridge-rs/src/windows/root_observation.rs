@@ -412,16 +412,30 @@ unsafe extern "system" fn unwind(
 static ROOT_CONTINUE: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 // These are actual assembly frames with static unwind tables, not guessed
 // dynamic trampolines. Each displaced instruction executes exactly once.
+// A RIP-relative JMP (ModRM.mod=00) is recognized as an epilogue even though
+// this frame has NOT been released. Use ModRM.mod=01 JMP [rsp+18h] instead.
+// The targets' checked ABI has no caller-home inputs. These call-local home
+// slots preserve RAX while forming the branch; every added instruction is MOV.
 global_asm!(
     ".globl root_world_original",
     ".seh_proc root_world_original",
     "root_world_original:",
     "push rbx",
     ".seh_pushreg rbx",
+    ".globl root_world_original_pushed",
+    "root_world_original_pushed:",
     "sub rsp,0x20",
     ".seh_stackalloc 0x20",
     ".seh_endprologue",
-    "jmp qword ptr [rip+ROOT_CONTINUE]",
+    ".globl root_world_original_body",
+    "root_world_original_body:",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+ROOT_CONTINUE]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    ".globl root_world_original_branch",
+    "root_world_original_branch:",
+    "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
     ".globl root_manager_original",
     ".seh_proc root_manager_original",
@@ -429,7 +443,15 @@ global_asm!(
     "mov [rsp+0x10],rbx",
     ".seh_savereg rbx,0x10",
     ".seh_endprologue",
-    "jmp qword ptr [rip+ROOT_CONTINUE+8]",
+    ".globl root_manager_original_body",
+    "root_manager_original_body:",
+    "mov [rsp+8],rax",
+    "mov rax,[rip+ROOT_CONTINUE+8]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+8]",
+    ".globl root_manager_original_branch",
+    "root_manager_original_branch:",
+    "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
     ".globl root_wait_original",
     ".seh_proc root_wait_original",
@@ -437,7 +459,15 @@ global_asm!(
     "mov [rsp+8],rbx",
     ".seh_savereg rbx,8",
     ".seh_endprologue",
-    "jmp qword ptr [rip+ROOT_CONTINUE+16]",
+    ".globl root_wait_original_body",
+    "root_wait_original_body:",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+ROOT_CONTINUE+16]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    ".globl root_wait_original_branch",
+    "root_wait_original_branch:",
+    "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
 );
 macro_rules! gateway {
@@ -917,11 +947,11 @@ mod tests {
             pointers: *mut c_void,
         ) -> usize;
         fn RtlAddFunctionTable(
-            entries: *const IMAGE_RUNTIME_FUNCTION_ENTRY,
+            entries: *mut IMAGE_RUNTIME_FUNCTION_ENTRY,
             count: u32,
             base: u64,
         ) -> u8;
-        fn RtlDeleteFunctionTable(entries: *const IMAGE_RUNTIME_FUNCTION_ENTRY) -> u8;
+        fn RtlDeleteFunctionTable(entries: *mut IMAGE_RUNTIME_FUNCTION_ENTRY) -> u8;
     }
     fn child(name: &str) -> bool {
         if std::env::var_os("CIV6_ROOT_OWNED_CHILD").is_some() {
@@ -1174,6 +1204,65 @@ mod tests {
         assert_eq!(BridgeRootObservationStop(null_mut()), 0);
         assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
     }
+    #[test]
+    fn root_displaced_shims_preserve_native_rax_inputs_and_output_state() {
+        if !child("root_displaced_shims_preserve_native_rax_inputs_and_output_state") {
+            return;
+        }
+        let ret = root_probe_return as *const () as u64;
+        bind_fixture(1, ret, ret);
+        for (i, body) in [
+            root_probe_world as *const () as usize,
+            root_probe_manager as *const () as usize,
+            root_probe_wait as *const () as usize,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            ROOT_CONTINUE[i].store(
+                (body + if i == 0 { 6 } else { 5 }) as u64,
+                Ordering::Release,
+            );
+            // Unlike the generic state test, this path executes every actual
+            // displaced-prologue shim, including its call-local branch load.
+            let mut original = vec![0u8; 0x500];
+            let mut observed = vec![0u8; 0x500];
+            unsafe {
+                SetLastError(0x1234);
+                root_probe_driver(original.as_mut_ptr(), body);
+            }
+            unsafe {
+                SetLastError(0x1234);
+                root_probe_driver(observed.as_mut_ptr(), gateways()[i]);
+            }
+            assert_eq!(
+                &observed[..48],
+                &original[..48],
+                "native volatile inputs at shim {i}"
+            );
+            assert_eq!(
+                u64_at(&observed, 0),
+                0x11223344,
+                "native RAX input at shim {i}"
+            );
+            assert_eq!(u64_at(&observed, 32), 0xbbcc);
+            assert_eq!(u64_at(&observed, 40), 0xddee);
+            if i != 0 {
+                assert_eq!(
+                    u64_at(&observed, 56),
+                    u64_at(&observed, 0x98),
+                    "MOV-only shim preserves flags"
+                );
+            }
+            assert_eq!(u64_at(&observed, 0x80), 1);
+            assert_eq!(u64_at(&observed, 0x90), 0x1234);
+            assert_eq!(unsafe { GetLastError() }, 0x880);
+            assert_eq!(&observed[0x200..0x238], &original[0x200..0x238]);
+            assert_eq!(&observed[0x300..0x360], &original[0x300..0x360]);
+            assert_eq!(u64_at(&observed, 0x280), u64_at(&observed, 0x88));
+        }
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+    }
     global_asm!(
         ".globl root_unwind_driver",".seh_proc root_unwind_driver","root_unwind_driver:",
         "push rbx",".seh_pushreg rbx","sub rsp,0x80",".seh_stackalloc 0x80",".seh_endprologue",
@@ -1222,32 +1311,99 @@ mod tests {
         }
         unsafe extern "system" {
             fn root_world_gateway_body();
+            fn root_world_original_pushed();
+            fn root_world_original_body();
+            fn root_world_original_branch();
+            fn root_manager_original_body();
+            fn root_manager_original_branch();
+            fn root_wait_original_body();
+            fn root_wait_original_branch();
         }
         let targets = [
             (
                 root_world_gateway_body as *const () as usize,
-                0usize,
                 0x1c8usize,
-                0usize,
+                None,
+                "gateway body",
             ),
-            (root_world_original as *const () as usize, 5, 0x28, 0x20),
-            (root_manager_original as *const () as usize, 5, 0, 0x10),
-            (root_wait_original as *const () as usize, 5, 0, 8),
+            (
+                root_world_original as *const () as usize,
+                0,
+                None,
+                "world entry",
+            ),
+            (
+                root_world_original_pushed as *const () as usize,
+                8,
+                Some(0),
+                "world after push",
+            ),
+            (
+                root_world_original_body as *const () as usize,
+                0x28,
+                Some(0x20),
+                "world body",
+            ),
+            (
+                root_world_original_branch as *const () as usize,
+                0x28,
+                Some(0x20),
+                "world branch",
+            ),
+            (
+                root_manager_original as *const () as usize,
+                0,
+                None,
+                "manager entry",
+            ),
+            (
+                root_manager_original_body as *const () as usize,
+                0,
+                Some(0x10),
+                "manager body",
+            ),
+            (
+                root_manager_original_branch as *const () as usize,
+                0,
+                Some(0x10),
+                "manager branch",
+            ),
+            (
+                root_wait_original as *const () as usize,
+                0,
+                None,
+                "wait entry",
+            ),
+            (
+                root_wait_original_body as *const () as usize,
+                0,
+                Some(8),
+                "wait body",
+            ),
+            (
+                root_wait_original_branch as *const () as usize,
+                0,
+                Some(8),
+                "wait branch",
+            ),
         ];
-        for (address, offset, allocation, saved_rbx) in targets {
+        for (address, allocation, saved_rbx, point) in targets {
             let mut stack = [0u64; 128];
             stack[allocation / 8] = 0x11223344;
-            if saved_rbx != 0 {
+            if let Some(saved_rbx) = saved_rbx {
                 stack[saved_rbx / 8] = 0x55667788;
             }
             let mut base = 0;
-            let entry =
-                unsafe { RtlLookupFunctionEntry((address + offset) as u64, &mut base, null_mut()) };
-            assert!(!entry.is_null());
+            let entry = unsafe { RtlLookupFunctionEntry(address as u64, &mut base, null_mut()) };
+            assert!(!entry.is_null(), "{point}");
             let mut ctx: CONTEXT = unsafe { std::mem::zeroed() };
-            ctx.Rip = (address + offset) as u64;
+            ctx.Rip = address as u64;
             ctx.Rsp = stack.as_mut_ptr() as u64;
-            ctx.Rbx = 0x55667788;
+            ctx.Rbx = if saved_rbx.is_some() {
+                0xaabbccdd
+            } else {
+                0x55667788
+            };
             let mut handler = null_mut();
             let mut frame = 0;
             unsafe {
@@ -1262,9 +1418,24 @@ mod tests {
                     null_mut(),
                 );
             }
-            assert_eq!(ctx.Rip, 0x11223344);
-            assert_eq!(ctx.Rsp, stack.as_mut_ptr() as u64 + allocation as u64 + 8);
-            assert_eq!(ctx.Rbx, 0x55667788);
+            assert_eq!(ctx.Rip, 0x11223344, "{point}: caller RIP");
+            assert_eq!(
+                ctx.Rsp,
+                stack.as_mut_ptr() as u64 + allocation as u64 + 8,
+                "{point}: caller RSP"
+            );
+            assert_eq!(ctx.Rbx, 0x55667788, "{point}: saved RBX restored");
+        }
+        for branch in [
+            root_world_original_branch as *const () as u64,
+            root_manager_original_branch as *const () as u64,
+            root_wait_original_branch as *const () as u64,
+        ] {
+            assert_eq!(
+                copy_current::<4>(branch),
+                Some([0xff, 0x64, 0x24, 0x18]),
+                "stack-relative JMP mod01 must not be replaced by epilogue-like mod00"
+            );
         }
     }
     // Metadata-only functions provide SDK-generated full native unwind tables
@@ -1397,7 +1568,7 @@ mod tests {
                 0
             );
             assert_ne!(
-                unsafe { RtlAddFunctionTable(table.as_ptr(), 3, base as u64) },
+                unsafe { RtlAddFunctionTable(table.as_mut_ptr(), 3, base as u64) },
                 0
             );
             Self { base, table }
@@ -1439,7 +1610,10 @@ mod tests {
     impl Drop for OwnedCore {
         fn drop(&mut self) {
             assert!(unsafe { restore_all() }.is_ok());
-            assert_ne!(unsafe { RtlDeleteFunctionTable(self.table.as_ptr()) }, 0);
+            assert_ne!(
+                unsafe { RtlDeleteFunctionTable(self.table.as_mut_ptr()) },
+                0
+            );
             // The child retains original code too. No late fetched continuation
             // becomes an executable pointer into a freed owned fixture.
         }
