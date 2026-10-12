@@ -623,6 +623,9 @@ macro_rules! gateway {
             restore_flags=sym root_flags_restore,save_flags=sym root_flags_save);
     };
 }
+// Keep the child after gateway!'s textual definition: it reuses this macro,
+// including the exact shared flags helpers and unwind handler.
+mod submission;
 unsafe extern "system" {
     fn root_world_original();
     fn root_manager_original();
