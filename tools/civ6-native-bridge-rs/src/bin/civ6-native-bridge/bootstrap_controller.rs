@@ -56,6 +56,92 @@ fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, Str
         .collect()
 }
 
+// Every actually attempted Prepare gets one diagnostic attempt, including an
+// unknown remote response. The diagnostic cannot manufacture a call result.
+fn prepare_call_with_diagnostic(
+    call: impl FnOnce() -> Result<u32, String>,
+    diagnostic: impl FnOnce(Option<u32>) -> Option<Value>,
+    log: impl FnOnce(Value) -> Result<(), String>,
+) -> Result<u32, String> {
+    let result = call();
+    let status = result.as_ref().ok().copied();
+    let diagnosis = diagnostic(status);
+    let mut row = json!({"type":"bootstrap_prepare","status":status,"runtime_installed":false});
+    if let Err(error) = &result {
+        row["call_result"] = json!("response_unknown");
+        row["call_error"] = json!(error);
+    }
+    if let Some(diagnosis) = diagnosis {
+        row["prepare_diagnostic"] = diagnosis;
+    }
+    let logged = log(row);
+    match result {
+        Err(original) => Err(original),
+        Ok(status) if status != 0 => Ok(status), // original refusal remains primary even if logging fails
+        Ok(status) => {
+            logged?;
+            Ok(status)
+        }
+    }
+}
+fn prepare_diagnostic_sample(
+    status: Option<u32>,
+    pid: u32,
+    created: u64,
+    version: u32,
+    read: impl FnOnce(&mut [u8]) -> (usize, Option<u32>),
+    save: impl FnOnce(&[u8]) -> Result<(), String>,
+) -> Value {
+    let mut bytes = [0u8; 64];
+    let (copied, error) = read(&mut bytes);
+    let prefix = &bytes[..copied.min(bytes.len())];
+    let saved = save(prefix);
+    let words: Vec<u64> = prefix
+        .chunks_exact(8)
+        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .collect();
+    let available = error.is_none() && copied == 64 && saved.is_ok();
+    let valid = available
+        && words[0] == 1
+        && words[1] == 64
+        && status.is_some_and(|s| words[2] == if s == 0 { 2 } else { 3 })
+        && words[5] == u64::from(pid)
+        && words[6] == created
+        && words[7] == u64::from(version);
+    let stage = words.get(3).copied().unwrap_or(0);
+    let reason = words.get(4).copied().unwrap_or(0);
+    let label = match stage {
+        1 => "config/input",
+        2 => "resident ownership",
+        3 => "EXE path identity",
+        4 => "EXE hash",
+        5 => "target Core already loaded",
+        6 => "menu Core path identity",
+        7 => "menu Core hash",
+        8 => "menu context identity",
+        9 => "bridge source hash",
+        10 => "capture exports/type/size/readiness",
+        11 => "bridge module pin",
+        12 => "bootstrap module pin",
+        13 => "release hotpatch prepare",
+        14 => "set hotpatch prepare",
+        15 => "loader hotpatch prepare",
+        16 => "release hotpatch publication",
+        17 => "set hotpatch publication",
+        18 => "loader hotpatch publication",
+        19 => "prepared before GO",
+        _ => "unknown stage",
+    };
+    json!({"schema":"todo880-bootstrap-prepare-diagnostic-v1","valid":valid,"raw":words,
+        "status":if available {"sampled"}else{"diagnostic unavailable"},"call_result_known":status.is_some(),
+        "copied":copied,"read_win32_error":error,"preservation_error":saved.err(),
+        "stage":stage,"stage_name":label,"static_reason_code":reason,
+        "static_reason":match reason {0=>"accepted",1=>"dependency rejected",2=>"input/read unavailable",
+            3=>"source SHA differs",4=>"export absent",5=>"function export type differs",6=>"data export type differs",
+            7=>"exported capture size differs",8=>"capture pointer/span unreadable or foreign",9=>"panic",_=>"unknown"},
+        "meaning":"first Prepare diagnostic only; never replaces an unknown remote response or proves runtime/World authority"})
+}
+
 // Preserve the actual copied prefix, including a failed/partial RPM, before a
 // second attempt. Zero-filled unread bytes must never become captured evidence.
 #[cfg(test)]
@@ -590,85 +676,46 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         };
         let slot = remote_alloc(&game, bytes.len())?;
         write_remote(&game, slot, bytes)?;
-        let status = remote_call(
-            &game,
-            bootstrap.base + prepared[0],
-            slot,
-            "RustBridgeBootstrapPrepare",
-        )?;
-        let diagnosis = diagnostic_address.map(|address| {
-            let mut bytes = [0u8; 64];
-            let mut copied = 0;
-            let ok = unsafe {
-                ReadProcessMemory(
-                    game.0,
-                    address as _,
-                    bytes.as_mut_ptr().cast(),
-                    bytes.len(),
-                    &mut copied,
+        let status = prepare_call_with_diagnostic(
+            || {
+                remote_call(
+                    &game,
+                    bootstrap.base + prepared[0],
+                    slot,
+                    "RustBridgeBootstrapPrepare",
                 )
-            };
-            let error = if ok == 0 {
-                Some(unsafe { windows_sys::Win32::Foundation::GetLastError() })
-            } else {
-                None
-            };
-            let saved = preserve(
-                &req.output,
-                "bootstrap-prepare-diagnostic.bin",
-                &bytes[..copied.min(bytes.len())],
-            );
-            let words: Vec<u64> = bytes[..copied.min(bytes.len())]
-                .chunks_exact(8)
-                .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
-                .collect();
-            let valid = ok != 0
-                && copied == 64
-                && saved.is_ok()
-                && words[0] == 1
-                && words[1] == 64
-                && words[2] == if status == 0 { 2 } else { 3 }
-                && words[5] == u64::from(req.pid)
-                && words[6] == req.created
-                && words[7] == u64::from(prepare_version);
-            let stage = words.get(3).copied().unwrap_or(0);
-            let reason = words.get(4).copied().unwrap_or(0);
-            let label = match stage {
-                1 => "config/input",
-                2 => "resident ownership",
-                3 => "EXE path identity",
-                4 => "EXE hash",
-                5 => "target Core already loaded",
-                6 => "menu Core path identity",
-                7 => "menu Core hash",
-                8 => "menu context identity",
-                9 => "bridge source hash",
-                10 => "capture exports/type/size/readiness",
-                11 => "bridge module pin",
-                12 => "bootstrap module pin",
-                13 => "release hotpatch prepare",
-                14 => "set hotpatch prepare",
-                15 => "loader hotpatch prepare",
-                16 => "release hotpatch publication",
-                17 => "set hotpatch publication",
-                18 => "loader hotpatch publication",
-                19 => "prepared before GO",
-                _ => "unknown stage",
-            };
-            json!({"schema":"todo880-bootstrap-prepare-diagnostic-v1","valid":valid,"raw":words,
-                "copied":copied,"read_win32_error":error,"preservation_error":saved.err(),
-                "stage":stage,"stage_name":label,"static_reason_code":reason,
-                "static_reason":match reason {0=>"accepted",1=>"dependency rejected",2=>"input/read unavailable",
-                    3=>"source SHA differs",4=>"export absent",5=>"function export type differs",6=>"data export type differs",
-                    7=>"exported capture size differs",8=>"capture pointer/span unreadable or foreign",9=>"panic",_=>"unknown"},
-                "meaning":"first Prepare result only; no runtime installation or World authority"})
-        });
-        let mut prepare_row =
-            json!({"type":"bootstrap_prepare","status":status,"runtime_installed":false});
-        if let Some(diagnosis) = diagnosis {
-            prepare_row["prepare_diagnostic"] = diagnosis;
-        }
-        write_json(&mut writer, prepare_row)?;
+            },
+            |status| {
+                diagnostic_address.map(|address| {
+                    prepare_diagnostic_sample(
+                        status,
+                        req.pid,
+                        req.created,
+                        prepare_version,
+                        |bytes| {
+                            let mut copied = 0;
+                            let ok = unsafe {
+                                ReadProcessMemory(
+                                    game.0,
+                                    address as _,
+                                    bytes.as_mut_ptr().cast(),
+                                    bytes.len(),
+                                    &mut copied,
+                                )
+                            };
+                            let error = if ok == 0 {
+                                Some(unsafe { windows_sys::Win32::Foundation::GetLastError() })
+                            } else {
+                                None
+                            };
+                            (copied, error)
+                        },
+                        |bytes| preserve(&req.output, "bootstrap-prepare-diagnostic.bin", bytes),
+                    )
+                })
+            },
+            |row| write_json(&mut writer, row),
+        )?;
         if status != 0 {
             return Err("Prepare refused; no resend".into());
         }
@@ -903,6 +950,227 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    fn prepare_fixture_diagnostic(status: u64) -> [u8; 64] {
+        let mut bytes = [0; 64];
+        for (i, w) in [
+            1,
+            64,
+            status,
+            8,
+            1,
+            23,
+            29,
+            u64::from(wire::SUBMISSION_PREPARE_VERSION),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            bytes[i * 8..i * 8 + 8].copy_from_slice(&w.to_le_bytes());
+        }
+        bytes
+    }
+    #[test]
+    fn bootstrap_prepare_known_and_unknown_call_results_always_sample_once_without_resend() {
+        for original in [
+            Ok(0),
+            Ok(1),
+            Err("UnknownSend: remote callback timeout".to_owned()),
+        ] {
+            let mut calls = 0;
+            let mut reads = 0;
+            let mut saves = 0;
+            let mut logs = Vec::new();
+            let bytes = prepare_fixture_diagnostic(if original == Ok(0) { 2 } else { 3 });
+            let returned = prepare_call_with_diagnostic(
+                || {
+                    calls += 1;
+                    original.clone()
+                },
+                |status| {
+                    Some(prepare_diagnostic_sample(
+                        status,
+                        23,
+                        29,
+                        wire::SUBMISSION_PREPARE_VERSION,
+                        |out| {
+                            reads += 1;
+                            out.copy_from_slice(&bytes);
+                            (64, None)
+                        },
+                        |_| {
+                            saves += 1;
+                            Ok(())
+                        },
+                    ))
+                },
+                |row| {
+                    logs.push(row);
+                    Ok(())
+                },
+            );
+            assert_eq!(returned, original);
+            assert_eq!((calls, reads, saves, logs.len()), (1, 1, 1, 1));
+            let row = &logs[0];
+            if original.is_err() {
+                assert!(row["status"].is_null());
+                assert_eq!(row["call_result"], "response_unknown");
+                assert_eq!(row["prepare_diagnostic"]["valid"], false);
+                assert_eq!(
+                    row["prepare_diagnostic"]["raw"][2], 3,
+                    "raw refusal is not a known call result"
+                );
+            } else {
+                assert_eq!(row["prepare_diagnostic"]["valid"], true);
+            }
+        }
+    }
+    #[test]
+    fn bootstrap_prepare_unknown_send_preserve_and_log_failures_keep_original_error() {
+        let original = "UnknownSend: callback response unavailable";
+        let mut reads = 0;
+        let mut saves = 0;
+        let mut log = None;
+        let bytes = prepare_fixture_diagnostic(2);
+        let returned = prepare_call_with_diagnostic(
+            || Err(original.to_owned()),
+            |status| {
+                Some(prepare_diagnostic_sample(
+                    status,
+                    23,
+                    29,
+                    wire::SUBMISSION_PREPARE_VERSION,
+                    |out| {
+                        reads += 1;
+                        out.copy_from_slice(&bytes);
+                        (64, None)
+                    },
+                    |_| {
+                        saves += 1;
+                        Err("create_new refused existing diagnostic".into())
+                    },
+                ))
+            },
+            |row| {
+                log = Some(row);
+                Err("controller row write failed".into())
+            },
+        );
+        assert_eq!(returned, Err(original.to_owned()));
+        assert_eq!((reads, saves), (1, 1));
+        let row = log.unwrap();
+        assert!(row["status"].is_null());
+        assert_eq!(
+            row["prepare_diagnostic"]["status"],
+            "diagnostic unavailable"
+        );
+        assert_eq!(
+            row["prepare_diagnostic"]["preservation_error"],
+            "create_new refused existing diagnostic"
+        );
+        assert_eq!(
+            row["prepare_diagnostic"]["raw"][2], 2,
+            "raw accepted diagnostic is not callback success"
+        );
+        assert_eq!(row["prepare_diagnostic"]["valid"], false);
+    }
+    #[test]
+    fn bootstrap_prepare_unknown_send_partial_read_preserves_only_actual_prefix() {
+        let mut saved = Vec::new();
+        let mut logs = Vec::new();
+        let mut reads = 0;
+        let returned = prepare_call_with_diagnostic(
+            || Err("original remote timeout".into()),
+            |status| {
+                Some(prepare_diagnostic_sample(
+                    status,
+                    23,
+                    29,
+                    wire::SUBMISSION_PREPARE_VERSION,
+                    |out| {
+                        reads += 1;
+                        out[..10].fill(0xab);
+                        (10, Some(299))
+                    },
+                    |prefix| {
+                        saved.extend_from_slice(prefix);
+                        Ok(())
+                    },
+                ))
+            },
+            |row| {
+                logs.push(row);
+                Ok(())
+            },
+        );
+        assert_eq!(returned, Err("original remote timeout".into()));
+        assert_eq!(reads, 1);
+        assert_eq!(saved, vec![0xab; 10]);
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0]["prepare_diagnostic"]["copied"], 10);
+        assert_eq!(logs[0]["prepare_diagnostic"]["read_win32_error"], 299);
+        assert_eq!(
+            logs[0]["prepare_diagnostic"]["status"],
+            "diagnostic unavailable"
+        );
+    }
+    #[test]
+    fn bootstrap_prepare_refusal_read_or_save_failures_never_replace_native_status() {
+        for failed_read in [false, true] {
+            let mut logs = Vec::new();
+            let mut saves = 0;
+            let returned = prepare_call_with_diagnostic(
+                || Ok(1),
+                |status| {
+                    Some(prepare_diagnostic_sample(
+                        status,
+                        23,
+                        29,
+                        wire::SUBMISSION_PREPARE_VERSION,
+                        |out| {
+                            if failed_read {
+                                (0, Some(299))
+                            } else {
+                                out.copy_from_slice(&prepare_fixture_diagnostic(3));
+                                (64, None)
+                            }
+                        },
+                        |_| {
+                            saves += 1;
+                            Err("diagnostic preservation failed".into())
+                        },
+                    ))
+                },
+                |row| {
+                    logs.push(row);
+                    Err("diagnostic row log failed".into())
+                },
+            );
+            assert_eq!(returned, Ok(1));
+            assert_eq!(saves, 1);
+            assert_eq!(logs[0]["status"], 1);
+            assert_eq!(
+                logs[0]["prepare_diagnostic"]["status"],
+                "diagnostic unavailable"
+            );
+        }
+    }
+    #[test]
+    fn bootstrap_prepare_ordinary_known_result_retains_old_row_shape() {
+        let mut row = None;
+        let returned = prepare_call_with_diagnostic(
+            || Ok(0),
+            |_| None,
+            |v| {
+                row = Some(v);
+                Ok(())
+            },
+        );
+        assert_eq!(returned, Ok(0));
+        assert_eq!(
+            row.unwrap(),
+            json!({"type":"bootstrap_prepare","status":0,"runtime_installed":false})
+        );
+    }
     use super::*;
     #[test]
     fn root_controller_preserves_actual_partial_bytes_and_never_completes_empty() {
