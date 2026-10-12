@@ -158,10 +158,12 @@ pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
-        options.share_mode(1);
+        use windows_sys::Win32::Storage::FileSystem::{FILE_SHARE_READ, FILE_SHARE_WRITE};
+        options.share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE);
     }
-    // Recovery pins a read-only handle. A monitor must be another reader,
-    // rather than requesting write access and mistaking that pin for failure.
+    // This is an observation, not an ownership pin. The tick/acquisition
+    // writer can keep its write handle while checking competitors. Permit
+    // that existing access without requesting write access ourselves.
     let file = match options.open(limit.paths.here.join("civ6.lock")) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(LeaseProbe::Unavailable),
@@ -177,7 +179,13 @@ pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe
     if bytes.len() > 32768 {
         return Err("Civ6 lease record too large".into());
     }
-    let owner: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    // The existing writer saves by truncating and rewriting. A partial JSON
+    // observation cannot clear a known lease deadline or establish ownership;
+    // the caller retries, retaining the deadline and the five-second bound.
+    let owner: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(owner) => owner,
+        Err(_) => return Ok(LeaseProbe::Unavailable),
+    };
     drop(file);
     #[cfg(unix)]
     drop(guard);

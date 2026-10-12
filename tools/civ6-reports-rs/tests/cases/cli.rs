@@ -241,13 +241,16 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
             .unwrap();
     assert!(default.output.is_none());
     assert!(default.repo.is_none());
-    assert_eq!(
-        scenario::default_output().unwrap(),
-        support::root()
-            .canonicalize()
-            .unwrap()
-            .join("tools/civ6-autotest/scenarios/court-arbitration-ai.json")
-    );
+    // An external Cargo target may live inside another checkout. Default
+    // discovery follows the executable, not the compile-time source tree;
+    // scenario_paths tests that precedence with two controlled checkouts.
+    let default_output = scenario::default_output().unwrap();
+    assert!(default_output.ends_with("tools/civ6-autotest/scenarios/court-arbitration-ai.json"));
+    assert!(default_output
+        .parent()
+        .unwrap()
+        .join("japan-15km-200turn-full.json")
+        .is_file());
 }
 
 #[test]

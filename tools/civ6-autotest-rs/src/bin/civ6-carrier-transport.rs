@@ -24,6 +24,10 @@ enum Command {
     GenerateInventoryUi {
         output: PathBuf,
     },
+    GenerateNativeWitness {
+        output: PathBuf,
+        nonce: String,
+    },
     SendQuery {
         checkpoint: PathBuf,
         active_humans: String,
@@ -36,6 +40,10 @@ fn run(args: Args) -> Result<()> {
         Command::GenerateInventory { output } => fs::write(output, transport::inventory_binding())?,
         Command::GenerateInventoryUi { output } => {
             fs::write(output, transport::inventory_ui_binding())?
+        }
+        Command::GenerateNativeWitness { output, nonce } => {
+            let emitted = civ6_autotest_rs::native_carrier_witness::emit(&output, &nonce)?;
+            println!("{}", serde_json::to_string_pretty(&emitted)?);
         }
         Command::SendQuery {
             checkpoint,

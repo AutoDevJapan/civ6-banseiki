@@ -518,6 +518,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-carrier-boundary-load.json",
                 "absorption-flow.json",
                 "absorption-native-custody.json",
+                "absorption-native-carrier-hotseat-save.json",
+                "absorption-native-carrier-witness-hold.json",
                 "absorption-native-deal.json",
                 "absorption-native-product-probe.json",
                 "absorption-native-product-resume.json",
@@ -596,9 +598,13 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         civ6_autotest_rs::scenario::validate_scenario(&value).unwrap();
         let lua = mlua::Lua::new();
         for (index, step) in value["steps"].as_array().unwrap().iter().enumerate() {
-            for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
-                .into_iter()
-                .flatten()
+            for code in [
+                step["code"].as_str(),
+                step["condition"]["code"].as_str(),
+                step["before_begin_lua"]["code"].as_str(),
+            ]
+            .into_iter()
+            .flatten()
             {
                 lua.load(code)
                     .set_name(format!("{name}: step {}", index + 1))

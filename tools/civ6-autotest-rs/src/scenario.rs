@@ -119,6 +119,21 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             Ok(())
         };
+        if let Some(hook) = step.get("before_begin_lua") {
+            if action != "load"
+                || !hook.is_object()
+                || hook["state_name"]
+                    .as_str()
+                    .is_none_or(|s| s.trim().is_empty())
+                || hook["code"].as_str().is_none_or(|s| s.trim().is_empty())
+            {
+                return Err(fail(
+                    "before_begin_lua needs load, state_name and code".into(),
+                ));
+            }
+            crate::tuner::validate_lua_code(hook["code"].as_str().unwrap())
+                .map_err(|e| fail(e.to_string()))?;
+        }
         match action {
             "restart_game"
                 if step

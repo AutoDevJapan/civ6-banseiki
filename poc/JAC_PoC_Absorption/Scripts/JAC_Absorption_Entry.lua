@@ -48,4 +48,8 @@ local function TestCall(id, domain, method, args)
   Game:SetProperty("JAC_ABSORPTION_TEST_RESULT_V1", reply)
 end
 GameEvents.JAC_Absorption_TestCall.Add(TestCall)
+local nativeWitnessNonce=GameConfiguration and GameConfiguration.GetValue and GameConfiguration.GetValue('JAC_NATIVE_CARRIER_WITNESS_NONCE')
+if type(nativeWitnessNonce)=='string' and #nativeWitnessNonce==32 and nativeWitnessNonce:match('^%x+$') then
+  include('JAC_NativeCarrierWitness_GP')
+end
 JAC_AbsorptionEntryLoaded = true

@@ -1,0 +1,384 @@
+{
+  "name": "Native carrier hotseat mid-loan save/load with dedicated existing-original archive seed",
+  "judge_profile": "generic",
+  "session_type": "hotseat",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 240,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer()\n and Game.GetLocalPlayer()==0 and Players[0]:IsHuman() and Players[1]:IsHuman()\n and not Players[2]:IsHuman() and Players[0]:IsTurnActive()\n and Players[0]:GetCities():GetCapitalCity()~=nil and Players[2]:GetCities():GetCapitalCity()~=nil\n and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroReadAPI~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "assert(Game.GetLocalPlayer()==0 and Players[0]:IsTurnActive(),'human0 turn required')\nlocal range=assert(tonumber(GlobalParameters.CITY_MIN_RANGE),'city spacing unavailable')\nlocal site\nfor i=0,Map.GetPlotCount()-1 do\n local q=Map.GetPlotByIndex(i)\n if q:GetOwner()==0 and not q:IsWater() and not q:IsMountain() and not q:IsImpassable()\n  and not q:IsNaturalWonder() and not q:IsCity() and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 then\n  local near=99999\n  for _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n   for _,city in Players[owner]:GetCities():Members() do\n    near=math.min(near,Map.GetPlotDistance(q:GetX(),q:GetY(),city:GetX(),city:GetY()))\n   end\n  end\n  if near>range and (not site or near>site.Distance) then site={X=q:GetX(),Y=q:GetY(),Index=i,Distance=near} end\n end\nend\nassert(site,'fixture preparation incomplete: no valid owned land beyond city spacing')\nExposedMembers.JAC996Site=site\nreturn 'selected owned empty land, nearest city distance '..site.Distance"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nassert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))==nil,'fixture already exists')\n-- Gameplay does not expose the UI Hotseat getters. The immediately preceding\n-- UI readiness check proves Hotseat; recheck the real living roster and reject\n-- network/unknown sessions here before creating any native asset.\nassert(type(GameConfiguration.IsNetworkMultiplayer)=='function'\n and GameConfiguration.IsNetworkMultiplayer()==false,'non-network hotseat required')\nlocal humans=0\nfor _,id in ipairs(PlayerManager.GetAliveIDs()) do\n local player=assert(Players[id])\n if player:IsHuman() then\n  assert((id==0 or id==1) and player:IsAlive(),'unexpected human slot')\n  humans=humans+1\n end\nend\nassert(humans==2 and Players[0]:IsAlive() and Players[1]:IsAlive(),'need two living humans')\nassert(Players[0]:IsHuman() and Players[1]:IsHuman() and not Players[2]:IsHuman(),'need human0/human1/AI2')\nlocal site=assert(ExposedMembers.JAC996Site,'detached UI site absent')\nlocal q=assert(Map.GetPlotByIndex(site.Index))\nassert(q:GetX()==site.X and q:GetY()==site.Y and q:GetOwner()==0 and not q:IsCity()\n and not q:IsWater() and not q:IsMountain() and not q:IsImpassable()\n and q:GetDistrictType()==-1 and q:GetImprovementType()==-1,'selected city plot changed')\nlocal range=assert(tonumber(GlobalParameters.CITY_MIN_RANGE))\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do\n assert(Map.GetPlotDistance(site.X,site.Y,city:GetX(),city:GetY())>range,'selected plot violates city spacing')\nend end\nlocal cities=Players[0]:GetCities();local capital=assert(cities:GetCapitalCity());local n=cities:GetCount()\nlocal source=assert(Players[2]:GetCities():GetCapitalCity())\n-- Stock TunerMapPanel.lua:111-121 uses player:GetCities():Create(x,y).\n-- Do not guess a CityManager.InitCity signature or synthesize a city/slot.\nassert(type(cities.Create)=='function','missing stock native city creation: Cities:Create(x,y)')\ncities:Create(site.X,site.Y)\nlocal target=assert(CityManager.GetCityAt(site.X,site.Y),'native city creation rejected owned land')\nassert(target:GetOwner()==0 and cities:GetCount()==n+1 and target:GetID()~=capital:GetID(),'native noncapital creation failed')\nassert(cities:GetCapitalCity():GetID()==capital:GetID(),'recipient capital changed')\nlocal function identity(c) return {Owner=c:GetOwner(),ID=c:GetID(),X=c:GetX(),Y=c:GetY()} end\nlocal e={Label='DEDICATED_EXISTING_ORIGINAL_ARCHIVE_SEED_NOT_ADMISSION_OR_FLOW',Recipient=0,Donor=2,\n Token='fixture-native-hotseat-996',Source=identity(source),Target=identity(target),Capital=identity(capital),\n FreeCity=assert(PlayerManager.GetFreeCitiesPlayerID()),Fixtures={}}\nGame:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)\nreturn 'created genuine extra recipient city; fixture archive seed is separate from normal admission'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local e=Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996');local c=e and CityManager.GetCityAt(e.Target.X,e.Target.Y);return c and c:GetOwner()==0 and c:GetID()==e.Target.ID"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "-- UI owns district/slot getters; Gameplay receives detached, freshly read observations.\nlocal F={Serial=0}\nExposedMembers.JAC_NativeTempleObservation={}\nlocal function identity(city)\n return {Owner=city:GetOwner(),ID=city:GetID(),X=city:GetX(),Y=city:GetY()}\nend\nlocal function sameCity(city,target)\n return city and city:GetOwner()==target.Owner and city:GetID()==target.ID and city:GetX()==target.X and city:GetY()==target.Y\nend\nlocal holy=assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index\nlocal shrine=assert(GameInfo.Buildings.BUILDING_SHRINE).Index\nlocal temple=assert(GameInfo.Buildings.BUILDING_TEMPLE).Index\nfunction F.Plan(city,label)\n local target=identity(city)\n local site\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==holy and sameCity(district:GetCity(),target) then\n   assert(not site,'multiple Holy Sites for fixture city')\n   site=Map.GetPlot(district:GetX(),district:GetY())\n   assert(district:IsComplete() and not city:GetDistricts():IsPillaged(holy,site:GetIndex()),\n    label..': existing Holy Site is incomplete or pillaged; refusing duplicate construction')\n  end\n end\n if not site then\n  local plots=assert(Map.GetCityPlots():GetPurchasedPlots(city),'fixture purchased plots unavailable')\n  local candidates={}\n  for _,index in pairs(plots) do candidates[#candidates+1]=index end\n  table.sort(candidates)\n  for _,index in ipairs(candidates) do\n   local q=Map.GetPlotByIndex(index)\n   if q:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(q),target)\n    and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n    and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 and not q:IsCity()\n    and not q:IsWater() and not q:IsMountain() and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,label..': no Holy Site or empty plot purchased by this exact city; carrier preparation is incomplete')\n assert(site:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(site),target),\n  label..': Holy Site plot belongs to another city')\n target.Plot=site:GetIndex()\n print('[JAC_NATIVE_TEMPLE_PLAN] fixture='..label..' owner='..target.Owner..' city='..target.ID..' plot='..target.Plot)\n return target\nend\nfunction F.Read(label,token)\n local t=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\n local target=assert(t.Fixtures[label],'unknown temple fixture')\n local city=CityManager.GetCityAt(target.X,target.Y)\n assert(sameCity(city,target),label..': fixture city identity changed')\n local q=assert(Map.GetPlotByIndex(target.Plot))\n assert(q:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(q),target),\n  label..': fixture plot purchase city changed')\n local complete=false\n local present=false\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==holy and Map.GetPlot(district:GetX(),district:GetY()):GetIndex()==target.Plot then\n   assert(sameCity(district:GetCity(),target),label..': Holy Site belongs to another city')\n   assert(q:GetDistrictType()==holy,label..': district/plot type mismatch')\n   present=true\n   complete=district:IsComplete() and not city:GetDistricts():IsPillaged(holy,target.Plot)\n  end\n end\n local buildings=city:GetBuildings()\n local at={}\n for _,kind in ipairs(buildings:GetBuildingsAtLocation(target.Plot)) do\n  local row=assert(GameInfo.Buildings[kind],'unknown fixture building')\n  at[row.Index]=true\n end\n local function built(index)\n  return buildings:HasBuilding(index) and at[index]==true and not buildings:IsPillaged(index)\n end\n local shrineReady=complete and built(shrine)\n local templeReady=shrineReady and built(temple)\n local count,slotType,slotValue\n if templeReady then\n  count=buildings:GetNumGreatWorkSlots(temple)\n  if count==1 then\n   slotType=assert(GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(temple,0)]).GreatWorkSlotType\n   slotValue=buildings:GetGreatWorkInSlot(temple,0)\n  end\n  assert(count==1 and slotType=='GREATWORKSLOT_RELIC',label..': completed Temple lacks exact stock relic slot 0')\n end\n F.Serial=F.Serial+1\n local observed={Token=token,Read=F.Serial,Owner=target.Owner,ID=target.ID,X=target.X,Y=target.Y,Plot=target.Plot,\n  Holy=complete,Shrine=shrineReady,Temple=templeReady,HolyPresent=present,\n  ShrinePresent=buildings:HasBuilding(shrine),TemplePresent=buildings:HasBuilding(temple),\n  SlotCount=count,SlotType=slotType,SlotValue=slotValue}\n ExposedMembers.JAC_NativeTempleObservation[label]=observed\n return observed\nend\nfunction F.Observe(label,stage)\n return F.Read(label,label..':'..stage)\nend\nfunction F.Ready(label,stage)\n local target=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')).Fixtures[label]\n local request=assert(target.Request,label..': temple stage not requested')\n assert(request.Stage==stage,label..': wrong temple publication stage')\n local r=F.Read(label,request.Token)\n assert(r.Token==request.Token and r.Read>request.Read,label..': stale temple observation')\n if not r[stage] then return false end\n print('[JAC_NATIVE_TEMPLE_READY] fixture='..label..' stage='..stage..' token='..r.Token..' read='..r.Read..' city='..r.ID..' plot='..r.Plot)\n return true\nend\nExposedMembers.JAC_NativeTempleFixture=F\nlocal e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal target=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))\nassert(target:GetOwner()==0 and target:GetID()==e.Target.ID,'fresh native city not published')\nExposedMembers.JAC996TemplePlan=F.Plan(target,'carrier')\nreturn 'planned stock Temple on a plot purchased by the exact extra recipient city'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))\nlocal plan=assert(ExposedMembers.JAC996TemplePlan)\nlocal c=assert(CityManager.GetCityAt(plan.X,plan.Y))\nassert(c:GetOwner()==0 and c:GetID()==e.Target.ID and plan.ID==e.Target.ID,'detached Temple plan changed')\ne.Fixtures.carrier=A.Rules.Copy(plan)\n-- Use the existing registered governance property to make restoration non-vacuous.\nassert(c:GetProperty(A.Rules.GOVERNANCE_KEY)==nil,'fresh city has unexpected governance')\nc:SetProperty(A.Rules.GOVERNANCE_KEY,{ID='fixture-native-hotseat-996',From=2,To=0,FrictionPerTurn=0,\n Fixture='DEDICATED_ARCHIVE_SEED',Nested={Original=true,Value=996}})\nGame:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)\nreturn 'persisted detached stock Temple plan and registered city property sentinel'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "-- Mutations run in Gameplay; never enumerate UI-only city district members here.\nlocal function requestTemple(label,stage)\n local t=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))\n local target=assert(t.Fixtures[label])\n local token=label..':'..stage\n local r=assert(ExposedMembers.JAC_NativeTempleObservation[label],label..': UI temple observation missing')\n assert(r.Token==token and r.Owner==target.Owner and r.ID==target.ID and r.X==target.X and r.Y==target.Y and r.Plot==target.Plot,\n  label..': mismatched temple observation')\n assert(type(r.Read)=='number' and (not target.Request or r.Read>target.Request.Read),label..': stale UI temple observation')\n assert(not target.Request or target.Request.Stage~=stage,label..': duplicate temple request')\n assert(stage=='Holy' or stage=='Shrine' or stage=='Temple','unknown temple stage')\n if stage~='Holy' then assert(r.Holy,label..': completed exact-city Holy Site not published') end\n if stage=='Temple' then assert(r.Shrine,label..': completed shrine not published') end\n local city=assert(CityManager.GetCityAt(target.X,target.Y))\n assert(city:GetOwner()==target.Owner and city:GetID()==target.ID,label..': Gameplay city identity changed')\n assert(r[stage] or not r[stage..'Present'],\n  label..': existing '..stage..' is incomplete, pillaged, or in another plot; refusing duplicate construction')\n target.Request={Stage=stage,Token=token,Read=r.Read}\n Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',t)\n if not r[stage] then\n  local queue=city:GetBuildQueue()\n  local ok,value=pcall(function()\n   if stage=='Holy' then\n    queue:CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index,target.Plot,100)\n   else\n    local kind=stage=='Shrine' and 'BUILDING_SHRINE' or 'BUILDING_TEMPLE'\n    queue:CreateIncompleteBuilding(assert(GameInfo.Buildings[kind]).Index,target.Plot,100)\n   end\n  end)\n  assert(ok,label..':'..stage..' request failed: '..tostring(value))\n end\n print('[JAC_NATIVE_TEMPLE_REQUEST] fixture='..label..' stage='..stage..' token='..token..' beforeRead='..r.Read..' city='..target.ID..' plot='..target.Plot..' alreadyComplete='..tostring(r[stage]))\n return 'requested '..label..' '..stage..'; fresh UI publication required'\nend\nExposedMembers.JAC_NativeTempleRequest=requestTemple"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','Holy');return 'observed carrier Holy city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Holy')"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Holy')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','Shrine');return 'observed carrier Shrine city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Shrine')"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Shrine')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','Temple');return 'observed carrier Temple city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "return assert(ExposedMembers.JAC_NativeTempleRequest)('carrier','Temple')"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeTempleFixture).Ready('carrier','Temple')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeTempleFixture).Observe('carrier','grant');assert(r.Temple and r.SlotValue==-1,'stock Temple not empty');return 'fresh empty stock Temple published'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption)\nlocal e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal c=assert(CityManager.GetCityAt(e.Source.X,e.Source.Y));local palace=assert(GameInfo.Buildings.BUILDING_PALACE).Index\nassert(c:GetOwner()==2 and c:GetID()==e.Source.ID and Players[2]:GetCities():GetCapitalCity():GetID()==c:GetID(),'AI source capital changed')\nlocal b=c:GetBuildings()\nassert(b:HasBuilding(palace) and b:GetNumGreatWorkSlots(palace)==1 and b:GetGreatWorkInSlot(palace,0)==-1,'AI Palace is not empty')\nlocal before={}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do for _,city in Players[owner]:GetCities():Members() do\n local buildings=city:GetBuildings()\n for row in GameInfo.Buildings() do if buildings:HasBuilding(row.Index) then\n  for slot=0,buildings:GetNumGreatWorkSlots(row.Index)-1 do\n   local index=buildings:GetGreatWorkInSlot(row.Index,slot);if index>=0 then before[index]=true end\n  end\n end end\nend end\nExposedMembers.JAC996GrantPlan={Before=before,Palace=palace,Owner=2,City=c:GetID(),X=c:GetX(),Y=c:GetY()}\nlocal target=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))\nlocal temple=assert(GameInfo.Buildings.BUILDING_TEMPLE).Index\nExposedMembers.JAC996CityBefore=A.ReadNativeCarrier(target,{Building=temple,Slot=0,X=e.Target.X,Y=e.Target.Y,Owner=0})\nassert(ExposedMembers.JAC996CityBefore.Work==-1,'fresh recipient Temple occupied')\nlocal cap=assert(Players[0]:GetCities():GetCapitalCity())\nlocal count=0\nfor _,s in ipairs(assert(ExposedMembers.JAC_HeroReadAPI).FindCompatibleNativeSlots(0,'GREATWORKOBJECT_RELIC')) do\n if s.City~=cap:GetID() then\n  assert(s.City==e.Target.ID and s.Building==temple and s.Slot==0,'another recipient noncapital slot would bypass the fixture city')\n  count=count+1\n end\nend\nassert(count==1,'exactly one eligible noncapital stock relic destination required')\nlocal units={};local keys=A.GetPropertyKeys()\nfor _,u in Players[0]:GetUnits():Members() do\n units[u:GetID()]={Owner=u:GetOwner(),ID=u:GetID(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),\n  Name=u:GetName(),Damage=u:GetDamage(),Moves=u:GetMovesRemaining(),BuildCharges=u:GetBuildCharges(),\n  Person=u:GetProperty(keys.PERSON_KEY),Token=u:GetProperty(keys.TOKEN_KEY)}\nend\nExposedMembers.JAC996RecipientUnits=units\nreturn 'observed empty AI Palace and sole eligible recipient noncapital Temple'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))\nlocal p=assert(ExposedMembers.JAC996GrantPlan);local c=assert(CityManager.GetCityAt(p.X,p.Y))\nlocal r=assert(ExposedMembers.JAC_NativeTempleObservation.carrier);local req=assert(e.Fixtures.carrier.Request)\nassert(req.Stage=='Temple' and r.Token=='carrier:grant' and r.Read>req.Read and r.Temple and r.SlotValue==-1,'fresh stock Temple publication missing')\nassert(p.Owner==2 and c:GetOwner()==2 and c:GetID()==e.Source.ID and p.City==e.Source.ID,'Palace grant plan changed')\nassert(not e.GrantIssued,'official modifier may be used exactly once')\ne.GrantIssued=true;e.Before=A.Rules.Copy(p.Before);e.Palace=p.Palace;e.CityBefore=A.Rules.Copy(assert(ExposedMembers.JAC996CityBefore))\ne.RecipientUnits=A.Rules.Copy(assert(ExposedMembers.JAC996RecipientUnits))\nGame:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)\nPlayers[2]:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')\nreturn 'issued exactly one official relic grant to AI2, without creating any Great Work'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal source=assert(CityManager.GetCityAt(e.Source.X,e.Source.Y))\nassert(source:GetOwner()==2 and source:GetID()==e.Source.ID,'source capital changed before original observation')\nlocal index=source:GetBuildings():GetGreatWorkInSlot(e.Palace,0)\nif index==-1 then return false end\nassert(type(index)=='number' and index>=0 and not e.Before[index],'official grant did not produce a fresh actual index')\nlocal found=A.ReadNativeLocations(index)\nassert(#found==1,'new original index is missing or duplicated in actual world')\nlocal w=found[1]\nassert(w.Owner==2 and w.CityID==e.Source.ID and w.X==e.Source.X and w.Y==e.Source.Y\n and w.Building==e.Palace and w.BuildingType=='BUILDING_PALACE' and w.Slot==0,'new original did not occupy AI Palace')\nassert(w.ObjectType=='GREATWORKOBJECT_RELIC','official grant is not a relic')\nfor _,key in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do\n assert(w[key]~=nil,'actual original metadata missing: '..key)\nend\nExposedMembers.JAC996Original=w\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_HeroKeys",
+      "code": "assert(JAC996BorrowObserver==nil,'borrow observer already armed')\nlocal original=assert(JAC_ObserveNativeCarrierMP,'product MP observer missing in HeroKeys UI context')\nJAC996BorrowObserver=original\nJAC_ObserveNativeCarrierMP=function(c)\n if c and c.MP and c.MP.Recovery=='fixture-native-hotseat-996' and c.MP.Phase=='BORROWED' then return false end\n return original(c)\nend\nreturn 'transient HeroKeys observer stops only this fixture at BORROWED; load removes wrapper'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local R=A.Rules\nlocal e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))\nlocal original=assert(ExposedMembers.JAC996Original,'actual original UI observation absent')\nassert(e.GrantIssued and original.Owner==2 and original.CityID==e.Source.ID and not e.Before[original.Index],'fixture original changed')\ne.Original=R.Copy(original);e.AssetID='native-work:'..original.Index\nlocal s=A.GetState();assert(not s.Archive[e.AssetID] and not s.Recoveries[e.Token],'fixture identity already admitted')\n-- Dedicated fixture archive seed of an EXISTING native original. This is not\n-- normal admission, a scatter outcome, or evidence that full Flow succeeded.\ns.Archive[e.AssetID]={ID=e.AssetID,Kind='ITEM',Owner=-1,NativeOwnerMoves=0,NativeWork=R.Copy(original),\n FixtureSeed=e.Label}\nGame:SetProperty(R.STATE_KEY,s);Game:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)\nlocal r=A.RecoverArchived(e.AssetID,0,e.Token)\nassert(r.Status=='WAITING_UI' and r.ObservationToken==e.Token..':inventory','public recovery did not request synchronized NativeInventory')\nassert(not A.GetState().Recoveries[e.Token] or not A.GetState().Recoveries[e.Token].NativeCarrier,'initial inventory bypassed synchronized publication')\nreturn 'public RecoverArchived waiting for product NativeInventory; no Gameplay UI fallback'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal r=A.GetState().Recoveries[e.Token];local c=r and r.NativeCarrier;local m=c and c.MP\nif not m or m.Phase~='BORROWED' then return false end\nassert(r.Status=='WAITING_UI' and m.Actor==0 and m.MoveOwner==2 and m.SourceOwnerMove==true,'wrong MP recovery actor or MOVE owner')\nassert(c.Index==e.Original.Index and #m.Loans==2 and not m.Claimed and not c.MoveToken,'MOVE was claimed before mid-loan save')\nlocal l=m.Loans[2];local target=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))\nassert(l.Owner==0 and l.ID==e.Target.ID and l.X==e.Target.X and l.Y==e.Target.Y and l.Issued==true\n and l.BorrowedID==target:GetID() and target:GetOwner()==2 and not l.ReturnIssued,'actual destination city not borrowed to AI2')\nlocal source=assert(CityManager.GetCityAt(e.Source.X,e.Source.Y));local first=m.Loans[1]\nassert(source:GetOwner()==2 and source:GetID()==e.Source.ID and first.Owner==2 and not first.Issued\n and Players[2]:GetCities():GetCapitalCity():GetID()==e.Source.ID,'AI source capital was borrowed or replaced')\nassert(source:GetBuildings():GetGreatWorkInSlot(e.Palace,e.Original.Slot)==e.Original.Index,'original left Palace before mid-loan save')\nlocal cap=assert(Players[0]:GetCities():GetCapitalCity())\nassert(cap:GetID()==e.Capital.ID and cap:GetX()==e.Capital.X and cap:GetY()==e.Capital.Y,'recipient source capital lost')\nExposedMembers.JAC996Borrowed={Owner=target:GetOwner(),ID=target:GetID(),Token=c.Token,Nonce=m.Nonce,\n SourceID=source:GetID(),TargetOriginalID=l.ID,Phase=m.Phase}\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))\nlocal b=assert(ExposedMembers.JAC996Borrowed,'fresh actual borrowed observation absent')\nlocal r=assert(A.GetState().Recoveries[e.Token]);local m=assert(r.NativeCarrier.MP)\nlocal city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))\nassert(m.Phase=='BORROWED' and b.Phase==m.Phase and b.Nonce==m.Nonce and city:GetOwner()==b.Owner\n and city:GetID()==b.ID and b.Owner==2 and not m.Claimed,'borrowed checkpoint changed')\ne.Borrowed=A.Rules.Copy(b)\nGame:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)\nreturn A.Canonical({Borrowed=e.Borrowed,Recovery=r})"
+    },
+    {
+      "action": "save",
+      "name": "JAC-native-hotseat-996-borrowed",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-native-hotseat-996-borrowed",
+      "timeout": 600,
+      "before_begin_lua": {
+        "state_name": "JAC_Absorption_HeroKeys",
+        "code": "assert(JAC996BorrowObserver==nil,'transient borrow wrapper survived actual load')\nassert(type(JAC_ObserveNativeCarrierMP)=='function','unmodified product observer absent after load')\nlocal e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal r=assert(ExposedMembers.JAC_Absorption.GetState().Recoveries[e.Token]);local m=assert(r.NativeCarrier.MP)\n-- The load-step hook runs before Begin Game publishes LoadScreenClose or\n-- accepts the HotseatStartTurn. Keep the phase guard as a real-engine check.\nassert(m.Phase=='BORROWED' or m.Phase=='READY',\n 'native MOVE observation unavailable: load advanced to '..tostring(m.Phase)..' before event hook; driver pre-publication hook required')\nassert(not m.Claimed and e.Borrowed.Phase=='BORROWED','loaded checkpoint was already dispatched')\nlocal events={};local diagnostics={}\nExposedMembers.JAC996MoveEventDiagnostics=diagnostics\nlocal expectedWork=assert(tonumber(e.Original.Index),'original native work index missing')\nassert(expectedWork>=0 and expectedWork==math.floor(expectedWork),'invalid original native work index')\nlocal targetBuilding=assert(m.Loans[2]).Building\nlocal function moved(fromOwner,fromCity,toOwner,toCity,building,workIndex)\n local row={fromOwner,fromCity,toOwner,toCity,building,workIndex}\n if #diagnostics<32 then\n  diagnostics[#diagnostics+1]=row\n  print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT_RAW] args='..ExposedMembers.JAC_Absorption.Canonical(row))\n end\n -- GreatWorksOverview.lua:1045 names its sixth argument greatWorkType, but\n -- live14 reports the original instance index (0), not the catalogue index.\n -- Exact source/target and instance are required; later world checks retain\n -- the original type, provenance and uniqueness checks independently.\n if fromOwner~=2 or fromCity~=e.Source.ID or toOwner~=2 or toCity~=e.Borrowed.ID\n  or building~=targetBuilding or workIndex~=expectedWork then return end\n events[#events+1]={Turn=Game.GetCurrentGameTurn(),Arguments=row}\n print('[JAC_NATIVE_HOTSEAT_MOVE_EVENT] count='..#events..' args='..ExposedMembers.JAC_Absorption.Canonical(row))\nend\nassert(Events.GreatWorkMoved and Events.GreatWorkMoved.Add,'native GreatWorkMoved event unavailable')\nEvents.GreatWorkMoved.Add(moved)\nExposedMembers.JAC996MoveEvents=events\nJAC996StopMoves=function() Events.GreatWorkMoved.Remove(moved) end\nreturn true"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal r=A.GetState().Recoveries[e.Token];local c=r and r.NativeCarrier;local m=c and c.MP\nif not m or m.Phase~='DONE' then return false end\nlocal city=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y));local l=assert(m.Loans[2])\nassert(c.Phase=='PROVED' and l.ReturnIssued and l.RestoredCore and city:GetOwner()==0 and city:GetID()==l.FinalID,'actual borrowed city not returned and restored')\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(JAC_AbsorptionGameplay.Rules.Copy(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996')))\nlocal before=assert(A.GetState().Recoveries[e.Token]);assert(before.NativeCarrier.MP.Phase=='DONE','unmodified executor did not finish')\nlocal events=assert(ExposedMembers.JAC996MoveEvents,'native MOVE event observer absent')\nassert(#events==1,'expected exactly one real native GreatWorkMoved event, observed '..#events)\ne.NativeMoveEvents=A.Rules.Copy(events);e.NativeMoveCount=#events\nGame:SetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996',e)\n-- Finalize the public recovery after automatic MP executor completion.\n-- No direct MP.Advance, TransferCity, MOVE request, or record patching.\nlocal r=A.RecoverArchived(e.AssetID,0,e.Token)\nassert(r.Status=='COMPLETE' and r.NativePhysicalMoved and r.NativeMoveEvidenceKind=='SYNCHRONIZED_ACTOR_OBSERVATION','public native recovery incomplete')\nreturn 'public recovery complete, with one observed native move event'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_HeroKeys",
+      "code": "assert(JAC996StopMoves)();JAC996StopMoves=nil;return 'removed fixture native event observer'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal function equal(a,b) return A.Canonical(a)==A.Canonical(b) end\nlocal state=A.GetState();local r=assert(state.Recoveries[e.Token]);local c=assert(r.NativeCarrier);local m=assert(c.MP)\nassert(e.Label=='DEDICATED_EXISTING_ORIGINAL_ARCHIVE_SEED_NOT_ADMISSION_OR_FLOW','fixture seed label missing')\nassert(e.NativeMoveCount==1 and #e.NativeMoveEvents==1,'native event count must equal one')\nassert(r.Status=='COMPLETE' and r.NativePhysicalMoved and not r.NativeAlreadyOwned\n and r.NativeMoveEvidenceKind=='SYNCHRONIZED_ACTOR_OBSERVATION','missing native MOVE recovery proof')\nassert(c.Phase=='PROVED' and m.Phase=='DONE' and m.Actor==0 and m.MoveOwner==2 and m.SourceOwnerMove\n and m.Claimed and type(m.ClaimNonce)=='number' and type(m.DispatchSession)=='string' and type(c.MoveToken)=='string'\n and not m.AbortReason and (m.AbortCycles or 0)==0,'expected one successful product dispatch claim')\nlocal moved=assert(m.ReportedMovedObservation);local final=assert(m.FinalActorObservation)\nassert(#moved.Locations==1 and moved.Locations[1].Index==e.Original.Index and moved.Locations[1].Owner==2,'missing synchronized borrowed MOVE evidence')\nassert(#final.Locations==1 and final.Locations[1].Index==e.Original.Index and final.Locations[1].Owner==0,'missing synchronized final world uniqueness evidence')\nlocal l=assert(m.Loans[2]);local target=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))\nassert(l.Owner==0 and l.ID==e.Target.ID and l.BorrowedID==e.Borrowed.ID and l.Issued and l.ReturnIssued\n and l.FinalID==target:GetID() and l.RestoredCore and target:GetOwner()==0,'loan identities do not match actual saved/returned city')\nlocal source=assert(CityManager.GetCityAt(e.Source.X,e.Source.Y));local cap=assert(Players[2]:GetCities():GetCapitalCity())\nassert(source:GetOwner()==2 and source:GetID()==e.Source.ID and cap:GetID()==e.Source.ID and not m.Loans[1].Issued,'original AI capital was not retained')\nassert(source:GetBuildings():GetGreatWorkInSlot(e.Palace,e.Original.Slot)==-1,'original Palace slot was reused')\nlocal recipientCap=assert(Players[0]:GetCities():GetCapitalCity())\nassert(recipientCap:GetID()==e.Capital.ID and recipientCap:GetX()==e.Capital.X and recipientCap:GetY()==e.Capital.Y,'recipient capital changed')\nlocal found=A.ReadNativeLocations(e.Original.Index)\nassert(#found==1,'actual original duplicated or missing in current world')\nlocal w=found[1]\nassert(w.Owner==0 and w.CityID==target:GetID() and w.X==e.Target.X and w.Y==e.Target.Y\n and w.Building==l.Building and w.Slot==l.Slot and w.BuildingType=='BUILDING_TEMPLE','actual original missed returned native Temple')\nfor _,key in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do\n assert(equal(w[key],e.Original[key]),'original provenance/effects changed: '..key)\nend\nlocal record=assert(A.GetRoster(0)[e.AssetID])\nassert(record.RecoveryToken==e.Token and record.NativeOwnerMoves==1 and record.FixtureSeed==e.Label,'recovery roster differs from fixture original')\nassert(equal(record.NativeWork,w) and record.NativeCustody.Owner==0 and record.NativeCustody.City==target:GetID()\n and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'roster differs from actual world')\nlocal after=A.ReadNativeCarrier(target,l)\nassert(after.Work==e.Original.Index and equal(after.State,e.CityBefore.State)\n and equal(after.Properties,e.CityBefore.Properties),'recipient city assets, religion, properties, units or purchased plots changed')\nassert(equal(l.CoreBefore.Properties,l.RestoredCore.Properties) and equal(l.CoreBefore.UnitsOnCenter,l.RestoredCore.UnitsOnCenter),'trusted Core properties/units not preserved')\nassert(equal(l.ActorBefore.State,after.State),'actual city differs from saved actor baseline')\nlocal units={};local keys=A.GetPropertyKeys()\nfor _,u in Players[0]:GetUnits():Members() do\n units[u:GetID()]={Owner=u:GetOwner(),ID=u:GetID(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),\n  Name=u:GetName(),Damage=u:GetDamage(),Moves=u:GetMovesRemaining(),BuildCharges=u:GetBuildCharges(),\n  Person=u:GetProperty(keys.PERSON_KEY),Token=u:GetProperty(keys.TOKEN_KEY)}\nend\nassert(equal(units,e.RecipientUnits),'recipient native units changed during the saved city loan')\nprint('[JAC_NATIVE_HOTSEAT_SAVE_PROOF] index='..w.Index..' moves='..e.NativeMoveCount..' borrowedID='..l.BorrowedID..' returnedID='..l.FinalID)\nreturn 'actual original recovered once; native city returned with provenance and world uniqueness'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal world={};local rosters={};local owners={};local seen={}\nfor _,id in ipairs(PlayerManager.GetAliveIDs()) do if not seen[id] then owners[#owners+1]=id;seen[id]=true end end\nif not seen[e.FreeCity] then owners[#owners+1]=e.FreeCity end;table.sort(owners)\nfor _,owner in ipairs(owners) do\n local p=assert(Players[owner]);local cities={};local units={};rosters[owner]=A.GetRoster(owner)\n for _,city in p:GetCities():Members() do\n  local b=city:GetBuildings();local buildings={}\n  for row in GameInfo.Buildings() do if b:HasBuilding(row.Index) then\n   local works={};for slot=0,b:GetNumGreatWorkSlots(row.Index)-1 do works[slot]=b:GetGreatWorkInSlot(row.Index,slot) end\n   buildings[row.BuildingType]={Pillaged=b:IsPillaged(row.Index),Works=works}\n  end end\n  local plots={}\n  for _,index in pairs(assert(Map.GetCityPlots():GetPurchasedPlots(city))) do\n   local q=assert(Map.GetPlotByIndex(index));local buyer=assert(Cities.GetPlotPurchaseCity(q))\n   plots[#plots+1]={Index=index,Owner=q:GetOwner(),City=buyer:GetID(),X=buyer:GetX(),Y=buyer:GetY(),\n    District=q:GetDistrictType(),Improvement=q:GetImprovementType(),Terrain=q:GetTerrainType()}\n  end\n  table.sort(plots,function(a,b) return a.Index<b.Index end)\n  local religions={};for _,row in pairs(city:GetReligion():GetReligionsInCity()) do religions[tostring(row.Religion)]=row.Followers end\n  cities[city:GetID()]={Owner=city:GetOwner(),ID=city:GetID(),X=city:GetX(),Y=city:GetY(),Name=city:GetName(),\n   Population=city:GetPopulation(),Buildings=buildings,PurchasedPlots=plots,Religions=religions,\n   Loyalty=city:GetCulturalIdentity():GetLoyalty(),Faith=city:GetProperty('JAC_ABSORPTION_CITY_FAITH_V1'),\n   Governance=city:GetProperty('JAC_ABSORPTION_GOVERNANCE_V1')}\n end\n for _,u in p:GetUnits():Members() do\n  units[u:GetID()]={Owner=u:GetOwner(),ID=u:GetID(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),\n   Name=u:GetName(),Damage=u:GetDamage(),Moves=u:GetMovesRemaining(),BuildCharges=u:GetBuildCharges()}\n end\n local cap=p:GetCities():GetCapitalCity()\n world[owner]={Capital=cap and cap:GetID(),Cities=cities,Units=units}\nend\nreturn A.Canonical({Ledger=A.GetState(),Rosters=rosters,\n NativeInventory=Game:GetProperty('JAC_NATIVE_INVENTORY_V1'),Boundary=Game:GetProperty('JAC_CARRIER_BOUNDARY_V1'),\n Fixture=e,World=world,OriginalLocations=A.ReadNativeLocations(e.Original.Index)})",
+      "capture_as": "NATIVE_HOTSEAT_COMPLETE_LEDGER_WORLD"
+    },
+    {
+      "action": "save",
+      "name": "JAC-native-hotseat-996-complete",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-native-hotseat-996-complete",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer()\n and Game.GetLocalPlayer()==0 and Players[0]:IsHuman() and Players[1]:IsHuman()\n and not Players[2]:IsHuman() and Players[0]:IsTurnActive()\n and Players[0]:GetCities():GetCapitalCity()~=nil and Players[2]:GetCities():GetCapitalCity()~=nil\n and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroReadAPI~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal function equal(a,b) return A.Canonical(a)==A.Canonical(b) end\nlocal state=A.GetState();local r=assert(state.Recoveries[e.Token]);local c=assert(r.NativeCarrier);local m=assert(c.MP)\nassert(e.Label=='DEDICATED_EXISTING_ORIGINAL_ARCHIVE_SEED_NOT_ADMISSION_OR_FLOW','fixture seed label missing')\nassert(e.NativeMoveCount==1 and #e.NativeMoveEvents==1,'native event count must equal one')\nassert(r.Status=='COMPLETE' and r.NativePhysicalMoved and not r.NativeAlreadyOwned\n and r.NativeMoveEvidenceKind=='SYNCHRONIZED_ACTOR_OBSERVATION','missing native MOVE recovery proof')\nassert(c.Phase=='PROVED' and m.Phase=='DONE' and m.Actor==0 and m.MoveOwner==2 and m.SourceOwnerMove\n and m.Claimed and type(m.ClaimNonce)=='number' and type(m.DispatchSession)=='string' and type(c.MoveToken)=='string'\n and not m.AbortReason and (m.AbortCycles or 0)==0,'expected one successful product dispatch claim')\nlocal moved=assert(m.ReportedMovedObservation);local final=assert(m.FinalActorObservation)\nassert(#moved.Locations==1 and moved.Locations[1].Index==e.Original.Index and moved.Locations[1].Owner==2,'missing synchronized borrowed MOVE evidence')\nassert(#final.Locations==1 and final.Locations[1].Index==e.Original.Index and final.Locations[1].Owner==0,'missing synchronized final world uniqueness evidence')\nlocal l=assert(m.Loans[2]);local target=assert(CityManager.GetCityAt(e.Target.X,e.Target.Y))\nassert(l.Owner==0 and l.ID==e.Target.ID and l.BorrowedID==e.Borrowed.ID and l.Issued and l.ReturnIssued\n and l.FinalID==target:GetID() and l.RestoredCore and target:GetOwner()==0,'loan identities do not match actual saved/returned city')\nlocal source=assert(CityManager.GetCityAt(e.Source.X,e.Source.Y));local cap=assert(Players[2]:GetCities():GetCapitalCity())\nassert(source:GetOwner()==2 and source:GetID()==e.Source.ID and cap:GetID()==e.Source.ID and not m.Loans[1].Issued,'original AI capital was not retained')\nassert(source:GetBuildings():GetGreatWorkInSlot(e.Palace,e.Original.Slot)==-1,'original Palace slot was reused')\nlocal recipientCap=assert(Players[0]:GetCities():GetCapitalCity())\nassert(recipientCap:GetID()==e.Capital.ID and recipientCap:GetX()==e.Capital.X and recipientCap:GetY()==e.Capital.Y,'recipient capital changed')\nlocal found=A.ReadNativeLocations(e.Original.Index)\nassert(#found==1,'actual original duplicated or missing in current world')\nlocal w=found[1]\nassert(w.Owner==0 and w.CityID==target:GetID() and w.X==e.Target.X and w.Y==e.Target.Y\n and w.Building==l.Building and w.Slot==l.Slot and w.BuildingType=='BUILDING_TEMPLE','actual original missed returned native Temple')\nfor _,key in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do\n assert(equal(w[key],e.Original[key]),'original provenance/effects changed: '..key)\nend\nlocal record=assert(A.GetRoster(0)[e.AssetID])\nassert(record.RecoveryToken==e.Token and record.NativeOwnerMoves==1 and record.FixtureSeed==e.Label,'recovery roster differs from fixture original')\nassert(equal(record.NativeWork,w) and record.NativeCustody.Owner==0 and record.NativeCustody.City==target:GetID()\n and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'roster differs from actual world')\nlocal after=A.ReadNativeCarrier(target,l)\nassert(after.Work==e.Original.Index and equal(after.State,e.CityBefore.State)\n and equal(after.Properties,e.CityBefore.Properties),'recipient city assets, religion, properties, units or purchased plots changed')\nassert(equal(l.CoreBefore.Properties,l.RestoredCore.Properties) and equal(l.CoreBefore.UnitsOnCenter,l.RestoredCore.UnitsOnCenter),'trusted Core properties/units not preserved')\nassert(equal(l.ActorBefore.State,after.State),'actual city differs from saved actor baseline')\nlocal units={};local keys=A.GetPropertyKeys()\nfor _,u in Players[0]:GetUnits():Members() do\n units[u:GetID()]={Owner=u:GetOwner(),ID=u:GetID(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),\n  Name=u:GetName(),Damage=u:GetDamage(),Moves=u:GetMovesRemaining(),BuildCharges=u:GetBuildCharges(),\n  Person=u:GetProperty(keys.PERSON_KEY),Token=u:GetProperty(keys.TOKEN_KEY)}\nend\nassert(equal(units,e.RecipientUnits),'recipient native units changed during the saved city loan')\nprint('[JAC_NATIVE_HOTSEAT_SAVE_PROOF] index='..w.Index..' moves='..e.NativeMoveCount..' borrowedID='..l.BorrowedID..' returnedID='..l.FinalID)\nreturn 'actual original recovered once; native city returned with provenance and world uniqueness'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_NATIVE_HOTSEAT_SAVE_FIXTURE_996'))\nlocal world={};local rosters={};local owners={};local seen={}\nfor _,id in ipairs(PlayerManager.GetAliveIDs()) do if not seen[id] then owners[#owners+1]=id;seen[id]=true end end\nif not seen[e.FreeCity] then owners[#owners+1]=e.FreeCity end;table.sort(owners)\nfor _,owner in ipairs(owners) do\n local p=assert(Players[owner]);local cities={};local units={};rosters[owner]=A.GetRoster(owner)\n for _,city in p:GetCities():Members() do\n  local b=city:GetBuildings();local buildings={}\n  for row in GameInfo.Buildings() do if b:HasBuilding(row.Index) then\n   local works={};for slot=0,b:GetNumGreatWorkSlots(row.Index)-1 do works[slot]=b:GetGreatWorkInSlot(row.Index,slot) end\n   buildings[row.BuildingType]={Pillaged=b:IsPillaged(row.Index),Works=works}\n  end end\n  local plots={}\n  for _,index in pairs(assert(Map.GetCityPlots():GetPurchasedPlots(city))) do\n   local q=assert(Map.GetPlotByIndex(index));local buyer=assert(Cities.GetPlotPurchaseCity(q))\n   plots[#plots+1]={Index=index,Owner=q:GetOwner(),City=buyer:GetID(),X=buyer:GetX(),Y=buyer:GetY(),\n    District=q:GetDistrictType(),Improvement=q:GetImprovementType(),Terrain=q:GetTerrainType()}\n  end\n  table.sort(plots,function(a,b) return a.Index<b.Index end)\n  local religions={};for _,row in pairs(city:GetReligion():GetReligionsInCity()) do religions[tostring(row.Religion)]=row.Followers end\n  cities[city:GetID()]={Owner=city:GetOwner(),ID=city:GetID(),X=city:GetX(),Y=city:GetY(),Name=city:GetName(),\n   Population=city:GetPopulation(),Buildings=buildings,PurchasedPlots=plots,Religions=religions,\n   Loyalty=city:GetCulturalIdentity():GetLoyalty(),Faith=city:GetProperty('JAC_ABSORPTION_CITY_FAITH_V1'),\n   Governance=city:GetProperty('JAC_ABSORPTION_GOVERNANCE_V1')}\n end\n for _,u in p:GetUnits():Members() do\n  units[u:GetID()]={Owner=u:GetOwner(),ID=u:GetID(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),\n   Name=u:GetName(),Damage=u:GetDamage(),Moves=u:GetMovesRemaining(),BuildCharges=u:GetBuildCharges()}\n end\n local cap=p:GetCities():GetCapitalCity()\n world[owner]={Capital=cap and cap:GetID(),Cities=cities,Units=units}\nend\nreturn A.Canonical({Ledger=A.GetState(),Rosters=rosters,\n NativeInventory=Game:GetProperty('JAC_NATIVE_INVENTORY_V1'),Boundary=Game:GetProperty('JAC_CARRIER_BOUNDARY_V1'),\n Fixture=e,World=world,OriginalLocations=A.ReadNativeLocations(e.Original.Index)})",
+      "equals_capture": "NATIVE_HOTSEAT_COMPLETE_LEDGER_WORLD"
+    }
+  ]
+}
