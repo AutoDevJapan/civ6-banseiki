@@ -1,5 +1,5 @@
 //! Portable DTO/trace framing, not game or lifecycle proof.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 pub const HEADER: usize = 72;
 pub const ROW: usize = 104;
@@ -444,12 +444,10 @@ mod submission_protocol_tests {
             );
         }
         assert!(Request::root_scenario(&json!({"observation":"native_submission"})).is_err());
-        assert!(
-            Request::root_scenario(
-                &json!({"observation":"native_submission","controller_seconds":60})
-            )
-            .unwrap()
-        );
+        assert!(Request::root_scenario(
+            &json!({"observation":"native_submission","controller_seconds":60})
+        )
+        .unwrap());
         assert!(!Request::root_scenario(&json!({})).unwrap());
         let v = scenario_request(
             &json!({"observation":"native_submission","controller_seconds":60}),

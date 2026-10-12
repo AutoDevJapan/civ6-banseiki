@@ -1,12 +1,11 @@
 //! Compose the existing controller's exact handles, lease, OwnedJob and remote
 //! call implementation. There is deliberately no CreateRemoteThread here.
 use super::*;
-use civ6_bootstrap_rs::{Prepare, protocol as wire};
+use civ6_bootstrap_rs::{protocol as wire, Prepare};
 use std::os::windows::fs::OpenOptionsExt;
 use windows_sys::Win32::System::Memory::{
-    MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
-    PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READONLY, PAGE_WRITECOPY, VirtualQuery,
-    VirtualQueryEx,
+    VirtualQuery, VirtualQueryEx, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
+    PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READONLY, PAGE_WRITECOPY,
 };
 
 fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, String> {

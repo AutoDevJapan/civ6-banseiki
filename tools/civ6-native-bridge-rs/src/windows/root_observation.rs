@@ -2,7 +2,7 @@
 //! The only receivers retained are within the current native invocation.
 use super::*;
 use civ6_bootstrap_rs::protocol::{
-    ROOT_BYTES, ROOT_CLOSED, ROOT_CONFIG_VERSION, ROOT_MAGIC, ROOT_ROWS, ROOT_VERSION, RootConfig,
+    RootConfig, ROOT_BYTES, ROOT_CLOSED, ROOT_CONFIG_VERSION, ROOT_MAGIC, ROOT_ROWS, ROOT_VERSION,
 };
 use std::fs::OpenOptions;
 #[cfg(test)]
@@ -16,8 +16,8 @@ use windows_sys::Win32::{
     Foundation::{GetLastError, SetLastError},
     System::{
         LibraryLoader::{
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
-            GetModuleHandleExW,
+            GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            GET_MODULE_HANDLE_EX_FLAG_PIN,
         },
         Threading::{GetCurrentThread, GetThreadTimes},
     },
@@ -116,7 +116,11 @@ fn site_rvas() -> [usize; 3] {
     }
 }
 fn site_count() -> usize {
-    if submission::active() { 2 } else { 3 }
+    if submission::active() {
+        2
+    } else {
+        3
+    }
 }
 fn entry_words() -> [[u8; 8]; 3] {
     if submission::active() {
@@ -1133,7 +1137,7 @@ fn stop_at(deadline: Instant) -> u32 {
 mod tests {
     use super::*;
     use windows_sys::Win32::System::Diagnostics::Debug::{
-        CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
+        RtlLookupFunctionEntry, CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY,
     };
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -1207,16 +1211,15 @@ mod tests {
     }
     fn bind_fixture(core: usize, manager_return: u64, wait_return: u64) {
         initialize(config(core), core, 1);
-        assert!(
-            BIND.set(Binding {
+        assert!(BIND
+            .set(Binding {
                 core,
                 manager_return,
                 local_manager_return: core as u64 + 0x63d448,
                 wait_return,
                 until: Instant::now() + Duration::from_secs(30)
             })
-            .is_ok()
-        );
+            .is_ok());
         h(19).store(3, Ordering::Release);
         for (i, target) in [
             root_world_original as *const () as u64,
@@ -1422,16 +1425,15 @@ mod tests {
             return;
         }
         initialize(config(1), 1, 1);
-        assert!(
-            BIND.set(Binding {
+        assert!(BIND
+            .set(Binding {
                 core: 1,
                 manager_return: 1 + 0x63e1d5,
                 local_manager_return: 1 + 0x63d448,
                 wait_return: 1 + 0x4a1196,
                 until: Instant::now() - Duration::from_secs(1),
             })
-            .is_ok()
-        );
+            .is_ok());
         h(19).store(3, Ordering::Release);
         ROOT_TEST_ORIGINALS[1].store(root_probe_manager as *const () as u64, Ordering::Release);
         let mut data = vec![0u8; 0x500];

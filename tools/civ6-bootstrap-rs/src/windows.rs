@@ -8,8 +8,8 @@ use std::{
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::{
-        Mutex,
         atomic::{AtomicU64, AtomicUsize, Ordering},
+        Mutex,
     },
 };
 use windows_sys::Win32::{
