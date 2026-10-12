@@ -11,6 +11,7 @@ pub fn audit_worker_payload(core: &[u8], host: &[u8]) -> Result<Value, String> {
     let payload = worker_payload::inspect(core)?;
     Ok(json!({"schema":"todo880-native-worker-payload-static-v1",
         "base_audit":base,"payload_slice":payload,
+        "pending_publication_slice":worker_payload::inspect_pending(host)?,
         "structural_declarations":{"process_open_calls":0,"dll_load_calls":0,
             "runtime_feature_activation_calls":0,
             "basis":"file-buffer-only code structure; not measured process or runtime counters"}}))
@@ -430,6 +431,748 @@ mod worker_payload {
                 "host shared vft+40/+38 ownership semantics","queue publication and992210.RDX identity",
                 "992280 publication of this payload","Cancel and reissue completion",
                 "safe old-epoch ticket transfer","all-domain Close/Rebuild authority"]}))
+    }
+
+    /// Only the explicit --worker-payload result gains this additional slice.
+    pub(super) fn inspect_pending(host: &[u8]) -> Result<Value, String> {
+        pending_publication::inspect(&Pe::parse(host)?)
+    }
+    mod pending_publication {
+        use super::*;
+        struct Frame {
+            begin: u32,
+            end: u32,
+            sha: &'static str,
+            fragments: &'static [(u32, u32, u32, &'static str)],
+        }
+        const FRAMES: &[Frame] = &[
+            Frame {
+                begin: 0x985b20,
+                end: 0x985bea,
+                sha: "481ba8890a6cc4d13d60b7a9259ea2e047b7a382e33cd4a20f42d62c882cf19b",
+                fragments: &[(
+                    0x985b20,
+                    0x985bea,
+                    0x11bebb8,
+                    "0114080014640b0014540a001434090014521070",
+                )],
+            },
+            Frame {
+                begin: 0x985bf0,
+                end: 0x985d2e,
+                sha: "e7135e3ce4cf7ceff41370c84158ffe040234184417e9c0a5d15652da4eb6af5",
+                fragments: &[
+                    (0x985bf0, 0x985c28, 0x11bed18, "0106020006520230"),
+                    (
+                        0x985c28,
+                        0x985cfd,
+                        0x11d9fe4,
+                        "2177060077e40a007264080005740900f05b9800285c980018ed1b01",
+                    ),
+                    (
+                        0x985cfd,
+                        0x985d28,
+                        0x11da000,
+                        "2100020000740900f05b9800285c980018ed1b01",
+                    ),
+                    (
+                        0x985d28,
+                        0x985d2e,
+                        0x11da014,
+                        "21000000f05b9800285c980018ed1b01",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0xe3e840,
+                end: 0xe3ea09,
+                sha: "265978cf803c133d6c7b2805aec21bd197471c58841ba23a1734499ef7d925f7",
+                fragments: &[(
+                    0xe3e840,
+                    0xe3ea09,
+                    0x11bfb58,
+                    "011709001764170017541600173415001701120010700000",
+                )],
+            },
+            Frame {
+                begin: 0xe41320,
+                end: 0xe41675,
+                sha: "8354d68617936e26369fada1e002ef30a76f03097e3f8e35b9dced42b4129d87",
+                fragments: &[
+                    (0xe41320, 0xe4132e, 0x12397cc, "010e02000e016100"),
+                    (
+                        0xe4132e,
+                        0xe4139a,
+                        0x12397d4,
+                        "210f06000ff45a0008745e00043465002013e4002e13e400cc972301",
+                    ),
+                    (
+                        0xe4139a,
+                        0xe413b7,
+                        0x12397f0,
+                        "211a06001ac45d0010645f00085460002e13e4009a13e400d4972301",
+                    ),
+                    (
+                        0xe413b7,
+                        0xe41530,
+                        0x123980c,
+                        "2118040018e45b0008d45c009a13e400b713e400f0972301",
+                    ),
+                    (
+                        0xe41530,
+                        0xe41578,
+                        0x1239824,
+                        "2100020000e45b009a13e400b713e400f0972301",
+                    ),
+                    (
+                        0xe41578,
+                        0xe415bc,
+                        0x1239838,
+                        "2100020000645f002e13e4009a13e400d4972301",
+                    ),
+                    (
+                        0xe415bc,
+                        0xe415d7,
+                        0x123984c,
+                        "210000002e13e4009a13e400d4972301",
+                    ),
+                    (
+                        0xe415d7,
+                        0xe41610,
+                        0x123985c,
+                        "2100020000f45a002013e4002e13e400cc972301",
+                    ),
+                    (
+                        0xe41610,
+                        0xe41675,
+                        0x1239870,
+                        "210000002013e4002e13e400cc972301",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0xe3e3b0,
+                end: 0xe3e46a,
+                sha: "2f3917b1b36e65ca2eb9a1c24cdd10e69a783455dc936ae891fc1b3b579b965f",
+                fragments: &[
+                    (
+                        0xe3e3b0,
+                        0xe3e40b,
+                        0x1169990,
+                        "010c06000c340a000c32087007600650",
+                    ),
+                    (
+                        0xe3e40b,
+                        0xe3e456,
+                        0x123941c,
+                        "210a04000af4090005e40800b0e3e3000be4e30090991601",
+                    ),
+                    (
+                        0xe3e456,
+                        0xe3e46a,
+                        0x1239434,
+                        "21000000b0e3e3000be4e30090991601",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0xe42150,
+                end: 0xe42284,
+                sha: "7b9f9af7e7b0662b85930ed21d29f082c3bebb513c62392ea42f7cf2fcf0bd12",
+                fragments: &[
+                    (
+                        0xe42150,
+                        0xe42180,
+                        0x11d639c,
+                        "010f06000f6409000f5408000f320b70",
+                    ),
+                    (
+                        0xe42180,
+                        0xe42271,
+                        0x12396fc,
+                        "210e04000ee40700053406005021e4008021e4009c631d01",
+                    ),
+                    (
+                        0xe42271,
+                        0xe42284,
+                        0x1239714,
+                        "210000005021e4008021e4009c631d01",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0xe3f200,
+                end: 0xe3f2b6,
+                sha: "6db2982005e701b2e2914b537f2c9bbfbc777ec26ca18d60e7acd94c31fa0835",
+                fragments: &[(
+                    0xe3f200,
+                    0xe3f2b6,
+                    0x12393cc,
+                    "011d0a001d640b001d540a001d3408001d3219f017e01570",
+                )],
+            },
+            Frame {
+                begin: 0xe3f2c0,
+                end: 0xe3f384,
+                sha: "bda37c3c6d0fd0402a4a149f3dbb654459aeae3da1795896215687ba579756c6",
+                fragments: &[(
+                    0xe3f2c0,
+                    0xe3f384,
+                    0x1214f24,
+                    "01150800157408001564070015340600153211e0",
+                )],
+            },
+            Frame {
+                begin: 0x985ec0,
+                end: 0x985efc,
+                sha: "c02b7b89ab37615ddfc7ab3446a427eaf60d4de0b76aa866095c8fd554d69046",
+                fragments: &[(0x985ec0, 0x985efc, 0x11bf96c, "0106020006320230")],
+            },
+            Frame {
+                begin: 0x985370,
+                end: 0x98539b,
+                sha: "412baee90931a58f7a098973418f358dae749a3cb4f144c4143923fe76c08d94",
+                fragments: &[(0x985370, 0x98539b, 0x11bf96c, "0106020006320230")],
+            },
+        ];
+        const BLOCKS: &[(u32, &[u8])] = &[
+            (
+                0xe3e456,
+                &[
+                    0x48, 0x8b, 0xce, 0x48, 0x8b, 0x5c, 0x24, 0x50, 0x48, 0x83, 0xc4, 0x20, 0x5f,
+                    0x5e, 0x5d, 0xe9, 0xf6, 0xf8, 0xff, 0xff,
+                ],
+            ),
+            (
+                0xe3e882,
+                &[
+                    0x48, 0x8b, 0x17, 0x33, 0xc0, 0xf0, 0x48, 0x0f, 0xb1, 0x9a, 0x80, 0x01, 0x00,
+                    0x00, 0x0f, 0x85, 0x40, 0x01, 0x00, 0x00,
+                ],
+            ),
+            (
+                0x985b7e,
+                &[
+                    0x4c, 0x8b, 0xc0, 0x48, 0x85, 0xc0, 0x74, 0x14, 0xc6, 0x40, 0xf5, 0x01, 0x48,
+                    0x8d, 0x05, 0x37, 0x58, 0x6e, 0x00, 0x49, 0x89, 0x00, 0x49, 0x89, 0x78, 0x08,
+                    0xeb, 0x03, 0x45, 0x33, 0xc0,
+                ],
+            ),
+            (
+                0x985b9d,
+                &[
+                    0x0f, 0x28, 0x44, 0x24, 0x20, 0x8d, 0x55, 0xff, 0x48, 0x8b, 0x5c, 0x24, 0x48,
+                    0x48, 0x8d, 0x05, 0x1f, 0x37, 0x38, 0x02, 0x48, 0x8b, 0x6c, 0x24, 0x50, 0x49,
+                    0x8d, 0x48, 0xf8, 0x48, 0x89, 0x77, 0x10, 0x48, 0x8b, 0x74, 0x24, 0x58, 0x4c,
+                    0x89, 0x47, 0x08, 0x0f, 0x11, 0x47, 0x18, 0x48, 0xc7, 0x01, 0x00, 0x00, 0x00,
+                    0x00, 0x48, 0xc1, 0xe2, 0x05, 0x48, 0x03, 0xd0, 0x48, 0x8b, 0x42, 0x08, 0x4c,
+                    0x89, 0x00, 0x48, 0x89, 0x4a, 0x08, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+                ],
+            ),
+            (
+                0x985bf0,
+                &[
+                    0x40, 0x53, 0x48, 0x83, 0xec, 0x30, 0x45, 0x33, 0xdb, 0x8d, 0x59, 0xff, 0x48,
+                    0xc1, 0xe3, 0x05, 0x48, 0x8d, 0x05, 0xc9, 0x36, 0x38, 0x02, 0x48, 0x03, 0xd8,
+                    0x4c, 0x89, 0x5c, 0x24, 0x20, 0x4c, 0x8d, 0x44, 0x24, 0x20, 0x41, 0xb2, 0x01,
+                    0x45, 0x8b, 0xcb, 0x4c, 0x89, 0x44, 0x24, 0x28, 0x4c, 0x39, 0x1b, 0x0f, 0x84,
+                    0x00, 0x01, 0x00, 0x00,
+                ],
+            ),
+            (
+                0x985c30,
+                &[
+                    0x48, 0x8b, 0x0b, 0x48, 0x8b, 0x41, 0xf8, 0x48, 0x8d, 0x51, 0xf8, 0x48, 0x89,
+                    0x03, 0x48, 0x85, 0xc0, 0x75, 0x04, 0x48, 0x89, 0x5b, 0x08, 0x44, 0x39, 0x59,
+                    0xe8, 0x75, 0x30, 0x48, 0x8b, 0x41, 0x08, 0x4c, 0x8b, 0x40, 0x10, 0x4d, 0x85,
+                    0xc9, 0x75, 0x05, 0x4d, 0x8b, 0xc8, 0xeb, 0x0b, 0x4d, 0x3b, 0xc1, 0x45, 0x0f,
+                    0xb6, 0xd2, 0x45, 0x0f, 0x45, 0xd3, 0x4c, 0x89, 0x1a, 0x4c, 0x8b, 0xc2, 0x48,
+                    0x8b, 0x44, 0x24, 0x28, 0x48, 0x89, 0x08, 0x48, 0x89, 0x54, 0x24, 0x28, 0x4c,
+                    0x39, 0x1b, 0x75, 0xae,
+                ],
+            ),
+            (
+                0x985c82,
+                &[
+                    0x48, 0x8b, 0x7c, 0x24, 0x20, 0x48, 0x85, 0xff, 0x0f, 0x84, 0x93, 0x00, 0x00,
+                    0x00, 0x45, 0x84, 0xd2, 0x75, 0x68,
+                ],
+            ),
+            (
+                0x985cb3,
+                &[
+                    0x48, 0x8b, 0x46, 0x08, 0x48, 0x8b, 0x48, 0x10, 0x48, 0x8b, 0x79, 0x08, 0x80,
+                    0x7f, 0x20, 0x00, 0x75, 0x0c, 0x48, 0x8b, 0xcf, 0xe8, 0x33, 0x8a, 0x4b, 0x00,
+                    0xc6, 0x47, 0x20, 0x01, 0x4c, 0x8d, 0x46, 0xf8, 0x48, 0x8b, 0xd6, 0x48, 0x8b,
+                    0xcf, 0xe8, 0x60, 0x8b, 0x4b, 0x00,
+                ],
+            ),
+            (
+                0x985cfd,
+                &[
+                    0x49, 0x8b, 0x59, 0x08, 0x44, 0x38, 0x5b, 0x20, 0x75, 0x11, 0x48, 0x8b, 0xcb,
+                    0xe8, 0xf1, 0x89, 0x4b, 0x00, 0xc6, 0x43, 0x20, 0x01, 0x4c, 0x8b, 0x44, 0x24,
+                    0x28, 0x48, 0x8b, 0xd7, 0x48, 0x8b, 0xcb, 0xe8, 0x1d, 0x8b, 0x4b, 0x00,
+                ],
+            ),
+            (
+                0xe3e840,
+                &[
+                    0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x6c, 0x24, 0x18, 0x48, 0x89, 0x74,
+                    0x24, 0x20, 0x57, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00, 0x48, 0x8b, 0xf9,
+                    0x49, 0x8b, 0xf0, 0x8b, 0x0d, 0x2d, 0xb9, 0x73, 0x02, 0x48, 0x8b, 0xea, 0xff,
+                    0x15, 0x64, 0x7f, 0x15, 0x00, 0x4c, 0x8b, 0x0f, 0x48, 0x8b, 0xd8, 0x4d, 0x8b,
+                    0x89, 0x80, 0x01, 0x00, 0x00, 0x4d, 0x85, 0xc9, 0x0f, 0x85, 0x54, 0x01, 0x00,
+                    0x00,
+                ],
+            ),
+            (
+                0xe3e903,
+                &[
+                    0x4c, 0x8b, 0xc6, 0x48, 0x8b, 0xd5, 0x48, 0x8b, 0xcb, 0xe8, 0x0f, 0x2a, 0x00,
+                    0x00,
+                ],
+            ),
+            (
+                0xe3e9d6,
+                &[
+                    0x48, 0x8b, 0x0f, 0x48, 0x8d, 0x43, 0x68, 0x45, 0x33, 0xc9, 0x48, 0x89, 0x44,
+                    0x24, 0x20, 0x4c, 0x8b, 0xc6, 0x48, 0x8b, 0xd5, 0xe8, 0xc0, 0xf9, 0xff, 0xff,
+                ],
+            ),
+            (
+                0xe41320,
+                &[
+                    0x48, 0x8b, 0xc4, 0x4c, 0x89, 0x40, 0x18, 0x48, 0x81, 0xec, 0x08, 0x03, 0x00,
+                    0x00, 0x48, 0x89, 0x58, 0x20, 0x48, 0x89, 0x78, 0xe8, 0x48, 0x8b, 0xfa, 0x4c,
+                    0x89, 0x78, 0xc8, 0x48, 0x8d, 0x42, 0xf8, 0x4c, 0x8b, 0xf9, 0x49, 0x3b, 0xc0,
+                    0x75, 0x51, 0xba, 0x01, 0x00, 0x00, 0x00, 0xe8, 0x3d, 0x0f, 0x00, 0x00, 0x48,
+                    0x8b, 0xd7, 0x49, 0x8b, 0xcf, 0x48, 0x8b, 0xd8, 0xe8, 0xef, 0x0d, 0x00, 0x00,
+                ],
+            ),
+            (
+                0xe413f5,
+                &[
+                    0x48, 0x8b, 0x47, 0xf8, 0x48, 0x8b, 0xd7, 0x49, 0x8b, 0xcf, 0x48, 0x89, 0x84,
+                    0x24, 0x18, 0x03, 0x00, 0x00, 0xe8, 0x44, 0x0d, 0x00, 0x00,
+                ],
+            ),
+            (
+                0xe3e3b0,
+                &[
+                    0x48, 0x89, 0x5c, 0x24, 0x18, 0x55, 0x56, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48,
+                    0x8b, 0x05, 0x9d, 0x76, 0x45, 0x00, 0x49, 0x8b, 0xe8, 0x48, 0x8b, 0xda, 0x48,
+                    0x8b, 0xf1, 0x48, 0x85, 0xc0, 0x74, 0x09, 0x48, 0x81, 0xc1, 0x90, 0x00, 0x00,
+                    0x00, 0xff, 0xd0, 0x48, 0x8d, 0x7b, 0xf8, 0xc6, 0x43, 0xf4, 0x02, 0x45, 0x33,
+                    0xc0, 0x48, 0x8d, 0x8e, 0x90, 0x00, 0x00, 0x00, 0x48, 0x8b, 0xd3, 0x48, 0x3b,
+                    0xfd, 0x75, 0x10, 0x80, 0x4b, 0xf5, 0x10, 0x4c, 0x8b, 0x4c, 0x24, 0x60, 0xe8,
+                    0xfe, 0x0d, 0x00, 0x00, 0xeb, 0x52,
+                ],
+            ),
+            (
+                0xe3e404,
+                &[
+                    0x48, 0x8b, 0x3f, 0x80, 0x4b, 0xf5, 0x10, 0x4c, 0x89, 0x74, 0x24, 0x40, 0x4c,
+                    0x89, 0x7c, 0x24, 0x48, 0x4c, 0x8b, 0x7c, 0x24, 0x60, 0x4d, 0x8b, 0xcf, 0xe8,
+                    0xde, 0x0d, 0x00, 0x00, 0x48, 0x8b, 0xd7, 0x48, 0x8d, 0x5f, 0xf8, 0x48, 0x8b,
+                    0x7f, 0xf8, 0x48, 0x8d, 0x8e, 0x90, 0x00, 0x00, 0x00, 0x4d, 0x8b, 0xcf, 0x45,
+                    0x33, 0xc0, 0xc6, 0x42, 0xf4, 0x02, 0x80, 0x4a, 0xf5, 0x10, 0xe8, 0xb9, 0x0d,
+                    0x00, 0x00, 0x48, 0x3b, 0xdd, 0x75, 0xd6, 0x4c, 0x8b, 0x7c, 0x24, 0x48, 0x4c,
+                    0x8b, 0x74, 0x24, 0x40,
+                ],
+            ),
+            (
+                0xe3f20f,
+                &[
+                    0x48, 0x89, 0x54, 0x24, 0x10, 0x57, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xec,
+                    0x20, 0x49, 0x63, 0xc0, 0x4d, 0x8b, 0xf1, 0x4c, 0x8b, 0xf9, 0x48, 0x8d, 0x2c,
+                    0xc1,
+                ],
+            ),
+            (
+                0xe3f272,
+                &[
+                    0x48, 0x8d, 0x54, 0x24, 0x48, 0x48, 0x8b, 0xcb, 0xe8, 0x41, 0x00, 0x00, 0x00,
+                ],
+            ),
+            (
+                0xe3f350,
+                &[
+                    0x48, 0x8b, 0x43, 0x08, 0x83, 0xe7, 0x01, 0x48, 0x8b, 0x04, 0x30, 0x48, 0x8d,
+                    0x0c, 0xf8, 0x48, 0x85, 0xc9, 0x74, 0x06, 0x49, 0x8b, 0x06, 0x48, 0x89, 0x01,
+                    0x48, 0xff, 0x43, 0x20,
+                ],
+            ),
+            (
+                0xe42150,
+                &[
+                    0x48, 0x89, 0x6c, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83,
+                    0xec, 0x20, 0x0f, 0xb7, 0x6a, 0xf6, 0x48, 0x8b, 0xf2, 0xc6, 0x42, 0xf4, 0x02,
+                    0x48, 0x8b, 0xf9, 0x66, 0x85, 0xed, 0x0f, 0x84, 0xfb, 0x00, 0x00, 0x00, 0x66,
+                    0x3b, 0x69, 0x40, 0x0f, 0x84, 0xf1, 0x00, 0x00, 0x00,
+                ],
+            ),
+            (
+                0xe4220d,
+                &[
+                    0x0f, 0xb7, 0xc5, 0xf7, 0xd8, 0x48, 0x63, 0xc8, 0x48, 0x8b, 0xc6, 0x48, 0x83,
+                    0xc8, 0x03, 0x48, 0xc1, 0xe1, 0x07, 0x48, 0x03, 0x4f, 0x20, 0x48, 0x89, 0x4b,
+                    0x18, 0x48, 0x89, 0x43, 0x08, 0x48, 0x8b, 0x46, 0xc8, 0x48, 0x89, 0x43, 0xc8,
+                ],
+            ),
+            (
+                0xe42242,
+                &[
+                    0x48, 0x8b, 0x4b, 0x18, 0x48, 0x8d, 0x53, 0x10, 0x4c, 0x89, 0x32, 0x48, 0x8b,
+                    0xc3, 0x4c, 0x8b, 0x74, 0x24, 0x38, 0x48, 0x87, 0x51, 0x08, 0x48, 0x89, 0x1a,
+                ],
+            ),
+            (
+                0x985ec0,
+                &[
+                    0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x41, 0x08, 0x48, 0x8b, 0xd9,
+                    0x33, 0xc9, 0x48, 0x89, 0x48, 0x08, 0x48, 0x8b, 0x43, 0x08, 0x48, 0x89, 0x48,
+                    0x10, 0x48, 0x8d, 0x0d, 0x5e, 0x33, 0x38, 0x02, 0xe8, 0x59, 0x67, 0x00, 0x00,
+                    0x48, 0x8b, 0x4b, 0x08, 0x8b, 0xd0, 0x4c, 0x8b, 0x01, 0x41, 0xff, 0x50, 0x08,
+                    0x33, 0xc0, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3,
+                ],
+            ),
+            (
+                0x985370,
+                &[
+                    0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d, 0x05, 0xe3, 0x5f, 0x6e, 0x00,
+                    0x48, 0x8b, 0xd9, 0x48, 0x89, 0x01, 0xf6, 0xc2, 0x01, 0x74, 0x0a, 0xba, 0x10,
+                    0x00, 0x00, 0x00, 0xe8, 0x8e, 0x54, 0x7d, 0xff, 0x48, 0x8b, 0xc3, 0x48, 0x83,
+                    0xc4, 0x20, 0x5b, 0xc3,
+                ],
+            ),
+        ];
+        fn hex(b: &[u8]) -> String {
+            b.iter().map(|x| format!("{x:02x}")).collect()
+        }
+        fn frame(pe: &Pe<'_>, s: &Frame) -> Result<Value, String> {
+            let length = s
+                .end
+                .checked_sub(s.begin)
+                .filter(|n| *n > 0)
+                .ok_or("pending reversed/empty frame")?;
+            let mut next = s.begin;
+            let mut parts = Vec::new();
+            for &(begin, end, unwind, expected) in s.fragments {
+                if begin != next || end <= begin || end > s.end {
+                    return Err("pending incomplete/overlapping fragment partition".into());
+                }
+                let f = Function { begin, end, unwind };
+                if pe.function(begin) != Some(f) || pe.function(end - 1) != Some(f) {
+                    return Err("pending exact pdata fragment differs".into());
+                }
+                let chain = pe.chain(f)?;
+                if chain.last().is_none_or(|p| p.begin != s.begin)
+                    || chain.iter().any(|p| {
+                        !s.fragments.iter().any(|&(a, z, u, _)| {
+                            *p == (Function {
+                                begin: a,
+                                end: z,
+                                unwind: u,
+                            })
+                        })
+                    })
+                {
+                    return Err("pending CHAININFO owner/partition differs".into());
+                }
+                let h = pe.span(unwind, 4, false)?;
+                let aligned = 4 + ((usize::from(h[2]) + 1) & !1) * 2;
+                let flags = h[0] >> 3;
+                let total = aligned
+                    + if flags & 4 != 0 {
+                        12
+                    } else if flags & 3 != 0 {
+                        4
+                    } else {
+                        0
+                    };
+                let codes = pe.span(unwind, total, false)?;
+                if hex(codes) != expected || u32::from(h[1]) > end - begin {
+                    return Err("pending complete unwind/prologue differs".into());
+                }
+                parts.push(json!({"begin":begin,"end":end,"unwind":unwind,
+                    "span_sha256":format!("{:x}",Sha256::digest(pe.span(begin,(end-begin)as usize,true)?)),
+                    "unwind_bytes_hex":hex(codes),
+                    "fragment_prologue_bytes_hex":hex(pe.span(begin,usize::from(h[1]),true)?),
+                    "chain":chain.iter().map(|p|json!({"begin":p.begin,"end":p.end,"unwind":p.unwind})).collect::<Vec<_>>()}));
+                next = end;
+            }
+            if next != s.end
+                || format!(
+                    "{:x}",
+                    Sha256::digest(pe.span(s.begin, length as usize, true)?)
+                ) != s.sha
+            {
+                return Err("pending complete frame SHA/partition differs".into());
+            }
+            Ok(
+                json!({"begin_rva":s.begin,"end_rva":s.end,"fullbytes_sha256":s.sha,
+                "span_type":"contiguous complete pdata/CHAININFO fragment partition",
+                "fragments":parts,"scope":"fixed disk bytes and unwind metadata; not observed execution or lifetime"}),
+            )
+        }
+        fn blocks(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+            BLOCKS
+                .iter()
+                .map(|&(r, b)| pe.witness(r, b, false))
+                .collect()
+        }
+        fn references(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+            let mut out = Vec::new();
+            for (r, op, target) in [
+                (0x985b79, 0xe8, 0xe3cca0),
+                (0x985cdb, 0xe8, 0xe3e840),
+                (0x985d1e, 0xe8, 0xe3e840),
+                (0xe3e90c, 0xe8, 0xe41320),
+                (0xe3e9eb, 0xe8, 0xe3e3b0),
+                (0xe4135c, 0xe8, 0xe42150),
+                (0xe41407, 0xe8, 0xe42150),
+                (0xe3e3fd, 0xe8, 0xe3f200),
+                (0xe3e41d, 0xe8, 0xe3f200),
+                (0xe3e442, 0xe8, 0xe3f200),
+                (0xe3f27a, 0xe8, 0xe3f2c0),
+                (0xe3e465, 0xe9, 0xe3dd60),
+                (0x98538d, 0xe8, 0x15a820),
+            ] {
+                let actual = rel_target(r, pe.span(r, 5, true)?, op, 5, 1)?;
+                if actual != target {
+                    return Err("pending computed call/tail target differs".into());
+                }
+                pe.span(actual, 1, true)?;
+                out.push(
+                    json!({"rva":r,"kind":if op==0xe8 {"direct_call"}else{"direct_tail"},
+                    "computed_target_rva":actual}),
+                );
+            }
+            // Both branch operands must reach the same fallback entry.
+            for r in [0xe3e87c, 0xe3e890] {
+                let b = pe.span(r, 6, true)?;
+                if b[..2] != [0x0f, 0x85] || rel_target(r, b, 0x0f, 6, 2)? != 0xe3e9d6 {
+                    return Err("pending fallback JNE operand differs".into());
+                }
+                out.push(json!({"rva":r,"kind":"conditional_JNE","computed_target_rva":0xe3e9d6}));
+            }
+            // Fixed preferred-image pointers are data, never indirect-call execution evidence.
+            out.push(pe.pointer(0x106b3c8, 0x985370)?);
+            out.push(pe.pointer(0x106b3d0, 0x985ec0)?);
+            let b = pe.span(0x985b8a, 7, true)?;
+            if b[..3] != [0x48, 0x8d, 0x05] || rel_target(0x985b8a, b, 0x48, 7, 3)? != 0x106b3c8 {
+                return Err("pending T table RIP operand differs".into());
+            }
+            pe.span(0x106b3c8, 16, false)?;
+            out.push(json!({"rva":0x985b8a,"kind":"rip_relative_table_address",
+                "computed_target_rva":0x106b3c8}));
+            Ok(out)
+        }
+        fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
+            let frames = FRAMES
+                .iter()
+                .map(|s| frame(pe, s))
+                .collect::<Result<Vec<_>, _>>()?;
+            let blocks = blocks(pe)?;
+            let refs = references(pe)?;
+            Ok(json!({"schema":"todo880-pending-publication-static-v1",
+                "host_sha256":HOST_SHA,"frames":frames,"contiguous_blocks":blocks,"references":refs,
+                "input_handoff":{
+                    "construction":"985B7E R8=allocation RAX; nonzero branch writes T.vft=106B3C8 and T+8=original RDI P at985B94",
+                    "pending_link":"985BB6 RCX=T-8; 985BC3 [P+8]=T; 985BDD writes T to the prior list tail and985BE0 writes T-8 as new tail",
+                    "publication_general":"985CB3..985CE0 obtains arena receiver via [T+8]->+10->+8; RDX=T and R8=T-8 at call985CDB",
+                    "publication_same_receiver":"985CFD..985D23 loads receiver [R9+8]; RDX=RDI head T and R8=stack-held tail at985D1E",
+                    "argument_lifetime_limit":"conditional on preceding calls returning normally and preserving Win64 nonvolatile registers and caller-owned stack slots; native pointer values only, no runtime identity/lifetime or cancellation inferred"
+                },
+                "branches":[
+                    {"caller":0xe3e90c,"callee":0xe41320,
+                     "arguments":"E3E840 saves entry RDX in RBP and R8 in RSI; E3E903..E3E911 restores R8=RSI,RDX=RBP,RCX=RBX",
+                     "transport":"E41336 RDI=RDX; compares RDX-8 with R8; single and linked-element paths pass RDX element to E42150",
+                     "saved_pointer":"E42150 saves RDX in RSI; normal zero/equal-word branch returns original RSI atE42276; alternate constructs [new+8]=RSI|3 atE42228",
+                     "publication_store":"E4136C single or E41506/E41543 multi-element copies E42150 results to pointer array; execution is not shown here"},
+                    {"caller":0xe3e9eb,"callee":0xe3e3b0,
+                     "arguments":"E3E9D6..E3E9F0 restores R8=RSI,RDX=RBP; RCX=[entry RCX],R9d=0,stack fifth argument=RBX+68",
+                     "transport":"E3E3C3 RBP=R8 tail; E3E3C6 RBX=RDX element; E3E3FD/E3E41D/E3E442 call E3F200 with current element in RDX",
+                     "saved_pointer":"E3F20F saves input RDX to home slot; E3F272 passes address of same slot to E3F2C0; E3F364..E3F367 stores its qword in selected pointer slot",
+                     "tail":"E3E465 direct tail to E3DD60; target execution body/receiver ownership not inferred"}
+                ],
+                "execute_and_destroy":{
+                    "table_rva":0x106b3c8,"execute_slot":8,"execute_target":0x985ec0,
+                    "execute_input":"RCX=T;985EC6 loads [T+8];985EE7 reloads it as RCX;985EF0 calls [[P]+8] with EDX from98C640; normal RET985EFB",
+                    "destroy_slot":0,"destroy_target":0x985370,
+                    "destroy_bytes":"985370 resets [RCX] vft; TEST DL,1 conditional path calls15A820 with EDX16 and RCX preserved; no load/dereference of T+8 in complete frame",
+                    "scope":"disk table targets and callee bodies only; queue consumer-to-virtual-execute/destructor call edge not established"
+                },
+                "not_established_by_this_audit":[
+                    "runtime T/P identity or lifetime through scheduler copies",
+                    "queue dequeue-to-985EC0 connection and typed/tagged pointer handling",
+                    "unexecuted pending T cancellation, destructor invocation or P settlement",
+                    "state byte or word meaning; zero/FreeList as Cancel or join",
+                    "same-set Wait joining every pending/copied T",
+                    "World epoch authority, generation permits and all-domain Close/Rebuild"],
+                "certificate_issued":false,"structural_declarations":{"runtime_calls":0,"game_runs":0,
+                    "basis":"borrowed file buffers only; zero values are structural declarations, not native measurements"}}))
+        }
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+            fn image() -> Vec<u8> {
+                let mut b = vec![0u8; 0x1240000];
+                for &(r, code) in BLOCKS {
+                    let p = (r - 0xc00) as usize;
+                    b[p..p + code.len()].copy_from_slice(code);
+                }
+                // One call just before the fixed contiguous allocation-result block.
+                b[0x985b79 - 0xc00..0x985b7e - 0xc00].copy_from_slice(&[0xe8, 0x22, 0x71, 0x4b, 0]);
+                for (slot, target) in [(0x106b3c8, 0x985370), (0x106b3d0, 0x985ec0)] {
+                    let p = slot - 0xc00;
+                    b[p..p + 8].copy_from_slice(&(0x140000000u64 + target).to_le_bytes());
+                }
+                b
+            }
+            fn pe(b: &[u8]) -> Pe<'_> {
+                Pe {
+                    image: b,
+                    base: 0x140000000,
+                    sections: vec![
+                        Section {
+                            name: *b".text\0\0\0",
+                            rva: 0x1000,
+                            virtual_size: 0xf95000,
+                            raw: 0x400,
+                            size: 0xf95000,
+                            flags: 0x60000020,
+                        },
+                        Section {
+                            name: *b".rdata\0\0",
+                            rva: 0xf96000,
+                            virtual_size: 0x2a9000,
+                            raw: 0xf95400,
+                            size: 0x2a9000,
+                            flags: 0x40000040,
+                        },
+                    ],
+                    functions: vec![],
+                    relocations: [0x106b3c8, 0x106b3d0].into_iter().collect(),
+                }
+            }
+            #[test]
+            fn pending_publication_call_operands_and_argument_blocks_reject_mutations() {
+                let mut b = image();
+                blocks(&pe(&b)).unwrap();
+                references(&pe(&b)).unwrap();
+                for r in [
+                    0x985cdb, 0x985d1e, 0xe3e90c, 0xe3e9eb, 0xe4135c, 0xe41407, 0xe3e3fd, 0xe3e41d,
+                    0xe3e442, 0xe3f27a,
+                ] {
+                    let p = r - 0xc00 + 1;
+                    b[p] ^= 1;
+                    assert!(references(&pe(&b)).is_err(), "operand {r:x}");
+                    b[p] ^= 1;
+                }
+                for r in [
+                    0x985b94, 0x985cd5, 0xe3e85a, 0xe3e863, 0xe3e903, 0xe3e9e8, 0xe3e3c6, 0xe3f20f,
+                    0xe3f364, 0xe42228,
+                ] {
+                    let p = r - 0xc00;
+                    b[p] ^= 1;
+                    assert!(blocks(&pe(&b)).is_err(), "argument {r:x}");
+                    b[p] ^= 1;
+                }
+                b[0xe3e890 - 0xc00 + 2] ^= 1;
+                assert!(references(&pe(&b)).is_err());
+                b[0xe3e890 - 0xc00 + 2] ^= 1;
+                b[0x106b3d0 - 0xc00] ^= 1;
+                assert!(references(&pe(&b)).is_err(), "wrong execute table target");
+            }
+            #[test]
+            fn pending_publication_code_data_and_relative_bounds_reject() {
+                let b = image();
+                let mut mapped = pe(&b);
+                mapped.sections[0].flags &= !0x20000000;
+                assert!(blocks(&mapped).is_err());
+                let mut mapped = pe(&b);
+                mapped.sections[1].flags |= 0x20000000;
+                assert!(references(&mapped).is_err());
+                let mut mapped = pe(&b);
+                mapped.relocations.clear();
+                assert!(references(&mapped).is_err());
+                assert!(references(&pe(&b[..0x106b3d4 - 0xc00])).is_err());
+                assert!(rel_target(0, &[0xe8, 0xf0, 0xff, 0xff, 0xff], 0xe8, 5, 1).is_err());
+                assert!(rel_target(u32::MAX, &[0xe8, 0, 0, 0, 0], 0xe8, 5, 1).is_err());
+            }
+            #[test]
+            fn pending_publication_full_pdata_chain_partition_sha_and_unwind_reject() {
+                let mut b = vec![0u8; 0x1100];
+                b[0x400..0x410].fill(0x90);
+                b[0x1000..0x1004].copy_from_slice(&[1, 0, 0, 0]);
+                b[0x1010..0x1020]
+                    .copy_from_slice(&[0x21, 0, 0, 0, 0, 0x10, 0, 0, 8, 0x10, 0, 0, 0, 0x20, 0, 0]);
+                fn mk(b: &[u8]) -> Pe<'_> {
+                    Pe {
+                        image: b,
+                        base: 0x140000000,
+                        sections: vec![
+                            Section {
+                                name: *b".text\0\0\0",
+                                rva: 0x1000,
+                                virtual_size: 16,
+                                raw: 0x400,
+                                size: 16,
+                                flags: 0x60000020,
+                            },
+                            Section {
+                                name: *b".rdata\0\0",
+                                rva: 0x2000,
+                                virtual_size: 32,
+                                raw: 0x1000,
+                                size: 32,
+                                flags: 0x40000040,
+                            },
+                        ],
+                        functions: vec![
+                            Function {
+                                begin: 0x1000,
+                                end: 0x1008,
+                                unwind: 0x2000,
+                            },
+                            Function {
+                                begin: 0x1008,
+                                end: 0x1010,
+                                unwind: 0x2010,
+                            },
+                        ],
+                        relocations: Default::default(),
+                    }
+                }
+                let s = Frame {
+                    begin: 0x1000,
+                    end: 0x1010,
+                    sha: "87e36ce5c70a77d0b4bafbe2d6d1f53167344236134dab16808ae0cdd505c54d",
+                    fragments: &[
+                        (0x1000, 0x1008, 0x2000, "01000000"),
+                        (0x1008, 0x1010, 0x2010, "21000000001000000810000000200000"),
+                    ],
+                };
+                frame(&mk(&b), &s).unwrap();
+                b[0x40f] ^= 1;
+                assert!(frame(&mk(&b), &s).is_err());
+                b[0x40f] ^= 1;
+                b[0x1014] ^= 1;
+                assert!(frame(&mk(&b), &s).is_err());
+                b[0x1014] ^= 1;
+                b[0x1001] = 9;
+                assert!(frame(&mk(&b), &s).is_err());
+                b[0x1001] = 0;
+                let mut mapped = mk(&b);
+                mapped.functions[1].end = 0x1011;
+                assert!(frame(&mapped, &s).is_err());
+                let wrong = Frame { end: 0x100f, ..s };
+                assert!(frame(&mk(&b), &wrong).is_err());
+                assert!(frame(&mk(&b[..0x101f]), &s).is_err());
+            }
+        }
     }
 
     /// Appended to the ordinary fixed-file audit after BOTH original hash gates.
