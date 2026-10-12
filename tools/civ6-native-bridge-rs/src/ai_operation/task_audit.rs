@@ -64,6 +64,12 @@ mod worker_payload {
     }
     impl<'a> Pe<'a> {
         fn parse(image: &'a [u8]) -> Result<Self, String> {
+            Self::parse_image(image, true)
+        }
+        fn parse_executable(image: &'a [u8]) -> Result<Self, String> {
+            Self::parse_image(image, false)
+        }
+        fn parse_image(image: &'a [u8], require_relocations: bool) -> Result<Self, String> {
             if at(image, 0, 2)? != b"MZ" {
                 return Err("payload PE MZ signature".into());
             }
@@ -75,6 +81,9 @@ mod worker_payload {
             let count = u16_at(image, coff + 2)? as usize;
             let opt_size = u16_at(image, coff + 16)? as usize;
             let opt = coff + 20;
+            if !require_relocations && u16_at(image, coff + 18)? & 0x2002 != 2 {
+                return Err("pending code audit requires an executable, not a DLL".into());
+            }
             if u16_at(image, coff)? != 0x8664
                 || count == 0
                 || count > 96
@@ -139,7 +148,10 @@ mod worker_payload {
             let reloc_rva = u32_at(image, opt + 112 + 5 * 8)?;
             let reloc_size = u32_at(image, opt + 116 + 5 * 8)? as usize;
             if reloc_size == 0 {
-                return Err("payload relocation directory absent".into());
+                if require_relocations || reloc_rva != 0 {
+                    return Err("payload relocation directory absent".into());
+                }
+                return Ok(pe);
             }
             let reloc = pe.span(reloc_rva, reloc_size, false)?;
             let mut pos = 0usize;
@@ -435,7 +447,7 @@ mod worker_payload {
 
     /// Only the explicit --worker-payload result gains this additional slice.
     pub(super) fn inspect_pending(host: &[u8]) -> Result<Value, String> {
-        pending_publication::inspect(&Pe::parse(host)?)
+        pending_publication::inspect(&Pe::parse_executable(host)?)
     }
     mod pending_publication {
         use super::*;
@@ -958,8 +970,15 @@ mod worker_payload {
                 out.push(json!({"rva":r,"kind":"conditional_JNE","computed_target_rva":0xe3e9d6}));
             }
             // Fixed preferred-image pointers are data, never indirect-call execution evidence.
-            out.push(pe.pointer(0x106b3c8, 0x985370)?);
-            out.push(pe.pointer(0x106b3d0, 0x985ec0)?);
+            for (slot, target) in [(0x106b3c8, 0x985370), (0x106b3d0, 0x985ec0)] {
+                let raw = u64_at(pe.span(slot, 8, false)?, 0)?;
+                if raw.checked_sub(pe.base) != Some(u64::from(target)) {
+                    return Err("pending preferred-image table pointer differs".into());
+                }
+                pe.span(target, 1, true)?;
+                out.push(json!({"slot_rva":slot,"preferred_va":raw,"computed_target_rva":target,
+                    "scope":"fixed disk pointer at preferred ImageBase; no DIR64 or executed target claim"}));
+            }
             let b = pe.span(0x985b8a, 7, true)?;
             if b[..3] != [0x48, 0x8d, 0x05] || rel_target(0x985b8a, b, 0x48, 7, 3)? != 0x106b3c8 {
                 return Err("pending T table RIP operand differs".into());
@@ -1097,10 +1116,64 @@ mod worker_payload {
                 assert!(references(&mapped).is_err());
                 let mut mapped = pe(&b);
                 mapped.relocations.clear();
-                assert!(references(&mapped).is_err());
+                assert!(references(&mapped).is_ok());
+                assert!(
+                    mapped.pointer(0x106b3c8, 0x985370).is_err(),
+                    "DLL relocated-pointer validation remains strict"
+                );
                 assert!(references(&pe(&b[..0x106b3d4 - 0xc00])).is_err());
                 assert!(rel_target(0, &[0xe8, 0xf0, 0xff, 0xff, 0xff], 0xe8, 5, 1).is_err());
                 assert!(rel_target(u32::MAX, &[0xe8, 0, 0, 0, 0], 0xe8, 5, 1).is_err());
+            }
+            #[test]
+            fn pending_publication_executable_without_relocations_does_not_relax_dll_checks() {
+                let mut b = vec![0; 0x800];
+                b[..2].copy_from_slice(b"MZ");
+                b[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+                b[0x80..0x84].copy_from_slice(b"PE\0\0");
+                for (p, v) in [
+                    (0x84, 0x8664u16),
+                    (0x86, 2),
+                    (0x94, 0xf0),
+                    (0x96, 2),
+                    (0x98, 0x20b),
+                ] {
+                    b[p..p + 2].copy_from_slice(&v.to_le_bytes());
+                }
+                b[0xb0..0xb8].copy_from_slice(&0x140000000u64.to_le_bytes());
+                for (p, v) in [(0x104, 6u32), (0x120, 0x2000), (0x124, 12)] {
+                    b[p..p + 4].copy_from_slice(&v.to_le_bytes());
+                }
+                for (p, name, rva, raw, flags) in [
+                    (0x188, *b".text\0\0\0", 0x1000u32, 0x400u32, 0x60000020u32),
+                    (0x1b0, *b".rdata\0\0", 0x2000, 0x600, 0x40000040),
+                ] {
+                    b[p..p + 8].copy_from_slice(&name);
+                    for (offset, v) in [(8, 0x100), (12, rva), (16, 0x100), (20, raw), (36, flags)]
+                    {
+                        b[p + offset..p + offset + 4].copy_from_slice(&v.to_le_bytes());
+                    }
+                }
+                for (p, v) in [(0x600, 0x1000u32), (0x604, 0x1008), (0x608, 0x2010)] {
+                    b[p..p + 4].copy_from_slice(&v.to_le_bytes());
+                }
+                b[0x610] = 1;
+                assert!(Pe::parse_executable(&b).is_ok());
+                assert!(
+                    Pe::parse(&b).is_err(),
+                    "Core relocation requirement is unchanged"
+                );
+                b[0x130..0x134].copy_from_slice(&0x2020u32.to_le_bytes());
+                assert!(
+                    Pe::parse_executable(&b).is_err(),
+                    "one-sided absent directory is malformed"
+                );
+                b[0x130..0x134].fill(0);
+                b[0x96..0x98].copy_from_slice(&0x2002u16.to_le_bytes());
+                assert!(
+                    Pe::parse_executable(&b).is_err(),
+                    "DLL cannot use the executable policy"
+                );
             }
             #[test]
             fn pending_publication_full_pdata_chain_partition_sha_and_unwind_reject() {
