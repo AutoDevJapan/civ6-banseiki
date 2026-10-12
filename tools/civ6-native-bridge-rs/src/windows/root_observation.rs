@@ -470,6 +470,58 @@ global_asm!(
     "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
 );
+// CALL pushes a helper return address. From helper entry, the gateway's flags
+// slot is +1c8h. Each temporary PUSH belongs to this helper's unwind prologue,
+// never to the fixed-size gateway body. POP memory computes an RSP-based
+// destination AFTER incrementing RSP, hence +1c8h (not +1d0h).
+global_asm!(
+    ".globl root_flags_restore",
+    ".seh_proc root_flags_restore",
+    "root_flags_restore:",
+    "push qword ptr [rsp+0x1c8]",
+    ".seh_stackalloc 8",
+    ".seh_endprologue",
+    ".globl root_flags_restore_pushed",
+    "root_flags_restore_pushed:",
+    // Owned OS children replace exactly this inert window with CALL fault.
+    // Both builds execute the same instructions and have the same unwind table.
+    "nop",
+    "nop",
+    "nop",
+    "nop",
+    "nop",
+    ".globl root_flags_restore_pop",
+    "root_flags_restore_pop:",
+    "popfq",
+    ".globl root_flags_restore_ret",
+    "root_flags_restore_ret:",
+    "ret",
+    ".seh_endproc",
+    ".globl root_flags_save",
+    ".seh_proc root_flags_save",
+    "root_flags_save:",
+    "pushfq",
+    ".seh_stackalloc 8",
+    ".seh_endprologue",
+    ".globl root_flags_save_pushed",
+    "root_flags_save_pushed:",
+    "nop",
+    "nop",
+    "nop",
+    "nop",
+    "nop",
+    ".globl root_flags_save_pop",
+    "root_flags_save_pop:",
+    "pop qword ptr [rsp+0x1c8]",
+    ".globl root_flags_save_ret",
+    "root_flags_save_ret:",
+    "ret",
+    ".seh_endproc",
+);
+unsafe extern "system" {
+    fn root_flags_restore();
+    fn root_flags_save();
+}
 macro_rules! gateway {
     ($name:literal,$kind:literal,$original:ident) => {
         global_asm!(concat!(
@@ -495,9 +547,9 @@ macro_rules! gateway {
             "mov rax,[rsp+0x40]\nmov r10,[rsp+0x48]\nmov r11,[rsp+0x50]\n",
             "movdqu xmm0,[rsp+0x60]\nmovdqu xmm1,[rsp+0x70]\nmovdqu xmm2,[rsp+0x80]\n",
             "movdqu xmm3,[rsp+0x90]\nmovdqu xmm4,[rsp+0xa0]\nmovdqu xmm5,[rsp+0xb0]\n",
-            "push qword ptr [rsp+0x1c0]\npopfq\ncall {original}\n",
+            "call {restore_flags}\n.globl ",$name,"_flags_input_return\n",$name,"_flags_input_return:\ncall {original}\n",
             // Preserve the ORIGINAL outputs before any helper or flag change.
-            "pushfq\npop qword ptr [rsp+0x1c0]\n",
+            "call {save_flags}\n.globl ",$name,"_flags_save_return\n",$name,"_flags_save_return:\n",
             "mov [rsp+0x20],rcx\nmov [rsp+0x28],rdx\nmov [rsp+0x30],r8\nmov [rsp+0x38],r9\n",
             "mov [rsp+0x40],rax\nmov [rsp+0x48],r10\nmov [rsp+0x50],r11\n",
             "movdqu [rsp+0x60],xmm0\nmovdqu [rsp+0x70],xmm1\nmovdqu [rsp+0x80],xmm2\n",
@@ -507,8 +559,12 @@ macro_rules! gateway {
             "mov rax,[rsp+0x40]\nmov r10,[rsp+0x48]\nmov r11,[rsp+0x50]\n",
             "movdqu xmm0,[rsp+0x60]\nmovdqu xmm1,[rsp+0x70]\nmovdqu xmm2,[rsp+0x80]\n",
             "movdqu xmm3,[rsp+0x90]\nmovdqu xmm4,[rsp+0xa0]\nmovdqu xmm5,[rsp+0xb0]\n",
-            "push qword ptr [rsp+0x1c0]\npopfq\nlea rsp,[rsp+0x1c8]\nret\n.seh_endproc\n"
-        ), begin=sym begin,end=sym end,unwind=sym unwind,original=sym $original);
+            "call {restore_flags}\n.globl ",$name,"_flags_output_return\n",$name,"_flags_output_return:\n",
+            // This exact LEA/RET is an epilogue: the flags helper's CALL frame
+            // is already gone before the gateway releases its fixed frame.
+            "lea rsp,[rsp+0x1c8]\nret\n.seh_endproc\n"
+        ), begin=sym begin,end=sym end,unwind=sym unwind,original=sym $original,
+            restore_flags=sym root_flags_restore,save_flags=sym root_flags_save);
     };
 }
 unsafe extern "system" {
@@ -1437,6 +1493,314 @@ mod tests {
                 "stack-relative JMP mod01 must not be replaced by epilogue-like mod00"
             );
         }
+    }
+    unsafe extern "system" {
+        fn root_flags_restore_pushed();
+        fn root_flags_restore_pop();
+        fn root_flags_restore_ret();
+        fn root_flags_save_pushed();
+        fn root_flags_save_pop();
+        fn root_flags_save_ret();
+        fn root_world_gateway_flags_input_return();
+        fn root_world_gateway_flags_save_return();
+        fn root_world_gateway_flags_output_return();
+    }
+    #[test]
+    fn root_flags_helpers_virtual_unwind_all_boundaries_and_invocation_settlement() {
+        if !child("root_flags_helpers_virtual_unwind_all_boundaries_and_invocation_settlement") {
+            return;
+        }
+        bind_fixture(1, 0, 0);
+        let helpers = [
+            (
+                root_flags_restore as *const () as usize,
+                root_flags_restore_pushed as *const () as usize,
+                root_flags_restore_pop as *const () as usize,
+                root_flags_restore_ret as *const () as usize,
+                root_world_gateway_flags_input_return as *const () as u64,
+                false,
+            ),
+            (
+                root_flags_save as *const () as usize,
+                root_flags_save_pushed as *const () as usize,
+                root_flags_save_pop as *const () as usize,
+                root_flags_save_ret as *const () as usize,
+                root_world_gateway_flags_save_return as *const () as u64,
+                false,
+            ),
+            (
+                root_flags_restore as *const () as usize,
+                root_flags_restore_pushed as *const () as usize,
+                root_flags_restore_pop as *const () as usize,
+                root_flags_restore_ret as *const () as usize,
+                root_world_gateway_flags_output_return as *const () as u64,
+                true,
+            ),
+        ];
+        for (entry, pushed, pop, ret, caller, already_settled) in helpers {
+            for (pc, after_push) in [(entry, false), (pushed, true), (pop, true), (ret, false)] {
+                let mut storage = [0u64; 160];
+                let gw = unsafe { storage.as_mut_ptr().add(2) };
+                storage[0] = 0x202;
+                storage[1] = caller;
+                storage[2 + 0x1c8 / 8] = 0x11223344;
+                let raw = unsafe { (gw.cast::<u8>()).add(0x20).cast::<Saved>() };
+                unsafe {
+                    ptr::write(
+                        raw,
+                        Saved {
+                            gpr: [0u64; 8],
+                            xmm: [[0; 16]; 6],
+                            invocation: Invocation {
+                                kind: 1,
+                                caller: 0x11223344,
+                                caller_rsp: gw as u64 + 0x1c8,
+                                native_rsp: gw as u64 - 8,
+                                ..Invocation::default()
+                            },
+                            metadata: 0,
+                        },
+                    );
+                }
+                begin(raw);
+                let token = unsafe { (*raw).invocation.token };
+                let binding = unsafe { (*raw).invocation };
+                assert!(token > 0);
+                if already_settled {
+                    end(raw);
+                }
+                assert_eq!(
+                    h(12).load(Ordering::Acquire),
+                    if already_settled { 0 } else { 1 }
+                );
+                let mut ctx: CONTEXT = unsafe { std::mem::zeroed() };
+                ctx.Rip = pc as u64;
+                ctx.Rsp = storage.as_mut_ptr() as u64 + if after_push { 0 } else { 8 };
+                ctx.Rbx = 0xaabbccdd;
+                let mut base = 0;
+                let table = unsafe { RtlLookupFunctionEntry(ctx.Rip, &mut base, null_mut()) };
+                assert!(!table.is_null());
+                let mut data = null_mut();
+                let mut frame = 0;
+                unsafe {
+                    RtlVirtualUnwind(
+                        0,
+                        base,
+                        ctx.Rip,
+                        table,
+                        &mut ctx,
+                        &mut data,
+                        &mut frame,
+                        null_mut(),
+                    );
+                }
+                assert_eq!(ctx.Rip, caller, "helper at {pc:#x}");
+                assert_eq!(ctx.Rsp, gw as u64, "helper returns exact gateway RSP");
+                assert_eq!(ctx.Rbx, 0xaabbccdd);
+                let table = unsafe { RtlLookupFunctionEntry(ctx.Rip, &mut base, null_mut()) };
+                assert!(!table.is_null());
+                // Obtain the real gateway language handler. VirtualUnwind
+                // returns its address; it does not execute the language handler.
+                let handler = unsafe {
+                    RtlVirtualUnwind(
+                        2,
+                        base,
+                        ctx.Rip,
+                        table,
+                        &mut ctx,
+                        &mut data,
+                        &mut frame,
+                        null_mut(),
+                    )
+                };
+                assert_eq!(ctx.Rip, 0x11223344);
+                assert_eq!(ctx.Rsp, gw as u64 + 0x1d0);
+                if !already_settled {
+                    assert_eq!(handler, unwind as *const () as usize);
+                    assert_eq!(frame, gw as u64);
+                    let mut exception: EXCEPTION_RECORD = unsafe { std::mem::zeroed() };
+                    exception.ExceptionFlags = 2;
+                    let language: unsafe extern "system" fn(
+                        *const EXCEPTION_RECORD,
+                        usize,
+                        *mut CONTEXT,
+                        *mut c_void,
+                    ) -> i32 = unsafe {
+                        std::mem::transmute::<
+                            usize,
+                            unsafe extern "system" fn(
+                                *const EXCEPTION_RECORD,
+                                usize,
+                                *mut CONTEXT,
+                                *mut c_void,
+                            ) -> i32,
+                        >(handler)
+                    };
+                    unsafe {
+                        language(&exception, frame as usize, &mut ctx, null_mut());
+                    }
+                    assert_eq!(TRACE.rows[token as usize][2].load(Ordering::Acquire), 3);
+                } else {
+                    // Original exit was committed before output-flags restore.
+                    // A later unwind must not overwrite its row or settle twice.
+                    assert_eq!(TRACE.rows[token as usize][2].load(Ordering::Acquire), 2);
+                }
+                assert_eq!(h(12).load(Ordering::Acquire), 0);
+                assert_eq!(STACK.with(|s| s.get().depth), 0);
+                assert_eq!(
+                    TRACE.rows[token as usize][5].load(Ordering::Acquire),
+                    binding.tid
+                );
+                assert_eq!(
+                    TRACE.rows[token as usize][6].load(Ordering::Acquire),
+                    binding.thread_created
+                );
+                assert_eq!(
+                    TRACE.rows[token as usize][7].load(Ordering::Acquire),
+                    binding.epoch
+                );
+                assert_eq!(
+                    TRACE.rows[token as usize][8].load(Ordering::Acquire),
+                    binding.caller
+                );
+            }
+        }
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+    }
+    #[unsafe(no_mangle)]
+    static ROOT_HELPER_FAULT_HITS: AtomicU64 = AtomicU64::new(0);
+    #[unsafe(no_mangle)]
+    static ROOT_HELPER_FAULT_TARGET: AtomicU64 = AtomicU64::new(0);
+    #[unsafe(no_mangle)]
+    static ROOT_HELPER_FAULT_STATE: AtomicU64 = AtomicU64::new(0);
+    #[unsafe(no_mangle)]
+    static ROOT_HELPER_NATIVE_CALLS: AtomicU64 = AtomicU64::new(0);
+    global_asm!(
+        ".globl root_helper_fault",".seh_proc root_helper_fault","root_helper_fault:",
+        "sub rsp,0x538",".seh_stackalloc 0x538",".seh_endprologue",
+        "mov [rsp+0x20],rax","mov [rsp+0x28],rdx",
+        "lock inc qword ptr [rip+ROOT_HELPER_FAULT_HITS]",
+        "mov rax,[rip+ROOT_HELPER_FAULT_HITS]",
+        "cmp rax,[rip+ROOT_HELPER_FAULT_TARGET]","jne 2f",
+        "mov rax,[rip+ROOT_HELPER_FAULT_STATE]","mov rdx,[rax+8]","mov rcx,[rax]",
+        "lea r10,[rsp+0x40]","mov r11d,0x9a",
+        "1:","mov qword ptr [r10],0","lea r10,[r10+8]","dec r11d","jnz 1b",
+        "lea r10,[rsp+0x40]","mov [rsp+0x20],r10","mov qword ptr [rsp+0x28],0",
+        "xor r8d,r8d","xor r9d,r9d","call {rtl_unwind}","int3",
+        "2:","mov rax,[rsp+0x20]","mov rdx,[rsp+0x28]","lea rsp,[rsp+0x538]","ret",".seh_endproc",
+        ".globl root_helper_native",".seh_proc root_helper_native","root_helper_native:",
+        ".byte 0x40,0x53",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",".seh_endprologue",
+        "lock inc qword ptr [rip+ROOT_HELPER_NATIVE_CALLS]","mov rax,0x55ff",
+        "add rsp,0x20","pop rbx","ret",".seh_endproc",
+        rtl_unwind=sym RtlUnwindEx,
+    );
+    unsafe extern "system" {
+        fn root_helper_fault();
+        fn root_helper_native();
+    }
+    struct HelperFaultPatch {
+        address: usize,
+        original: [u8; 5],
+    }
+    impl HelperFaultPatch {
+        fn at(address: usize) -> Self {
+            let original = copy_current::<5>(address as u64).unwrap();
+            assert_eq!(original, [0x90; 5]);
+            let displacement = i32::try_from(
+                root_helper_fault as *const () as usize as i128 - address as i128 - 5,
+            )
+            .unwrap();
+            let mut call = [0xe8, 0, 0, 0, 0];
+            call[1..].copy_from_slice(&displacement.to_le_bytes());
+            Self::write(address, call);
+            Self { address, original }
+        }
+        fn write(address: usize, bytes: [u8; 5]) {
+            let mut old = 0;
+            let mut ignored = 0;
+            assert_ne!(
+                unsafe { VirtualProtect(address as _, 5, PAGE_EXECUTE_READWRITE, &mut old) },
+                0
+            );
+            unsafe {
+                ptr::copy_nonoverlapping(bytes.as_ptr(), address as *mut u8, 5);
+            }
+            assert_ne!(
+                unsafe { VirtualProtect(address as _, 5, old, &mut ignored) },
+                0
+            );
+            assert_ne!(
+                unsafe { FlushInstructionCache(GetCurrentProcess(), address as _, 5) },
+                0
+            );
+        }
+    }
+    impl Drop for HelperFaultPatch {
+        fn drop(&mut self) {
+            Self::write(self.address, self.original);
+        }
+    }
+    #[test]
+    fn root_flags_helpers_actual_seh_before_pop_and_single_settlement() {
+        if !child("root_flags_helpers_actual_seh_before_pop_and_single_settlement") {
+            return;
+        }
+        bind_fixture(1, 0, 0);
+        ROOT_CONTINUE[0].store(
+            root_helper_native as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        for (stage, window, hit, native, edge, exceptions) in [
+            (
+                1,
+                root_flags_restore_pushed as *const () as usize,
+                1,
+                0,
+                3,
+                1,
+            ),
+            (2, root_flags_save_pushed as *const () as usize, 1, 1, 3, 2),
+            (
+                3,
+                root_flags_restore_pushed as *const () as usize,
+                2,
+                2,
+                2,
+                2,
+            ),
+        ] {
+            let mut state = [0u64; 2];
+            ROOT_HELPER_FAULT_HITS.store(0, Ordering::Release);
+            ROOT_HELPER_FAULT_TARGET.store(hit, Ordering::Release);
+            ROOT_HELPER_FAULT_STATE.store(state.as_mut_ptr() as u64, Ordering::Release);
+            let token = h(10).load(Ordering::Acquire) + 1;
+            let patch = HelperFaultPatch::at(window);
+            let result = unsafe { root_unwind_driver(state.as_mut_ptr(), gateways()[0]) };
+            drop(patch);
+            assert_eq!(
+                result, 1,
+                "stage {stage} must reach the real outer SEH target"
+            );
+            assert_eq!(ROOT_HELPER_NATIVE_CALLS.load(Ordering::Acquire), native);
+            assert_eq!(
+                h(12).load(Ordering::Acquire),
+                0,
+                "stage {stage} sample settled once"
+            );
+            assert_eq!(STACK.with(|s| s.get().depth), 0);
+            assert_eq!(TRACE.rows[token as usize][2].load(Ordering::Acquire), edge);
+            assert_eq!(h(13).load(Ordering::Acquire), exceptions);
+            for field in [3, 5, 6, 7, 8, 9, 10, 21, 22] {
+                assert_eq!(
+                    TRACE.rows[token as usize - 1][field].load(Ordering::Acquire),
+                    TRACE.rows[token as usize][field].load(Ordering::Acquire),
+                    "stage {stage} binding {field}"
+                );
+            }
+        }
+        ROOT_HELPER_FAULT_STATE.store(0, Ordering::Release);
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+        assert_eq!(h(10).load(Ordering::Acquire), 6);
     }
     // Metadata-only functions provide SDK-generated full native unwind tables
     // for the three owned code fixtures. Their addresses are never game RVAs.
