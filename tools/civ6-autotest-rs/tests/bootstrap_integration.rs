@@ -264,13 +264,13 @@ fn either_observer_failure_interrupts_the_shared_step_budget() {
 
 #[test]
 fn integrated_actions_keep_order_and_resident_modes_exclusive_with_bootstrap() {
-    assert_eq!(ACTIONS.len(), 43);
+    assert_eq!(ACTIONS.len(), 44);
     assert_eq!(
         ACTIONS
             .iter()
             .collect::<std::collections::BTreeSet<_>>()
             .len(),
-        43
+        44
     );
     for action in [
         "start_native_order_capture",
@@ -280,6 +280,7 @@ fn integrated_actions_keep_order_and_resident_modes_exclusive_with_bootstrap() {
         "stop_native_paid_runtime_observation",
         "start_native_bootstrap",
         "stop_native_bootstrap",
+        "audit_thread_visibility",
     ] {
         assert!(ACTIONS.contains(&action));
     }
