@@ -411,7 +411,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
     let version = word(b, 8)?;
     if b.len() != SUBMISSION_BYTES
         || word(b, 0)? != SUBMISSION_MAGIC
-        || !matches!(version, 4 | 5 | 6)
+        || !matches!(version, 4..=6)
         || word(b, 16)? != SUBMISSION_BYTES as u64
         || word(b, 24)? != ROOT_ROWS as u64
         || word(b, 32)? != SUBMISSION_ROW as u64
@@ -743,7 +743,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
 /// this parser never follows them. Correspondence is not job ownership/join.
 pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
-    if matches!(version, 4 | 5 | 6) {
+    if matches!(version, 4..=6) {
         return submission_observed_trace(b, pid, created);
     }
     let (row_bytes, trace_bytes) = match version {
