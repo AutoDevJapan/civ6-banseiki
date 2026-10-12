@@ -556,7 +556,8 @@ fn close_civ6_with_renderer(
         close_civ6_outcome(r, p)?
     };
     evidence["game_close_outcome"] = json!(outcome);
-    let printed = r.print(&format!("CIV6_CLOSE outcome={outcome}"));
+    // A diagnostic sink cannot be allowed to interrupt the actual recovery.
+    let mut printed = cleanup_print(r, &format!("CIV6_CLOSE outcome={outcome}"));
     let sync_result = (|| -> Result<(), String> {
         if outcome == "absent" && cursor.is_none() {
             evidence["sync_phase"] = json!("not_needed_game_absent");
@@ -609,7 +610,8 @@ fn close_civ6_with_renderer(
             return Err("pending Steam exit needs its native helper before recovery".into());
         } else {
             evidence["sync_phase"] = json!("legacy_helper_absent");
-            r.print("STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it")?;
+            let message = cleanup_print(r,"STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it");
+            printed = printed.clone().and(message);
         }
         Ok(())
     })();
@@ -622,7 +624,7 @@ fn close_civ6_with_renderer(
     // Game absence alone does not complete an earlier Cloud barrier. Never
     // move the owner's originals back while the original exit is unresolved.
     let restored = if sync_result.is_ok() {
-        restore_autosaves(r, p)
+        restore_autosaves(r, p, &mut printed)
     } else {
         Err("autosave restoration waits for confirmed Steam release".into())
     };
@@ -634,6 +636,7 @@ fn close_civ6_with_renderer(
     evidence["autosave_restore_error"] = json!(restored.as_ref().err());
     evidence["recovery_receipt_remaining"] =
         json!(p.here.join("reliability-auto-state.json").exists());
+    evidence["cleanup_confirmed"] = json!(sync_result.is_ok() && restored.is_ok());
     evidence["output_error"] = json!(printed.as_ref().err());
     let sync_result = sync_result.and(printed);
     match (sync_result, restored) {
@@ -642,7 +645,18 @@ fn close_civ6_with_renderer(
         (Err(sync), Err(recovery)) => Err(format!("{sync}; {recovery}")),
     }
 }
-fn restore_autosaves(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
+fn cleanup_print(r: &mut impl Runner, message: &str) -> Result<(), String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| r.print(message)))
+        .unwrap_or_else(|_| Err("cleanup output panicked".into()))
+}
+fn close_cleanup_confirmed(evidence: &Value) -> bool {
+    evidence["cleanup_confirmed"] == true
+}
+fn restore_autosaves(
+    r: &mut impl Runner,
+    p: &Paths,
+    printed: &mut Result<(), String>,
+) -> Result<(), String> {
     let auto_state = p.here.join("reliability-auto-state.json");
     if auto_state.is_file() {
         let helper = p
@@ -666,7 +680,23 @@ fn restore_autosaves(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
                 out.stdout, out.stderr
             ));
         }
-        r.print("AUTOSAVE original folder restored; test autosaves retained with artifacts")?;
+        let message = cleanup_print(
+            r,
+            "AUTOSAVE original folder restored; test autosaves retained with artifacts",
+        );
+        *printed = printed.clone().and(message);
+    }
+    // Helper success must not silently leave an unresolved original receipt.
+    for name in ["reliability-auto-state.json", "steam-exit-recovery.json"] {
+        if p.here
+            .join(name)
+            .try_exists()
+            .map_err(|e| format!("inspect recovery receipt {name}: {e}"))?
+        {
+            return Err(format!(
+                "recovery receipt remains after restoration: {name}"
+            ));
+        }
     }
     Ok(())
 }
@@ -2043,10 +2073,25 @@ fn time_left(r: &mut impl Runner, deadline: f64) -> Result<f64, String> {
 #[derive(Default)]
 struct RunCleanup {
     game_closed: bool,
+    cleanup_refused_before_work: bool,
     deadline: Option<f64>,
     artifacts: Option<std::path::PathBuf>,
     software_profile: Option<crate::software_renderer::Profile>,
     renderer: Option<renderer_evidence::Run>,
+}
+fn pending_recovery_records(p: &Paths) -> Result<bool, String> {
+    for name in [
+        "reliability-auto-state.json",
+        "steam-exit-recovery.json",
+        "software-renderer-original.bin",
+    ] {
+        if p.here.join(name).try_exists().map_err(|error| {
+            format!("inspect recovery records before unstarted lease release: {error}")
+        })? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn main_owned(
@@ -2059,6 +2104,7 @@ fn main_owned(
 ) -> Result<i32, String> {
     let RunCleanup {
         game_closed,
+        cleanup_refused_before_work,
         deadline: cleanup_deadline,
         artifacts: cleanup_artifacts,
         software_profile,
@@ -2066,12 +2112,17 @@ fn main_owned(
     } = cleanup;
     if options.cleanup_only {
         if civ6_running(r)? {
+            // No close/restore helper was dispatched. Refusing an unrelated
+            // running game is not a failed restoration of our original files.
+            *cleanup_refused_before_work = true;
             return Err(
                 "cleanup-only requires a closed Civ6; refusing to close an unrelated game".into(),
             );
         }
-        close_civ6_with_paths(r, p)?;
-        *game_closed = true;
+        let mut evidence = json!({});
+        let closed = close_civ6_with_renderer(r, p, &mut evidence, None);
+        *game_closed = close_cleanup_confirmed(&evidence);
+        closed?;
         return Ok(0);
     }
     let mut first_failure = 0;
@@ -2374,8 +2425,9 @@ fn main_owned(
             };
             let protection = token
                 .map(|token| {
-                    open_close_protection(&mut budget, &p.here.join("civ6.lock"), token)
-                        .and_then(|p| p.ok_or("lock ownership changed before driver close".into()))
+                    open_close_protection(&mut budget, &p.here.join("civ6.lock"), token).and_then(
+                        |p| p.ok_or_else(|| "lock ownership changed before driver close".into()),
+                    )
                 })
                 .transpose()?;
             close_civ6_with_renderer(
@@ -2734,6 +2786,7 @@ fn cli_once(
     .unwrap_or_else(|_| Err("live chain panicked".into()));
     let RunCleanup {
         mut game_closed,
+        cleanup_refused_before_work,
         deadline: cleanup_deadline,
         artifacts: cleanup_artifacts,
         mut software_profile,
@@ -2759,6 +2812,14 @@ fn cli_once(
         let r = &mut budget;
         let protection = open_close_protection(r, &path, &token)?
             .ok_or("lock ownership changed before cleanup")?;
+        if options.cleanup_only && cleanup_refused_before_work && !pending_recovery_records(p)? {
+            // Roll back only this unstarted acquisition. The original refusal
+            // remains Err, and game_closed remains false for the live game.
+            let released = protection.release(r, &path, &token);
+            lock_released = released.is_ok();
+            return released;
+        }
+        let mut diagnostic_error = None;
         // The profile denies DELETE access. Restore under its read protection
         // before opening the normal owned-delete handle, even after a failed
         // driver/panic where the owned game is still alive.
@@ -2782,7 +2843,11 @@ fn cli_once(
                     renderer.as_ref(),
                     "outer-profile-after-close",
                 );
-                closed?;
+                if !close_cleanup_confirmed(&cleanup_exit) {
+                    closed?;
+                } else {
+                    diagnostic_error = closed.err();
+                }
                 game_closed = true;
             }
             protection.check(r, &path)?;
@@ -2823,7 +2888,12 @@ fn cli_once(
             }))
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
-        game_closed = closed.is_ok();
+        game_closed = closed.is_ok() || close_cleanup_confirmed(&cleanup_exit);
+        if !game_closed {
+            closed?;
+        } else if let Err(error) = closed {
+            diagnostic_error = Some(error);
+        }
         protection.check(r, &path)?;
         let restored = if game_closed && !options.cleanup_only {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2834,10 +2904,11 @@ fn cli_once(
             Ok(())
         };
         retain_renderer(r, p, Some(&token), renderer.as_ref(), "outer-after-close");
-        closed.and(restored)?;
+        restored?;
         let released = protection.release(r, &path, &token);
         lock_released = released.is_ok();
-        released
+        released?;
+        diagnostic_error.map_or(Ok(()), Err)
     })();
     if cleanup_needed {
         if let Some(artifacts) = cleanup_artifacts {

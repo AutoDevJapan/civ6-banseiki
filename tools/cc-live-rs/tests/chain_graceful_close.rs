@@ -172,6 +172,7 @@ struct Model {
     omit_sync_journal: bool,
     sync_phase: Option<&'static str>,
     broken_output: bool,
+    panic_output: bool,
     restore_code: i32,
     publish_collision: Option<PathBuf>,
     replaced_before_termination: bool,
@@ -201,6 +202,7 @@ impl Model {
             omit_sync_journal: false,
             sync_phase: None,
             broken_output: false,
+            panic_output: false,
             restore_code: 0,
             publish_collision: None,
             replaced_before_termination: false,
@@ -434,6 +436,7 @@ impl Runner for Model {
         Ok(())
     }
     fn print(&mut self, text: &str) -> Result<(), String> {
+        assert!(!self.panic_output, "fixture output panicked");
         if self.broken_output && text.starts_with("CIV6_CLOSE") {
             return Err("output pipe closed".into());
         }
@@ -791,6 +794,65 @@ fn cleanup_only_restores_receipt_without_checkout_launch_or_touching_a_running_g
     assert!(r.tuner_calls("lua").is_empty());
     assert!(r.running[0]);
     assert!(!f.paths.here.join("civ6.lock").exists());
+}
+
+#[test]
+fn cleanup_only_output_failure_releases_only_after_real_restoration() {
+    for panic in [false, true] {
+        for restore_code in [0, 1] {
+            let f = Fixture::new(false);
+            let state = f.paths.here.join("reliability-auto-state.json");
+            fs::write(&state, "original recovery receipt").unwrap();
+            let mut r = Model::new([false; 2]);
+            r.require_lock = Some(f.paths.here.join("civ6.lock"));
+            r.broken_output = !panic;
+            r.panic_output = panic;
+            r.restore_code = restore_code;
+            let error = chain::cli(&mut r, &f.paths, &["--cleanup-only".into()]).unwrap_err();
+            assert!(
+                error.contains(if panic {
+                    "panicked"
+                } else {
+                    "output pipe closed"
+                }),
+                "{error}"
+            );
+            assert_eq!(state.exists(), restore_code != 0);
+            assert_eq!(f.paths.here.join("civ6.lock").exists(), restore_code != 0);
+            assert_eq!(
+                r.calls
+                    .iter()
+                    .filter(|(_, c)| c.args.get(1).is_some_and(|a| a == "--restore"))
+                    .count(),
+                1
+            );
+            assert_eq!(r.count("taskkill"), 0);
+            assert!(r.tuner_calls("lua").is_empty());
+            if restore_code != 0 {
+                assert!(error.contains("owner autosave recovery failed"));
+                assert_eq!(fs::read(&state).unwrap(), b"original recovery receipt");
+            }
+        }
+    }
+}
+
+#[test]
+fn cleanup_only_live_game_refusal_keeps_pending_original_receipt_and_lock() {
+    let f = Fixture::new(false);
+    let state = f.paths.here.join("reliability-auto-state.json");
+    fs::write(&state, "original recovery receipt").unwrap();
+    let mut r = Model::new([true, false]);
+    let error = chain::cli(&mut r, &f.paths, &["--cleanup-only".into()]).unwrap_err();
+    assert!(error.contains("refusing to close an unrelated game"));
+    assert!(f.paths.here.join("civ6.lock").exists());
+    assert_eq!(fs::read(&state).unwrap(), b"original recovery receipt");
+    assert!(!r
+        .calls
+        .iter()
+        .any(|(_, c)| c.args.get(1).is_some_and(|a| a == "--restore")));
+    assert_eq!(r.count("taskkill"), 0);
+    assert!(r.tuner_calls("lua").is_empty());
+    assert!(r.running[0]);
 }
 
 #[test]

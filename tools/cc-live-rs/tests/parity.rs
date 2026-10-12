@@ -1016,7 +1016,7 @@ fn invalid_input_returns_before_lock_or_external_calls() {
     assert!(!f.p.here.join("queue").exists());
 }
 #[test]
-fn cleanup_failure_retains_lock_until_restoration_is_confirmed() {
+fn failed_initial_exit_query_releases_after_outer_cleanup_confirms_absence() {
     let f = Fixture::new();
     let mut r = Fake::success();
     r.replies.push_back(Ok(Output::default()));
@@ -1024,7 +1024,10 @@ fn cleanup_failure_retains_lock_until_restoration_is_confirmed() {
     assert!(failed_prepare_cli(&mut r, &f.p)
         .unwrap_err()
         .contains("cleanup refused"));
-    assert!(f.p.here.join("civ6.lock").exists());
+    assert!(r.replies.is_empty());
+    assert!(r.printed.iter().any(|s| s == "CIV6_CLOSE outcome=absent"));
+    assert!(!r.calls.iter().any(|c| is_tuner(c) && c.args[1] == "lua"));
+    assert!(!f.p.here.join("civ6.lock").exists());
 }
 
 #[cfg(windows)]
@@ -1335,17 +1338,30 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
     impl Runner for Blocked {
         fn run(&mut self, c: Call) -> Result<Output, String> {
             if is_tuner(&c) && c.args[1] == "lua" {
-                // The verified DELETE handle stays open while cleanup runs.
+                // Close protection denies deletion while allowing contention
+                // metadata updates; its acquisition actor must stay fixed.
                 assert_eq!(
                     fs::remove_file(&self.lock).unwrap_err().raw_os_error(),
                     Some(32)
                 );
-                assert_eq!(
-                    fs::write(&self.lock, "replacement")
-                        .unwrap_err()
-                        .raw_os_error(),
-                    Some(32)
-                );
+                let before = read_json(&self.lock).unwrap();
+                let mut updated = before.clone();
+                updated["competitor_since"] = json!(1000.0);
+                fs::write(&self.lock, updated.to_string()).unwrap();
+                let after = read_json(&self.lock).unwrap();
+                for key in [
+                    "live_chain",
+                    "pid",
+                    "chain_pid",
+                    "pid_created_filetime",
+                    "lock_token",
+                    "acquired_at",
+                    "job",
+                    "owner_job",
+                ] {
+                    assert_eq!(after[key], before[key], "actor field {key} must not change");
+                }
+                assert_eq!(after["competitor_since"], 1000.0);
             }
             self.fake.run(c)
         }
@@ -1443,7 +1459,7 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
     };
     let error = failed_prepare_cli(&mut r, &f.p).unwrap_err();
     assert!(
-        error.contains("ownership changed before cleanup"),
+        error.contains("ownership changed at final release"),
         "{error}"
     );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
