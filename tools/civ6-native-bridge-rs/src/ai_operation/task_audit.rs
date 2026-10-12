@@ -4,6 +4,466 @@ use sha2::{Digest, Sha256};
 
 const HOST_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
 
+/// Opt-in slice. The old audit and every value it returns are preserved.
+/// Hashes refer to these borrowed file buffers, never a later path reread.
+pub fn audit_worker_payload(core: &[u8], host: &[u8]) -> Result<Value, String> {
+    let base = audit(core, host)?; // includes BOTH hash gates before interpreting ABI
+    let payload = worker_payload::inspect(core)?;
+    Ok(json!({"schema":"todo880-native-worker-payload-static-v1",
+        "base_audit":base,"payload_slice":payload,
+        "structural_declarations":{"process_open_calls":0,"dll_load_calls":0,
+            "runtime_feature_activation_calls":0,
+            "basis":"file-buffer-only code structure; not measured process or runtime counters"}}))
+}
+
+mod worker_payload {
+    use super::*;
+    // Pure PE section mapping follows civ6-pe-rs/src/main.rs. It additionally
+    // checks WHOLE spans and keeps exception-directory unwind RVAs for CHAININFO.
+    // No process reader, image loader, CLI decoder or runtime interface here.
+    #[derive(Clone)]
+    struct Section {
+        name: [u8; 8],
+        rva: u32,
+        virtual_size: u32,
+        raw: usize,
+        size: usize,
+        flags: u32,
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct Function {
+        begin: u32,
+        end: u32,
+        unwind: u32,
+    }
+    struct Pe<'a> {
+        image: &'a [u8],
+        base: u64,
+        sections: Vec<Section>,
+        functions: Vec<Function>,
+        relocations: std::collections::BTreeSet<u32>,
+    }
+    fn at(b: &[u8], offset: usize, length: usize) -> Result<&[u8], String> {
+        b.get(
+            offset
+                ..offset
+                    .checked_add(length)
+                    .ok_or("payload file span overflow")?,
+        )
+        .ok_or("payload file span truncated".into())
+    }
+    fn u16_at(b: &[u8], p: usize) -> Result<u16, String> {
+        Ok(u16::from_le_bytes(at(b, p, 2)?.try_into().unwrap()))
+    }
+    fn u32_at(b: &[u8], p: usize) -> Result<u32, String> {
+        Ok(u32::from_le_bytes(at(b, p, 4)?.try_into().unwrap()))
+    }
+    fn u64_at(b: &[u8], p: usize) -> Result<u64, String> {
+        Ok(u64::from_le_bytes(at(b, p, 8)?.try_into().unwrap()))
+    }
+    impl<'a> Pe<'a> {
+        fn parse(image: &'a [u8]) -> Result<Self, String> {
+            if at(image, 0, 2)? != b"MZ" {
+                return Err("payload PE MZ signature".into());
+            }
+            let nt = u32_at(image, 0x3c)? as usize;
+            if at(image, nt, 4)? != b"PE\0\0" {
+                return Err("payload PE signature".into());
+            }
+            let coff = nt.checked_add(4).ok_or("payload header overflow")?;
+            let count = u16_at(image, coff + 2)? as usize;
+            let opt_size = u16_at(image, coff + 16)? as usize;
+            let opt = coff + 20;
+            if u16_at(image, coff)? != 0x8664
+                || count == 0
+                || count > 96
+                || opt_size < 160
+                || u16_at(image, opt)? != 0x20b
+                || u32_at(image, opt + 108)? < 6
+            {
+                return Err("payload PE64 sections/directories".into());
+            }
+            at(image, opt, opt_size)?;
+            let table = opt
+                .checked_add(opt_size)
+                .ok_or("payload section table overflow")?;
+            let mut sections = Vec::new();
+            for i in 0..count {
+                let p = table + i * 40;
+                let section = Section {
+                    name: at(image, p, 8)?.try_into().unwrap(),
+                    virtual_size: u32_at(image, p + 8)?,
+                    rva: u32_at(image, p + 12)?,
+                    size: u32_at(image, p + 16)? as usize,
+                    raw: u32_at(image, p + 20)? as usize,
+                    flags: u32_at(image, p + 36)?,
+                };
+                section
+                    .rva
+                    .checked_add(section.virtual_size)
+                    .ok_or("payload section RVA overflow")?;
+                at(image, section.raw, section.size)?;
+                sections.push(section);
+            }
+            let mut pe = Self {
+                image,
+                base: u64_at(image, opt + 24)?,
+                sections,
+                functions: Vec::new(),
+                relocations: std::collections::BTreeSet::new(),
+            };
+            let pdata_rva = u32_at(image, opt + 112 + 3 * 8)?;
+            let pdata_size = u32_at(image, opt + 116 + 3 * 8)? as usize;
+            if pdata_size == 0 || pdata_size % 12 != 0 || pdata_size / 12 > 131072 {
+                return Err("payload exception directory size".into());
+            }
+            let pdata = pe.span(pdata_rva, pdata_size, false)?;
+            for row in pdata.chunks_exact(12) {
+                let f = Function {
+                    begin: u32_at(row, 0)?,
+                    end: u32_at(row, 4)?,
+                    unwind: u32_at(row, 8)?,
+                };
+                if f.begin >= f.end || f.unwind & 3 != 0 {
+                    return Err("payload function range/unwind alignment".into());
+                }
+                pe.span(f.begin, (f.end - f.begin) as usize, true)?;
+                pe.span(f.unwind, 4, false)?;
+                pe.functions.push(f);
+            }
+            pe.functions.sort_by_key(|f| f.begin);
+            if pe.functions.windows(2).any(|w| w[0].end > w[1].begin) {
+                return Err("payload overlapping exception ranges".into());
+            }
+            let reloc_rva = u32_at(image, opt + 112 + 5 * 8)?;
+            let reloc_size = u32_at(image, opt + 116 + 5 * 8)? as usize;
+            if reloc_size == 0 {
+                return Err("payload relocation directory absent".into());
+            }
+            let reloc = pe.span(reloc_rva, reloc_size, false)?;
+            let mut pos = 0usize;
+            while pos < reloc.len() {
+                let page = u32_at(reloc, pos)?;
+                let size = u32_at(reloc, pos + 4)? as usize;
+                if size < 8 || size % 2 != 0 {
+                    return Err("payload relocation block size".into());
+                }
+                let block = at(reloc, pos, size)?;
+                for word in block[8..].chunks_exact(2) {
+                    let item = u16::from_le_bytes(word.try_into().unwrap());
+                    if item >> 12 == 10 {
+                        let rva = page
+                            .checked_add(u32::from(item & 0xfff))
+                            .ok_or("payload relocation overflow")?;
+                        pe.span_any(rva, 8)?;
+                        pe.relocations.insert(rva);
+                    } else if item >> 12 != 0 {
+                        return Err("payload non-DIR64 relocation".into());
+                    }
+                }
+                pos = pos
+                    .checked_add(size)
+                    .ok_or("payload relocation size overflow")?;
+            }
+            Ok(pe)
+        }
+        fn section(&self, rva: u32, length: usize) -> Result<&Section, String> {
+            let length = u32::try_from(length).map_err(|_| "payload span length")?;
+            let end = rva.checked_add(length).ok_or("payload RVA span overflow")?;
+            let mut matches = self.sections.iter().filter(|s| {
+                rva >= s.rva && end <= s.rva.saturating_add(s.virtual_size.min(s.size as u32))
+            });
+            let s = matches
+                .next()
+                .ok_or("payload span outside backed section")?;
+            if matches.next().is_some() {
+                return Err("payload ambiguous section".into());
+            }
+            Ok(s)
+        }
+        fn span_any(&self, rva: u32, length: usize) -> Result<&'a [u8], String> {
+            let s = self.section(rva, length)?;
+            at(self.image, s.raw + (rva - s.rva) as usize, length)
+        }
+        fn span(&self, rva: u32, length: usize, code: bool) -> Result<&'a [u8], String> {
+            let s = self.section(rva, length)?;
+            if (s.flags & 0x2000_0000 != 0) != code || s.flags & 0x4000_0000 == 0 {
+                return Err("payload executable/data section type differs".into());
+            }
+            self.span_any(rva, length)
+        }
+        fn function(&self, rva: u32) -> Option<Function> {
+            let i = self.functions.partition_point(|f| f.begin <= rva);
+            i.checked_sub(1)
+                .and_then(|i| self.functions.get(i))
+                .copied()
+                .filter(|f| rva < f.end)
+        }
+        fn chain(&self, fragment: Function) -> Result<Vec<Function>, String> {
+            let mut chain = Vec::new();
+            let mut current = fragment;
+            for _ in 0..16 {
+                if chain.contains(&current) {
+                    return Err("payload cyclic CHAININFO".into());
+                }
+                chain.push(current);
+                let h = self.span(current.unwind, 4, false)?;
+                if h[0] & 7 != 1 || h[0] >> 3 & !7 != 0 {
+                    return Err("payload unwind version/flags".into());
+                }
+                let flags = h[0] >> 3;
+                let codes = usize::from(h[2]);
+                let aligned = 4 + ((codes + 1) & !1) * 2;
+                self.span(current.unwind, aligned, false)?;
+                if flags & 4 == 0 {
+                    return Ok(chain);
+                }
+                if flags & 3 != 0 {
+                    return Err("payload chained unwind also has a handler".into());
+                }
+                let address = current
+                    .unwind
+                    .checked_add(aligned as u32)
+                    .ok_or("payload CHAININFO overflow")?;
+                let row = self.span(address, 12, false)?;
+                let parent = Function {
+                    begin: u32_at(row, 0)?,
+                    end: u32_at(row, 4)?,
+                    unwind: u32_at(row, 8)?,
+                };
+                if !self.functions.contains(&parent) {
+                    return Err("payload CHAININFO parent absent from pdata".into());
+                }
+                current = parent;
+            }
+            Err("payload CHAININFO exceeds finite depth".into())
+        }
+        fn witness(
+            &self,
+            rva: u32,
+            expected: &[u8],
+            whole_function: bool,
+        ) -> Result<Value, String> {
+            if self.span(rva, expected.len(), true)? != expected {
+                return Err(format!("payload bytes differ at {rva:#x}"));
+            }
+            let f = self.function(rva);
+            if whole_function
+                && f.is_none_or(|f| f.begin != rva || f.end != rva + expected.len() as u32)
+            {
+                return Err(format!(
+                    "payload complete function range differs at {rva:#x}"
+                ));
+            }
+            let s = self.section(rva, expected.len())?;
+            Ok(
+                json!({"rva":rva,"length":expected.len(),"section":String::from_utf8_lossy(&s.name).trim_end_matches('\0'),
+                "span_type":if whole_function {"complete_pdata_function"} else if f.is_none() {"bounded_leaf_without_pdata"} else {"bounded_instruction_interval"},
+                "bytes_hex":expected.iter().map(|b|format!("{b:02x}")).collect::<String>(),
+                "function_range":f.map(|f|json!({"begin":f.begin,"end":f.end,"unwind":f.unwind}))}),
+            )
+        }
+        fn pointer(&self, slot: u32, target: u32) -> Result<Value, String> {
+            let raw = u64_at(self.span(slot, 8, false)?, 0)?;
+            let actual = raw
+                .checked_sub(self.base)
+                .and_then(|v| u32::try_from(v).ok())
+                .ok_or("payload absolute pointer outside image")?;
+            if actual != target || !self.relocations.contains(&slot) {
+                return Err("payload vft pointer/DIR64 relocation differs".into());
+            }
+            self.span(target, 1, true)?;
+            Ok(
+                json!({"slot_rva":slot,"preferred_va":raw,"computed_target_rva":actual,"relocation_type":"DIR64",
+                "scope":"relocated disk pointer; not an executed vtable or payload identity"}),
+            )
+        }
+    }
+    const GETTER: &[u8] = &[
+        0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x41, 0x08, 0x48, 0x8b, 0x58, 0x60, 0x48,
+        0x85, 0xdb, 0x74, 0x2b, 0x48, 0x8b, 0xcb, 0xe8, 0x65, 0xd8, 0x0a, 0, 0x84, 0xc0, 0x74,
+        0x1f, 0xb9, 0x20, 0, 0, 0, 0xe8, 0x97, 0xf6, 0, 0, 0x48, 0x85, 0xc0, 0x74, 0x10, 0x48,
+        0x8b, 0xd3, 0x48, 0x8b, 0xc8, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xe9, 0x72, 0x6b, 0, 0, 0x33,
+        0xc0, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3,
+    ];
+    const CTOR: &[u8] = &[
+        0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x89, 0x51, 0x08, 0x48, 0x8d, 0x05, 0x87, 0xa1,
+        0x47, 0, 0x48, 0x89, 0x01, 0x48, 0x8b, 0xd9, 0x48, 0xc7, 0x41, 0x10, 0, 0, 0, 0, 0xc7,
+        0x41, 0x18, 1, 0, 0, 0, 0x48, 0x85, 0xd2, 0x74, 0x12, 0x48, 0x8b, 0x0d, 0xfe, 0x3c, 0x5f,
+        0, 0x48, 0x85, 0xc9, 0x74, 6, 0x48, 0x8b, 0x01, 0xff, 0x50, 0x40, 0x48, 0x8b, 0xc3, 0x48,
+        0x83, 0xc4, 0x20, 0x5b, 0xc3,
+    ];
+    const OTHER_CTOR: &[u8] = &[
+        0x48, 0x8d, 0x05, 0x41, 0xa1, 0x47, 0, 0x48, 0xc7, 0x41, 8, 0, 0, 0, 0, 0x48, 0x89, 1,
+        0x48, 0x8b, 0xc1, 0x48, 0x89, 0x51, 0x10, 0xc7, 0x41, 0x18, 1, 0, 0, 0, 0xc3,
+    ];
+    const COUNTER: &[u8] = &[
+        0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x8b, 0x41, 0x18, 0x48, 0x8b, 0xd9, 0x83, 0xf8, 1,
+        0x75, 0x30, 0x48, 0x83, 0x79, 8, 0, 0x48, 0x8d, 0x05, 0xfb, 0xa0, 0x47, 0, 0x48, 0x89, 1,
+        0x74, 0x12, 0x48, 0x8b, 0x0d, 0x87, 0x3c, 0x5f, 0, 0x48, 0x85, 0xc9, 0x74, 6, 0x48, 0x8b,
+        1, 0xff, 0x50, 0x38, 0x48, 0x8b, 0xcb, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xe9, 0x6f, 0x91,
+        0xff, 0xff, 0xff, 0xc8, 0x89, 0x41, 0x18, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3,
+    ];
+    const EXECUTE: &[u8] = &[0x48, 0x8b, 0x49, 8, 0xe9, 0xb7, 0x5b, 0x0a, 0];
+    const FINISH: &[u8] = &[0x48, 0x8b, 0x49, 8, 0xe9, 0xc7, 0x67, 0x0a, 0];
+    fn rel_target(
+        rva: u32,
+        code: &[u8],
+        opcode: u8,
+        length: usize,
+        displacement: usize,
+    ) -> Result<u32, String> {
+        if length != code.len() || code.first() != Some(&opcode) {
+            return Err("payload relative opcode/length".into());
+        }
+        let delta = i32::from_le_bytes(at(code, displacement, 4)?.try_into().unwrap());
+        u32::try_from(i64::from(rva) + length as i64 + i64::from(delta))
+            .map_err(|_| "payload relative target bounds".into())
+    }
+    fn computed_branches(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+        let mut result = Vec::new();
+        for (rva, op, target) in [
+            (0x5901b6, 0xe8, 0x63da20),
+            (0x5901c4, 0xe8, 0x59f860),
+            (0x5901d9, 0xe9, 0x596d50),
+            (0x597634, 0xe9, 0x63d1f0),
+            (0x597994, 0xe9, 0x63e160),
+            (0x596e0c, 0xe9, 0x58ff80),
+        ] {
+            let actual = rel_target(rva, pe.span(rva, 5, true)?, op, 5, 1)?;
+            if actual != target {
+                return Err("payload relative branch target differs".into());
+            }
+            result.push(
+                json!({"rva":rva,"kind":if op==0xe8 {"direct_call"} else {"direct_tail"},
+                "computed_target_rva":actual}),
+            );
+        }
+        for (rva, target) in [
+            (0x596d5a, 0xa10ee8),
+            (0x596da0, 0xa10ee8),
+            (0x596de6, 0xa10ee8),
+        ] {
+            let b = pe.span(rva, 7, true)?;
+            if b[..3] != [0x48, 0x8d, 0x05] {
+                return Err("payload table LEA opcode".into());
+            }
+            let actual = rel_target(rva, b, 0x48, 7, 3)?;
+            if actual != target {
+                return Err("payload table LEA target differs".into());
+            }
+            result.push(
+                json!({"rva":rva,"kind":"rip_relative_address","computed_target_rva":actual}),
+            );
+        }
+        Ok(result)
+    }
+    fn code(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+        [
+            (0x5901a0, GETTER, true),
+            (0x596d50, CTOR, true),
+            (0x596da0, OTHER_CTOR, false),
+            (0x596dd0, COUNTER, true),
+            (0x597630, EXECUTE, false),
+            (0x597990, FINISH, false),
+        ]
+        .into_iter()
+        .map(|(rva, b, whole)| pe.witness(rva, b, whole))
+        .collect()
+    }
+    pub(super) fn inspect(core: &[u8]) -> Result<Value, String> {
+        let pe = Pe::parse(core)?;
+        let witnesses = code(&pe)?;
+        let branches = computed_branches(&pe)?;
+        let pointers = [
+            (0xa10278, 0x5901a0),
+            (0xa10ee8, 0x5976f0),
+            (0xa10ef0, 0x596dd0),
+            (0xa10ef8, 0x597630),
+            (0xa10f00, 0x597990),
+        ]
+        .into_iter()
+        .map(|(slot, target)| pe.pointer(slot, target))
+        .collect::<Result<Vec<_>, _>>()?;
+        let fragment = pe
+            .function(0x63d443)
+            .ok_or("payload manager call has no exception owner")?;
+        let chain = pe.chain(fragment)?;
+        if chain.last().is_none_or(|f| f.begin != 0x63d1f0) {
+            return Err("payload complete owner differs".into());
+        }
+        pe.witness(
+            0x63d1f0,
+            &[
+                0x48, 0x8b, 0xc4, 0x55, 0x57, 0x48, 0x8d, 0x68, 0xa1, 0x48, 0x81, 0xec, 0xa8, 0, 0,
+                0,
+            ],
+            false,
+        )?;
+        pe.witness(
+            0x63d4e0,
+            &[
+                0x66, 0xc7, 0x87, 0xa4, 2, 0, 0, 1, 0, 0xb0, 1, 0x48, 0x81, 0xc4, 0xa8, 0, 0, 0,
+                0x5f, 0x5d, 0xc3,
+            ],
+            false,
+        )?;
+        let complete = pe.span(0x63d1f0, 0x305, true)?;
+        Ok(json!({"schema":"todo880-worker-payload-slice-v1",
+            "core_sha256":format!("{:x}",Sha256::digest(core)),
+            "witnesses":witnesses,"computed_references":branches,"relocated_table_slots":pointers,
+            "complete_owner":{"entry_rva":0x63d1f0,"normal_ret_rva":0x63d4f4,
+                "span_bytes":complete.len(),"span_sha256":format!("{:x}",Sha256::digest(complete)),
+                "scope":"whole copied interval and static unwind ownership, not exhaustive executed control flow",
+                "manager_fragment_chain":chain.iter().map(|f|json!({"begin":f.begin,"end":f.end,"unwind":f.unwind})).collect::<Vec<_>>()},
+            "payload_fields":[{"offset":0,"width":8,"value":"table RVA A10EE8"},
+                {"offset":8,"width":8,"value":"constructor input RDX; execution/shutdown leaves load it into RCX"},
+                {"offset":16,"width":8,"value":"zero in596D50; input RDX in596DA0; NOT ticket storage"},
+                {"offset":24,"width":4,"value":"initial1;596DD0 compares1 or decrements/stores; ownership meaning unestablished"}],
+            "origin_candidate":{"getter_rva":0x5901a0,"context_table_slot":0x90,
+                "receiver_reads":[8,96],"allocation_bytes":32,"allocation_call_rva":0x5901c4,
+                "constructor_tail_rva":0x5901d9,"constructor_destination":"RCX from allocation RAX",
+                "stored_receiver":"RDX from getter RBX; no later source pointer read inferred",
+                "ticket_placement":"only a bridge-owned birth reservation once origin epoch and publication handoff are proven; no native field write"},
+            "counter_scope":"local compare/decrement/store bytes only; not an atomic refcounter, ownership transfer, Cancel or join proof",
+            "not_established_by_this_audit":["executed Context type and vft identity","payload receiver lifetime",
+                "host shared vft+40/+38 ownership semantics","queue publication and992210.RDX identity",
+                "992280 publication of this payload","Cancel and reissue completion",
+                "safe old-epoch ticket transfer","all-domain Close/Rebuild authority"]}))
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        #[test]
+        fn payload_relative_references_reject_opcode_truncation_and_signed_bounds() {
+            assert_eq!(
+                rel_target(0x100, &[0xe9, 0xfb, 0xff, 0xff, 0xff], 0xe9, 5, 1).unwrap(),
+                0x100
+            );
+            assert!(rel_target(0, &[0xe9, 0xf0, 0xff, 0xff, 0xff], 0xe9, 5, 1).is_err());
+            assert!(rel_target(u32::MAX, &[0xe8, 0, 0, 0, 0], 0xe8, 5, 1).is_err());
+            assert!(rel_target(0x100, &[0xe9, 0, 0, 0], 0xe9, 5, 1).is_err());
+            assert!(rel_target(0x100, &[0xe8, 0, 0, 0, 0], 0xe9, 5, 1).is_err());
+        }
+        #[test]
+        fn payload_offset10_is_not_a_free_ticket_field() {
+            let mut b = vec![0u8; 0x596da0 - 0xc00 + OTHER_CTOR.len()];
+            let start = 0x596da0 - 0xc00;
+            b[start..].copy_from_slice(OTHER_CTOR);
+            assert!(bytes(&b, 0x596da0, OTHER_CTOR).is_ok());
+            assert_eq!(&OTHER_CTOR[21..25], &[0x48, 0x89, 0x51, 0x10]);
+            b[start + 24] = 0x20;
+            assert!(bytes(&b, 0x596da0, OTHER_CTOR).is_err());
+        }
+        #[test]
+        fn payload_wrong_hash_is_rejected_before_section_or_type_interpretation() {
+            assert!(audit_worker_payload(b"MZ", b"PE")
+                .unwrap_err()
+                .contains("pinned"));
+        }
+    }
+}
+
 fn bytes(image: &[u8], rva: u32, expected: &[u8]) -> Result<(), String> {
     // Both hash-pinned images: .text RVA1000/raw400, verified from PE headers.
     let offset = rva.checked_sub(0xc00).ok_or("text RVA underflow")? as usize;
