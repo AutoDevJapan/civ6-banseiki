@@ -641,6 +641,116 @@ mod worker_payload {
             )
         }
 
+        pub(super) fn inspect(core: &[u8]) -> Result<Value, String> {
+            let pe = Pe::parse(core)?;
+            let witnesses = spans(&pe)?;
+            let refs = references(&pe)?;
+            let functions = [
+                complete(
+                    &pe,
+                    0x4a5f30,
+                    0x4a63ad,
+                    0xaf1928,
+                    "0ae7315ceae95bf6def7024c984d9d5bd63df84886df36f494fbef1d321542c2",
+                    &[
+                        1, 0x1f, 0xc, 0, 0x1f, 0x74, 0x12, 0, 0x1f, 0x64, 0x11, 0, 0x1f, 0x34,
+                        0x10, 0, 0x1f, 0x92, 0x18, 0xf0, 0x16, 0xe0, 0x14, 0xd0, 0x12, 0xc0, 0x10,
+                        0x50,
+                    ],
+                )?,
+                complete(
+                    &pe,
+                    0x4a64a0,
+                    0x4a65b0,
+                    0xacae3c,
+                    "41fb6cefb7c5ab572672b84742aadf990669304009240219a5bafac49973d3f2",
+                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
+                )?,
+                complete(
+                    &pe,
+                    0x4a71a0,
+                    0x4a71d4,
+                    0xacae3c,
+                    "0cb7eaae207fc94bb18c31525afbd42e3b24c07c75b7c17f034493f6c6be8506",
+                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
+                )?,
+                complete(
+                    &pe,
+                    0x4a71e0,
+                    0x4a7214,
+                    0xacae3c,
+                    "8e77fe1a8e1ba3a58e2b1c3185bfd34991a0d0ac33769a366e3983f19e55594a",
+                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
+                )?,
+                complete(
+                    &pe,
+                    0x4a7380,
+                    0x4a73c7,
+                    0xb578e8,
+                    "e23163f9d558e1676b6c93752235170e9df6f3a08c1f23deb41ad60b41a37a6c",
+                    &[1, 4, 1, 0, 4, 0x62, 0, 0],
+                )?,
+            ];
+            let slots = [
+                pe.pointer(0xa06648, 0x4a71a0)?,
+                pe.pointer(0xa06650, 0x4a8530)?,
+                pe.pointer(0xa06790, 0x4a71e0)?,
+            ];
+            if pe.span(0x9c5fc0, 16, false)? != b"<Null Job Name>\0"
+                || pe.span(0xa06920, 18, false)? != b"Governor Analyzer\0"
+            {
+                return Err("governor fixed name strings differ".into());
+            }
+            let fragment = pe
+                .function(0x4a7a4b)
+                .ok_or("governor producer pdata absent")?;
+            let producer_chain = pe.chain(fragment)?;
+            if producer_chain.last().is_none_or(|f| f.begin != 0x4a79b0) {
+                return Err("governor producer chain owner differs".into());
+            }
+            Ok(
+                json!({"schema":"todo880-governor-job-birth-owner-static-v1",
+                "core_sha256":format!("{:x}",Sha256::digest(core)),"witnesses":witnesses,
+                "complete_functions":functions,"computed_references":refs,"relocated_table_slots":slots,
+                "rtti":rtti_failure(&pe)?,
+                "owner_constructor":{"entry_rva":0x4a5f30,"input_receiver":"RCX saved into RDI at4A5F4F",
+                    "normal_return":"RAX=RDI at4A6391, conditional on normal returns and Win64 nonvolatile ABI",
+                    "table_rva":0xa06790,"allocation_caller_rva":0x4a7380,
+                    "allocation_call_rva":0x4a73ac,"allocation_size_argument":0x1f0,
+                    "constructor_tail_rva":0x4a73bd},
+                "embedded_job":{"relation":"each checked function uses its own input owner+D0; cross-invocation receiver equality unestablished",
+                    "offset":0xd0,"table_store_rva":0x4a60a1,"table_rva":0xa06648,
+                    "sized_deallocation_argument":0x40,"argument_rva":0x4a71b9,
+                    "construction_scope":"embedded initialization at this owner D0; no independent32-byte allocation in this slice",
+                    "initial_fields":[{"offset":8,"value":0},{"offset":16,"value":0},
+                        {"offset":24,"value":"Core+9C5FC0: <Null Job Name>"},
+                        {"offset":32,"value":0},{"offset":40,"value":0},
+                        {"offset":56,"width":2,"value":1}],
+                    "native_ticket_field_write":false},
+                "publication":{"producer_owner_entry":0x4a79b0,"job_address_rva":0x4a7a2e,
+                    "job_address":"RDX=RSI+D0; RSI saved from incoming RCX",
+                    "manager_load_rva":0x4a7a41,"manager_basis":"[Core+B8AA68]+250, not owner+250",
+                    "manager_receiver":"RBX passed to both4A1100 and4A10B0 after normal Push return",
+                    "metadata_rva":0xa06920,"metadata_text":"Governor Analyzer",
+                    "producer_chain":producer_chain.iter().map(|f|json!({"begin":f.begin,"end":f.end,"unwind":f.unwind})).collect::<Vec<_>>()},
+                "destruction":{"owner_table_virtual0":0x4a71e0,"owner_body":0x4a64a0,
+                    "embedded_receiver_rva":0x4a6565,"embedded_receiver":"RCX=RBX+D0; RBX saved from owner RCX",
+                    "base_reset_call_rva":0x4a656c,"base_reset_target":0x992150,"base_table_rva":0x9c5fd0,
+                    "job_table_virtual0":0x4a71a0,"job_base_reset_call_rva":0x4a71af,
+                    "distinct_paths":"owner body calls base reset directly, not the job virtual0",
+                    "conditional_sized_call_target":0x9afea8,
+                    "condition":"job/owner scalar paths test original DL bit0 after normal cleanup return",
+                    "owner_size_argument":0x1f0,"job_size_argument":0x40},
+                "certificate_issued":false,"runtime_calls":0,"game_runs":0,"observations_accepted":false,
+                "zero_count_basis":"buffer-only implementation structure; not measured process counters",
+                "not_established_by_this_audit":["executed constructor/producer/drop receiver equality",
+                    "owner lifetime and its World epoch at construction","global manager identity with owner or its stored receiver",
+                    "constructor/destruction ordering against pending or running proxy T",
+                    "retain/copy/release/Cancel/reissue completion","safe birthticket transfer",
+                    "4A8530 whole executed frame and SEH completion","985BF0 never-executed task recovery",
+                    "all-domain Close/Rebuild authority"]}),
+            )
+        }
         #[cfg(test)]
         mod tests {
             use super::*;
@@ -815,116 +925,6 @@ mod worker_payload {
                 b[p + 5] ^= 1;
                 assert!(complete(&pe(&b), 0x4a64a0, 0x4a65b0, 0xacae3c, expected, &codes).is_err());
             }
-        }
-        pub(super) fn inspect(core: &[u8]) -> Result<Value, String> {
-            let pe = Pe::parse(core)?;
-            let witnesses = spans(&pe)?;
-            let refs = references(&pe)?;
-            let functions = [
-                complete(
-                    &pe,
-                    0x4a5f30,
-                    0x4a63ad,
-                    0xaf1928,
-                    "0ae7315ceae95bf6def7024c984d9d5bd63df84886df36f494fbef1d321542c2",
-                    &[
-                        1, 0x1f, 0xc, 0, 0x1f, 0x74, 0x12, 0, 0x1f, 0x64, 0x11, 0, 0x1f, 0x34,
-                        0x10, 0, 0x1f, 0x92, 0x18, 0xf0, 0x16, 0xe0, 0x14, 0xd0, 0x12, 0xc0, 0x10,
-                        0x50,
-                    ],
-                )?,
-                complete(
-                    &pe,
-                    0x4a64a0,
-                    0x4a65b0,
-                    0xacae3c,
-                    "41fb6cefb7c5ab572672b84742aadf990669304009240219a5bafac49973d3f2",
-                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
-                )?,
-                complete(
-                    &pe,
-                    0x4a71a0,
-                    0x4a71d4,
-                    0xacae3c,
-                    "0cb7eaae207fc94bb18c31525afbd42e3b24c07c75b7c17f034493f6c6be8506",
-                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
-                )?,
-                complete(
-                    &pe,
-                    0x4a71e0,
-                    0x4a7214,
-                    0xacae3c,
-                    "8e77fe1a8e1ba3a58e2b1c3185bfd34991a0d0ac33769a366e3983f19e55594a",
-                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
-                )?,
-                complete(
-                    &pe,
-                    0x4a7380,
-                    0x4a73c7,
-                    0xb578e8,
-                    "e23163f9d558e1676b6c93752235170e9df6f3a08c1f23deb41ad60b41a37a6c",
-                    &[1, 4, 1, 0, 4, 0x62, 0, 0],
-                )?,
-            ];
-            let slots = [
-                pe.pointer(0xa06648, 0x4a71a0)?,
-                pe.pointer(0xa06650, 0x4a8530)?,
-                pe.pointer(0xa06790, 0x4a71e0)?,
-            ];
-            if pe.span(0x9c5fc0, 16, false)? != b"<Null Job Name>\0"
-                || pe.span(0xa06920, 18, false)? != b"Governor Analyzer\0"
-            {
-                return Err("governor fixed name strings differ".into());
-            }
-            let fragment = pe
-                .function(0x4a7a4b)
-                .ok_or("governor producer pdata absent")?;
-            let producer_chain = pe.chain(fragment)?;
-            if producer_chain.last().is_none_or(|f| f.begin != 0x4a79b0) {
-                return Err("governor producer chain owner differs".into());
-            }
-            Ok(
-                json!({"schema":"todo880-governor-job-birth-owner-static-v1",
-                "core_sha256":format!("{:x}",Sha256::digest(core)),"witnesses":witnesses,
-                "complete_functions":functions,"computed_references":refs,"relocated_table_slots":slots,
-                "rtti":rtti_failure(&pe)?,
-                "owner_constructor":{"entry_rva":0x4a5f30,"input_receiver":"RCX saved into RDI at4A5F4F",
-                    "normal_return":"RAX=RDI at4A6391, conditional on normal returns and Win64 nonvolatile ABI",
-                    "table_rva":0xa06790,"allocation_caller_rva":0x4a7380,
-                    "allocation_call_rva":0x4a73ac,"allocation_size_argument":0x1f0,
-                    "constructor_tail_rva":0x4a73bd},
-                "embedded_job":{"relation":"each checked function uses its own input owner+D0; cross-invocation receiver equality unestablished",
-                    "offset":0xd0,"table_store_rva":0x4a60a1,"table_rva":0xa06648,
-                    "sized_deallocation_argument":0x40,"argument_rva":0x4a71b9,
-                    "construction_scope":"embedded initialization at this owner D0; no independent32-byte allocation in this slice",
-                    "initial_fields":[{"offset":8,"value":0},{"offset":16,"value":0},
-                        {"offset":24,"value":"Core+9C5FC0: <Null Job Name>"},
-                        {"offset":32,"value":0},{"offset":40,"value":0},
-                        {"offset":56,"width":2,"value":1}],
-                    "native_ticket_field_write":false},
-                "publication":{"producer_owner_entry":0x4a79b0,"job_address_rva":0x4a7a2e,
-                    "job_address":"RDX=RSI+D0; RSI saved from incoming RCX",
-                    "manager_load_rva":0x4a7a41,"manager_basis":"[Core+B8AA68]+250, not owner+250",
-                    "manager_receiver":"RBX passed to both4A1100 and4A10B0 after normal Push return",
-                    "metadata_rva":0xa06920,"metadata_text":"Governor Analyzer",
-                    "producer_chain":producer_chain.iter().map(|f|json!({"begin":f.begin,"end":f.end,"unwind":f.unwind})).collect::<Vec<_>>()},
-                "destruction":{"owner_table_virtual0":0x4a71e0,"owner_body":0x4a64a0,
-                    "embedded_receiver_rva":0x4a6565,"embedded_receiver":"RCX=RBX+D0; RBX saved from owner RCX",
-                    "base_reset_call_rva":0x4a656c,"base_reset_target":0x992150,"base_table_rva":0x9c5fd0,
-                    "job_table_virtual0":0x4a71a0,"job_base_reset_call_rva":0x4a71af,
-                    "distinct_paths":"owner body calls base reset directly, not the job virtual0",
-                    "conditional_sized_call_target":0x9afea8,
-                    "condition":"job/owner scalar paths test original DL bit0 after normal cleanup return",
-                    "owner_size_argument":0x1f0,"job_size_argument":0x40},
-                "certificate_issued":false,"runtime_calls":0,"game_runs":0,"observations_accepted":false,
-                "zero_count_basis":"buffer-only implementation structure; not measured process counters",
-                "not_established_by_this_audit":["executed constructor/producer/drop receiver equality",
-                    "owner lifetime and its World epoch at construction","global manager identity with owner or its stored receiver",
-                    "constructor/destruction ordering against pending or running proxy T",
-                    "retain/copy/release/Cancel/reissue completion","safe birthticket transfer",
-                    "4A8530 whole executed frame and SEH completion","985BF0 never-executed task recovery",
-                    "all-domain Close/Rebuild authority"]}),
-            )
         }
     }
     #[cfg(test)]
