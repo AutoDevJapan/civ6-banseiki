@@ -76,15 +76,27 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         let a = read(i)?;
         let z = read(i + 1)?;
         for r in [&a, &z] {
+            let copied_bytes = |words: &[u64], copied: u64| {
+                words
+                    .iter()
+                    .flat_map(|v| v.to_le_bytes())
+                    .take(usize::try_from(copied).unwrap_or(usize::MAX))
+                    .collect::<Vec<_>>()
+            };
             rows.push(
                 json!({"raw":r.to_vec(),"invocation_id":r[3],"kind":r[1],"edge":r[2],
                 "tid":r[5],"thread_created_filetime":r[6],"core_epoch":r[7],
                 "caller":r[8],"entry_rsp":r[9],"rcx_list":r[10],"rdx_opaque":r[11],
                 "r8_set_opaque":r[12],"r9_metadata_opaque":r[13],
-                "descriptor_words":r[14..18],"metadata_words":r[18..20],
+                "descriptor_bytes":copied_bytes(&r[14..18],r[24]),
+                "metadata_bytes":copied_bytes(&r[18..20],r[26]),
+                "snapshot_requested":r[1]==4,
+                "status":match r[2] {1=>"entry",2=>"normal_return",3=>"exception_unwind",_=>"unknown"},
+                "native_return_present":r[2]==2,
                 "errors":r[20],"rax":r[21],"last_error":r[22],"event":r[23],
                 "descriptor_copied":r[24],"descriptor_read_error":r[25],
                 "metadata_copied":r[26],"metadata_read_error":r[27],"output_rdx":r[28],
+                "descriptor_read_raw_bool":r[30],"metadata_read_raw_bool":r[31],
                 "native_entry_rsp":r[29],"snapshot_scope":"entry_only_no_pointer_reread"}),
             );
         }
@@ -103,8 +115,10 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
             && a[7] == epoch
             && epoch > 0
             && core > 0
+            && a[8] > 0
             && a[9] > 0
             && a[29] > 0
+            && a[9].checked_sub(0x1d0) == Some(a[29])
             && a[20] == 0
             && z[20] == 0
             && a[23] > 0
@@ -112,12 +126,17 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
             && z[23] <= word(b, 192)?
             && events.insert(a[23])
             && events.insert(z[23])
-            && a[30..] == [0, 0]
-            && z[30..] == [0, 0]
+            && a[30..] == z[30..]
             && if a[1] == 4 {
-                a[24] >= 16 && a[24] <= 32 && a[26] == 16 && a[25] == 0 && a[27] == 0
+                a[30] != 0
+                    && a[31] != 0
+                    && matches!(a[24], 16 | 32)
+                    && (a[24] == 32 || a[16..18] == [0, 0])
+                    && a[26] == 16
+                    && a[25] == 0
+                    && a[27] == 0
             } else {
-                a[14..20] == [0; 6] && a[24..28] == [0; 4]
+                a[14..20] == [0; 6] && a[24..28] == [0; 4] && a[30..] == [0, 0]
             };
         if valid {
             pairs.push((a, z));
@@ -132,11 +151,11 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     // frame identity; an equal list value alone cannot supply this relation.
     let mut matched = std::collections::BTreeSet::new();
     for (publish, publish_return) in pairs.iter().filter(|(a, _)| a[1] == 5) {
-        if publish[8] != core.checked_add(0x38888e).unwrap_or(0) {
+        if core.checked_add(0x38888e) != Some(publish[8]) {
             continue;
         }
         for (submit, returned) in pairs.iter().filter(|(a, _)| a[1] == 4) {
-            if submit[8]==core.checked_add(0x388871).unwrap_or(0)
+            if core.checked_add(0x388871)==Some(submit[8])
                 && submit[4]==0 && publish[4]==0
                 && submit[5..8]==publish[5..8] && submit[9]==publish[9]
                 && submit[10]>0 && submit[10]==publish[10]
@@ -175,6 +194,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         "not_established_by_this_capture":["descriptor C++ type and ownership","birth generation ticket",
         "retain/copy/release/cancel/reissue","native publication completion","job execution or Join",
         "World root identity/lifetime or all-domain drainage","runtime activation authority",
+        "caller-frame lifetime or stack address reuse outside the two observed wrappers",
         "992210 copies R9 metadata16; it forwards RDX unchanged"]}),
     )
 }
@@ -276,9 +296,11 @@ mod submission_protocol_tests {
                 r[18] = 0xccdd;
                 r[24] = 32;
                 r[26] = 16;
+                r[30] = 1;
+                r[31] = 1;
             }
             r[23] = i + 1;
-            r[29] = 0x800;
+            r[29] = 0xe30;
             for (j, v) in r.into_iter().enumerate() {
                 put(&mut b, ROOT_HEADER / 8 + i as usize * 32 + j, v);
             }
@@ -337,8 +359,11 @@ mod submission_protocol_tests {
             (26, 1),
             (27, 0),
             (ROOT_HEADER / 8 + 24, 15),
+            (ROOT_HEADER / 8 + 24, 17),
             (ROOT_HEADER / 8 + 25, 299),
             (ROOT_HEADER / 8 + 26, 0),
+            (ROOT_HEADER / 8 + 30, 0),
+            (ROOT_HEADER / 8 + 31, 0),
             (32 + 4, 0),
             (32 + 5, 1),
             (40 + 7, 1),
@@ -651,7 +676,7 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     )
 }
 pub struct Request {
-    /// Only the distinct root schema can opt into the passive three-entry shim.
+    /// Explicit capture schemas only; ordinary requests never enable a shim.
     pub root_only: bool,
     pub submission_only: bool,
     pub pid: u32,

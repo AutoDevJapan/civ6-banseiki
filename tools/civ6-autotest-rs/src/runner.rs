@@ -3319,7 +3319,9 @@ impl Runner {
                     + std::time::Duration::from_secs_f64(self.remaining(deadline)?.min(30.0));
                 self.backend
                     .start_native_bootstrap(&self.output, step, preparation_deadline)?;
-                Ok(if root_only {
+                Ok(if step["observation"] == "native_submission" {
+                    "native submission capture prepared; execution and Join remain unestablished"
+                } else if root_only {
                     "root observation prepared; product runtime activation absent"
                 } else {
                     "bootstrap prepared; target runtime not yet installed"

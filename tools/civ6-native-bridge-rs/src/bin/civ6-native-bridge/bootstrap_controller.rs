@@ -1,11 +1,12 @@
 //! Compose the existing controller's exact handles, lease, OwnedJob and remote
 //! call implementation. There is deliberately no CreateRemoteThread here.
 use super::*;
-use civ6_bootstrap_rs::{protocol as wire, Prepare};
+use civ6_bootstrap_rs::{Prepare, protocol as wire};
 use std::os::windows::fs::OpenOptionsExt;
 use windows_sys::Win32::System::Memory::{
-    VirtualQuery, VirtualQueryEx, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
-    PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READONLY, PAGE_WRITECOPY,
+    MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
+    PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READONLY, PAGE_WRITECOPY, VirtualQuery,
+    VirtualQueryEx,
 };
 
 fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, String> {
@@ -58,10 +59,21 @@ fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, Str
 
 // Preserve the actual copied prefix, including a failed/partial RPM, before a
 // second attempt. Zero-filled unread bytes must never become captured evidence.
+#[cfg(test)]
 fn root_samples(
     pid: u32,
     created: u64,
     stop_succeeded: bool,
+    read: impl FnMut(&mut [u8]) -> (usize, Option<String>),
+    save: impl FnMut(&str, &[u8]) -> Result<(), String>,
+) -> Value {
+    capture_samples(pid, created, stop_succeeded, false, read, save)
+}
+fn capture_samples(
+    pid: u32,
+    created: u64,
+    stop_succeeded: bool,
+    submission: bool,
     mut read: impl FnMut(&mut [u8]) -> (usize, Option<String>),
     mut save: impl FnMut(&str, &[u8]) -> Result<(), String>,
 ) -> Value {
@@ -70,8 +82,21 @@ fn root_samples(
         "status":"unknown","samples":[],"not_established_by_this_capture":
         ["native producer lifetime","world lifetime","all-domain drainage","runtime activation authority"]});
     let mut samples = Vec::new();
-    for name in ["root-first.bin", "root-second.bin"] {
-        let mut bytes = vec![0u8; wire::ROOT_BYTES];
+    if submission {
+        result["schema"] = json!("todo880-native-submission-controller-receipt-v1");
+    }
+    let size = if submission {
+        wire::SUBMISSION_BYTES
+    } else {
+        wire::ROOT_BYTES
+    };
+    let names = if submission {
+        ["submission-first.bin", "submission-second.bin"]
+    } else {
+        ["root-first.bin", "root-second.bin"]
+    };
+    for name in names {
+        let mut bytes = vec![0u8; size];
         let (copied, error) = read(&mut bytes);
         if copied > bytes.len() {
             result["error"] = json!("root read returned impossible size");
@@ -86,14 +111,19 @@ fn root_samples(
             .unwrap()
             .push(json!({"file":name,"copied":copied,"error":error}));
         samples.push(bytes[..copied].to_vec());
-        if copied != wire::ROOT_BYTES || error.is_some() {
+        if copied != size || error.is_some() {
             result["error"] = json!("root original sample was partial or unreadable");
             return result;
         }
     }
     let equal = samples[0] == samples[1];
     result["copies_equal"] = json!(equal);
-    match wire::root_trace(&samples[0], pid, created) {
+    let trace = if submission {
+        wire::submission_trace(&samples[0], pid, created)
+    } else {
+        wire::root_trace(&samples[0], pid, created)
+    };
+    match trace {
         Ok(trace) => {
             let complete = stop_succeeded && equal && trace["capture_complete"] == true;
             result["status"] = json!(if complete { "captured" } else { "unknown" });
@@ -110,11 +140,13 @@ fn capture_root(
     pid: u32,
     created: u64,
     stopped: bool,
+    submission: bool,
 ) -> Value {
-    root_samples(
+    capture_samples(
         pid,
         created,
         stopped,
+        submission,
         |bytes| {
             let mut copied = 0usize;
             let ok = unsafe {
@@ -132,8 +164,14 @@ fn capture_root(
         |name, bytes| preserve(output, name, bytes),
     )
 }
-fn root_address(game: &Handle, module: &Module, data: usize, size: usize) -> Result<usize, String> {
-    if pointer(game, module.base + size)? != wire::ROOT_BYTES {
+fn root_address(
+    game: &Handle,
+    module: &Module,
+    data: usize,
+    size: usize,
+    expected: usize,
+) -> Result<usize, String> {
+    if pointer(game, module.base + size)? != expected {
         return Err("root trace exported size mismatch".into());
     }
     let p = pointer(game, module.base + data)?;
@@ -154,7 +192,7 @@ fn root_address(game: &Handle, module: &Module, data: usize, size: usize) -> Res
             info.Protect & 0xff,
             PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
         )
-        || p.checked_add(wire::ROOT_BYTES)
+        || p.checked_add(expected)
             .is_none_or(|end| end > info.BaseAddress as usize + info.RegionSize)
     {
         return Err("root trace outside source data image".into());
@@ -391,11 +429,30 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     let _exe_pin = pin(Path::new(GAME_EXE), civ6_bootstrap_rs::EXE_SHA)?;
     let _runtime_pin = pin(&req.runtime, &req.runtime_sha)?;
     let _bootstrap_pin = pin(&req.bootstrap, &req.bootstrap_sha)?;
+    let prepare_version = if req.submission_only {
+        wire::SUBMISSION_PREPARE_VERSION
+    } else if req.root_only {
+        wire::ROOT_PREPARE_VERSION
+    } else {
+        civ6_bootstrap_rs::VERSION
+    };
+    let receipt_name = if req.submission_only {
+        "submission-receipt.json"
+    } else {
+        "root-receipt.json"
+    };
     let prepared = if req.root_only {
         typed_exports(
             &req.bootstrap,
             &[
-                (b"RustBridgeBootstrapPrepareRootObservation\0", true),
+                (
+                    if req.submission_only {
+                        b"RustBridgeBootstrapPrepareSubmissionObservation\0"
+                    } else {
+                        b"RustBridgeBootstrapPrepareRootObservation\0"
+                    },
+                    true,
+                ),
                 (b"RustBridgeBootstrapStopObservation\0", true),
                 (b"BOOTSTRAP_TRACE_POINTER\0", false),
             ],
@@ -414,10 +471,38 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         typed_exports(
             &req.runtime,
             &[
-                (b"BridgeRootObservationInstall\0", true),
-                (b"BridgeRootObservationStop\0", true),
-                (b"BRIDGE_ROOT_OBSERVATION_TRACE\0", false),
-                (b"BRIDGE_ROOT_OBSERVATION_TRACE_SIZE\0", false),
+                (
+                    if req.submission_only {
+                        b"BridgeSubmissionObservationInstall\0"
+                    } else {
+                        b"BridgeRootObservationInstall\0"
+                    },
+                    true,
+                ),
+                (
+                    if req.submission_only {
+                        b"BridgeSubmissionObservationStop\0"
+                    } else {
+                        b"BridgeRootObservationStop\0"
+                    },
+                    true,
+                ),
+                (
+                    if req.submission_only {
+                        b"BRIDGE_SUBMISSION_OBSERVATION_TRACE\0"
+                    } else {
+                        b"BRIDGE_ROOT_OBSERVATION_TRACE\0"
+                    },
+                    false,
+                ),
+                (
+                    if req.submission_only {
+                        b"BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE\0"
+                    } else {
+                        b"BRIDGE_ROOT_OBSERVATION_TRACE_SIZE\0"
+                    },
+                    false,
+                ),
             ],
         )?
     } else {
@@ -450,7 +535,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     let mut writer = BufWriter::new(file);
     write_json(
         &mut writer,
-        json!({"type":"bootstrap_identity","pid":req.pid,"created_filetime":req.created,"chain_pid":chain_pid,"chain_created_filetime":process_created(&chain)?,"runner_pid":runner_pid,"runner_created_filetime":process_created(&runner)?,"bootstrap_sha256":req.bootstrap_sha,"runtime_sha256":req.runtime_sha,"prepare_version":if req.root_only {wire::ROOT_PREPARE_VERSION} else {civ6_bootstrap_rs::VERSION},"menu_context":menu_context,"runtime_installed":false}),
+        json!({"type":"bootstrap_identity","pid":req.pid,"created_filetime":req.created,"chain_pid":chain_pid,"chain_created_filetime":process_created(&chain)?,"runner_pid":runner_pid,"runner_created_filetime":process_created(&runner)?,"bootstrap_sha256":req.bootstrap_sha,"runtime_sha256":req.runtime_sha,"prepare_version":prepare_version,"menu_context":menu_context,"runtime_installed":false}),
     )?;
     let mut job = OwnedJob::attach(&game, req.pid, req.created)?;
     let mut prepared_trace_address = None;
@@ -471,14 +556,15 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 &runtime,
                 runtime_exports[2],
                 runtime_exports[3],
+                if req.submission_only {
+                    wire::SUBMISSION_BYTES
+                } else {
+                    wire::ROOT_BYTES
+                },
             )?);
         }
         let config = Prepare {
-            version: if req.root_only {
-                wire::ROOT_PREPARE_VERSION
-            } else {
-                civ6_bootstrap_rs::VERSION
-            },
+            version: prepare_version,
             size: size_of::<Prepare>() as u32,
             pid: req.pid,
             observation_seconds: req.seconds,
@@ -552,7 +638,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 Ok(Ok(command)) if command == "stop" => break,
                 Ok(_) => return Err("bootstrap input ended or was invalid".into()),
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    return Err("bootstrap input reader lost".into())
+                    return Err("bootstrap input reader lost".into());
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
@@ -579,12 +665,13 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 req.pid,
                 req.created,
                 true,
+                req.submission_only,
             );
             root_evidence_saved = true;
             let captured = evidence["status"] == "captured";
             preserve(
                 &req.output,
-                "root-receipt.json",
+                receipt_name,
                 &serde_json::to_vec(&evidence).map_err(|e| e.to_string())?,
             )?;
             write_json(&mut writer, evidence)?;
@@ -596,7 +683,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             }
             write_json(
                 &mut writer,
-                json!({"type":"root_observation_stop","pid":req.pid,
+                json!({"type":if req.submission_only {"native_submission_stop"} else {"root_observation_stop"},"pid":req.pid,
                 "created_filetime":req.created,"observation_stopped":true,
                 "resident_code_retained":true,"not_established_by_this_capture":
                 ["all-domain drainage","world lifetime","runtime activation authority"]}),
@@ -680,6 +767,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                                 stop_observation_stage,
                                 ObservationStopStage::ReturnedSuccess
                             ),
+                            req.submission_only,
                         )
                     })
                 } else {
@@ -688,7 +776,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 let evidence = evidence.or_else(|| {
                     (!root_evidence_saved).then(|| {
                         json!({
-                        "schema":"todo880-root-controller-receipt-v1","pid":req.pid,
+                        "schema":if req.submission_only {"todo880-native-submission-controller-receipt-v1"} else {"todo880-root-controller-receipt-v1"},"pid":req.pid,
                         "created_filetime":req.created,"status":"unknown","samples":[],
                         "stop_response_succeeded":false,"error":"root trace address unavailable"})
                     })
@@ -696,7 +784,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 let error = failure_evidence_error(e, evidence, |record| {
                     preserve(
                         &req.output,
-                        "root-receipt.json",
+                        receipt_name,
                         &serde_json::to_vec(&record).map_err(|e| e.to_string())?,
                     )?;
                     write_json(&mut writer, record)
@@ -915,5 +1003,54 @@ mod tests {
         fs::write(&p, b"changed").unwrap();
         assert!(pin(&p, expected).is_err());
         fs::remove_file(p).unwrap();
+    }
+    #[test]
+    fn submission_controller_preserves_partial_original_bytes_and_distinct_schema() {
+        let mut saved = Vec::new();
+        let receipt = capture_samples(
+            23,
+            29,
+            true,
+            true,
+            |b| {
+                b[..13].copy_from_slice(&[0x5a; 13]);
+                (13, Some("owned partial read".into()))
+            },
+            |name, b| {
+                saved.push((name.to_owned(), b.to_vec()));
+                Ok(())
+            },
+        );
+        assert_eq!(
+            receipt["schema"],
+            "todo880-native-submission-controller-receipt-v1"
+        );
+        assert_eq!(receipt["status"], "unknown");
+        assert_eq!(saved, vec![("submission-first.bin".into(), vec![0x5a; 13])]);
+        let empty = capture_samples(23, 29, true, true, |b| (b.len(), None), |_, _| Ok(()));
+        assert_eq!(empty["status"], "unknown");
+    }
+    #[test]
+    fn submission_controller_existing_destination_never_overwrites_or_resamples() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("submission.jsonl");
+        let target = path.with_extension("submission-first.bin");
+        fs::write(&target, b"original").unwrap();
+        let mut reads = 0;
+        let receipt = capture_samples(
+            23,
+            29,
+            false,
+            true,
+            |b| {
+                reads += 1;
+                (b.len(), None)
+            },
+            |name, b| preserve(&path, name, b),
+        );
+        assert_eq!(reads, 1);
+        assert_eq!(fs::read(target).unwrap(), b"original");
+        assert_eq!(receipt["status"], "unknown");
+        assert!(receipt["error"].as_str().unwrap().contains("preserve"));
     }
 }

@@ -33,13 +33,36 @@ fn bootstrap_terminal(path: &Path, pid: u32, created: u64, root_only: bool) -> R
 }
 
 fn root_bootstrap_terminal(path: &Path, pid: u32, created: u64) -> Result<()> {
-    let first = std::fs::read(path.with_extension("root-first.bin"))?;
-    let second = std::fs::read(path.with_extension("root-second.bin"))?;
+    // The existing Session owns both profiles. Its exact saved request selects
+    // the terminal; a submission trace cannot satisfy the old root certificate.
+    let submission = match std::fs::read(path.with_extension("request.json")) {
+        Ok(bytes) => {
+            civ6_bootstrap_rs::protocol::Request::parse(&serde_json::from_slice::<Value>(&bytes)?)
+                .map_err(Error::input)?
+                .submission_only
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => return Err(e.into()),
+    };
+    let first = std::fs::read(path.with_extension(if submission {
+        "submission-first.bin"
+    } else {
+        "root-first.bin"
+    }))?;
+    let second = std::fs::read(path.with_extension(if submission {
+        "submission-second.bin"
+    } else {
+        "root-second.bin"
+    }))?;
     if first != second {
         return Err(Error::input("root observation raw copies differ"));
     }
-    let trace =
-        civ6_bootstrap_rs::protocol::root_trace(&first, pid, created).map_err(Error::input)?;
+    let trace = if submission {
+        civ6_bootstrap_rs::protocol::submission_trace(&first, pid, created)
+    } else {
+        civ6_bootstrap_rs::protocol::root_trace(&first, pid, created)
+    }
+    .map_err(Error::input)?;
     if trace["capture_complete"] != true {
         return Err(Error::input(
             "root observation lacks a complete matching Wait return",
@@ -54,7 +77,12 @@ fn root_bootstrap_terminal(path: &Path, pid: u32, created: u64) -> Result<()> {
     let terminal = rows
         .last()
         .ok_or_else(|| Error::input("root terminal missing"))?;
-    if terminal["type"] != "root_observation_stop"
+    if terminal["type"]
+        != if submission {
+            "native_submission_stop"
+        } else {
+            "root_observation_stop"
+        }
         || terminal["pid"] != pid
         || terminal["created_filetime"] != created
         || terminal["observation_stopped"] != true
@@ -64,12 +92,27 @@ fn root_bootstrap_terminal(path: &Path, pid: u32, created: u64) -> Result<()> {
     }
     let receipts: Vec<_> = rows
         .iter()
-        .filter(|v| v["schema"] == "todo880-root-controller-receipt-v1")
+        .filter(|v| {
+            v["schema"]
+                == if submission {
+                    "todo880-native-submission-controller-receipt-v1"
+                } else {
+                    "todo880-root-controller-receipt-v1"
+                }
+        })
         .collect();
     if receipts.len() != 1 {
         return Err(Error::input("root receipt missing or duplicated"));
     }
     let receipt = receipts[0];
+    if submission {
+        let independent: Value = serde_json::from_slice(&std::fs::read(
+            path.with_extension("submission-receipt.json"),
+        )?)?;
+        if independent != *receipt {
+            return Err(Error::input("independent capture receipt differs"));
+        }
+    }
     if receipt["pid"] != pid
         || receipt["created_filetime"] != created
         || receipt["status"] != "captured"
@@ -317,6 +360,137 @@ mod root_terminal_tests {
                 + "\n",
         )
         .unwrap();
+    }
+    fn submission_fixture(path: &Path) -> Vec<Value> {
+        let mut b = vec![0; wire::SUBMISSION_BYTES];
+        let put = |b: &mut [u8], word: usize, v: u64| {
+            b[word * 8..word * 8 + 8].copy_from_slice(&v.to_le_bytes())
+        };
+        for (i, v) in [
+            wire::SUBMISSION_MAGIC,
+            1,
+            wire::SUBMISSION_BYTES as u64,
+            128,
+            256,
+            23,
+            29,
+            0x180000000,
+            0x140000000,
+            1,
+            4,
+            0,
+            wire::ROOT_CLOSED,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            2,
+            4,
+            3,
+            3,
+            1,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            put(&mut b, i, v);
+        }
+        for (i, (rva, bytes)) in [
+            (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
+            (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for (j, v) in [
+                rva,
+                u64::from_le_bytes(bytes),
+                u64::from_le_bytes(bytes),
+                1,
+                1,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                put(&mut b, 32 + i * 8 + j, v);
+            }
+        }
+        for i in 0..4 {
+            let mut r = [0; 32];
+            r[0] = i + 1;
+            r[1] = if i < 2 { 4 } else { 5 };
+            r[2] = if i % 2 == 0 { 1 } else { 2 };
+            r[3] = if i < 2 { 1 } else { 3 };
+            r[5] = 31;
+            r[6] = 37;
+            r[7] = 1;
+            r[8] = 0x180000000 + if i < 2 { 0x388871 } else { 0x38888e };
+            r[9] = 0x1000;
+            r[10] = 7;
+            if i < 2 {
+                r[11] = 0x10000;
+                r[12] = 0x20000;
+                r[13] = 0x30000;
+                r[24] = 32;
+                r[26] = 16;
+                r[30] = 1;
+                r[31] = 1;
+            }
+            r[23] = i + 1;
+            r[29] = 0xe30;
+            for (j, v) in r.into_iter().enumerate() {
+                put(&mut b, wire::ROOT_HEADER / 8 + i as usize * 32 + j, v);
+            }
+        }
+        let request = serde_json::json!({"schema":"todo880-native-submission-controller-v1","pid":23,
+            "created_filetime":29,"max_seconds":30,"controller_seconds":60,
+            "runtime_dll":path,"runtime_sha256":"11".repeat(32),"bootstrap_dll":path,
+            "bootstrap_sha256":"22".repeat(32),"output":path});
+        std::fs::write(path.with_extension("request.json"), request.to_string()).unwrap();
+        let trace = wire::submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(trace["capture_complete"], true);
+        let rows = vec![
+            serde_json::json!({"schema":"todo880-native-submission-controller-receipt-v1",
+            "pid":23,"created_filetime":29,"status":"captured","stop_response_succeeded":true,"copies_equal":true,"trace":trace}),
+            serde_json::json!({"type":"native_submission_stop","pid":23,"created_filetime":29,"observation_stopped":true,"resident_code_retained":true}),
+        ];
+        std::fs::write(path.with_extension("submission-first.bin"), &b).unwrap();
+        std::fs::write(path.with_extension("submission-second.bin"), &b).unwrap();
+        std::fs::write(
+            path.with_extension("submission-receipt.json"),
+            rows[0].to_string(),
+        )
+        .unwrap();
+        save(path, &rows);
+        rows
+    }
+    #[test]
+    fn submission_terminal_requires_its_saved_request_raw_bytes_and_independent_receipt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("submission.jsonl");
+        let rows = submission_fixture(&path);
+        bootstrap_terminal(&path, 23, 29, true).unwrap();
+        assert!(!path.with_extension("runtime.bin").exists());
+        assert!(!path.with_extension("root-first.bin").exists());
+        let mut changed = rows.clone();
+        changed[1]["type"] = serde_json::json!("root_observation_stop");
+        save(&path, &changed);
+        assert!(bootstrap_terminal(&path, 23, 29, true).is_err());
+        save(&path, &rows);
+        let mut different = rows[0].clone();
+        different["stop_response_succeeded"] = serde_json::json!(false);
+        std::fs::write(
+            path.with_extension("submission-receipt.json"),
+            different.to_string(),
+        )
+        .unwrap();
+        assert!(bootstrap_terminal(&path, 23, 29, true).is_err());
     }
 
     #[test]

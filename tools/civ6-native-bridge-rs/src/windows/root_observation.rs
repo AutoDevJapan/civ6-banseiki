@@ -1,8 +1,9 @@
 //! Explicit passive root capture. Never installed by BridgeRuntimeInstall.
 //! The only receivers retained are within the current native invocation.
 use super::*;
+mod submission;
 use civ6_bootstrap_rs::protocol::{
-    RootConfig, ROOT_BYTES, ROOT_CLOSED, ROOT_CONFIG_VERSION, ROOT_MAGIC, ROOT_ROWS, ROOT_VERSION,
+    ROOT_BYTES, ROOT_CLOSED, ROOT_CONFIG_VERSION, ROOT_MAGIC, ROOT_ROWS, ROOT_VERSION, RootConfig,
 };
 use std::fs::OpenOptions;
 #[cfg(test)]
@@ -16,8 +17,8 @@ use windows_sys::Win32::{
     Foundation::{GetLastError, SetLastError},
     System::{
         LibraryLoader::{
-            GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            GET_MODULE_HANDLE_EX_FLAG_PIN,
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
+            GetModuleHandleExW,
         },
         Threading::{GetCurrentThread, GetThreadTimes},
     },
@@ -95,7 +96,35 @@ pub(super) static BRIDGE_ROOT_OBSERVATION_TRACE: &RootTrace = &TRACE;
 #[unsafe(no_mangle)]
 pub static BRIDGE_ROOT_OBSERVATION_TRACE_SIZE: u64 = ROOT_BYTES as u64;
 fn h(i: usize) -> &'static AtomicU64 {
-    &TRACE.header[i]
+    if submission::active() {
+        &submission::TRACE.header[i]
+    } else {
+        &TRACE.header[i]
+    }
+}
+fn site_row(i: usize) -> &'static [AtomicU64; 8] {
+    if submission::active() {
+        &submission::TRACE.sites[i]
+    } else {
+        &TRACE.sites[i]
+    }
+}
+fn site_rvas() -> [usize; 3] {
+    if submission::active() {
+        [0x992210, 0x992280, 0]
+    } else {
+        SITE
+    }
+}
+fn site_count() -> usize {
+    if submission::active() { 2 } else { 3 }
+}
+fn entry_words() -> [[u8; 8]; 3] {
+    if submission::active() {
+        submission::WORDS
+    } else {
+        WORDS
+    }
 }
 fn unknown() {
     h(14).fetch_add(1, Ordering::Relaxed);
@@ -109,7 +138,7 @@ impl Drop for Unpublished {
     }
 }
 fn site_error(i: usize, code: u64, message: &'static str) -> &'static str {
-    TRACE.sites[i][7].store(code, Ordering::Release);
+    site_row(i)[7].store(code, Ordering::Release);
     h(16).fetch_or(1 << i, Ordering::Release);
     message
 }
@@ -262,6 +291,10 @@ fn sample(inv: Invocation, rax: u64, last_error: u32, rdx: u64, edge: u64) {
 }
 
 extern "system" fn begin(raw: *mut Saved) {
+    if submission::active() {
+        submission::begin(raw);
+        return;
+    }
     let error = unsafe { GetLastError() };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let saved = unsafe { &mut *raw };
@@ -402,6 +435,10 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, edge: u64, error: u32) {
+    if submission::active() {
+        submission::finish(raw, edge, error);
+        return;
+    }
     let mut inv = raw.invocation;
     if inv.cookie != COOKIE {
         return;
@@ -670,6 +707,9 @@ gateway!("root_manager_gateway", "2", root_test_manager_original);
 #[cfg(test)]
 gateway!("root_wait_gateway", "3", root_test_wait_original);
 fn gateways() -> [usize; 3] {
+    if submission::active() {
+        return submission::gateways();
+    }
     [
         root_world_gateway as *const () as usize,
         root_manager_gateway as *const () as usize,
@@ -699,6 +739,10 @@ fn pin(path: &str, expected: &str) -> Result<File, &'static str> {
     Ok(f)
 }
 fn initialize(config: RootConfig, core: usize, exe: usize) {
+    if submission::active() {
+        submission::initialize(config, core, exe);
+        return;
+    }
     let values = [
         ROOT_MAGIC,
         ROOT_VERSION,
@@ -716,32 +760,38 @@ fn initialize(config: RootConfig, core: usize, exe: usize) {
     }
     h(19).store(1, Ordering::Release);
     for i in 0..3 {
-        TRACE.sites[i][0].store(SITE[i] as u64, Ordering::Relaxed);
-        TRACE.sites[i][1].store(u64::from_le_bytes(WORDS[i]), Ordering::Relaxed);
+        site_row(i)[0].store(SITE[i] as u64, Ordering::Relaxed);
+        site_row(i)[1].store(u64::from_le_bytes(WORDS[i]), Ordering::Relaxed);
     }
 }
 unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'static str> {
+    let sites = site_rvas();
+    let count = site_count();
     // ALL sites and complete local call evidence are checked before publication.
-    for i in 0..3 {
-        let actual = copy_current::<8>((core + SITE[i]) as u64).ok_or("root unreadable entry")?;
-        TRACE.sites[i][2].store(u64::from_le_bytes(actual), Ordering::Release);
-        if actual != expected[i] || !(core + SITE[i]).is_multiple_of(8) {
-            TRACE.sites[i][7].store(1, Ordering::Release);
+    for i in 0..count {
+        let actual = copy_current::<8>((core + sites[i]) as u64).ok_or("root unreadable entry")?;
+        site_row(i)[2].store(u64::from_le_bytes(actual), Ordering::Release);
+        if actual != expected[i] || !(core + sites[i]).is_multiple_of(8) {
+            site_row(i)[7].store(1, Ordering::Release);
             return Err("root fixed entry differs");
         }
-        TRACE.sites[i][3].store(1, Ordering::Release);
+        site_row(i)[3].store(1, Ordering::Release);
     }
     let callbacks = gateways();
     h(19).store(2, Ordering::Release);
-    for i in 0..3 {
-        let entry = (core + SITE[i]) as *mut u8;
+    for i in 0..count {
+        let entry = (core + sites[i]) as *mut u8;
         let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
         if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0 {
             return Err(site_error(i, 10, "root entry protection"));
         }
-        let code =
-            unsafe { executable_near(entry as usize, entry as usize, if i == 0 { 6 } else { 5 }) }
-                .ok_or_else(|| site_error(i, 11, "root relay unavailable"))?;
+        let displaced = if (submission::active() && i == 1) || (!submission::active() && i == 0) {
+            6
+        } else {
+            5
+        };
+        let code = unsafe { executable_near(entry as usize, entry as usize, displaced) }
+            .ok_or_else(|| site_error(i, 11, "root relay unavailable"))?;
         let mut unpublished = Unpublished(code);
         unsafe {
             ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
@@ -759,10 +809,10 @@ unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'sta
             &rel32_jump(entry as usize, code as usize)
                 .ok_or_else(|| site_error(i, 13, "root relay range"))?,
         );
-        if i == 0 {
+        if displaced == 6 {
             patched[5] = 0x90;
         } // 6-byte displaced prologue, cmp starts at+6
-        let continuation = core + SITE[i] + if i == 0 { 6 } else { 5 };
+        let continuation = core + sites[i] + displaced;
         ROOT_CONTINUE[i].store(continuation as u64, Ordering::Release);
         // Ownership MUST precede a CAS that might succeed then report failure.
         *HOOKS[i]
@@ -788,14 +838,14 @@ unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'sta
         .map_err(|e| site_error(i, 15, e))?;
         if result.exchanged {
             h(15).fetch_or(1 << i, Ordering::Release);
-            TRACE.sites[i][4].store(1, Ordering::Release);
+            site_row(i)[4].store(1, Ordering::Release);
         }
         if !result.exchanged
             || !result.protection_restored
             || !result.cache_flushed
             || copy_current::<8>(entry as u64) != Some(patched)
         {
-            TRACE.sites[i][7].store(2, Ordering::Release);
+            site_row(i)[7].store(2, Ordering::Release);
             h(16).fetch_or(1 << i, Ordering::Release);
             return Err("root entry publication unverified");
         }
@@ -810,9 +860,9 @@ unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'sta
 unsafe fn restore_all() -> Result<(), &'static str> {
     h(12).fetch_or(ROOT_CLOSED, Ordering::AcqRel);
     let mut failed = false;
-    for (i, slot) in HOOKS.iter().enumerate() {
+    for (i, slot) in HOOKS.iter().take(site_count()).enumerate() {
         h(17).fetch_or(1 << i, Ordering::Release);
-        TRACE.sites[i][5].store(1, Ordering::Release);
+        site_row(i)[5].store(1, Ordering::Release);
         let Ok(mut owner) = slot.lock() else {
             failed = true;
             continue;
@@ -847,12 +897,12 @@ unsafe fn restore_all() -> Result<(), &'static str> {
             && copy_current::<8>(hook.target as u64) == Some(hook.original)
         {
             h(18).fetch_or(1 << i, Ordering::Release);
-            TRACE.sites[i][6].store(1, Ordering::Release);
+            site_row(i)[6].store(1, Ordering::Release);
             *owner = None; // code remains allocated; continuation never redirected
         } else {
             failed = true;
             h(16).fetch_or(1 << i, Ordering::Release);
-            TRACE.sites[i][7].store(3, Ordering::Release);
+            site_row(i)[7].store(3, Ordering::Release);
         }
     }
     if failed {
@@ -862,7 +912,8 @@ unsafe fn restore_all() -> Result<(), &'static str> {
     }
 }
 fn install(config: &mut RootConfig) -> Result<(), &'static str> {
-    if config.version != ROOT_CONFIG_VERSION
+    if (config.version != ROOT_CONFIG_VERSION
+        && config.version != civ6_bootstrap_rs::protocol::SUBMISSION_CONFIG_VERSION)
         || config.size as usize != std::mem::size_of::<RootConfig>()
         || config.reserved != 0
         || config.trace_address != 0
@@ -887,25 +938,31 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
         pin(GAMECORE, crate::PINNED_GAMECORE_SHA256)?,
         pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?,
     ];
+    submission::PROFILE.store(
+        config.version == civ6_bootstrap_rs::protocol::SUBMISSION_CONFIG_VERSION,
+        Ordering::Release,
+    );
     initialize(*config, core as usize, exe as usize);
     if USED.swap(true, Ordering::AcqRel) {
         return Err("root lifetime already consumed");
     }
     let mut entry_mismatch = false;
-    for i in 0..3 {
-        match copy_current::<8>((core as usize + SITE[i]) as u64) {
+    let sites = site_rvas();
+    let words = entry_words();
+    for i in 0..site_count() {
+        match copy_current::<8>((core as usize + sites[i]) as u64) {
             Some(actual) => {
-                TRACE.sites[i][2].store(u64::from_le_bytes(actual), Ordering::Release);
-                if actual == WORDS[i] {
-                    TRACE.sites[i][3].store(1, Ordering::Release);
+                site_row(i)[2].store(u64::from_le_bytes(actual), Ordering::Release);
+                if actual == words[i] {
+                    site_row(i)[3].store(1, Ordering::Release);
                 } else {
                     entry_mismatch = true;
-                    TRACE.sites[i][7].store(1, Ordering::Release);
+                    site_row(i)[7].store(1, Ordering::Release);
                 }
             }
             None => {
                 entry_mismatch = true;
-                TRACE.sites[i][7].store(4, Ordering::Release);
+                site_row(i)[7].store(4, Ordering::Release);
             }
         }
     }
@@ -914,21 +971,30 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
     }
     // Hash-pinned .text RVA1000/raw400. Verify the complete THREE displaced
     // native functions against the same retained file, not just entry bytes.
-    for (i, length) in [0x17fusize, 0x58f, 0x4c].into_iter().enumerate() {
+    let lengths = if submission::active() {
+        [0x6cusize, 0x33, 0]
+    } else {
+        [0x17fusize, 0x58f, 0x4c]
+    };
+    for (i, length) in lengths.into_iter().take(site_count()).enumerate() {
         files[0]
-            .seek(SeekFrom::Start((SITE[i] - 0xc00) as u64))
+            .seek(SeekFrom::Start((sites[i] - 0xc00) as u64))
             .map_err(|_| "root ABI file seek")?;
         let mut disk = vec![0u8; length];
         files[0]
             .read_exact(&mut disk)
             .map_err(|_| "root ABI file read")?;
         for (offset, byte) in disk.into_iter().enumerate() {
-            if copy_current::<1>((core as usize + SITE[i] + offset) as u64) != Some([byte]) {
+            if copy_current::<1>((core as usize + sites[i] + offset) as u64) != Some([byte]) {
                 return Err(site_error(i, 21, "root complete native function differs"));
             }
         }
     }
-    verify_call_spans(core as usize)?;
+    if submission::active() {
+        submission::verify(&mut files[0], core as usize)?;
+    } else {
+        verify_call_spans(core as usize)?;
+    }
     // Pin exact modules before any executable publication. Files alone do not
     // keep an image mapped. No hook or unwind target is ever freed/unpinned.
     for address in [
@@ -959,13 +1025,31 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
         until: Instant::now() + Duration::from_secs(config.max_seconds as u64),
     })
     .map_err(|_| "root binding already set")?;
-    unsafe { install_sites(core as usize, WORDS) }?;
-    config.trace_address = std::ptr::addr_of!(TRACE) as u64;
-    config.trace_size = ROOT_BYTES as u32;
+    unsafe { install_sites(core as usize, words) }?;
+    config.trace_address = if submission::active() {
+        std::ptr::addr_of!(submission::TRACE) as u64
+    } else {
+        std::ptr::addr_of!(TRACE) as u64
+    };
+    config.trace_size = if submission::active() {
+        civ6_bootstrap_rs::protocol::SUBMISSION_BYTES as u32
+    } else {
+        ROOT_BYTES as u32
+    };
     Ok(())
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeRootObservationInstall(input: *mut c_void) -> u32 {
+    install_export(input, ROOT_CONFIG_VERSION)
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeSubmissionObservationInstall(input: *mut c_void) -> u32 {
+    install_export(
+        input,
+        civ6_bootstrap_rs::protocol::SUBMISSION_CONFIG_VERSION,
+    )
+}
+fn install_export(input: *mut c_void, version: u32) -> u32 {
     if !committed_range(input as usize, std::mem::size_of::<RootConfig>(), 8, true) {
         return 1;
     }
@@ -975,6 +1059,9 @@ pub extern "system" fn BridgeRootObservationInstall(input: *mut c_void) -> u32 {
     }
     let result = std::panic::catch_unwind(|| {
         let mut config = unsafe { ptr::read(input.cast::<RootConfig>()) };
+        if config.version != version {
+            return Err("observation export/config profile mismatch");
+        }
         install(&mut config)?;
         unsafe { ptr::write(input.cast(), config) };
         Ok::<_, &'static str>(())
@@ -996,6 +1083,19 @@ pub extern "system" fn BridgeRootObservationInstall(input: *mut c_void) -> u32 {
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeRootObservationStop(_: *mut c_void) -> u32 {
+    if submission::active() {
+        return 1;
+    }
+    stop_export()
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeSubmissionObservationStop(_: *mut c_void) -> u32 {
+    if !submission::active() {
+        return 1;
+    }
+    stop_export()
+}
+fn stop_export() -> u32 {
     let deadline = Instant::now() + Duration::from_secs(2);
     let _guard = loop {
         match INSTALL.try_lock() {
@@ -1034,7 +1134,7 @@ fn stop_at(deadline: Instant) -> u32 {
 mod tests {
     use super::*;
     use windows_sys::Win32::System::Diagnostics::Debug::{
-        RtlLookupFunctionEntry, CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY,
+        CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
     };
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -1108,15 +1208,16 @@ mod tests {
     }
     fn bind_fixture(core: usize, manager_return: u64, wait_return: u64) {
         initialize(config(core), core, 1);
-        assert!(BIND
-            .set(Binding {
+        assert!(
+            BIND.set(Binding {
                 core,
                 manager_return,
                 local_manager_return: core as u64 + 0x63d448,
                 wait_return,
                 until: Instant::now() + Duration::from_secs(30)
             })
-            .is_ok());
+            .is_ok()
+        );
         h(19).store(3, Ordering::Release);
         for (i, target) in [
             root_world_original as *const () as u64,
@@ -1322,15 +1423,16 @@ mod tests {
             return;
         }
         initialize(config(1), 1, 1);
-        assert!(BIND
-            .set(Binding {
+        assert!(
+            BIND.set(Binding {
                 core: 1,
                 manager_return: 1 + 0x63e1d5,
                 local_manager_return: 1 + 0x63d448,
                 wait_return: 1 + 0x4a1196,
                 until: Instant::now() - Duration::from_secs(1),
             })
-            .is_ok());
+            .is_ok()
+        );
         h(19).store(3, Ordering::Release);
         ROOT_TEST_ORIGINALS[1].store(root_probe_manager as *const () as u64, Ordering::Release);
         let mut data = vec![0u8; 0x500];
@@ -2397,6 +2499,669 @@ mod tests {
         assert_eq!(h(15).load(Ordering::Acquire), 0);
         assert!(!USED.load(Ordering::Acquire));
         assert!(HOOKS.iter().all(|slot| slot.lock().unwrap().is_none()));
+    }
+    fn submission_fixture(core: usize) {
+        submission::PROFILE.store(true, Ordering::Release);
+        bind_fixture(core, 0, 0);
+    }
+    global_asm!(
+        ".p2align 4",
+        ".globl submission_fixture_push",
+        ".seh_proc submission_fixture_push",
+        "submission_fixture_push:",
+        "mov [rsp+8],rbx",
+        ".seh_savereg rbx,8",
+        "mov [rsp+0x10],rbp",
+        ".seh_savereg rbp,0x10",
+        "mov [rsp+0x18],rsi",
+        ".seh_savereg rsi,0x18",
+        "push rdi",
+        ".seh_pushreg rdi",
+        "sub rsp,0x30",
+        ".seh_stackalloc 0x30",
+        ".seh_endprologue",
+        "inc qword ptr [rcx+0x80]",
+        "mov rax,[rdx]",
+        "movups xmm0,[r9]",
+        "mov rbx,[rsp+0x40]",
+        "mov rbp,[rsp+0x48]",
+        "mov rsi,[rsp+0x50]",
+        "lea rsp,[rsp+0x30]",
+        "pop rdi",
+        "ret",
+        ".seh_endproc",
+        ".globl submission_fixture_push_end",
+        "submission_fixture_push_end:",
+        ".p2align 4",
+        ".globl submission_fixture_publish",
+        ".seh_proc submission_fixture_publish",
+        "submission_fixture_publish:",
+        ".byte 0x40,0x53",
+        ".seh_pushreg rbx",
+        "sub rsp,0x20",
+        ".seh_stackalloc 0x20",
+        ".seh_endprologue",
+        ".byte 0x48,0x8b,0xc2",
+        "inc qword ptr [rcx+0x80]",
+        "add rsp,0x20",
+        "pop rbx",
+        "jmp rax",
+        ".seh_endproc",
+        ".globl submission_fixture_publish_end",
+        "submission_fixture_publish_end:",
+        ".globl submission_fixture_tail",
+        "submission_fixture_tail:",
+        "inc qword ptr [rcx+0x88]",
+        "mov rax,0x12345678",
+        "ret",
+        ".globl submission_seh_tail_forward",
+        ".seh_proc submission_seh_tail_forward",
+        "submission_seh_tail_forward:",
+        ".byte 0x40,0x53",
+        ".seh_pushreg rbx",
+        "sub rsp,0x20",
+        ".seh_stackalloc 0x20",
+        ".seh_endprologue",
+        "lea rax,[rip+root_unwind_original]",
+        "add rsp,0x20",
+        "pop rbx",
+        "jmp rax",
+        ".seh_endproc",
+    );
+    unsafe extern "system" {
+        fn submission_fixture_push();
+        fn submission_fixture_push_end();
+        fn submission_fixture_publish();
+        fn submission_fixture_publish_end();
+        fn submission_fixture_tail();
+        fn submission_seh_tail_forward();
+    }
+    #[test]
+    fn submission_owned_os_real_two_cas_and_entire_tail_frame_once() {
+        if !child("submission_owned_os_real_two_cas_and_entire_tail_frame_once") {
+            return;
+        }
+        let core = OwnedCore::new();
+        let base = core.base as usize;
+        submission_fixture(base);
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(core.base.cast(), 0xa10000, PAGE_EXECUTE_READWRITE, &mut old) },
+            0
+        );
+        let mut table: Box<[IMAGE_RUNTIME_FUNCTION_ENTRY; 2]> =
+            Box::new(unsafe { std::mem::zeroed() });
+        for (i, (start, end)) in [
+            (
+                submission_fixture_push as *const () as usize,
+                submission_fixture_push_end as *const () as usize,
+            ),
+            (
+                submission_fixture_publish as *const () as usize,
+                submission_fixture_publish_end as *const () as usize,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(end > start && end - start < 256);
+            let code = unsafe { std::slice::from_raw_parts(start as *const u8, end - start) };
+            assert_eq!(&code[..8], &submission::WORDS[i]);
+            let mut image = 0;
+            let entry = unsafe { RtlLookupFunctionEntry(start as u64, &mut image, null_mut()) };
+            assert!(!entry.is_null());
+            let unwind = image + unsafe { (*entry).Anonymous.UnwindData as u64 };
+            let header = copy_current::<4>(unwind).unwrap();
+            assert_eq!(header[0], 1);
+            let length = (4 + usize::from(header[2]) * 2 + 3) & !3;
+            assert!(length <= 64);
+            let raw = unsafe { std::slice::from_raw_parts(unwind as *const u8, length) };
+            let metadata = 0xa0f000 + i * 64;
+            unsafe {
+                ptr::copy_nonoverlapping(code.as_ptr(), core.base.add(site_rvas()[i]), code.len());
+                ptr::copy_nonoverlapping(raw.as_ptr(), core.base.add(metadata), length);
+            }
+            table[i].BeginAddress = site_rvas()[i] as u32;
+            table[i].EndAddress = (site_rvas()[i] + code.len()) as u32;
+            table[i].Anonymous.UnwindData = metadata as u32;
+        }
+        assert_ne!(
+            unsafe { VirtualProtect(core.base.cast(), 0xa10000, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        assert_ne!(
+            unsafe { FlushInstructionCache(GetCurrentProcess(), core.base.cast(), 0xa10000) },
+            0
+        );
+        assert_ne!(
+            unsafe { RtlAddFunctionTable(table.as_mut_ptr(), 2, base as u64) },
+            0
+        );
+        // Test gateways route through the same real displaced shims as release.
+        submission::SUBMISSION_TEST_ORIGINALS[0].store(
+            submission::submission_push_original as *const () as u64,
+            Ordering::Release,
+        );
+        submission::SUBMISSION_TEST_ORIGINALS[1].store(
+            submission::submission_publish_original as *const () as u64,
+            Ordering::Release,
+        );
+        assert!(unsafe { install_sites(base, submission::WORDS) }.is_ok());
+        let mut data = [0u64; 32];
+        let job = [0xaabbccdd_u64; 4];
+        let meta = [0x1122_u64, 0x3344];
+        let submit = unsafe {
+            std::mem::transmute::<
+                usize,
+                unsafe extern "system" fn(*mut u64, *const u64, u64, *const u64) -> u64,
+            >(base + site_rvas()[0])
+        };
+        assert_eq!(
+            unsafe { submit(data.as_mut_ptr(), job.as_ptr(), 7, meta.as_ptr()) },
+            job[0]
+        );
+        let publish = unsafe {
+            std::mem::transmute::<usize, unsafe extern "system" fn(*mut u64, usize, u64, u64) -> u64>(
+                base + site_rvas()[1],
+            )
+        };
+        assert_eq!(
+            unsafe {
+                publish(
+                    data.as_mut_ptr(),
+                    submission_fixture_tail as *const () as usize,
+                    0,
+                    0,
+                )
+            },
+            0x12345678
+        );
+        assert_eq!(
+            data[16], 2,
+            "both complete native bodies called exactly once"
+        );
+        assert_eq!(
+            data[17], 1,
+            "publication tail target returned through the gateway once"
+        );
+        assert_eq!(h(15).load(Ordering::Acquire), 3);
+        assert_eq!(h(10).load(Ordering::Acquire), 4);
+        assert_eq!(
+            submission::TRACE.rows[0][14].load(Ordering::Acquire),
+            job[0]
+        );
+        assert_eq!(
+            submission::TRACE.rows[0][18].load(Ordering::Acquire),
+            meta[0]
+        );
+        assert_eq!(
+            submission::TRACE.rows[3][21].load(Ordering::Acquire),
+            0x12345678
+        );
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+        // Continuations/shim code stay live after rollback and late admission.
+        assert!(unsafe { restore_all() }.is_ok());
+        assert_ne!(unsafe { RtlDeleteFunctionTable(table.as_mut_ptr()) }, 0);
+    }
+    #[test]
+    fn submission_owned_os_four_args_flags_outputs_and_original_once() {
+        if !child("submission_owned_os_four_args_flags_outputs_and_original_once") {
+            return;
+        }
+        submission_fixture(1);
+        for i in 0..2 {
+            // Samples native INPUT flags before its first SUB, and outputs at
+            // the assembly caller immediately after gateway RET. These are
+            // actual four-argument native executions, not recorder reflection.
+            submission::SUBMISSION_TEST_ORIGINALS[i]
+                .store(root_probe_manager as *const () as u64, Ordering::Release);
+            let mut baseline = vec![0; 0x500];
+            let mut observed = vec![0; 0x500];
+            unsafe {
+                SetLastError(0x1234);
+                root_probe_driver(
+                    baseline.as_mut_ptr(),
+                    root_probe_manager as *const () as usize,
+                );
+            }
+            unsafe {
+                SetLastError(0x1234);
+                root_probe_driver(observed.as_mut_ptr(), gateways()[i]);
+            }
+            assert_eq!(unsafe { GetLastError() }, 0x880);
+            assert_eq!(u64_at(&observed, 0x80), 1);
+            assert_eq!(u64_at(&observed, 0x90), 0x1234);
+            assert_eq!(&observed[..48], &baseline[..48]);
+            assert_eq!(u64_at(&observed, 0), 0x11223344);
+            assert_eq!(u64_at(&observed, 32), 0xbbcc);
+            assert_eq!(u64_at(&observed, 40), 0xddee);
+            assert_eq!(u64_at(&observed, 56), u64_at(&observed, 0x98));
+            assert_eq!(u64_at(&observed, 56), u64_at(&baseline, 56));
+            assert_eq!(&observed[0x100..0x160], &baseline[0x100..0x160]);
+            assert_eq!(&observed[0x200..0x238], &baseline[0x200..0x238]);
+            assert_eq!(&observed[0x300..0x360], &baseline[0x300..0x360]);
+            assert_eq!(u64_at(&observed, 0x280), u64_at(&observed, 0x88));
+            assert_eq!(u64_at(&observed, 0x280), u64_at(&baseline, 0x280));
+        }
+        assert_eq!(h(10).load(Ordering::Acquire), 4);
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+        let mut late = vec![0; 0x500];
+        unsafe {
+            root_probe_driver(late.as_mut_ptr(), gateways()[1]);
+        }
+        assert_eq!(u64_at(&late, 0x80), 1);
+        assert_eq!(h(10).load(Ordering::Acquire), 4);
+        assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+    }
+    #[test]
+    fn submission_owned_os_metadata_error_capacity_and_frame_overlap() {
+        if !child("submission_owned_os_metadata_error_capacity_and_frame_overlap") {
+            return;
+        }
+        submission_fixture(1);
+        let mut job = [0x1122334455667788u64; 4];
+        let mut a = Saved {
+            gpr: [7, job.as_mut_ptr() as u64, 19, 1, 0, 0, 0, 0],
+            xmm: [[0; 16]; 6],
+            invocation: Invocation {
+                kind: 4,
+                caller_rsp: 0x1000,
+                native_rsp: 0x800,
+                ..Invocation::default()
+            },
+            metadata: 0,
+        };
+        begin(&mut a);
+        assert_eq!(submission::TRACE.rows[0][24].load(Ordering::Acquire), 32);
+        assert_eq!(
+            submission::TRACE.rows[0][14].load(Ordering::Acquire),
+            job[0]
+        );
+        assert_ne!(submission::TRACE.rows[0][27].load(Ordering::Acquire), 0);
+        let mut overlap = Saved {
+            gpr: [7, 0, 0, 0, 0, 0, 0, 0],
+            xmm: [[0; 16]; 6],
+            invocation: Invocation {
+                kind: 5,
+                caller_rsp: 0x1000,
+                native_rsp: 0x800,
+                ..Invocation::default()
+            },
+            metadata: 0,
+        };
+        begin(&mut overlap);
+        assert_ne!(overlap.invocation.errors & 0x100, 0);
+        finish(&mut overlap, 2, 0);
+        // Make input memory unavailable after entry. Finishing must use the
+        // frozen entry bytes, even if both register outputs are unrelated.
+        job.fill(0);
+        a.gpr[1] = u64::MAX;
+        a.gpr[3] = u64::MAX;
+        finish(&mut a, 2, 0);
+        assert_eq!(
+            submission::TRACE.rows[1][14].load(Ordering::Acquire),
+            0x1122334455667788
+        );
+        assert_eq!(submission::TRACE.rows[1][24].load(Ordering::Acquire), 32);
+        let mut metadata = [0x8877u64; 2];
+        a.gpr[1] = job.as_ptr() as u64;
+        a.gpr[3] = metadata.as_mut_ptr() as u64;
+        for _ in 0..ROOT_ROWS {
+            a.invocation = Invocation {
+                kind: 4,
+                caller_rsp: 0x1000,
+                native_rsp: 0x800,
+                ..Invocation::default()
+            };
+            begin(&mut a);
+            finish(&mut a, 2, 0);
+        }
+        assert_eq!(h(10).load(Ordering::Acquire), ROOT_ROWS as u64);
+        assert!(h(11).load(Ordering::Acquire) > 0);
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    }
+    #[test]
+    fn submission_owned_os_actual_seh_settles_without_native_return() {
+        if !child("submission_owned_os_actual_seh_settles_without_native_return") {
+            return;
+        }
+        submission_fixture(1);
+        ROOT_CONTINUE[1].store(
+            root_unwind_original as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        submission::SUBMISSION_TEST_ORIGINALS[1].store(
+            submission::submission_publish_original as *const () as u64,
+            Ordering::Release,
+        );
+        let mut state = [0; 2];
+        let landed = unsafe { root_unwind_driver(state.as_mut_ptr(), gateways()[1]) };
+        assert_eq!(landed, 1);
+        assert_eq!(h(13).load(Ordering::Acquire), 1);
+        assert_eq!(STACK.with(|s| s.get().depth), 0);
+        assert_eq!(h(10).load(Ordering::Acquire), 2);
+        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 3);
+        assert_eq!(submission::TRACE.rows[1][21].load(Ordering::Acquire), 0);
+        assert_ne!(
+            submission::TRACE.rows[1][20].load(Ordering::Acquire) & 0x40,
+            0
+        );
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    }
+    #[test]
+    fn submission_owned_os_tail_target_seh_crosses_entire_wrapper() {
+        if !child("submission_owned_os_tail_target_seh_crosses_entire_wrapper") {
+            return;
+        }
+        submission_fixture(1);
+        ROOT_CONTINUE[1].store(
+            submission_seh_tail_forward as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        submission::SUBMISSION_TEST_ORIGINALS[1].store(
+            submission::submission_publish_original as *const () as u64,
+            Ordering::Release,
+        );
+        let mut state = [0; 2];
+        assert_eq!(
+            unsafe { root_unwind_driver(state.as_mut_ptr(), gateways()[1]) },
+            1
+        );
+        assert_eq!(h(13).load(Ordering::Acquire), 1);
+        assert_eq!(h(10).load(Ordering::Acquire), 2);
+        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 3);
+        assert_eq!(submission::TRACE.rows[1][21].load(Ordering::Acquire), 0);
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    }
+    #[test]
+    fn submission_owned_os_safe_sixteen_bytes_and_no_post_return_reads() {
+        if !child("submission_owned_os_safe_sixteen_bytes_and_no_post_return_reads") {
+            return;
+        }
+        submission_fixture(1);
+        let memory =
+            unsafe { VirtualAlloc(null_mut(), 0x2000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE) }
+                as *mut u8;
+        assert!(!memory.is_null());
+        let mut old = 0;
+        let prefix = [0x55u8; 16];
+        unsafe {
+            ptr::copy_nonoverlapping(prefix.as_ptr(), memory.add(0xff0), 16);
+        }
+        assert_ne!(
+            unsafe {
+                VirtualProtect(
+                    memory.add(0x1000).cast(),
+                    0x1000,
+                    windows_sys::Win32::System::Memory::PAGE_NOACCESS,
+                    &mut old,
+                )
+            },
+            0
+        );
+        let meta = [0x7788u64; 2];
+        let mut raw = Saved {
+            gpr: [
+                7,
+                unsafe { memory.add(0xff0) } as u64,
+                9,
+                meta.as_ptr() as u64,
+                0,
+                0,
+                0,
+                0,
+            ],
+            xmm: [[0; 16]; 6],
+            invocation: Invocation {
+                kind: 4,
+                caller_rsp: 0x1000,
+                native_rsp: 0x800,
+                ..Invocation::default()
+            },
+            metadata: 0,
+        };
+        begin(&mut raw);
+        assert_eq!(submission::TRACE.rows[0][24].load(Ordering::Acquire), 16);
+        assert_eq!(submission::TRACE.rows[0][25].load(Ordering::Acquire), 0);
+        assert_eq!(
+            submission::TRACE.rows[0][14].load(Ordering::Acquire),
+            0x5555555555555555
+        );
+        assert_ne!(
+            unsafe {
+                VirtualProtect(
+                    memory.cast(),
+                    0x1000,
+                    windows_sys::Win32::System::Memory::PAGE_NOACCESS,
+                    &mut old,
+                )
+            },
+            0
+        );
+        raw.gpr[1] = 0;
+        raw.gpr[3] = 1;
+        finish(&mut raw, 2, 0);
+        assert_eq!(
+            submission::TRACE.rows[1][14].load(Ordering::Acquire),
+            0x5555555555555555
+        );
+        assert_eq!(submission::TRACE.rows[1][24].load(Ordering::Acquire), 16);
+        assert_eq!(submission::TRACE.rows[1][20].load(Ordering::Acquire), 0);
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+        assert_ne!(unsafe { VirtualFree(memory.cast(), 0, MEM_RELEASE) }, 0);
+    }
+    #[test]
+    fn submission_owned_os_depth_overflow_keeps_every_reservation_settlement() {
+        if !child("submission_owned_os_depth_overflow_keeps_every_reservation_settlement") {
+            return;
+        }
+        submission_fixture(1);
+        let mut frames = Vec::new();
+        for _ in 0..DEPTH + 2 {
+            let mut raw = Saved {
+                gpr: [0; 8],
+                xmm: [[0; 16]; 6],
+                invocation: Invocation {
+                    kind: 5,
+                    caller_rsp: 0x1000,
+                    native_rsp: 0x800,
+                    ..Invocation::default()
+                },
+                metadata: 0,
+            };
+            begin(&mut raw);
+            frames.push(raw);
+        }
+        assert_ne!(frames.last().unwrap().invocation.errors & 0x10, 0);
+        while let Some(mut raw) = frames.pop() {
+            finish(&mut raw, 2, 0);
+        }
+        assert_eq!(STACK.with(|s| s.get().depth), 0);
+        assert_eq!(h(12).load(Ordering::Acquire), 0);
+        assert_eq!(h(10).load(Ordering::Acquire), ((DEPTH + 2) * 2) as u64);
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    }
+    fn submission_partial(name: &str, site: usize) {
+        if !child(name) {
+            return;
+        }
+        let core = OwnedCore::new();
+        let base = core.base as usize;
+        submission_fixture(base);
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(core.base.cast(), 0xa10000, PAGE_EXECUTE_READWRITE, &mut old) },
+            0
+        );
+        for i in 0..2 {
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    submission::WORDS[i].as_ptr(),
+                    core.base.add(site_rvas()[i]),
+                    8,
+                );
+            }
+        }
+        assert_ne!(
+            unsafe { VirtualProtect(core.base.cast(), 0xa10000, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        FAIL_AFTER_PUBLISH.store(site, Ordering::Release);
+        assert!(unsafe { install_sites(base, submission::WORDS) }.is_err());
+        assert_eq!(h(15).load(Ordering::Acquire), (1 << site) - 1);
+        assert!(unsafe { restore_all() }.is_ok());
+        assert_eq!(h(17).load(Ordering::Acquire), 3);
+        for i in 0..2 {
+            assert_eq!(
+                copy_current::<8>((base + site_rvas()[i]) as u64),
+                Some(submission::WORDS[i])
+            );
+            assert!(HOOKS[i].lock().unwrap().is_none());
+        }
+    }
+    #[test]
+    fn submission_owned_os_partial_submit_cas_rollback() {
+        submission_partial("submission_owned_os_partial_submit_cas_rollback", 1);
+    }
+    #[test]
+    fn submission_owned_os_partial_publish_cas_rollback() {
+        submission_partial("submission_owned_os_partial_publish_cas_rollback", 2);
+    }
+    #[test]
+    fn submission_owned_os_virtual_unwind_new_shims_and_gateways() {
+        if !child("submission_owned_os_virtual_unwind_new_shims_and_gateways") {
+            return;
+        }
+        unsafe extern "system" {
+            fn submission_push_original_body();
+            fn submission_push_original_branch();
+            fn submission_publish_original_body();
+            fn submission_publish_original_branch();
+            fn submission_push_gateway_body();
+            fn submission_publish_gateway_body();
+        }
+        for (pc, allocation, slot) in [
+            (
+                submission::submission_push_original as *const () as usize,
+                0usize,
+                None,
+            ),
+            (
+                submission_push_original_body as *const () as usize,
+                0,
+                Some(8usize),
+            ),
+            (
+                submission_push_original_branch as *const () as usize,
+                0,
+                Some(8),
+            ),
+            (
+                submission::submission_publish_original as *const () as usize,
+                0,
+                None,
+            ),
+            (
+                submission_publish_original_body as *const () as usize,
+                0x28,
+                Some(0x20),
+            ),
+            (
+                submission_publish_original_branch as *const () as usize,
+                0x28,
+                Some(0x20),
+            ),
+            (
+                submission_push_gateway_body as *const () as usize,
+                0x1c8,
+                None,
+            ),
+            (
+                submission_publish_gateway_body as *const () as usize,
+                0x1c8,
+                None,
+            ),
+        ] {
+            let mut stack = [0u64; 128];
+            stack[allocation / 8] = 0x11223344;
+            if let Some(slot) = slot {
+                stack[slot / 8] = 0x55667788;
+            }
+            let mut base = 0;
+            let entry = unsafe { RtlLookupFunctionEntry(pc as u64, &mut base, null_mut()) };
+            assert!(!entry.is_null());
+            let mut ctx: CONTEXT = unsafe { std::mem::zeroed() };
+            ctx.Rip = pc as u64;
+            ctx.Rsp = stack.as_mut_ptr() as u64;
+            ctx.Rbx = if slot.is_some() {
+                0xaabbccdd
+            } else {
+                0x55667788
+            };
+            let initial = ctx.Rsp;
+            let mut data = null_mut();
+            let mut frame = 0;
+            unsafe {
+                RtlVirtualUnwind(
+                    0,
+                    base,
+                    pc as u64,
+                    entry,
+                    &mut ctx,
+                    &mut data,
+                    &mut frame,
+                    null_mut(),
+                );
+            }
+            assert_eq!(ctx.Rip, 0x11223344, "PC{pc:x}");
+            assert_eq!(ctx.Rsp, initial + allocation as u64 + 8);
+            assert_eq!(ctx.Rbx, 0x55667788, "PC{pc:x}");
+        }
+    }
+    #[test]
+    fn submission_owned_os_stop_deadline_retains_late_reserved_return() {
+        if !child("submission_owned_os_stop_deadline_retains_late_reserved_return") {
+            return;
+        }
+        submission_fixture(1);
+        ROOT_CONTINUE[1].store(
+            root_delay_original as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        submission::SUBMISSION_TEST_ORIGINALS[1].store(
+            submission::submission_publish_original as *const () as u64,
+            Ordering::Release,
+        );
+        let delay = std::sync::Arc::new(Delay {
+            entered: AtomicU64::new(0),
+            release: AtomicU64::new(0),
+            calls: AtomicU64::new(0),
+        });
+        let target = delay.clone();
+        let worker = std::thread::spawn(move || {
+            let call = unsafe {
+                std::mem::transmute::<usize, unsafe extern "system" fn(*const Delay)>(gateways()[1])
+            };
+            unsafe {
+                call(std::sync::Arc::as_ptr(&target));
+            }
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while delay.entered.load(Ordering::Acquire) == 0 {
+            assert!(Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        let status = stop_at(Instant::now());
+        let pending = h(12).load(Ordering::Acquire) != ROOT_CLOSED;
+        let uncommitted = submission::TRACE.rows[1][0].load(Ordering::Acquire) == 0;
+        delay.release.store(1, Ordering::Release);
+        worker.join().unwrap();
+        assert_eq!(status, 2);
+        assert!(pending && uncommitted);
+        assert_eq!(delay.calls.load(Ordering::Acquire), 1);
+        assert_eq!(submission::TRACE.rows[1][0].load(Ordering::Acquire), 2);
+        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 2);
+        assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
     }
     fn partial_failure(name: &str, site: usize) {
         if !child(name) {

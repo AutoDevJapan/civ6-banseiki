@@ -8,8 +8,8 @@ use std::{
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
         Mutex,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
     },
 };
 use windows_sys::Win32::{
@@ -41,6 +41,8 @@ static STATE: Mutex<Option<Resident>> = Mutex::new(None);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
 static ROOT_PROFILE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SUBMISSION_PROFILE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 static OBSERVATION: crate::observation::ObservationGate =
     crate::observation::ObservationGate::new(true);
 struct RecordFlight;
@@ -580,7 +582,11 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
     s.core = core;
     if ROOT_PROFILE.load(Ordering::Acquire) {
         let mut config = protocol::RootConfig {
-            version: protocol::ROOT_CONFIG_VERSION,
+            version: if SUBMISSION_PROFILE.load(Ordering::Acquire) {
+                protocol::SUBMISSION_CONFIG_VERSION
+            } else {
+                protocol::ROOT_CONFIG_VERSION
+            },
             size: size_of::<protocol::RootConfig>() as u32,
             pid: s.config.pid,
             max_seconds: s.config.max_seconds,
@@ -595,7 +601,12 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
         if status != 0 {
             return Err("deferred root observation install failed before factory".into());
         }
-        if config.trace_size as usize != protocol::ROOT_BYTES || config.trace_address == 0 {
+        let expected_size = if SUBMISSION_PROFILE.load(Ordering::Acquire) {
+            protocol::SUBMISSION_BYTES
+        } else {
+            protocol::ROOT_BYTES
+        };
+        if config.trace_size as usize != expected_size || config.trace_address == 0 {
             return Err("root install returned an invalid trace receipt".into());
         }
         s.phase = Phase::Open;
@@ -652,9 +663,14 @@ extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usiz
 }
 
 fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
+    let submission_only = root_only && input.version == protocol::SUBMISSION_PREPARE_VERSION;
     if input.version
         != if root_only {
-            protocol::ROOT_PREPARE_VERSION
+            if submission_only {
+                protocol::SUBMISSION_PREPARE_VERSION
+            } else {
+                protocol::ROOT_PREPARE_VERSION
+            }
         } else {
             VERSION
         }
@@ -704,7 +720,9 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     let source = pin_file(&path(bridge)?, &input.bridge_sha256)?;
     let install = api(
         bridge,
-        if root_only {
+        if submission_only {
+            b"BridgeSubmissionObservationInstall\0"
+        } else if root_only {
             b"BridgeRootObservationInstall\0"
         } else {
             b"BridgeRuntimeInstall\0"
@@ -712,7 +730,9 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     )?;
     let stop = api(
         bridge,
-        if root_only {
+        if submission_only {
+            b"BridgeSubmissionObservationStop\0"
+        } else if root_only {
             b"BridgeRootObservationStop\0"
         } else {
             b"BridgeRuntimeStopObservation\0"
@@ -788,6 +808,7 @@ fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
     };
     // Publish retained responsibility before the first runtime mutation.
     ROOT_PROFILE.store(root_only, Ordering::Release);
+    SUBMISSION_PROFILE.store(submission_only, Ordering::Release);
     *lock = Some(Resident {
         exe,
         core: 0,
@@ -832,9 +853,21 @@ fn prepare(input: Prepare) -> Result<(), String> {
 /// Distinct explicit export AND strict input version; no old config can opt in.
 #[unsafe(no_mangle)]
 pub extern "system" fn RustBridgeBootstrapPrepareRootObservation(input: *const Prepare) -> u32 {
+    prepare_capture_export(input, protocol::ROOT_PREPARE_VERSION)
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapPrepareSubmissionObservation(
+    input: *const Prepare,
+) -> u32 {
+    prepare_capture_export(input, protocol::SUBMISSION_PREPARE_VERSION)
+}
+fn prepare_capture_export(input: *const Prepare, version: u32) -> u32 {
     std::panic::catch_unwind(|| {
         let bytes = read(input as usize, size_of::<Prepare>()).map_err(|_| ())?;
         let config = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<Prepare>()) };
+        if config.version != version {
+            return Err(());
+        }
         prepare_profile(config, true).map_err(|_| ())
     })
     .ok()
