@@ -509,18 +509,10 @@ fn shipped_scenario_inventory_and_json_are_intact() {
     let expected: BTreeSet<_> = shipped_scenarios::SHIPPED_SCENARIOS
         .iter()
         .map(|(name, _)| (*name).to_string())
-        .chain(
-            [
-                "absorption-native-carrier-hotseat-save.json",
-                "absorption-native-carrier-witness-hold.json",
-            ]
-            .into_iter()
-            .map(str::to_string),
-        )
         .collect();
     assert_eq!(
         expected.len(),
-        shipped_scenarios::SHIPPED_SCENARIOS.len() + 2,
+        shipped_scenarios::SHIPPED_SCENARIOS.len(),
         "scenario inventory must not repeat a filename"
     );
     let actual: BTreeSet<_> = fs::read_dir(&folder)
