@@ -610,7 +610,9 @@ pub fn my_turn(r: &mut impl Runner, p: &Paths, me: &Path) -> Result<bool, String
         {
             return Ok(false);
         }
-        // A dispatched waiter must reach live_chain before a yielding chain resumes.
+        // A starting/running dispatch must reach live_chain before a yielding
+        // chain resumes. A session queued for an execution slot has not started
+        // its work; its actual live_chain queue/lock is protected above instead.
         if item["status"] == "doing"
             && fairness::needs_civ6(&item)
             && chain_job_active(p, &item["scheduler"]["job"])?
@@ -630,7 +632,7 @@ fn chain_job_active(p: &Paths, job: &Value) -> Result<bool, String> {
     }
     Ok(matches!(
         read_json(path)?["status"].as_str(),
-        Some("queued" | "starting" | "running")
+        Some("starting" | "running")
     ))
 }
 fn remove_if_exists(p: &Path) -> Result<(), String> {
