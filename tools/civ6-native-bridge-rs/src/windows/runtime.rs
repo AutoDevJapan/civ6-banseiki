@@ -43,6 +43,16 @@ pub(super) fn invocation_start() -> u64 {
 pub(super) fn invocation_admitted(cookie: u64) -> bool {
     cookie != 0
 }
+#[cfg(test)]
+pub(super) fn fixture_invocation_runtime() {
+    OWNED.store(true, Ordering::Release);
+    assert!(product_activate());
+    assert!(start_observation(30));
+}
+#[cfg(test)]
+pub(super) fn fixture_invocation_closed() -> bool {
+    !INVOCATIONS.current(1)
+}
 pub(super) unsafe fn invocation_finish(cookie: *const AtomicU64) {
     let Some(cookie) = (unsafe { cookie.as_ref() }) else {
         return;

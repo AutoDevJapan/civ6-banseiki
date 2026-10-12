@@ -28,6 +28,8 @@ mod assignment;
 #[path = "windows/composite.rs"]
 mod composite;
 pub use composite::CompositeTrace;
+#[path = "windows/lifecycle.rs"]
+mod lifecycle;
 #[path = "windows/property_log.rs"]
 mod property_log;
 #[path = "windows/runtime.rs"]
@@ -1210,7 +1212,7 @@ fn joined_bind(receiver: u64, session: u32, ticket: u32) {
 
 // Returns a session/ticket token only for the one numeric Core property and
 // the currently bound receiver. This runs before the original getter once.
-unsafe extern "system" fn joined_property_begin(property: u64, key: u32) -> u64 {
+unsafe fn joined_property_begin(property: u64, key: u32) -> u64 {
     if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key) {
         return composite::begin(property, key);
     }
@@ -1279,7 +1281,7 @@ fn joined_observe_property(
 // The original function receives its saved argument registers immediately after
 // this bounded copy. A failed copy is recorded, never treated as permission.
 const _: () = assert!(std::mem::size_of::<CalibrationRow>() <= 0x58);
-unsafe extern "system" fn calibration_begin(
+unsafe fn calibration_begin(
     governors_this: u64,
     governor_index: u32,
     return_address: u64,
@@ -1388,7 +1390,7 @@ unsafe extern "system" fn calibration_begin(
     row as *const CalibrationRow
 }
 
-unsafe extern "system" fn calibration_end(
+unsafe fn calibration_end(
     row: *const CalibrationRow,
     original_rax: u64,
     governor_index: u32,
@@ -1726,7 +1728,7 @@ fn production_tag(tag: u32, key_id: u32, property: u64, token: u64) -> u32 {
     }
 }
 
-unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64, token: u64) {
+unsafe fn record_property(property: u64, key_id: u32, returned: u64, token: u64) {
     let trace = PROPERTY_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
         return;
@@ -1825,55 +1827,6 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
 // The 0xd8-byte frame supplies aligned calls, shadow space, and saved volatile
 // argument registers for the entry ticket call. The original sees them once;
 // its RAX is saved across telemetry and restored before returning to its caller.
-global_asm!(
-    ".globl property_gateway",
-    ".seh_proc property_gateway",
-    "property_gateway:",
-    "sub rsp, 0xd8",
-    ".seh_stackalloc 0xd8",
-    ".seh_endprologue",
-    "mov qword ptr [rsp + 0x20], rcx",
-    "mov qword ptr [rsp + 0x28], rdx",
-    "mov qword ptr [rsp + 0x30], r8",
-    "mov qword ptr [rsp + 0x38], r9",
-    "mov qword ptr [rsp + 0x40], rax",
-    "mov qword ptr [rsp + 0x48], r10",
-    "mov qword ptr [rsp + 0x50], r11",
-    "movdqu xmmword ptr [rsp + 0x70], xmm0",
-    "movdqu xmmword ptr [rsp + 0x80], xmm1",
-    "movdqu xmmword ptr [rsp + 0x90], xmm2",
-    "movdqu xmmword ptr [rsp + 0xa0], xmm3",
-    "movdqu xmmword ptr [rsp + 0xb0], xmm4",
-    "movdqu xmmword ptr [rsp + 0xc0], xmm5",
-    "call {begin}",
-    "mov qword ptr [rsp + 0x58], rax",
-    "mov rcx, qword ptr [rsp + 0x20]",
-    "mov rdx, qword ptr [rsp + 0x28]",
-    "mov r8, qword ptr [rsp + 0x30]",
-    "mov r9, qword ptr [rsp + 0x38]",
-    "mov rax, qword ptr [rsp + 0x40]",
-    "mov r10, qword ptr [rsp + 0x48]",
-    "mov r11, qword ptr [rsp + 0x50]",
-    "movdqu xmm0, xmmword ptr [rsp + 0x70]",
-    "movdqu xmm1, xmmword ptr [rsp + 0x80]",
-    "movdqu xmm2, xmmword ptr [rsp + 0x90]",
-    "movdqu xmm3, xmmword ptr [rsp + 0xa0]",
-    "movdqu xmm4, xmmword ptr [rsp + 0xb0]",
-    "movdqu xmm5, xmmword ptr [rsp + 0xc0]",
-    "call qword ptr [rip + PROPERTY_TRAMPOLINE_PTR]",
-    "mov qword ptr [rsp + 0x60], rax",
-    "mov rcx, qword ptr [rsp + 0x20]",
-    "mov edx, dword ptr [rsp + 0x28]",
-    "mov r8, rax",
-    "mov r9, qword ptr [rsp + 0x58]",
-    "call {record}",
-    "mov rax, qword ptr [rsp + 0x60]",
-    "add rsp, 0xd8",
-    "ret",
-    ".seh_endproc",
-    begin = sym joined_property_begin,
-    record = sym record_property,
-);
 
 unsafe extern "system" {
     fn property_gateway();
@@ -1938,56 +1891,6 @@ static BRIDGE_TRAMPOLINE_PTR: AtomicPtr<u8> = AtomicPtr::new(null_mut());
 // A read-only return wrapper for owner/receiver calibration. Both callbacks
 // operate on the current call only. All incoming volatile argument registers
 // and XMM0..5 are restored before the original native function runs once.
-global_asm!(
-    ".globl calibration_gateway",
-    ".seh_proc calibration_gateway",
-    "calibration_gateway:",
-    "sub rsp, 0x138",
-    ".seh_stackalloc 0x138",
-    ".seh_endprologue",
-    "mov qword ptr [rsp + 0x20], rcx",
-    "mov qword ptr [rsp + 0x28], rdx",
-    "mov qword ptr [rsp + 0x30], r8",
-    "mov qword ptr [rsp + 0x38], r9",
-    "mov qword ptr [rsp + 0x40], rax",
-    "mov qword ptr [rsp + 0x48], r10",
-    "mov qword ptr [rsp + 0x50], r11",
-    "movdqu xmmword ptr [rsp + 0x70], xmm0",
-    "movdqu xmmword ptr [rsp + 0x80], xmm1",
-    "movdqu xmmword ptr [rsp + 0x90], xmm2",
-    "movdqu xmmword ptr [rsp + 0xa0], xmm3",
-    "movdqu xmmword ptr [rsp + 0xb0], xmm4",
-    "movdqu xmmword ptr [rsp + 0xc0], xmm5",
-    "mov r8, qword ptr [rsp + 0x138]",
-    "lea r9, [rsp + 0xe0]",
-    "call {begin}",
-    "mov qword ptr [rsp + 0x58], rax",
-    "mov rcx, qword ptr [rsp + 0x20]",
-    "mov rdx, qword ptr [rsp + 0x28]",
-    "mov r8, qword ptr [rsp + 0x30]",
-    "mov r9, qword ptr [rsp + 0x38]",
-    "mov rax, qword ptr [rsp + 0x40]",
-    "mov r10, qword ptr [rsp + 0x48]",
-    "mov r11, qword ptr [rsp + 0x50]",
-    "movdqu xmm0, xmmword ptr [rsp + 0x70]",
-    "movdqu xmm1, xmmword ptr [rsp + 0x80]",
-    "movdqu xmm2, xmmword ptr [rsp + 0x90]",
-    "movdqu xmm3, xmmword ptr [rsp + 0xa0]",
-    "movdqu xmm4, xmmword ptr [rsp + 0xb0]",
-    "movdqu xmm5, xmmword ptr [rsp + 0xc0]",
-    "call qword ptr [rip + BRIDGE_TRAMPOLINE_PTR]",
-    "mov qword ptr [rsp + 0x60], rax",
-    "mov rcx, qword ptr [rsp + 0x58]",
-    "mov rdx, rax",
-    "mov r8d, dword ptr [rsp + 0x28]",
-    "mov r9, qword ptr [rsp + 0x20]",
-    "call {end}",
-    "add rsp, 0x138",
-    "ret",
-    ".seh_endproc",
-    begin = sym calibration_begin,
-    end = sym calibration_end,
-);
 
 unsafe extern "system" {
     fn calibration_gateway();

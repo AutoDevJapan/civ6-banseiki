@@ -187,7 +187,7 @@ fn field32(base: u64, offset: u64) -> Option<u32> {
     copy_current::<4>(base.checked_add(offset)?).map(u32::from_le_bytes)
 }
 
-pub(super) unsafe extern "system" fn assign_calibration_begin(
+pub(super) unsafe fn assign_calibration_begin(
     governors: u64,
     governor: u64,
     city: u64,
@@ -291,7 +291,7 @@ pub(super) unsafe extern "system" fn assign_calibration_begin(
 #[cfg(test)]
 static PAID_SYNTHETIC_GATE: AtomicBool = AtomicBool::new(false);
 
-pub(super) unsafe extern "system" fn assign_calibration_end(
+pub(super) unsafe fn assign_calibration_end(
     token: u64,
     original: u64,
     _governors: u64,
@@ -344,29 +344,27 @@ pub(super) unsafe extern "system" fn assign_calibration_end(
 }
 
 // Dedicated four-argument gateway. The fifth callback argument occupies
+pub(super) unsafe fn unwind_sample(token: u64) {
+    if token == 0 || token > ASSIGN_CAPACITY as u64 {
+        return;
+    }
+    if let Some(trace) = unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() } {
+        let row = &trace.rows[token as usize - 1];
+        if row
+            .sequence
+            .compare_exchange(0, 2, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+            runtime::sample_end();
+        }
+    }
+}
+
+// Dedicated four-argument gateway. The fifth callback argument occupies
 // [rsp+20h], and its sixth argument at 28h. The 24-byte lifetime fence lives
 // at E0h, outside shadow/arguments and saved SIMD. Rows remain observational.
 // RSP is 16-byte aligned for all calls. Nonvolatile registers are untouched.
-global_asm!(
-    ".globl assign_calibration_gateway", ".seh_proc assign_calibration_gateway",
-    "assign_calibration_gateway:", "sub rsp, 0x108", ".seh_stackalloc 0x108", ".seh_endprologue",
-    "mov [rsp+0x30], rcx", "mov [rsp+0x38], rdx", "mov [rsp+0x40], r8", "mov [rsp+0x48], r9",
-    "mov [rsp+0x50], rax", "mov [rsp+0x58], r10", "mov [rsp+0x60], r11",
-    "movdqu [rsp+0x80], xmm0", "movdqu [rsp+0x90], xmm1", "movdqu [rsp+0xa0], xmm2",
-    "movdqu [rsp+0xb0], xmm3", "movdqu [rsp+0xc0], xmm4", "movdqu [rsp+0xd0], xmm5",
-    "mov rax, [rsp+0x108]", "mov [rsp+0x20], rax",
-    "lea rax, [rsp+0xe0]", "mov [rsp+0x28], rax", "call {begin}", "mov [rsp+0x68], rax",
-    "mov rcx, [rsp+0x30]", "mov rdx, [rsp+0x38]", "mov r8, [rsp+0x40]", "mov r9, [rsp+0x48]",
-    "mov rax, [rsp+0x50]", "mov r10, [rsp+0x58]", "mov r11, [rsp+0x60]",
-    "movdqu xmm0, [rsp+0x80]", "movdqu xmm1, [rsp+0x90]", "movdqu xmm2, [rsp+0xa0]",
-    "movdqu xmm3, [rsp+0xb0]", "movdqu xmm4, [rsp+0xc0]", "movdqu xmm5, [rsp+0xd0]",
-    "call qword ptr [rip+ASSIGN_TRAMPOLINE_PTR]", "mov [rsp+0x70], rax",
-    "mov rcx, [rsp+0x68]", "mov rdx, rax",
-    "mov r8, [rsp+0x30]", "mov r9, [rsp+0x38]",
-    "lea rax, [rsp+0xe0]", "mov [rsp+0x20], rax", "call {end}",
-    "add rsp, 0x108", "ret", ".seh_endproc",
-    begin = sym assign_calibration_begin, end = sym assign_calibration_end,
-);
 unsafe extern "system" {
     pub(super) fn assign_calibration_gateway();
 }
@@ -531,7 +529,13 @@ mod tests {
         };
         assert_eq!(unwind[0] & 7, 1);
         assert_eq!(unwind[5] & 15, 1);
-        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0x108 / 8);
+        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0x1c0 / 8);
+        assert_ne!(
+            unwind[0] & 0x10,
+            0,
+            "native unwind owns the lifecycle cleanup"
+        );
+        assert_eq!(unwind[2], 3, "large frame plus the initial FLAGS slot");
         let page = unsafe {
             VirtualAlloc(
                 null_mut(),
