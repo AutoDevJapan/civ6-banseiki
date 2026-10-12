@@ -113,6 +113,7 @@ fn submission_owned_os_observed_four_gateways_real_shims_state_and_normal_return
         }
         submission_observed_seed(&mut hooked, kind, core, exe);
         let first = h(10).load(Ordering::Acquire) as usize;
+        let extra_before = submission_observed::fixture_extra_next();
         unsafe {
             SetLastError(0x1234);
             submission_observed_probe_driver(
@@ -148,6 +149,19 @@ fn submission_owned_os_observed_four_gateways_real_shims_state_and_normal_return
                 "real entry accepted"
             );
             let recorded = submission_observed::fixture_last_entry();
+            let expected = if i == 2 {
+                civ6_bootstrap_rs::protocol::SUBMISSION_ROWS + extra_before
+            } else {
+                first - 12 + if i == 1 { 8 } else { 4 }
+            };
+            assert_eq!(
+                recorded, expected,
+                "static role pair inside its existing reservation"
+            );
+            assert_eq!(
+                submission::TRACE.rows[recorded][1].load(Ordering::Acquire),
+                kind
+            );
             assert_eq!(
                 submission::TRACE.rows[recorded + 1][2].load(Ordering::Acquire),
                 2
