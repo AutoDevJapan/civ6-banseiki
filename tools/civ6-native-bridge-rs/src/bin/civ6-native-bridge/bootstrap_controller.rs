@@ -545,12 +545,14 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             ],
         )?
     } else {
-        exports(
+        typed_exports(
             &req.bootstrap,
             &[
-                b"RustBridgeBootstrapPrepare\0",
-                b"RustBridgeBootstrapStopObservation\0",
-                b"BOOTSTRAP_TRACE_POINTER\0",
+                (b"RustBridgeBootstrapPrepare\0", true),
+                (b"RustBridgeBootstrapStopObservation\0", true),
+                (b"BOOTSTRAP_TRACE_POINTER\0", false),
+                (b"BOOTSTRAP_PREPARE_DIAGNOSTIC_POINTER\0", false),
+                (b"BOOTSTRAP_PREPARE_DIAGNOSTIC_SIZE\0", false),
             ],
         )?
     };
@@ -650,17 +652,13 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 },
             )?);
         }
-        let diagnostic_address = if req.root_only {
-            Some(root_address(
-                &game,
-                &bootstrap,
-                prepared[3],
-                prepared[4],
-                64,
-            )?)
-        } else {
-            None
-        };
+        let diagnostic_address = Some(root_address(
+            &game,
+            &bootstrap,
+            prepared[3],
+            prepared[4],
+            64,
+        )?);
         let config = Prepare {
             version: prepare_version,
             size: size_of::<Prepare>() as u32,

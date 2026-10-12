@@ -1013,10 +1013,6 @@ fn prepare_profile(
     record(11, 0, 0, 0, 0, 0, 0); // Prepared entries, not XP2/Mode6 readiness.
     Ok(())
 }
-fn prepare(input: Prepare) -> Result<(), String> {
-    prepare_profile(input, false, None)
-}
-
 /// Distinct explicit export AND strict input version; no old config can opt in.
 #[unsafe(no_mangle)]
 pub extern "system" fn RustBridgeBootstrapPrepareRootObservation(input: *const Prepare) -> u32 {
@@ -1029,6 +1025,9 @@ pub extern "system" fn RustBridgeBootstrapPrepareSubmissionObservation(
     prepare_capture_export(input, protocol::SUBMISSION_PREPARE_VERSION)
 }
 fn prepare_capture_export(input: *const Prepare, version: u32) -> u32 {
+    prepare_export(input, version, true)
+}
+fn prepare_export(input: *const Prepare, version: u32, capture: bool) -> u32 {
     let diagnosis = PrepareDiagnosis::begin();
     diagnosis.stage(1);
     let result = std::panic::catch_unwind(|| {
@@ -1042,7 +1041,7 @@ fn prepare_capture_export(input: *const Prepare, version: u32) -> u32 {
         if config.version != version {
             return Err("bootstrap selector version differs".into());
         }
-        prepare_profile(config, true, Some(&diagnosis))
+        prepare_profile(config, capture, Some(&diagnosis))
     });
     match result {
         Ok(Ok(())) => {
@@ -1065,14 +1064,7 @@ fn prepare_capture_export(input: *const Prepare, version: u32) -> u32 {
 /// work, automatic DLL search or default enable flag exists.
 #[unsafe(no_mangle)]
 pub extern "system" fn RustBridgeBootstrapPrepare(input: *const Prepare) -> u32 {
-    std::panic::catch_unwind(|| {
-        let bytes = read(input as usize, size_of::<Prepare>()).map_err(|_| ())?;
-        let config = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<Prepare>()) };
-        prepare(config).map_err(|_| ())
-    })
-    .ok()
-    .and_then(Result::ok)
-    .map_or(1, |_| 0)
+    prepare_export(input, VERSION, false)
 }
 
 /// Fixed POD snapshot: caller reads returned immutable-address atomics through

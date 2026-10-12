@@ -265,6 +265,25 @@ fn fresh_submission_prepare_wrong_selector_records_config_refusal_before_depende
 }
 
 #[test]
+fn fresh_normal_prepare_wrong_selector_preserves_numeric_refusal_before_dependencies() {
+    if !capture_fixture_child(
+        "fresh_normal_prepare_wrong_selector_preserves_numeric_refusal_before_dependencies",
+    ) {
+        return;
+    }
+    let image = CaptureImage::new(false);
+    let input = image.input(false); // Root version is not accepted by ordinary runtime.
+    assert_ne!(input.version, VERSION);
+    assert_eq!(RustBridgeBootstrapPrepare(&input), 1);
+    let words = prepare_diagnostic_words();
+    assert_eq!(&words[..5], &[1, 64, 3, 1, 1]);
+    assert_eq!(words[5], u64::from(input.pid));
+    assert_eq!(words[6], input.created_filetime);
+    assert_eq!(words[7], u64::from(input.version));
+    assert!(STATE.lock().unwrap().is_none());
+}
+
+#[test]
 fn real_loader_return_rejects_overlap_and_crossed_generation() {
     const CHILD: &str = "JAC_BOOTSTRAP_LOADER_OVERLAP_CHILD";
     if std::env::var_os(CHILD).is_none() {
