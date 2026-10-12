@@ -31,10 +31,12 @@ unsafe extern "system" fn calibration_begin(
     let cookie = unsafe { cookie_before(scratch.cast()) };
     let result = if unsafe { start(cookie) } {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            #[cfg(test)]
+            tests::panic_in_begin();
             super::calibration_begin(governors, index, caller, scratch)
         }))
         .unwrap_or_else(|_| {
-            unsafe { runtime::invocation_finish(cookie) };
+            unsafe { runtime::invocation_refuse(cookie) };
             null_mut()
         })
     } else {
@@ -68,10 +70,12 @@ unsafe extern "system" fn property_begin(property: u64, key: u32, cookie: *const
     let error = unsafe { GetLastError() };
     let result = if unsafe { start(cookie) } {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            #[cfg(test)]
+            tests::panic_in_begin();
             super::joined_property_begin(property, key)
         }))
         .unwrap_or_else(|_| {
-            unsafe { runtime::invocation_finish(cookie) };
+            unsafe { runtime::invocation_refuse(cookie) };
             0
         })
     } else {
@@ -111,17 +115,24 @@ unsafe extern "system" fn assignment_begin(
     let cookie = unsafe { cookie_before(fence.cast()) };
     let result = if unsafe { start(cookie) } {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-            assignment::assign_calibration_begin(governors, governor, city, r9, caller, fence)
+            assignment::assign_calibration_begin_scoped(
+                governors,
+                governor,
+                city,
+                r9,
+                caller,
+                fence,
+                cookie.add(1),
+            )
         }))
         .unwrap_or_else(|_| {
-            unsafe { runtime::invocation_finish(cookie) };
+            unsafe { runtime::invocation_refuse(cookie) };
             0
         })
     } else {
         0
     };
-    // This slot belongs only to the telemetry acquired by the native begin.
-    unsafe { (*cookie.add(1)).store(result & 0xffff_ffff, Ordering::Release) };
+    // The scoped begin publishes its sample reservation before any pointer read.
     unsafe { SetLastError(error) };
     result
 }
@@ -143,7 +154,8 @@ unsafe extern "system" fn assignment_end(
     } else {
         original & !0xff
     };
-    unsafe { (*cookie.add(1)).store(0, Ordering::Release) };
+    let sample = unsafe { (*cookie.add(1)).swap(0, Ordering::AcqRel) };
+    unsafe { assignment::unwind_sample(sample) };
     drop(complete);
     unsafe { SetLastError(error) };
     result
@@ -223,4 +235,4 @@ gateway!("assign_calibration_gateway",
 
 #[cfg(test)]
 #[path = "lifecycle_tests.rs"]
-mod tests;
+pub(super) mod tests;

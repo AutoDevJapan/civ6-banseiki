@@ -1778,9 +1778,9 @@ unsafe fn record_property(property: u64, key_id: u32, returned: u64, token: u64)
         if trace.scope == BridgeMode::JoinedAdmission as u32 {
             joined_observe_property(property, key_id, token, 0, 0, 0, 0);
         }
-        trace.dropped.fetch_add(1, Ordering::Relaxed);
-        trace.in_flight.fetch_sub(1, Ordering::Release);
         if sampled {
+            trace.dropped.fetch_add(1, Ordering::Relaxed);
+            trace.in_flight.fetch_sub(1, Ordering::Release);
             runtime::sample_end();
         }
         return;

@@ -700,8 +700,13 @@ mod tests {
             let native = (gateway_sp + 0xc0) as *mut NativeInvocation;
             begin(native, 0, 0, 0);
             assert!(unsafe { (*native).cookie.load(Ordering::Acquire) } >= 2);
-            stack.0[3] = runtime_promotion_return as *const () as u64;
-            stack.0[2] = 0x202; // helper's temporary flags, never a return RIP
+            unsafe {
+                ptr::write(
+                    (gateway_sp - 8) as *mut u64,
+                    runtime_promotion_return as *const () as u64,
+                );
+                ptr::write((gateway_sp - 16) as *mut u64, 0x202); // helper FLAGS, not a return RIP
+            }
             unsafe { ptr::write((gateway_sp + 0x1c8) as *mut u64, 0x11223344) };
             let mut context: CONTEXT = unsafe { std::mem::zeroed() };
             context.Rsp = gateway_sp - if pushed { 16 } else { 8 };

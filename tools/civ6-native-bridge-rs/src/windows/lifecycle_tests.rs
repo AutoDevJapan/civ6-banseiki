@@ -7,6 +7,12 @@ static ENTERED: AtomicBool = AtomicBool::new(false);
 static RELEASE: AtomicBool = AtomicBool::new(false);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static RETURNED: AtomicU64 = AtomicU64::new(1);
+static ENTRY_PANIC: AtomicBool = AtomicBool::new(false);
+pub(in super::super) fn panic_in_begin() {
+    if ENTRY_PANIC.swap(false, Ordering::AcqRel) {
+        panic!("owned entry panic");
+    }
+}
 pub(super) fn pause(at: &AtomicBool) {
     if at.swap(false, Ordering::AcqRel) {
         ENTERED.store(true, Ordering::Release);
@@ -20,14 +26,23 @@ fn child(name: &str) -> bool {
     if std::env::var_os(ENV).is_some() {
         return true;
     }
-    let mut worker = std::process::Command::new(std::env::current_exe().unwrap())
+    let executable = std::env::current_exe().unwrap();
+    let module = module_path!().split_once("::").unwrap().1;
+    let exact_name = format!("{module}::{name}");
+    let inventory = std::process::Command::new(&executable)
+        .creation_flags(0x08000000)
+        .args(["--list", "--exact", &exact_name])
+        .output()
+        .unwrap();
+    assert!(inventory.status.success());
+    assert!(
+        String::from_utf8_lossy(&inventory.stdout).contains(&format!("{exact_name}: test")),
+        "owned child test was not found"
+    );
+    let mut worker = std::process::Command::new(executable)
         .creation_flags(0x08000000)
         .env(ENV, "1")
-        .args([
-            "--exact",
-            &format!("{}::{name}", module_path!()),
-            "--nocapture",
-        ])
+        .args(["--exact", &exact_name, "--nocapture"])
         .spawn()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -154,8 +169,101 @@ fn runtime_owned_os_closed_entry_is_not_imported_by_rebuild() {
 }
 
 unsafe extern "system" {
+    fn calibration_gateway();
     fn root_unwind_driver(state: *mut u64, target: usize) -> u64;
     fn root_unwind_original();
+}
+
+#[test]
+fn runtime_owned_os_close_timeout_keeps_admission_and_rebuild_closed() {
+    if !child("runtime_owned_os_close_timeout_keeps_admission_and_rebuild_closed") {
+        return;
+    }
+    let _trace = setup();
+    PAUSE_ORIGINAL.store(true, Ordering::Release);
+    let reader = std::thread::spawn(call_property);
+    let entered = wait_for(|| ENTERED.load(Ordering::Acquire));
+    let close = runtime::BridgeRuntimeClose(null_mut());
+    let pending = runtime::fixture_pending_invocations();
+    let rebuild = runtime::BridgeRuntimeRebuild(null_mut());
+    RELEASE.store(true, Ordering::Release);
+    let result = reader.join().unwrap();
+    assert!(entered);
+    assert_eq!(close, BridgeStatus::Critical as u32);
+    assert_eq!(rebuild, BridgeStatus::Critical as u32);
+    assert_eq!(pending, 1);
+    assert_eq!(result, 1);
+    assert_eq!(
+        runtime::BridgeRuntimeClose(null_mut()),
+        BridgeStatus::Ok as u32
+    );
+    assert_eq!(
+        runtime::BridgeRuntimeRebuild(null_mut()),
+        BridgeStatus::Ok as u32
+    );
+}
+
+#[test]
+fn runtime_owned_os_entry_panic_retains_lease_until_original_returns() {
+    if !child("runtime_owned_os_entry_panic_retains_lease_until_original_returns") {
+        return;
+    }
+    let property = setup();
+    let mut assignment = assignment::AssignCalibrationTrace::boxed();
+    assignment::ASSIGN_TRACE_PTR.store(assignment.as_mut(), Ordering::Release);
+    BRIDGE_TRAMPOLINE_PTR.store(original as *const () as *mut u8, Ordering::Release);
+    assignment::ASSIGN_TRAMPOLINE_PTR.store(original as *const () as *mut u8, Ordering::Release);
+    let gateways = [
+        calibration_gateway as *const () as usize,
+        super::super::property_gateway as *const () as usize,
+        assignment::assign_calibration_gateway as *const () as usize,
+    ];
+    for (index, target) in gateways.into_iter().enumerate() {
+        RELEASE.store(false, Ordering::Release);
+        ENTERED.store(false, Ordering::Release);
+        PAUSE_ORIGINAL.store(true, Ordering::Release);
+        ENTRY_PANIC.store(true, Ordering::Release);
+        let reader = std::thread::spawn(move || {
+            let call = unsafe {
+                std::mem::transmute::<usize, unsafe extern "system" fn(u64, u64, u64, u64) -> u64>(
+                    target,
+                )
+            };
+            unsafe { call(0x1000, 0, 0, 1) }
+        });
+        let entered = wait_for(|| ENTERED.load(Ordering::Acquire));
+        let held_during_original = runtime::fixture_pending_invocations();
+        let closer = std::thread::spawn(|| runtime::BridgeRuntimeClose(null_mut()));
+        let inactive = wait_for(runtime::fixture_product_inactive);
+        let still_held = !closer.is_finished();
+        RELEASE.store(true, Ordering::Release);
+        let result = reader.join().unwrap();
+        let closed = closer.join().unwrap();
+        assert_eq!(
+            held_during_original, 1,
+            "entry failure retains the actual gateway's original call"
+        );
+        assert!(
+            entered && inactive && still_held,
+            "gateway {index} released before original completed"
+        );
+        assert_eq!(closed, BridgeStatus::Ok as u32);
+        assert_eq!(result, if index == 1 { 1 } else { 0 });
+        if index < 2 {
+            assert_eq!(
+                runtime::BridgeRuntimeRebuild(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+        }
+    }
+    assert_eq!(CALLS.load(Ordering::Acquire), 3);
+    assert_eq!(property.next.load(Ordering::Acquire), 0);
+    assert_eq!(assignment.in_flight.load(Ordering::Acquire), 0);
+    assert_eq!(assignment.rows[0].sequence.load(Ordering::Acquire), 2);
+    assert_eq!(
+        runtime::BridgeRuntimeStopObservation(null_mut()),
+        BridgeStatus::Ok as u32
+    );
 }
 #[test]
 fn runtime_owned_os_real_unwind_settles_all_three_native_gateways() {

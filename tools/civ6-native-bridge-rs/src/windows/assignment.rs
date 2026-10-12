@@ -187,6 +187,7 @@ fn field32(base: u64, offset: u64) -> Option<u32> {
     copy_current::<4>(base.checked_add(offset)?).map(u32::from_le_bytes)
 }
 
+#[cfg(test)]
 pub(super) unsafe fn assign_calibration_begin(
     governors: u64,
     governor: u64,
@@ -194,6 +195,27 @@ pub(super) unsafe fn assign_calibration_begin(
     raw_r9: u64,
     caller: u64,
     fence: *mut runtime::CallFence,
+) -> u64 {
+    unsafe {
+        assign_calibration_begin_scoped(
+            governors,
+            governor,
+            city,
+            raw_r9,
+            caller,
+            fence,
+            ptr::null(),
+        )
+    }
+}
+pub(super) unsafe fn assign_calibration_begin_scoped(
+    governors: u64,
+    governor: u64,
+    city: u64,
+    raw_r9: u64,
+    caller: u64,
+    fence: *mut runtime::CallFence,
+    sample_slot: *const AtomicU64,
 ) -> u64 {
     if !fence.is_null() {
         unsafe {
@@ -212,7 +234,7 @@ pub(super) unsafe fn assign_calibration_begin(
     let slot = trace
         .next
         .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-            (n < ASSIGN_CAPACITY as u32).then_some(n + 1)
+            (n < ASSIGN_CAPACITY as u32).then(|| n + 1)
         });
     let Ok(slot) = slot else {
         trace.dropped.fetch_add(1, Ordering::Relaxed);
@@ -221,6 +243,11 @@ pub(super) unsafe fn assign_calibration_begin(
         return generation;
     };
     let row = &trace.rows[slot as usize];
+    if let Some(sample_slot) = unsafe { sample_slot.as_ref() } {
+        sample_slot.store(u64::from(slot) + 1, Ordering::Release);
+        #[cfg(test)]
+        super::lifecycle::tests::panic_in_begin();
+    }
     row.thread_id
         .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
     row.governors_this.store(governors, Ordering::Relaxed);

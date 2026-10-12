@@ -26,6 +26,7 @@ static INSTALLED: AtomicBool = AtomicBool::new(false);
 static INVOCATIONS: crate::invocation_gate::InvocationGate =
     crate::invocation_gate::InvocationGate::new();
 static INVOCATION_FAILURE: AtomicBool = AtomicBool::new(false);
+const INVOCATION_REFUSED: u64 = 1 << 63;
 
 // 0 is a refused runtime call; 1 is the existing non-runtime diagnostic path.
 // Higher cookies hold a single generation until normal return or SEH cleanup.
@@ -41,7 +42,14 @@ pub(super) fn invocation_start() -> u64 {
         .map_or(0, |generation| u64::from(generation) + 1)
 }
 pub(super) fn invocation_admitted(cookie: u64) -> bool {
-    cookie != 0
+    cookie != 0 && cookie & INVOCATION_REFUSED == 0
+}
+pub(super) unsafe fn invocation_refuse(cookie: *const AtomicU64) {
+    if let Some(cookie) = unsafe { cookie.as_ref() } {
+        if cookie.load(Ordering::Acquire) != 0 {
+            cookie.fetch_or(INVOCATION_REFUSED, Ordering::AcqRel);
+        }
+    }
 }
 #[cfg(test)]
 pub(super) fn fixture_invocation_runtime() {
@@ -53,11 +61,19 @@ pub(super) fn fixture_invocation_runtime() {
 pub(super) fn fixture_invocation_closed() -> bool {
     !INVOCATIONS.current(1)
 }
+#[cfg(test)]
+pub(super) fn fixture_product_inactive() -> bool {
+    !PRODUCT_ACTIVE.load(Ordering::Acquire)
+}
+#[cfg(test)]
+pub(super) fn fixture_pending_invocations() -> u32 {
+    INVOCATIONS.pending_for_test()
+}
 pub(super) unsafe fn invocation_finish(cookie: *const AtomicU64) {
     let Some(cookie) = (unsafe { cookie.as_ref() }) else {
         return;
     };
-    let held = cookie.swap(0, Ordering::AcqRel);
+    let held = cookie.swap(0, Ordering::AcqRel) & !INVOCATION_REFUSED;
     if held > 1 && !INVOCATIONS.leave((held - 1) as u32) {
         INVOCATION_FAILURE.store(true, Ordering::Release);
         INVOCATIONS.close();
