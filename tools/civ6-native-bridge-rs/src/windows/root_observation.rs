@@ -1556,11 +1556,7 @@ mod tests {
             }
             assert_eq!(u64_at(&observed, 0x80), 1);
             assert_eq!(u64_at(&observed, 0x90), 0x1234);
-            assert_eq!(
-                submission::TRACE.rows[i * 2 + 1][34].load(Ordering::Acquire),
-                0x3344,
-                "native R8 output is captured before the end helper"
-            );
+
             assert_eq!(unsafe { GetLastError() }, 0x880);
             assert_eq!(&observed[0x200..0x238], &original[0x200..0x238]);
             assert_eq!(&observed[0x300..0x360], &original[0x300..0x360]);
@@ -2745,6 +2741,11 @@ mod tests {
             assert_eq!(unsafe { GetLastError() }, 0x880);
             assert_eq!(u64_at(&observed, 0x80), 1);
             assert_eq!(u64_at(&observed, 0x90), 0x1234);
+            assert_eq!(
+                submission::TRACE.rows[i * 2 + 1][34].load(Ordering::Acquire),
+                0x3344,
+                "native R8 output is captured before the end helper"
+            );
             assert_eq!(&observed[..48], &baseline[..48]);
             assert_eq!(u64_at(&observed, 0), 0x11223344);
             assert_eq!(u64_at(&observed, 32), 0xbbcc);
