@@ -214,9 +214,9 @@ fn live_t(t: u64) -> bool {
 fn acquire_call(tls: bool, t: Option<u64>) -> bool {
     h(12)
         .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
-            if v & ROOT_CLOSED != 0 && ((!tls && !t.is_some_and(live_t)) || v & !ROOT_CLOSED == 0) {
-                None
-            } else if v & !ROOT_CLOSED == ROOT_CLOSED - 1 {
+            if (v & ROOT_CLOSED != 0 && ((!tls && !t.is_some_and(live_t)) || v & !ROOT_CLOSED == 0))
+                || v & !ROOT_CLOSED == ROOT_CLOSED - 1
+            {
                 None
             } else {
                 Some(v + 1)
