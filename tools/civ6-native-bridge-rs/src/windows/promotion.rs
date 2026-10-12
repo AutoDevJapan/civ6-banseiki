@@ -702,7 +702,7 @@ mod tests {
             assert!(unsafe { (*native).cookie.load(Ordering::Acquire) } >= 2);
             stack.0[3] = runtime_promotion_return as *const () as u64;
             stack.0[2] = 0x202; // helper's temporary flags, never a return RIP
-            stack.0[4 + 0x1c8 / 8] = 0x11223344;
+            unsafe { ptr::write((gateway_sp + 0x1c8) as *mut u64, 0x11223344) };
             let mut context: CONTEXT = unsafe { std::mem::zeroed() };
             context.Rsp = gateway_sp - if pushed { 16 } else { 8 };
             context.Rip = pc;

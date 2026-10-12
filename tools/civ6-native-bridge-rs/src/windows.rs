@@ -3790,9 +3790,14 @@ mod tests {
         let unwind_address = image_base + unsafe { (*entry).Anonymous.UnwindData as u64 };
         let unwind = unsafe { ptr::read(unwind_address as *const [u8; 8]) };
         assert_eq!(unwind[0] & 0x07, 1); // UNWIND_INFO version 1
-        assert_eq!(unwind[2], 2); // UWOP_ALLOC_LARGE uses two unwind slots
+        assert_eq!(unwind[2], 3); // UWOP_ALLOC_LARGE plus the initial FLAGS slot
         assert_eq!(unwind[5] & 0x0f, 1);
-        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0xd8 / 8);
+        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0x1c0 / 8);
+        assert_ne!(
+            unwind[0] & 0x10,
+            0,
+            "native unwind owns the lifecycle cleanup"
+        );
         assert!(!unsafe {
             RtlLookupFunctionEntry(
                 joined_cas128 as *const () as u64,
