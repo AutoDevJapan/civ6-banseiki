@@ -135,7 +135,16 @@ impl TunerClient {
                 TunerError::Preflight(failure.message)
             });
         }
-        let result = self.await_ack(state, &token, deadline);
+        self.finish_lua(state, &token, deadline)
+    }
+
+    fn finish_lua(
+        &mut self,
+        state: &str,
+        token: &str,
+        deadline: Instant,
+    ) -> Result<LuaResult, TunerError> {
+        let result = self.await_ack(state, token, deadline);
         if matches!(&result, Err(TunerError::Unknown(_))) {
             self.invalidate();
         }
@@ -437,11 +446,12 @@ mod tests {
     use super::*;
     use regex::Regex;
     use std::net::TcpListener;
+    use std::sync::mpsc::{self, Receiver, SyncSender};
     use std::thread::{self, JoinHandle};
 
     const STATES: &str = "3\x00FrontEnd\x0017\x00InGame\x0041\x00GameCore_Tuner";
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     enum Reply {
         Ok,
         LuaError,
@@ -477,6 +487,14 @@ mod tests {
     }
 
     fn fake(states: &str, reply: Reply) -> (u16, JoinHandle<Vec<(i32, String)>>) {
+        fake_with_gate(states, reply, None)
+    }
+
+    fn fake_with_gate(
+        states: &str,
+        reply: Reply,
+        no_ack_gate: Option<(SyncSender<()>, Receiver<()>)>,
+    ) -> (u16, JoinHandle<Vec<(i32, String)>>) {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         let states = states.to_string();
@@ -518,7 +536,9 @@ mod tests {
                         let token = re.find(&payload).unwrap().as_str();
                         match reply {
                             Reply::NoAck => {
-                                thread::sleep(Duration::from_millis(350));
+                                let (received, release) = no_ack_gate.as_ref().unwrap();
+                                received.send(()).unwrap();
+                                release.recv_timeout(Duration::from_secs(5)).unwrap();
                                 break;
                             }
                             Reply::Disconnect => break,
@@ -602,19 +622,57 @@ mod tests {
     }
 
     #[test]
-    fn timeout_disconnect_partial_reply_and_duplicate_ack_never_replay() {
-        for reply in [
-            Reply::NoAck,
-            Reply::Disconnect,
-            Reply::PartialAck,
-            Reply::DuplicateAck,
-        ] {
+    fn timeout_before_query_is_preflight_and_sends_no_command() {
+        let (port, server) = fake(STATES, Reply::Ok);
+        let mut client = TunerClient::connect(port, Duration::from_secs(5)).unwrap();
+        let result = client.state_pairs_until(Instant::now() - Duration::from_millis(1));
+        let replay = client.run_lua("InGame", "return true", Duration::from_secs(1));
+        drop(client);
+        let received = server.join().unwrap();
+        assert!(matches!(result, Err(TunerError::Preflight(_))));
+        assert!(matches!(replay, Err(TunerError::Preflight(_))));
+        assert_eq!(count_commands(&received), 0);
+        assert_eq!(received.len(), 2); // APP/LSQ from connection only
+    }
+
+    #[test]
+    fn timeout_after_confirmed_send_invalidates_and_never_replays() {
+        let (sent, observed) = mpsc::sync_channel(1);
+        let (release, held) = mpsc::sync_channel(1);
+        let (port, server) = fake_with_gate(STATES, Reply::NoAck, Some((sent, held)));
+        let mut client = TunerClient::connect(port, Duration::from_secs(5)).unwrap();
+        let token = new_token();
+        let wire = encode_frame(COMMAND, &lua_payload(17, "return true", &token)).unwrap();
+        write_packet(
+            client.stream.as_mut().unwrap(),
+            &wire,
+            Instant::now() + Duration::from_secs(5),
+            |stream, timeout| stream.set_write_timeout(Some(timeout)),
+        )
+        .unwrap();
+        observed.recv_timeout(Duration::from_secs(5)).unwrap();
+        // The peer has received one complete command and holds the socket.
+        // Expiry belongs to the ACK stage, independent of query/scheduler time.
+        let result = client.finish_lua("InGame", &token, Instant::now() - Duration::from_millis(1));
+        let replay = client.run_lua("InGame", "return true", Duration::from_secs(1));
+        release.send(()).unwrap();
+        drop(client);
+        let received = server.join().unwrap();
+        assert!(matches!(result, Err(TunerError::Unknown(_))));
+        assert!(matches!(replay, Err(TunerError::Preflight(_))));
+        assert_eq!(count_commands(&received), 1);
+    }
+
+    #[test]
+    fn disconnect_partial_reply_and_duplicate_ack_never_replay() {
+        for reply in [Reply::Disconnect, Reply::PartialAck, Reply::DuplicateAck] {
             let (port, server) = fake(STATES, reply);
             let mut client = TunerClient::connect(port, Duration::from_secs(1)).unwrap();
-            assert!(matches!(
-                client.run_lua("InGame", "return true", Duration::from_millis(150)),
-                Err(TunerError::Unknown(_))
-            ));
+            let result = client.run_lua("InGame", "return true", Duration::from_secs(5));
+            assert!(
+                matches!(result, Err(TunerError::Unknown(_))),
+                "{reply:?}: {result:?}"
+            );
             assert!(matches!(
                 client.run_lua("InGame", "return true", Duration::from_secs(1)),
                 Err(TunerError::Preflight(_))
