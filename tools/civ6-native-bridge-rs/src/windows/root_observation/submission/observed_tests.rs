@@ -1210,6 +1210,73 @@ fn submission_owned_os_observed_sixteenth_admission_seals_new_producers_but_fini
     assert_eq!(submission_observed::fixture_bytes(), sealed);
 }
 #[test]
+fn submission_owned_os_observed_book_wait_rechecks_sixteenth_seal_without_new_loss() {
+    if !child("submission_owned_os_observed_book_wait_rechecks_sixteenth_seal_without_new_loss") {
+        return;
+    }
+    use std::sync::{Arc, Barrier};
+    let mut p = SubmissionPipeline::new();
+    for _ in 0..15 {
+        p.producer(true);
+        let t = p.task.as_ptr();
+        p.execute(t);
+    }
+    let arrived = Arc::new(Barrier::new(2));
+    let go = Arc::new(Barrier::new(2));
+    let locking = Arc::new(Barrier::new(2));
+    let (a, g, l) = (arrived.clone(), go.clone(), locking.clone());
+    let base = p.core.base as usize;
+    let worker = std::thread::spawn(move || {
+        let mut owner = Box::new([0u64; 160]);
+        owner[0xd0 / 8] = base as u64 + 0xa06648;
+        owner[0x88 / 8] = 1;
+        submission_observed::fixture_book_wait(unsafe { GetCurrentThreadId() } as u64, a, g, l);
+        let call = unsafe {
+            std::mem::transmute::<usize, unsafe extern "system" fn(*mut u64)>(base + 0x4a79b0)
+        };
+        unsafe {
+            call(owner.as_mut_ptr());
+        }
+        owner[0x80 / 8]
+    });
+    arrived.wait(); // worker Push passed seal=0 and owns provisional flights
+    p.producer(true); // main thread atomically registers/seals the sixteenth birth
+    assert_eq!(submission_observed::fixture_budget(7), 1);
+    assert_eq!(h(29).load(Ordering::Acquire), 16);
+    let old_t = p.task.as_ptr();
+    let outside_t = Box::new([p.host.base as u64 + 0x106b3c8, 0]);
+    // The unobserved native call gets its own fixture T and cannot mutate the
+    // still-pending accepted task. Only this owned machine body is changed.
+    p.write(true, 0x98606a, &(outside_t.as_ptr() as u64).to_le_bytes());
+    let mut before = Vec::new();
+    submission_observed::fixture_with_book_lock(|| {
+        go.wait();
+        locking.wait(); // worker now attempts the mutex held here
+        before = submission_observed::fixture_bytes();
+    });
+    let original_calls = worker.join().unwrap();
+    assert_eq!(original_calls, 1);
+    assert!(submission_observed::fixture_sealed_after_lock());
+    // Only the two already-admitted provisional flights leave. Every other
+    // raw byte, row, serial, no-submit, error and diagnostic counter is fixed.
+    assert_eq!(u64_at(&before, 96), ROOT_CLOSED | 3);
+    before[96..104].copy_from_slice(&(ROOT_CLOSED | 1).to_le_bytes());
+    assert_eq!(submission_observed::fixture_bytes(), before);
+    assert_eq!(h(11).load(Ordering::Acquire), 0);
+    assert_eq!(h(14).load(Ordering::Acquire), 0);
+    assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED | 1);
+    assert_eq!(
+        stop_at(Instant::now()),
+        2,
+        "the old accepted T is still pending"
+    );
+    p.execute(old_t);
+    assert_eq!(submission::TRACE.rows[189][2].load(Ordering::Acquire), 2);
+    assert_eq!(submission::TRACE.rows[191][2].load(Ordering::Acquire), 2);
+    assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+    assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+}
+#[test]
 fn submission_owned_os_observed_closed_reserved_cycle_records_late_host_and_core_returns() {
     if !child(
         "submission_owned_os_observed_closed_reserved_cycle_records_late_host_and_core_returns",

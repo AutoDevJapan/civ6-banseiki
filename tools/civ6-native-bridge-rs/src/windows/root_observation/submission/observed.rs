@@ -239,6 +239,18 @@ static BOOK: Mutex<[Birth; SUBMISSION_BIRTHS]> = Mutex::new(
 );
 #[cfg(test)]
 static FAIL_THREAD_LOOKUP: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+#[derive(Clone)]
+struct BookWait {
+    tid: u64,
+    arrived: std::sync::Arc<std::sync::Barrier>,
+    go: std::sync::Arc<std::sync::Barrier>,
+    locking: std::sync::Arc<std::sync::Barrier>,
+}
+#[cfg(test)]
+static BOOK_WAIT_TEST: Mutex<Option<BookWait>> = Mutex::new(None);
+#[cfg(test)]
+static SEALED_AFTER_LOCK_TEST: AtomicBool = AtomicBool::new(false);
 fn publish(index: usize, b: Birth) {
     for (dst, v) in TRACE.births[index].iter().zip(b.w) {
         dst.store(v, Ordering::Release);
@@ -372,10 +384,31 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             }
             return;
         }
+        #[cfg(test)]
+        if matches!(kind, 4 | 5) {
+            let wait = BOOK_WAIT_TEST.lock().unwrap().clone();
+            if let Some(wait) = wait.filter(|w| w.tid == saved.invocation.tid) {
+                wait.arrived.wait();
+                wait.go.wait();
+                wait.locking.wait();
+            }
+        }
         let mut book = BOOK
             .lock()
             .map_err(|_| ())
             .unwrap_or_else(|_| panic!("observed book poisoned"));
+        // The fastpath may have observed seal=0 before waiting for BOOK. Window
+        // eligibility and registration are one decision under this same lock.
+        // Already promoted parent tokens retain their existing reservation.
+        if matches!(kind, 4 | 5)
+            && TRACE.budget[7].load(Ordering::Acquire) == 1
+            && parent.is_some_and(|p| p.cookie == COOKIE && p.kind == 6 && p.token == 0)
+        {
+            PROVISIONAL.with(|p| p.borrow_mut()[stack.depth - 1].outside_window = true);
+            #[cfg(test)]
+            SEALED_AFTER_LOCK_TEST.store(true, Ordering::Release);
+            return;
+        }
         let mut snapshot = None;
         let mut p_snapshot = None;
         let mut index = None;
@@ -1066,6 +1099,29 @@ pub(in super::super) fn fixture_last_entry() -> usize {
 #[cfg(test)]
 pub(in super::super) fn fixture_budget(index: usize) -> u64 {
     TRACE.budget[index].load(Ordering::Acquire)
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_book_wait(
+    tid: u64,
+    arrived: std::sync::Arc<std::sync::Barrier>,
+    go: std::sync::Arc<std::sync::Barrier>,
+    locking: std::sync::Arc<std::sync::Barrier>,
+) {
+    *BOOK_WAIT_TEST.lock().unwrap() = Some(BookWait {
+        tid,
+        arrived,
+        go,
+        locking,
+    });
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_with_book_lock(action: impl FnOnce()) {
+    let _lock = BOOK.lock().unwrap();
+    action();
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_sealed_after_lock() -> bool {
+    SEALED_AFTER_LOCK_TEST.load(Ordering::Acquire)
 }
 #[cfg(test)]
 pub(in super::super) fn fixture_bytes() -> Vec<u8> {
