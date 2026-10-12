@@ -246,3 +246,136 @@ fn complete_nested_rows_need_each_fixed_site_and_successful_installation() {
         );
     }
 }
+
+fn with_local_manager() -> Vec<u8> {
+    let mut bytes = nested_return();
+    put(&mut bytes, 80, 10);
+    put(&mut bytes, 192, 10);
+    for (index, kind, edge, id, parent, event) in [
+        (6, 2, 1, 7, 0, 7),
+        (7, 2, 2, 7, 0, 10),
+        (8, 3, 1, 9, 7, 8),
+        (9, 3, 2, 9, 7, 9),
+    ] {
+        for (field, value) in [
+            (0, index as u64 + 1),
+            (1, kind),
+            (2, edge),
+            (3, id),
+            (4, parent),
+            (5, 456),
+            (6, 222),
+            (7, EPOCH),
+            (10, 0),
+            (11, MANAGER),
+            (12, MANAGER + 0x400),
+            (13, 2),
+            (14, 31),
+            (15, 41),
+            (16, 51),
+            (17, 61),
+            (18, 0x55ff),
+            (8, CORE + if kind == 2 { 0x63d448 } else { 0x4a1196 }),
+            (9, if kind == 2 { 0x7100 } else { 0x6fc0 }),
+            (21, if kind == 2 { 0x7000 } else { 0x6da0 }),
+            (22, if kind == 2 { 0x8888 } else { MANAGER }),
+            (23, event),
+        ] {
+            row(&mut bytes, index, field, value);
+        }
+    }
+    bytes
+}
+#[test]
+fn local_manager_wait_is_counted_separately_and_world_path_remains_required() {
+    let capture = root_trace(&with_local_manager(), 23, 29).unwrap();
+    assert_eq!(capture["capture_complete"], true);
+    assert_eq!(capture["same_manager_wait_normal_returns"], 1);
+    assert_eq!(capture["local_manager_normal_returns"], 1);
+    assert_eq!(capture["local_manager_wait_normal_returns"], 1);
+    assert_eq!(capture["rows"][6]["scope"], "local_manager");
+    assert_eq!(capture["rows"][8]["world"], 0);
+    assert_eq!(capture["rows"][2]["scope"], "world_shutdown");
+    let mut local = with_local_manager();
+    let saved = local[ROOT_HEADER + 6 * ROOT_ROW..ROOT_HEADER + 10 * ROOT_ROW].to_vec();
+    local[ROOT_HEADER..ROOT_HEADER + 4 * ROOT_ROW].copy_from_slice(&saved);
+    put(&mut local, 80, 4);
+    put(&mut local, 192, 4);
+    for i in 0..4 {
+        row(&mut local, i, 0, i as u64 + 1);
+        row(&mut local, i, 3, if i < 2 { 1 } else { 3 });
+        row(&mut local, i, 4, if i < 2 { 0 } else { 1 });
+        row(&mut local, i, 23, [1, 4, 2, 3][i]);
+    }
+    let capture = root_trace(&local, 23, 29).unwrap();
+    assert_eq!(capture["local_manager_wait_normal_returns"], 1);
+    assert_eq!(capture["same_manager_wait_normal_returns"], 0);
+    assert_eq!(capture["capture_complete"], false);
+}
+#[test]
+fn local_manager_rejects_wrong_caller_scope_set_rsp_and_thread_lifetime() {
+    let original = with_local_manager();
+    for (indices, field, value) in [
+        ([6, 7], 8, CORE + 0x63d447),
+        ([6, 7], 4, 1),
+        ([6, 7], 10, WORLD),
+        ([8, 9], 10, WORLD),
+        ([8, 9], 9, 0x6fc8),
+        ([8, 9], 12, MANAGER + 0x408),
+        ([8, 9], 22, MANAGER + 8),
+        ([8, 9], 5, 457),
+        ([8, 9], 6, 223),
+        ([7, 7], 6, 223),
+        ([6, 7], 8, CORE + 0x63e1d5),
+    ] {
+        let mut bytes = original.clone();
+        for index in indices {
+            row(&mut bytes, index, field, value);
+        }
+        let capture = root_trace(&bytes, 23, 29).unwrap();
+        assert_eq!(
+            capture["capture_complete"], false,
+            "field {field} value {value}"
+        );
+        assert_eq!(
+            capture["same_manager_wait_normal_returns"], 1,
+            "old world path retained"
+        );
+        assert_eq!(capture["local_manager_wait_normal_returns"], 0);
+        assert!(!capture["unknown"].as_array().unwrap().is_empty());
+    }
+}
+#[test]
+fn orphan_wait_unknown_is_not_repaired_by_pointer_match_or_new_scope() {
+    let mut bytes = nested_return();
+    put(&mut bytes, 80, 8);
+    put(&mut bytes, 192, 8);
+    for (i, edge, event) in [(6, 1, 7), (7, 2, 8)] {
+        for (field, value) in [
+            (0, i as u64 + 1),
+            (1, 3),
+            (2, edge),
+            (3, 7),
+            (4, 0),
+            (5, 456),
+            (6, 222),
+            (7, EPOCH),
+            (8, CORE + 0x4a1196),
+            (9, 0x7000),
+            (10, 0),
+            (11, MANAGER),
+            (12, MANAGER + 0x400),
+            (19, 2),
+            (21, 0x6e00),
+            (22, MANAGER),
+            (23, event),
+        ] {
+            row(&mut bytes, i, field, value);
+        }
+    }
+    let capture = root_trace(&bytes, 23, 29).unwrap();
+    assert_eq!(capture["same_manager_wait_normal_returns"], 1);
+    assert_eq!(capture["local_manager_wait_normal_returns"], 0);
+    assert_eq!(capture["capture_complete"], false);
+    assert_eq!(capture["rows"][6]["scope"], "unknown");
+}

@@ -120,6 +120,7 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let epoch = word(b, 72)?;
     let mut valid_pairs = std::collections::BTreeSet::new();
     let mut wait_pairs = 0usize;
+    let mut local_wait_pairs = 0usize;
     for (id, pair) in &pairs {
         if pair.len() != 2 || pair[0][2] != 1 || pair[1][2] != 2 {
             unknown.push(format!("invocation {id} has no normal return"));
@@ -136,14 +137,60 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
             || a[7] != epoch
             || a[19] != 0
             || z[19] != 0
+            || a[23] >= z[23]
         {
             unknown.push(format!("invocation {id} binding/read mismatch"));
             continue;
         }
         valid_pairs.insert(*id);
     }
+    // Validate each manager's scope before any Wait can borrow it. A local
+    // manager is specifically the second fixed caller; world=0 never permits
+    // manufacturing a parent world from a worker's RDI or matching pointers.
+    let mut manager_scopes = std::collections::BTreeMap::new();
+    let mut matched_managers = std::collections::BTreeSet::new();
+    let primary_caller = core.checked_add(0x63e1d5).ok_or("core overflow")?;
+    let local_caller = core.checked_add(0x63d448).ok_or("core overflow")?;
+    let wait_caller = core.checked_add(0x4a1196).ok_or("core overflow")?;
+    for id in &valid_pairs {
+        let pair = &pairs[id];
+        let m = &pair[0];
+        let end = &pair[1];
+        if m[1] != 2 {
+            continue;
+        }
+        let local = m[8] == local_caller;
+        let receiver = m[11] != 0 && m[12].checked_sub(0x400) == Some(m[11]);
+        let valid = if local {
+            receiver && m[4] == 0 && m[10] == 0
+        } else if m[8] == primary_caller {
+            pairs
+                .get(&m[4])
+                .filter(|_| valid_pairs.contains(&m[4]))
+                .is_some_and(|world| {
+                    let r = &world[0];
+                    let exit = &world[1];
+                    receiver
+                        && r[1] == 1
+                        && r[10] != 0
+                        && r[4] == 0
+                        && m[22] == r[10]
+                        && m[9].checked_add(0x30) == Some(r[21])
+                        && [5, 6, 7, 10].into_iter().all(|j| m[j] == r[j])
+                        && r[23] < m[23]
+                        && end[23] < exit[23]
+                })
+        } else {
+            false
+        };
+        if valid {
+            manager_scopes.insert(*id, local);
+        } else {
+            unknown.push(format!("manager {id} exact caller/scope mismatch"));
+        }
+    }
     // A parent's entry cannot supply authority when its own return belongs
-    // to another thread lifetime, epoch or binding. Validate every pair first.
+    // to another thread lifetime, epoch or binding.
     for id in &valid_pairs {
         let pair = &pairs[id];
         let a = &pair[0];
@@ -154,41 +201,60 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
                 continue;
             };
             let m = &parent[0];
-            let Some(world) = pairs.get(&m[4]).filter(|_| valid_pairs.contains(&m[4])) else {
-                unknown.push(format!("manager {} has no complete world", m[3]));
+            let Some(local) = manager_scopes.get(&a[4]) else {
+                unknown.push(format!("wait {id} has no manager with a valid scope"));
                 continue;
             };
-            let r = &world[0];
             // Reservation row order is not execution order.
             let binding = m[1] == 2
-                && r[1] == 1
                 && parent[1][2] == 2
-                && world[1][2] == 2
                 && m[19] == 0
                 && parent[1][19] == 0
-                && r[19] == 0
-                && world[1][19] == 0
-                && a[8] == core.checked_add(0x4a1196).ok_or("core overflow")?
-                && m[8] == core.checked_add(0x63e1d5).ok_or("core overflow")?
+                && a[8] == wait_caller
                 && a[12].checked_sub(0x400) == Some(m[11])
                 && a[9].checked_add(0x40) == Some(m[21])
-                && m[9].checked_add(0x30) == Some(r[21])
                 && a[22] == m[11]
-                && m[22] == r[10]
-                && [5, 6, 7, 10]
-                    .into_iter()
-                    .all(|j| a[j] == m[j] && m[j] == r[j])
-                && r[23] < m[23]
+                && [5, 6, 7, 10, 11, 12].into_iter().all(|j| a[j] == m[j])
                 && m[23] < a[23]
                 && a[23] < z[23]
                 && z[23] < parent[1][23]
-                && parent[1][23] < world[1][23];
+                && (!*local || (m[4] == 0 && m[10] == 0 && a[10] == 0));
             if binding {
-                wait_pairs += 1;
+                matched_managers.insert(a[4]);
+                if *local {
+                    local_wait_pairs += 1;
+                } else {
+                    wait_pairs += 1;
+                }
             } else {
                 unknown.push(format!("wait {id} exact parent mismatch"));
             }
         }
+    }
+    for id in manager_scopes.keys() {
+        if !matched_managers.contains(id) {
+            unknown.push(format!("manager {id} has no exact normal-return Wait pair"));
+        }
+    }
+    // Keep the v1 byte geometry and existing world counter. Additional scope
+    // fields never reinterpret an orphan Wait from an older capture.
+    for row in &mut rows {
+        let kind = row["kind"].as_u64().unwrap();
+        let id = row["invocation"].as_u64().unwrap();
+        let manager = if kind == 2 {
+            id
+        } else {
+            row["parent"].as_u64().unwrap()
+        };
+        row["scope"] = json!(if kind == 1 {
+            "world_shutdown"
+        } else {
+            match manager_scopes.get(&manager) {
+                Some(true) => "local_manager",
+                Some(false) => "world_shutdown",
+                None => "unknown",
+            }
+        });
     }
     let stopped = word(b, 184)? == 2 && word(b, 96)? == ROOT_CLOSED;
     let clean = stopped
@@ -206,11 +272,14 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
         "created_filetime":created,"core":core,"core_epoch":word(b,72)?,
         "reserved_rows":next,"rows":rows,"accepted_calls_stopped":stopped,
         "same_manager_wait_normal_returns":wait_pairs,
+        "local_manager_normal_returns":manager_scopes.values().filter(|local|**local).count(),
+        "local_manager_wait_normal_returns":local_wait_pairs,
         "capture_complete":clean && wait_pairs > 0,"unknown":unknown,
         "site_witnesses":site_witnesses,
         "not_established_by_this_capture":["native producer admission seal","pending publication or cancellation",
             "rePush absence","host indirect target and arena join path","all six other domains exited",
-            "synchronous4A7AD0/5E2D0 and higher callers exited","world lifetime","runtime activation authority"]}),
+            "synchronous4A7AD0/5E2D0 and higher callers exited","world lifetime","runtime activation authority",
+            "local manager caller continues at63D448 through another call and conditional49C7C0; no world exit certificate"]}),
     )
 }
 pub struct Request {

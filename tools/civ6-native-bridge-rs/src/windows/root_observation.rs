@@ -42,6 +42,41 @@ const MANAGER_PREFIX: &[u8] = &[
 const WORLD_CALL: &[u8] = &[
     0x48, 0x8b, 0x8b, 0x50, 2, 0, 0, 0xe8, 0x7b, 0x2f, 0xe6, 0xff,
 ];
+// RCX=[RDI+250], CALL4A1150, followed by CALL3D50B0. No world type
+// is inferred from RDI. The caller continues after manager return.
+const LOCAL_MANAGER_CALL: &[u8] = &[
+    0x48, 0x8b, 0x8f, 0x50, 2, 0, 0, 0xe8, 0x08, 0x3d, 0xe6, 0xff,
+];
+const LOCAL_MANAGER_CONTINUATION: &[u8] = &[
+    0xe8, 0x63, 0x7c, 0xd9, 0xff, 0x4c, 0x8b, 0xb4, 0x24, 0xa0, 0, 0, 0, 0x84, 0xc0, 0x74, 0x0c,
+    0x48, 0x8b, 0x8f, 0x50, 2, 0, 0, 0xe8, 0x5b, 0xf3, 0xe5, 0xff,
+];
+fn verify_call_spans(core: usize) -> Result<(), &'static str> {
+    for (rva, bytes) in [
+        (0x4a1150, MANAGER_PREFIX),
+        (0x63e1c9, WORLD_CALL),
+        (0x63d43c, LOCAL_MANAGER_CALL),
+        (0x63d448, LOCAL_MANAGER_CONTINUATION),
+    ] {
+        for (offset, byte) in bytes.iter().enumerate() {
+            if copy_current::<1>((core + rva + offset) as u64) != Some([*byte]) {
+                return Err("root fixed caller/continuation bytes differ");
+            }
+        }
+    }
+    for (call, bytes, target) in [
+        (0x63e1d0, &WORLD_CALL[7..12], 0x4a1150),
+        (0x63d443, &LOCAL_MANAGER_CALL[7..12], 0x4a1150),
+        (0x63d448, &LOCAL_MANAGER_CONTINUATION[..5], 0x3d50b0),
+    ] {
+        let actual = (core + call + 5)
+            .checked_add_signed(i32::from_le_bytes(bytes[1..].try_into().unwrap()) as isize);
+        if bytes[0] != 0xe8 || actual != core.checked_add(target) {
+            return Err("root fixed direct caller target differs");
+        }
+    }
+    Ok(())
+}
 
 #[repr(C)]
 pub(super) struct RootTrace {
@@ -82,6 +117,7 @@ fn site_error(i: usize, code: u64, message: &'static str) -> &'static str {
 struct Binding {
     core: usize,
     manager_return: u64,
+    local_manager_return: u64,
     wait_return: u64,
     until: Instant,
 }
@@ -240,10 +276,19 @@ extern "system" fn begin(raw: *mut Saved) {
         if inv.kind == 3 && inv.caller != bind.wait_return {
             return;
         }
-        if inv.kind == 2 && inv.caller != bind.manager_return {
+        if inv.kind == 2
+            && inv.caller != bind.manager_return
+            && inv.caller != bind.local_manager_return
+        {
+            if acquire(false) {
+                let _release = Release;
+                unknown();
+            }
             return;
         }
+        let local_manager = inv.kind == 2 && inv.caller == bind.local_manager_return;
         let inherited = inv.kind != 1
+            && !local_manager
             && parent.is_some_and(|p| {
                 p.cookie == COOKIE
                     && p.epoch == h(9).load(Ordering::Acquire)
@@ -277,7 +322,15 @@ extern "system" fn begin(raw: *mut Saved) {
             inv.errors |= 2;
             h(22).fetch_add(1, Ordering::Relaxed);
         }
-        if inv.kind == 1 {
+        if local_manager {
+            // A standalone call owns only its current manager receiver.
+            // Never borrow a world token or dereference the caller's RDI.
+            inv.manager = saved.gpr[0];
+            inv.set = inv.manager.checked_add(0x400).unwrap_or(0);
+            if parent.is_some() || inv.manager == 0 || inv.set == 0 {
+                inv.errors |= 2;
+            }
+        } else if inv.kind == 1 {
             inv.world = saved.gpr[0];
         } else {
             if let Some(p) = parent {
@@ -869,13 +922,7 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
             }
         }
     }
-    for (rva, bytes) in [(0x4a1150, MANAGER_PREFIX), (0x63e1c9, WORLD_CALL)] {
-        for (offset, byte) in bytes.iter().enumerate() {
-            if copy_current::<1>((core as usize + rva + offset) as u64) != Some([*byte]) {
-                return Err("root local call witness differs");
-            }
-        }
-    }
+    verify_call_spans(core as usize)?;
     // Pin exact modules before any executable publication. Files alone do not
     // keep an image mapped. No hook or unwind target is ever freed/unpinned.
     for address in [
@@ -901,6 +948,7 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
     BIND.set(Binding {
         core: core as usize,
         manager_return: core as u64 + 0x63e1d5,
+        local_manager_return: core as u64 + 0x63d448,
         wait_return: core as u64 + 0x4a1196,
         until: Instant::now() + Duration::from_secs(config.max_seconds as u64),
     })
@@ -1058,6 +1106,7 @@ mod tests {
             .set(Binding {
                 core,
                 manager_return,
+                local_manager_return: core as u64 + 0x63d448,
                 wait_return,
                 until: Instant::now() + Duration::from_secs(30)
             })
@@ -1817,6 +1866,21 @@ mod tests {
         "pop rbx",
         "ret",
         ".seh_endproc",
+        ".globl root_meta_local_caller",
+        ".seh_proc root_meta_local_caller",
+        "root_meta_local_caller:",
+        "push rdi",
+        ".seh_pushreg rdi",
+        "push r14",
+        ".seh_pushreg r14",
+        "sub rsp,0x28",
+        ".seh_stackalloc 0x28",
+        ".seh_endprologue",
+        "add rsp,0x28",
+        "pop r14",
+        "pop rdi",
+        "ret",
+        ".seh_endproc",
         ".globl root_meta_manager",
         ".seh_proc root_meta_manager",
         "root_meta_manager:",
@@ -1852,10 +1916,11 @@ mod tests {
         fn root_meta_world();
         fn root_meta_manager();
         fn root_meta_wait();
+        fn root_meta_local_caller();
     }
     struct OwnedCore {
         base: *mut u8,
-        table: Box<[IMAGE_RUNTIME_FUNCTION_ENTRY; 3]>,
+        table: Box<[IMAGE_RUNTIME_FUNCTION_ENTRY; 4]>,
     }
     impl OwnedCore {
         fn new() -> Self {
@@ -1890,17 +1955,31 @@ mod tests {
                 0xb8, 0xff, 0x55, 0, 0, 0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f,
                 0xc3,
             ];
-            let code = [world, manager, wait];
+            const LOCAL_ENTRY: usize = 0x63d424;
+            let mut local = vec![0x57, 0x41, 0x56, 0x48, 0x83, 0xec, 0x28, 0x48, 0x8b, 0xf9];
+            local.resize(0x63d43c - LOCAL_ENTRY, 0x90);
+            local.extend_from_slice(LOCAL_MANAGER_CALL);
+            local.extend_from_slice(LOCAL_MANAGER_CONTINUATION);
+            local.extend_from_slice(&[0x48, 0x83, 0xc4, 0x28, 0x41, 0x5e, 0x5f, 0xc3]);
+            // Only test-owned downstream bodies. Their role is not attributed
+            // to the real functions at these same RVAs.
+            unsafe {
+                *base.add(0x3d50b0) = 0xc3;
+                *base.add(0x49c7c0) = 0xc3;
+            }
+            let code = [world, manager, wait, local];
+            let starts = [SITE[0], SITE[1], SITE[2], LOCAL_ENTRY];
             let metadata = [
                 root_meta_world as *const () as usize,
                 root_meta_manager as *const () as usize,
                 root_meta_wait as *const () as usize,
+                root_meta_local_caller as *const () as usize,
             ];
             let mut table =
-                Box::new(unsafe { std::mem::zeroed::<[IMAGE_RUNTIME_FUNCTION_ENTRY; 3]>() });
-            for i in 0..3 {
+                Box::new(unsafe { std::mem::zeroed::<[IMAGE_RUNTIME_FUNCTION_ENTRY; 4]>() });
+            for i in 0..4 {
                 unsafe {
-                    ptr::copy_nonoverlapping(code[i].as_ptr(), base.add(SITE[i]), code[i].len());
+                    ptr::copy_nonoverlapping(code[i].as_ptr(), base.add(starts[i]), code[i].len());
                 }
                 let mut image = 0;
                 let entry =
@@ -1917,8 +1996,8 @@ mod tests {
                 unsafe {
                     ptr::copy_nonoverlapping(raw.as_ptr(), base.add(rva), length);
                 }
-                table[i].BeginAddress = SITE[i] as u32;
-                table[i].EndAddress = (SITE[i] + code[i].len()) as u32;
+                table[i].BeginAddress = starts[i] as u32;
+                table[i].EndAddress = (starts[i] + code[i].len()) as u32;
                 table[i].Anonymous.UnwindData = rva as u32;
             }
             table.sort_by_key(|e| e.BeginAddress);
@@ -1932,7 +2011,7 @@ mod tests {
                 0
             );
             assert_ne!(
-                unsafe { RtlAddFunctionTable(table.as_mut_ptr(), 3, base as u64) },
+                unsafe { RtlAddFunctionTable(table.as_mut_ptr(), 4, base as u64) },
                 0
             );
             Self { base, table }
@@ -2034,6 +2113,163 @@ mod tests {
                 >= 8
         );
         assert!(unsafe { restore_all() }.is_ok());
+    }
+    #[test]
+    fn root_local_manager_three_cas_wait_is_separate_from_world_scope() {
+        if !child("root_local_manager_three_cas_wait_is_separate_from_world_scope") {
+            return;
+        }
+        let core = OwnedCore::new();
+        assert!(verify_call_spans(core.base as usize).is_ok());
+        core.prepare();
+        let mut manager = vec![0u8; 0x3900];
+        let address = manager.as_mut_ptr() as u64;
+        let mut opaque_caller_receiver = vec![0u8; 0x400];
+        opaque_caller_receiver[0x250..0x258].copy_from_slice(&address.to_le_bytes());
+        let base = core.base as usize;
+        let worker = std::thread::spawn(move || {
+            let call = unsafe {
+                std::mem::transmute::<usize, unsafe extern "system" fn(*mut u8) -> u64>(
+                    base + 0x63d424,
+                )
+            };
+            unsafe { call(opaque_caller_receiver.as_mut_ptr()) }
+        });
+        assert_eq!(worker.join().unwrap(), 0x55ff);
+        assert_eq!(h(10).load(Ordering::Acquire), 4);
+        assert_eq!(h(14).load(Ordering::Acquire), 0);
+        let local = civ6_bootstrap_rs::protocol::root_trace(
+            &bytes(),
+            config(1).pid,
+            config(1).created_filetime,
+        )
+        .unwrap();
+        assert_eq!(local["local_manager_wait_normal_returns"], 1);
+        assert_eq!(local["same_manager_wait_normal_returns"], 0);
+        assert_eq!(local["capture_complete"], false);
+        assert_eq!(local["rows"][0]["parent"], 0);
+        assert_eq!(local["rows"][0]["world"], 0);
+        assert_eq!(local["rows"][2]["parent"], 1);
+        assert_eq!(local["rows"][2]["world"], 0);
+        assert_eq!(
+            local["rows"][2]["gateway_entry_rsp"].as_u64().unwrap() + 0x40,
+            local["rows"][0]["native_entry_rsp"].as_u64().unwrap()
+        );
+        let mut world = vec![0u8; 0x400];
+        world[0x2a4] = 1;
+        world[0x250..0x258].copy_from_slice(&address.to_le_bytes());
+        assert_eq!(core.invoke(world.as_mut_ptr()), 0x55ff);
+        assert_eq!(
+            u64_at(&manager, 0x80),
+            2,
+            "each original manager called once"
+        );
+        assert_eq!(u64_at(&manager, 0x400), 2, "each original Wait called once");
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+        let both = civ6_bootstrap_rs::protocol::root_trace(
+            &bytes(),
+            config(1).pid,
+            config(1).created_filetime,
+        )
+        .unwrap();
+        assert_eq!(both["same_manager_wait_normal_returns"], 1);
+        assert_eq!(both["local_manager_wait_normal_returns"], 1);
+        assert_eq!(
+            both["capture_complete"], true,
+            "fixture call coverage, not world certification"
+        );
+        assert_ne!(both["rows"][0]["tid"], both["rows"][4]["tid"]);
+        assert_eq!(both["rows"][4]["parent"], 0);
+        assert_eq!(h(10).load(Ordering::Acquire), 10);
+    }
+    #[test]
+    fn root_local_manager_spans_reject_modified_call_and_continuation() {
+        if !child("root_local_manager_spans_reject_modified_call_and_continuation") {
+            return;
+        }
+        let core = OwnedCore::new();
+        let base = core.base as usize;
+        assert!(verify_call_spans(base).is_ok());
+        for rva in [0x63d443, 0x63d448, 0x63d460] {
+            let original = copy_current::<5>((base + rva) as u64).unwrap();
+            let mut bad = original;
+            bad[1] ^= 1;
+            HelperFaultPatch::write(base + rva, bad);
+            let rejected = verify_call_spans(base).is_err();
+            HelperFaultPatch::write(base + rva, original);
+            assert!(rejected, "complete second-caller span at {rva:#x}");
+            assert!(verify_call_spans(base).is_ok());
+        }
+        assert_eq!(h(15).load(Ordering::Acquire), 0);
+    }
+    #[test]
+    fn root_local_manager_current_call_rejects_bad_rsp_lifetime_and_orphan_wait() {
+        if !child("root_local_manager_current_call_rejects_bad_rsp_lifetime_and_orphan_wait") {
+            return;
+        }
+        bind_fixture(1, 1 + 0x63e1d5, 1 + 0x4a1196);
+        let mut manager = vec![0u8; 0x3900];
+        let address = manager.as_mut_ptr() as u64;
+        let metadata = [3u64, 4];
+        let frame = |kind, caller, rsp, native, rcx, rbx| Saved {
+            gpr: [rcx, metadata.as_ptr() as u64, 0, 0, 0, 0, 0, rbx],
+            xmm: [[0; 16]; 6],
+            invocation: Invocation {
+                kind,
+                caller,
+                caller_rsp: rsp,
+                native_rsp: native,
+                ..Invocation::default()
+            },
+            metadata: metadata.as_ptr() as u64,
+        };
+        let mut m = frame(2, 1 + 0x63d448, 0x8100, 0x8000, address, 0xdead);
+        begin(&mut m);
+        assert_eq!(m.invocation.errors, 0);
+        assert_eq!(m.invocation.world, 0);
+        assert_eq!(m.invocation.parent, 0);
+        let mut wrong = frame(3, 1 + 0x4a1196, 0x7fc8, 0x7e00, address + 0x400, address);
+        begin(&mut wrong);
+        assert_ne!(wrong.invocation.errors & 2, 0);
+        end(&mut wrong);
+        let original_parent = STACK.with(Cell::get);
+        STACK.with(|s| {
+            let mut f = s.get();
+            f.frames[0].thread_created += 1;
+            s.set(f);
+        });
+        let mut wrong = frame(3, 1 + 0x4a1196, 0x7fc0, 0x7e00, address + 0x400, address);
+        begin(&mut wrong);
+        assert_ne!(wrong.invocation.errors & 2, 0);
+        end(&mut wrong);
+        STACK.with(|s| s.set(original_parent));
+        end(&mut m);
+        let mut unknown_manager = frame(2, 1 + 0x63d449, 0x8100, 0x8000, address, 0xdead);
+        let next = h(10).load(Ordering::Acquire);
+        begin(&mut unknown_manager);
+        assert_eq!(unknown_manager.invocation.token, 0);
+        assert_eq!(h(10).load(Ordering::Acquire), next);
+        let mut orphan = frame(3, 1 + 0x4a1196, 0x7fc0, 0x7e00, address + 0x400, address);
+        begin(&mut orphan);
+        assert_ne!(orphan.invocation.errors & 2, 0);
+        assert_eq!(orphan.invocation.parent, 0);
+        end(&mut orphan);
+        assert_eq!(BridgeRootObservationStop(null_mut()), 0);
+        let unknown = h(14).load(Ordering::Acquire);
+        begin(&mut unknown_manager);
+        assert_eq!(
+            h(14).load(Ordering::Acquire),
+            unknown,
+            "closed capture remains immutable at unknown manager entries"
+        );
+        let capture = civ6_bootstrap_rs::protocol::root_trace(
+            &bytes(),
+            config(1).pid,
+            config(1).created_filetime,
+        )
+        .unwrap();
+        assert_eq!(capture["capture_complete"], false);
+        assert_eq!(capture["local_manager_wait_normal_returns"], 0);
     }
     #[test]
     fn root_rollback_continues_after_failed_first_compare_and_retains_owner() {
