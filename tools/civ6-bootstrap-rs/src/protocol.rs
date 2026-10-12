@@ -1,5 +1,5 @@
 //! Portable DTO/trace framing, not game or lifecycle proof.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 pub const HEADER: usize = 72;
 pub const ROW: usize = 104;
@@ -14,6 +14,170 @@ pub const ROOT_ROW: usize = 192;
 pub const ROOT_ROWS: usize = 128;
 pub const ROOT_BYTES: usize = ROOT_HEADER + ROOT_ROW * ROOT_ROWS;
 pub const ROOT_CLOSED: u64 = 1 << 63;
+pub const SUBMISSION_PREPARE_VERSION: u32 = 0x0880_2001;
+pub const SUBMISSION_CONFIG_VERSION: u32 = 0x0880_2002;
+pub const SUBMISSION_MAGIC: u64 = 0x424f_4a53_3038_3830;
+pub const SUBMISSION_ROW: usize = 256;
+pub const SUBMISSION_BYTES: usize = ROOT_HEADER + SUBMISSION_ROW * ROOT_ROWS;
+
+/// Copies made at entry only. Scalar addresses in these records are opaque;
+/// this parser never follows them. Correspondence is not job ownership/join.
+pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    if b.len() != SUBMISSION_BYTES
+        || word(b, 0)? != SUBMISSION_MAGIC
+        || word(b, 8)? != 1
+        || word(b, 16)? != SUBMISSION_BYTES as u64
+        || word(b, 24)? != ROOT_ROWS as u64
+        || word(b, 32)? != SUBMISSION_ROW as u64
+        || word(b, 40)? != u64::from(pid)
+        || word(b, 48)? != created
+        || (28..32).any(|i| word(b, i * 8).ok() != Some(0))
+    {
+        return Err("submission trace size/version/identity/reserved mismatch".into());
+    }
+    let next = usize::try_from(word(b, 80)?).map_err(|_| "submission count")?;
+    if next > ROOT_ROWS || next % 2 != 0 {
+        return Err("submission reservation count".into());
+    }
+    let core = word(b, 56)?;
+    let epoch = word(b, 72)?;
+    let mut unknown = Vec::<String>::new();
+    let mut sites = Vec::new();
+    for (i, (rva, bytes)) in [
+        (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
+        (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let s = (0..8)
+            .map(|j| word(b, 256 + i * 64 + j * 8))
+            .collect::<Result<Vec<_>, _>>()?;
+        let expected = u64::from_le_bytes(bytes);
+        if s[..5] != [rva, expected, expected, 1, 1] || s[5..] != [0, 0, 0] {
+            unknown.push(format!("submission site {i} witness incomplete"));
+        }
+        sites.push(s);
+    }
+    if (0..8).any(|j| word(b, 384 + j * 8).ok() != Some(0)) {
+        unknown.push("unused submission site is not zero".into());
+    }
+    let mut pairs = Vec::<([u64; 32], [u64; 32])>::new();
+    let mut rows = Vec::new();
+    let mut events = std::collections::BTreeSet::new();
+    for i in (0..next).step_by(2) {
+        let read = |row: usize| -> Result<[u64; 32], String> {
+            let mut r = [0; 32];
+            for (j, v) in r.iter_mut().enumerate() {
+                *v = word(b, ROOT_HEADER + row * SUBMISSION_ROW + j * 8)?;
+            }
+            Ok(r)
+        };
+        let a = read(i)?;
+        let z = read(i + 1)?;
+        for r in [&a, &z] {
+            rows.push(
+                json!({"raw":r.to_vec(),"invocation_id":r[3],"kind":r[1],"edge":r[2],
+                "tid":r[5],"thread_created_filetime":r[6],"core_epoch":r[7],
+                "caller":r[8],"entry_rsp":r[9],"rcx_list":r[10],"rdx_opaque":r[11],
+                "r8_set_opaque":r[12],"r9_metadata_opaque":r[13],
+                "descriptor_words":r[14..18],"metadata_words":r[18..20],
+                "errors":r[20],"rax":r[21],"last_error":r[22],"event":r[23],
+                "descriptor_copied":r[24],"descriptor_read_error":r[25],
+                "metadata_copied":r[26],"metadata_read_error":r[27],"output_rdx":r[28],
+                "native_entry_rsp":r[29],"snapshot_scope":"entry_only_no_pointer_reread"}),
+            );
+        }
+        let valid = a[0] == i as u64 + 1
+            && z[0] == i as u64 + 2
+            && (a[1] == 4 || a[1] == 5)
+            && a[2] == 1
+            && z[2] == 2
+            && a[3] == i as u64 + 1
+            && a[3] == z[3]
+            && a[4..21] == z[4..21]
+            && a[1] == z[1]
+            && a[29] == z[29]
+            && a[5] > 0
+            && a[6] > 0
+            && a[7] == epoch
+            && epoch > 0
+            && core > 0
+            && a[9] > 0
+            && a[29] > 0
+            && a[20] == 0
+            && z[20] == 0
+            && a[23] > 0
+            && z[23] > a[23]
+            && z[23] <= word(b, 192)?
+            && events.insert(a[23])
+            && events.insert(z[23])
+            && a[30..] == [0, 0]
+            && z[30..] == [0, 0]
+            && if a[1] == 4 {
+                a[24] >= 16 && a[24] <= 32 && a[26] == 16 && a[25] == 0 && a[27] == 0
+            } else {
+                a[14..20] == [0; 6] && a[24..28] == [0; 4]
+            };
+        if valid {
+            pairs.push((a, z));
+        } else {
+            unknown.push(format!(
+                "invocation {} incomplete/exception/identity/read mismatch",
+                i + 1
+            ));
+        }
+    }
+    // One fixed, fully checked direct-call loop. RSP is the native caller
+    // frame identity; an equal list value alone cannot supply this relation.
+    let mut matched = std::collections::BTreeSet::new();
+    for (publish, publish_return) in pairs.iter().filter(|(a, _)| a[1] == 5) {
+        if publish[8] != core.checked_add(0x38888e).unwrap_or(0) {
+            continue;
+        }
+        for (submit, returned) in pairs.iter().filter(|(a, _)| a[1] == 4) {
+            if submit[8]==core.checked_add(0x388871).unwrap_or(0)
+                && submit[4]==0 && publish[4]==0
+                && submit[5..8]==publish[5..8] && submit[9]==publish[9]
+                && submit[10]>0 && submit[10]==publish[10]
+                && returned[23]<publish[23] && publish[23]<publish_return[23]
+                // A later/interleaved publication for this frame cuts the batch.
+                && !pairs.iter().any(|(other,_)|other[1]==5 && other[5..8]==submit[5..8]
+                    && other[9]==submit[9] && returned[23]<other[23] && other[23]<publish[23])
+            {
+                matched.insert(submit[3]);
+            }
+        }
+    }
+    let submitted = pairs.iter().filter(|(a, _)| a[1] == 4).count();
+    let stopped = word(b, 96)? == ROOT_CLOSED && word(b, 184)? == 2;
+    let clean = stopped
+        && word(b, 88)? == 0
+        && word(b, 104)? == 0
+        && word(b, 112)? == 0
+        && word(b, 120)? == 3
+        && word(b, 128)? == 0
+        && word(b, 136)? == 0
+        && word(b, 144)? == 0
+        && word(b, 152)? == 3
+        && word(b, 176)? == 0
+        && word(b, 200)? == 3
+        && word(b, 208)? == 3
+        && word(b, 216)? == 1
+        && unknown.is_empty();
+    Ok(
+        json!({"schema":"todo880-native-submission-trace-v1","pid":pid,
+        "created_filetime":created,"core":core,"core_epoch":epoch,"reserved_rows":next,
+        "rows":rows,"site_witnesses":sites,"accepted_calls_stopped":stopped,
+        "submitted_normal_returns":submitted,"matched_published_submissions":matched.len(),
+        "capture_complete":clean && submitted>0 && !matched.is_empty(),"unknown":unknown,
+        "runtime_activated":false,"scope":"accepted_two_wrapper_calls_sampling_only",
+        "not_established_by_this_capture":["descriptor C++ type and ownership","birth generation ticket",
+        "retain/copy/release/cancel/reissue","native publication completion","job execution or Join",
+        "World root identity/lifetime or all-domain drainage","runtime activation authority",
+        "992210 copies R9 metadata16; it forwards RDX unchanged"]}),
+    )
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -27,6 +191,210 @@ pub struct RootConfig {
     pub trace_address: u64,
     pub trace_size: u32,
     pub reserved: u32,
+}
+
+#[cfg(test)]
+mod submission_protocol_tests {
+    use super::*;
+    fn put(b: &mut [u8], word: usize, v: u64) {
+        b[word * 8..word * 8 + 8].copy_from_slice(&v.to_le_bytes());
+    }
+    fn fixture() -> Vec<u8> {
+        let mut b = vec![0; SUBMISSION_BYTES];
+        for (i, v) in [
+            SUBMISSION_MAGIC,
+            1,
+            SUBMISSION_BYTES as u64,
+            128,
+            256,
+            23,
+            29,
+            0x180000000,
+            0x140000000,
+            1,
+            4,
+            0,
+            ROOT_CLOSED,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            2,
+            4,
+            3,
+            3,
+            1,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            put(&mut b, i, v);
+        }
+        for (i, (rva, bytes)) in [
+            (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
+            (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for (j, v) in [
+                rva,
+                u64::from_le_bytes(bytes),
+                u64::from_le_bytes(bytes),
+                1,
+                1,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                put(&mut b, 32 + i * 8 + j, v);
+            }
+        }
+        for i in 0..4 {
+            let mut r = [0; 32];
+            r[0] = i + 1;
+            r[1] = if i < 2 { 4 } else { 5 };
+            r[2] = if i % 2 == 0 { 1 } else { 2 };
+            r[3] = if i < 2 { 1 } else { 3 };
+            r[5] = 31;
+            r[6] = 37;
+            r[7] = 1;
+            r[8] = 0x180000000 + if i < 2 { 0x388871 } else { 0x38888e };
+            r[9] = 0x1000;
+            r[10] = 7;
+            if i < 2 {
+                r[11] = 0x10000;
+                r[12] = 0x20000;
+                r[13] = 0x30000;
+                r[14] = 0xaabb;
+                r[18] = 0xccdd;
+                r[24] = 32;
+                r[26] = 16;
+            }
+            r[23] = i + 1;
+            r[29] = 0x800;
+            for (j, v) in r.into_iter().enumerate() {
+                put(&mut b, ROOT_HEADER / 8 + i as usize * 32 + j, v);
+            }
+        }
+        b
+    }
+    #[test]
+    fn submission_fixed_caller_pairs_are_sampling_only_and_root_rejects_them() {
+        let b = fixture();
+        let v = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["matched_published_submissions"], 1);
+        assert_eq!(v["runtime_activated"], false);
+        assert!(root_trace(&b, 23, 29).is_err());
+        assert!(
+            v["not_established_by_this_capture"]
+                .as_array()
+                .unwrap()
+                .len()
+                > 6
+        );
+    }
+    #[test]
+    fn submission_wrong_caller_rsp_fte_epoch_overlap_and_event_order_never_complete() {
+        for (row, field, value) in [
+            (2, 8, 0x18038888f),
+            (2, 9, 0x1008),
+            (3, 6, 38),
+            (3, 7, 2),
+            (0, 7, 2),
+            (1, 7, 2),
+            (0, 4, 77),
+            (1, 4, 77),
+            (2, 23, 1),
+            (3, 2, 3),
+        ] {
+            let mut b = fixture();
+            put(&mut b, ROOT_HEADER / 8 + row * 32 + field, value);
+            assert_eq!(
+                submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+                false,
+                "row{row} field{field}"
+            );
+        }
+    }
+    #[test]
+    fn submission_empty_partial_dropped_read_errors_and_site_failure_never_complete() {
+        for (offset, value) in [
+            (10, 0),
+            (11, 1),
+            (13, 1),
+            (15, 1),
+            (16, 1),
+            (19, 2),
+            (25, 1),
+            (26, 1),
+            (27, 0),
+            (ROOT_HEADER / 8 + 24, 15),
+            (ROOT_HEADER / 8 + 25, 299),
+            (ROOT_HEADER / 8 + 26, 0),
+            (32 + 4, 0),
+            (32 + 5, 1),
+            (40 + 7, 1),
+        ] {
+            let mut b = fixture();
+            put(&mut b, offset, value);
+            assert_eq!(
+                submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+                false,
+                "word{offset}"
+            );
+        }
+        let mut b = fixture();
+        b.pop();
+        assert!(submission_trace(&b, 23, 29).is_err());
+    }
+    #[test]
+    fn submission_entry_snapshot_changes_at_return_are_rejected() {
+        for field in [10, 11, 12, 13, 14, 18, 24, 26, 29] {
+            let mut b = fixture();
+            put(&mut b, ROOT_HEADER / 8 + 32 + field, 999);
+            assert_eq!(
+                submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+                false
+            );
+        }
+    }
+    #[test]
+    fn submission_selector_is_exact_and_requires_explicit_controller_lifetime() {
+        for value in [
+            json!(null),
+            json!(true),
+            json!("submission"),
+            json!("native_submission "),
+        ] {
+            assert!(
+                Request::root_scenario(&json!({"observation":value,"controller_seconds":60}))
+                    .is_err()
+            );
+        }
+        assert!(Request::root_scenario(&json!({"observation":"native_submission"})).is_err());
+        assert!(
+            Request::root_scenario(
+                &json!({"observation":"native_submission","controller_seconds":60})
+            )
+            .unwrap()
+        );
+        assert!(!Request::root_scenario(&json!({})).unwrap());
+        let v = scenario_request(
+            &json!({"observation":"native_submission","controller_seconds":60}),
+            23,
+            29,
+            std::path::Path::new("capture"),
+        );
+        assert_eq!(v["schema"], "todo880-native-submission-controller-v1");
+    }
 }
 
 /// Layout/record correspondence only. A normal wrapper return is not a join
@@ -285,6 +653,7 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
 pub struct Request {
     /// Only the distinct root schema can opt into the passive three-entry shim.
     pub root_only: bool,
+    pub submission_only: bool,
     pub pid: u32,
     pub created: u64,
     pub seconds: u32,
@@ -310,7 +679,9 @@ impl Request {
     pub fn root_scenario(step: &Value) -> Result<bool, String> {
         match step.get("observation") {
             None => Ok(false),
-            Some(Value::String(value)) if value == "native_shutdown" => {
+            Some(Value::String(value))
+                if value == "native_shutdown" || value == "native_submission" =>
+            {
                 if step.get("controller_seconds").is_none() {
                     return Err("root observation requires explicit controller_seconds".into());
                 }
@@ -353,6 +724,7 @@ impl Request {
             Some("todo880-bootstrap-controller-v2") => &fields[..9],
             Some("todo880-bootstrap-controller-v3") => &fields[..],
             Some("todo880-root-observation-controller-v1") => &fields[..],
+            Some("todo880-native-submission-controller-v1") => &fields[..],
             _ => return Err("bootstrap request schema/fields".into()),
         };
         if map.len() != fields.len() || map.keys().any(|k| !fields.contains(&k.as_str())) {
@@ -377,7 +749,9 @@ impl Request {
         };
         let (seconds, controller_seconds) = Self::durations(v)?;
         Ok(Self {
-            root_only: v["schema"] == "todo880-root-observation-controller-v1",
+            root_only: v["schema"] == "todo880-root-observation-controller-v1"
+                || v["schema"] == "todo880-native-submission-controller-v1",
+            submission_only: v["schema"] == "todo880-native-submission-controller-v1",
             pid: u32::try_from(num("pid")?).map_err(|_| "PID overflow")?,
             created: num("created_filetime")?,
             seconds,
@@ -404,6 +778,9 @@ pub fn scenario_request(step: &Value, pid: u32, created: u64, output: &std::path
     }
     if step["observation"] == "native_shutdown" {
         value["schema"] = json!("todo880-root-observation-controller-v1");
+    }
+    if step["observation"] == "native_submission" {
+        value["schema"] = json!("todo880-native-submission-controller-v1");
     }
     value
 }
@@ -642,7 +1019,10 @@ pub fn native_trace(b: &[u8], log: Option<&[u8]>, pid: u32, created: u64) -> Res
         {
             return Err(format!(
                 "native trace header at {offset:#x}: magic={:#x} version={} dropped={} in_flight={}",
-                u(offset)?, u(offset + 4)?, u(offset + 12)?, u(offset + 16)?
+                u(offset)?,
+                u(offset + 4)?,
+                u(offset + 12)?,
+                u(offset + 16)?
             ));
         }
         let count = u(offset + 8)? as usize;
