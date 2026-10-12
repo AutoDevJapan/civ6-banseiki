@@ -114,7 +114,7 @@ mod worker_payload {
             };
             let pdata_rva = u32_at(image, opt + 112 + 3 * 8)?;
             let pdata_size = u32_at(image, opt + 116 + 3 * 8)? as usize;
-            if pdata_size == 0 || pdata_size % 12 != 0 || pdata_size / 12 > 131072 {
+            if pdata_size == 0 || !pdata_size.is_multiple_of(12) || pdata_size / 12 > 131072 {
                 return Err("payload exception directory size".into());
             }
             let pdata = pe.span(pdata_rva, pdata_size, false)?;
@@ -145,7 +145,7 @@ mod worker_payload {
             while pos < reloc.len() {
                 let page = u32_at(reloc, pos)?;
                 let size = u32_at(reloc, pos + 4)? as usize;
-                if size < 8 || size % 2 != 0 {
+                if size < 8 || !size.is_multiple_of(2) {
                     return Err("payload relocation block size".into());
                 }
                 let block = at(reloc, pos, size)?;
