@@ -602,3 +602,11 @@ e15d7f32、コード484f21feの実機183は8手順とgeneric5判定すべて成�
 標準の終了、Steam解放と原本復旧を確認し、保持した同じchain512564/FILETIME134362473550260971のHANDLEでexit0だった。原21ファイル298227byteを所有a4df731a…へ全SHA一致で保全した。元auto30・COS1・AppOptionsのSHAも全一致し、game・chain・lock・Steam/autosave復旧記録・software backupの残存は0だった。実ゲーム6回と未起動3件、旧182の失敗と原DRクラッシュを保持する。
 
 この成功は、受け付けた固定3入口の記録と同一プロセス読込の成功である。63D1F0の完全な外側frame、未spawn/pending/再発行、hostのarena join、全6domainと同期4A7AD0/5E2D0の退出、通常の自動接続と製品再開の権限は未達のまま。局所manager/Waitをもう一度観測するための実機を重ねず、実発行時に旧世界を帰属させる接続と全frame退出へ同じ880で進む。原7条件0/7・未マージを維持する。
+
+### 2026-10-12: opt-in native submission descriptor sampling
+
+The new `observation: native_submission` selector shares the reviewed cold bootstrap and passive gateway machinery, but uses a distinct protocol, trace layout, terminal event and receipt. It captures the original four input registers, copies the readable 16/32-byte RDX descriptor and 16-byte R9 metadata at entry, and preserves the entire 992280 wrapper including its indirect tail target. Return records reuse the entry snapshot rather than dereferencing expired input pointers. CAS rollback, original-call-once, flags, LastError, SEH and unwind remain required. The collector has a finite capacity; overflow or an unmatched/failed read remains a failed capture with its original evidence retained.
+
+The fixed direct caller pair 388871/38888E can establish observed submission-to-publication correspondence by thread creation time, epoch, list and native caller frame. It does not establish the descriptor's C++ ownership, birth generation, cancellation, reissue, native Join, World lifetime, complete domain drainage or permission to activate the normal runtime.
+
+Validation: the 11 Windows submission tests passed; the related protocol/controller/SDK selection passed 22 tests. After the final source changes, the three affected crates passed 1508 tests with one dedicated child entry excluded. Clippy for their complete targets passed. A separate-model review found one return-snapshot count/error comparison defect; the fix and negative regressions were accepted with no remaining Must. The ordinary runtime and AI candidate remain disabled. No native submission game sample has yet been taken. The original product acceptance remains 0/7 and PR86 remains unmerged.
