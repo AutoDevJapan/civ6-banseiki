@@ -3,6 +3,8 @@
 //! Only the two pinned aligned E8 operands are changed, under mode8's AMD rule.
 use super::*;
 use crate::governor_payment::{self, CurrentMemory, PromotionSubject};
+use windows_sys::Win32::Foundation::{GetLastError, SetLastError};
+use windows_sys::Win32::System::Diagnostics::Debug::{CONTEXT, EXCEPTION_RECORD};
 
 pub(super) const AI_CALL_RVA: usize = 0x4a_7d67;
 pub(super) const AI_WINDOW: [u8; 16] = [
@@ -19,15 +21,18 @@ const CALLEE_BOUNDARY: [u8; 13] = [
 struct Memory;
 impl CurrentMemory for Memory {
     fn copy<const N: usize>(&self, address: u64) -> Option<[u8; N]> {
+        #[cfg(test)]
+        tests::READ_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
         copy_current(address)
     }
 }
 
-// Entirely invocation-local. No persistent Core pointer, TLS, trace writer or
-// in-flight counter exists here, so SEH needs only unwind the assembly frame.
+// The first word is the sole generation lease, owned by this native frame.
+// Numeric Core receivers and copied admission words never outlive the call.
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct Invocation {
+#[derive(Default)]
+struct NativeInvocation {
+    cookie: AtomicU64,
     governors: u64,
     governor: u64,
     requested: u32,
@@ -38,7 +43,17 @@ struct Invocation {
     fence: runtime::CallFence,
     admission: [u128; 5],
 }
-const _: () = assert!(std::mem::size_of::<Invocation>() == 0x90);
+const _: () = {
+    assert!(std::mem::offset_of!(NativeInvocation, cookie) == 0);
+    assert!(std::mem::size_of::<NativeInvocation>() == 0xa0);
+};
+
+struct LastError(u32);
+impl Drop for LastError {
+    fn drop(&mut self) {
+        unsafe { SetLastError(self.0) };
+    }
+}
 
 fn admission(fence: runtime::CallFence, index: usize) -> Option<[u128; 5]> {
     let owner = fence.owner as usize;
@@ -77,6 +92,8 @@ fn admission(fence: runtime::CallFence, index: usize) -> Option<[u128; 5]> {
 }
 
 fn identity(governor: u64) -> Option<([u8; 8], u32)> {
+    #[cfg(test)]
+    tests::READ_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
     let person = copy_current::<8>(governor)?;
     let owner = u32::from_le_bytes(copy_current::<4>(
         governor.checked_add(governor_payment::CORE_GOVERNOR_OWNER_OFFSET)?,
@@ -84,15 +101,28 @@ fn identity(governor: u64) -> Option<([u8; 8], u32)> {
     Some((person, owner))
 }
 
-extern "system" fn begin(out: *mut Invocation, governors: u64, governor: u64, requested: u32) {
-    // Initialize before any fallible work. A Rust panic closes this invocation.
-    let mut invocation = Invocation {
-        governors,
-        governor,
-        requested,
-        ..Invocation::default()
-    };
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+extern "system" fn begin(
+    out: *mut NativeInvocation,
+    governors: u64,
+    governor: u64,
+    requested: u32,
+) {
+    let _error = LastError(unsafe { GetLastError() });
+    // Gateway zeroes the first word even if unwind occurs before this helper.
+    unsafe { ptr::write(out, NativeInvocation::default()) };
+    let invocation = unsafe { &mut *out };
+    invocation
+        .cookie
+        .store(runtime::invocation_start(), Ordering::Release);
+    if !runtime::invocation_admitted(invocation.cookie.load(Ordering::Acquire)) {
+        return; // Original still runs once; no metadata/ticket/receiver reads.
+    }
+    invocation.governors = governors;
+    invocation.governor = governor;
+    invocation.requested = requested;
+    let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        #[cfg(test)]
+        tests::READ_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
         invocation.fence = runtime::call_begin(governors);
         if let Some((person, owner)) = identity(governor) {
             invocation.identity = person;
@@ -104,11 +134,21 @@ extern "system" fn begin(out: *mut Invocation, governors: u64, governor: u64, re
             )
             .unwrap_or([0; 5]);
         }
+        #[cfg(test)]
+        if tests::BEGIN_PANIC.swap(false, Ordering::AcqRel) {
+            panic!("promotion entry helper panic fixture");
+        }
     }));
-    unsafe { ptr::write(out, invocation) };
+    if status.is_err() {
+        invocation.readable = 0;
+        invocation.admission = [0; 5];
+    }
 }
 
-fn restrict_current(original: u64, invocation: Invocation) -> u64 {
+fn restrict_current(original: u64, invocation: &NativeInvocation) -> u64 {
+    if !runtime::invocation_admitted(invocation.cookie.load(Ordering::Acquire)) {
+        return original & !0xff;
+    }
     if original & 0xff == 0 {
         return original;
     }
@@ -178,7 +218,8 @@ fn restrict_current(original: u64, invocation: Invocation) -> u64 {
     }
 }
 
-extern "system" fn end(invocation: *const Invocation, original: u64) -> u64 {
+extern "system" fn end(invocation: *const NativeInvocation, original: u64) -> u64 {
+    let _error = LastError(unsafe { GetLastError() });
     #[cfg(test)]
     if tests::END_PAUSE.swap(false, Ordering::AcqRel) {
         tests::END_PAUSED.store(true, Ordering::Release);
@@ -186,8 +227,27 @@ extern "system" fn end(invocation: *const Invocation, original: u64) -> u64 {
             std::thread::yield_now();
         }
     }
-    std::panic::catch_unwind(|| restrict_current(original, unsafe { ptr::read(invocation) }))
-        .unwrap_or(original & !0xff)
+    let result = std::panic::catch_unwind(|| {
+        #[cfg(test)]
+        if tests::END_PANIC.swap(false, Ordering::AcqRel) {
+            panic!("promotion exit helper panic fixture");
+        }
+        restrict_current(original, unsafe { &*invocation })
+    })
+    .unwrap_or(original & !0xff);
+    unsafe { runtime::invocation_finish(ptr::addr_of!((*invocation).cookie)) };
+    result
+}
+
+unsafe extern "system" fn unwind(
+    record: *const EXCEPTION_RECORD,
+    frame: usize,
+    _context: *mut CONTEXT,
+    _dispatcher: *mut c_void,
+) -> i32 {
+    let _error = LastError(unsafe { GetLastError() });
+    unsafe { runtime::invocation_unwind(record, (frame + 0xc0) as *const AtomicU64) };
+    1 // ExceptionContinueSearch: never manufacture a normal native return.
 }
 
 #[unsafe(no_mangle)]
@@ -203,10 +263,10 @@ global_asm!(
     ".globl runtime_promotion_gateway", ".seh_proc runtime_promotion_gateway",
     "runtime_promotion_gateway:",
     "pushfq", ".seh_stackalloc 8",
-    "sub rsp,0x1c0", ".seh_stackalloc 0x1c0", ".seh_endprologue",
+    "sub rsp,0x1c0", ".seh_stackalloc 0x1c0",
+    "mov qword ptr [rsp+0xc0],0", ".seh_handler {unwind}, @unwind", ".seh_endprologue",
     "mov [rsp+0x20],rcx", "mov [rsp+0x28],rdx", "mov [rsp+0x30],r8", "mov [rsp+0x38],r9",
     "mov [rsp+0x40],rax", "mov [rsp+0x48],r10", "mov [rsp+0x50],r11",
-    "mov rax,[rsp+0x1c0]", "mov [rsp+0x58],rax",
     "movdqu [rsp+0x60],xmm0", "movdqu [rsp+0x70],xmm1", "movdqu [rsp+0x80],xmm2",
     "movdqu [rsp+0x90],xmm3", "movdqu [rsp+0xa0],xmm4", "movdqu [rsp+0xb0],xmm5",
     "mov r9d,r8d", "mov r8,rdx", "mov rdx,rcx", "lea rcx,[rsp+0xc0]", "call {begin}",
@@ -214,10 +274,10 @@ global_asm!(
     "mov rax,[rsp+0x40]", "mov r10,[rsp+0x48]", "mov r11,[rsp+0x50]",
     "movdqu xmm0,[rsp+0x60]", "movdqu xmm1,[rsp+0x70]", "movdqu xmm2,[rsp+0x80]",
     "movdqu xmm3,[rsp+0x90]", "movdqu xmm4,[rsp+0xa0]", "movdqu xmm5,[rsp+0xb0]",
-    "push qword ptr [rsp+0x58]", "popfq",
+    "call {restore_flags}",
     "call qword ptr [rip+RUNTIME_PROMOTION_TARGET]",
     ".globl runtime_promotion_return", "runtime_promotion_return:",
-    "pushfq", "pop qword ptr [rsp+0x58]",
+    "call {save_flags}",
     "mov [rsp+0x20],rcx", "mov [rsp+0x28],rdx", "mov [rsp+0x30],r8", "mov [rsp+0x38],r9",
     "mov [rsp+0x40],rax", "mov [rsp+0x48],r10", "mov [rsp+0x50],r11",
     "movdqu [rsp+0x60],xmm0", "movdqu [rsp+0x70],xmm1", "movdqu [rsp+0x80],xmm2",
@@ -227,11 +287,14 @@ global_asm!(
     "movdqu xmm3,[rsp+0x90]", "movdqu xmm4,[rsp+0xa0]", "movdqu xmm5,[rsp+0xb0]",
     "mov rcx,[rsp+0x20]", "mov rdx,[rsp+0x28]", "mov r8,[rsp+0x30]", "mov r9,[rsp+0x38]",
     "mov rax,[rsp+0x40]", "mov r10,[rsp+0x48]", "mov r11,[rsp+0x50]",
-    "push qword ptr [rsp+0x58]", "popfq", "lea rsp,[rsp+0x1c8]", "ret", ".seh_endproc",
-    begin = sym begin, end = sym end,
+    "call {restore_flags}", "lea rsp,[rsp+0x1c8]", "ret", ".seh_endproc",
+    begin = sym begin, end = sym end, unwind = sym unwind,
+    restore_flags = sym root_flags_restore, save_flags = sym root_flags_save,
 );
 unsafe extern "system" {
     pub(super) fn runtime_promotion_gateway();
+    fn root_flags_restore();
+    fn root_flags_save();
 }
 
 static USED: AtomicBool = AtomicBool::new(false);
@@ -454,5 +517,261 @@ pub(super) unsafe fn restore() -> Result<bool, &'static str> {
 }
 
 #[cfg(test)]
-#[path = "promotion_tests.rs"]
-mod tests;
+mod tests {
+    include!("promotion_tests.rs");
+    pub(super) static BEGIN_PANIC: AtomicBool = AtomicBool::new(false);
+    pub(super) static END_PANIC: AtomicBool = AtomicBool::new(false);
+    pub(super) static READ_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+    static NATIVE_ORIGINALS: AtomicU64 = AtomicU64::new(0);
+    static ORIGINAL_ERROR: AtomicU32 = AtomicU32::new(0);
+    static REBUILD_STATUS: AtomicU32 = AtomicU32::new(u32::MAX);
+
+    unsafe fn invocation_calls(target: *mut u8) -> [Call; 2] {
+        let page = unsafe { promotion_relay_near(target as usize | 3) }.unwrap();
+        let (sites, calls) = unsafe { sites(page, target) };
+        unsafe { install_sites(sites, target) }.unwrap();
+        calls
+    }
+
+    extern "system" fn closed_original(_: u64, _: u64, _: u32, result: u64) -> u64 {
+        NATIVE_ORIGINALS.fetch_add(1, Ordering::Relaxed);
+        ORIGINAL_ERROR.store(unsafe { GetLastError() }, Ordering::Relaxed);
+        REBUILD_STATUS.store(runtime::BridgeRuntimeRebuild(null_mut()), Ordering::Release);
+        unsafe { SetLastError(0x11223344) };
+        result
+    }
+
+    #[test]
+    fn promotion_invocation_closed_before_reads_stays_rejected_across_original_rebuild() {
+        if !child("promotion_invocation_closed_before_reads_stays_rejected_across_original_rebuild")
+        {
+            return;
+        }
+        runtime::allocate_trace().unwrap();
+        assert!(runtime::start_observation(MAX_ACTIVE_SECONDS));
+        let calls = unsafe { invocation_calls(closed_original as *const () as *mut u8) };
+        for call in calls {
+            assert_eq!(runtime::BridgeRuntimeClose(null_mut()), 0);
+            READ_ATTEMPTS.store(0, Ordering::Release);
+            let before = NATIVE_ORIGINALS.load(Ordering::Acquire);
+            unsafe { SetLastError(0x55667788) };
+            let result = unsafe { call(1, 3, 8, ORIGINAL) };
+            let error = unsafe { GetLastError() };
+            assert_eq!(result, ORIGINAL & !255);
+            assert_eq!(NATIVE_ORIGINALS.load(Ordering::Acquire), before + 1);
+            assert_eq!(REBUILD_STATUS.load(Ordering::Acquire), 0);
+            assert_eq!(ORIGINAL_ERROR.load(Ordering::Acquire), 0x55667788);
+            assert_eq!(error, 0x11223344);
+            assert_eq!(
+                READ_ATTEMPTS.load(Ordering::Acquire),
+                0,
+                "refused cookie must not acquire metadata or read native identity after Rebuild"
+            );
+        }
+        assert_eq!(runtime::BridgeRuntimeClose(null_mut()), 0);
+        unsafe { restore() }.unwrap();
+    }
+
+    #[test]
+    fn promotion_invocation_normal_return_and_exit_panic_settle_after_observation_expiry() {
+        if !child(
+            "promotion_invocation_normal_return_and_exit_panic_settle_after_observation_expiry",
+        ) {
+            return;
+        }
+        let mut fixture = Fixture::new();
+        fixture.catalog();
+        fixture.select(200, &[]);
+        let target = unsafe { fixture._page.add(1024) };
+        let code = [0xff, 0x41, 0x78, 0x4c, 0x89, 0xc8, 0xc3];
+        unsafe { ptr::copy_nonoverlapping(code.as_ptr(), target, code.len()) };
+        let (sites, calls) = unsafe { sites(fixture._page, target) };
+        unsafe { install_sites(sites, target) }.unwrap();
+        runtime::expire_observation();
+        assert_eq!(runtime::BridgeRuntimeStopObservation(null_mut()), 0);
+        for call in calls {
+            let before = fixture.governors[0x78 / 8];
+            let ordinary = unsafe { call(fixture.this(), fixture.person(), 8, ORIGINAL) };
+            END_PANIC.store(true, Ordering::Release);
+            let panic = unsafe { call(fixture.this(), fixture.person(), 8, ORIGINAL) };
+            let resumed = unsafe { call(fixture.this(), fixture.person(), 8, ORIGINAL) };
+            BEGIN_PANIC.store(true, Ordering::Release);
+            let entry_panic = unsafe { call(fixture.this(), fixture.person(), 8, ORIGINAL) };
+            assert_eq!(
+                (ordinary, panic, resumed),
+                (ORIGINAL, ORIGINAL & !255, ORIGINAL)
+            );
+            assert_eq!(entry_panic, ORIGINAL & !255);
+            assert_eq!(
+                fixture.governors[0x78 / 8],
+                before + 4,
+                "original once per call including helper panic"
+            );
+        }
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            0,
+            "no held invocation remains"
+        );
+        unsafe { restore() }.unwrap();
+    }
+
+    #[test]
+    fn promotion_invocation_raw_unwind_flags_settle_only_the_owned_cookie_once() {
+        if !child("promotion_invocation_raw_unwind_flags_settle_only_the_owned_cookie_once") {
+            return;
+        }
+        runtime::allocate_trace().unwrap();
+        assert!(runtime::start_observation(MAX_ACTIVE_SECONDS));
+        #[repr(align(16))]
+        struct Frame([u8; 0x1c8]);
+        let mut frame = Frame([0; 0x1c8]);
+        let native = unsafe { frame.0.as_mut_ptr().add(0xc0).cast::<NativeInvocation>() };
+        begin(native, 0, 0, 0);
+        let held = unsafe { (*native).cookie.load(Ordering::Acquire) };
+        assert!(held >= 2);
+        let mut record: EXCEPTION_RECORD = unsafe { std::mem::zeroed() };
+        assert_eq!(
+            unsafe { unwind(&record, frame.0.as_ptr() as usize, null_mut(), null_mut()) },
+            1
+        );
+        assert_eq!(
+            unsafe { (*native).cookie.load(Ordering::Acquire) },
+            held,
+            "exception search is not invocation completion"
+        );
+        record.ExceptionFlags = 2;
+        unsafe { SetLastError(0xabc123) };
+        let disposition =
+            unsafe { unwind(&record, frame.0.as_ptr() as usize, null_mut(), null_mut()) };
+        let error = unsafe { GetLastError() };
+        assert_eq!(disposition, 1);
+        assert_eq!(error, 0xabc123);
+        assert_eq!(unsafe { (*native).cookie.load(Ordering::Acquire) }, 0);
+        assert_eq!(runtime::BridgeRuntimeClose(null_mut()), 0);
+        assert_eq!(runtime::BridgeRuntimeRebuild(null_mut()), 0);
+        let newer = AtomicU64::new(runtime::invocation_start());
+        assert!(newer.load(Ordering::Acquire) > held);
+        unsafe { unwind(&record, frame.0.as_ptr() as usize, null_mut(), null_mut()) };
+        assert_eq!(end(native, ORIGINAL), ORIGINAL & !255);
+        unsafe { runtime::invocation_finish(&newer) };
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            0,
+            "repeated unwind/normal finish must not settle a newer generation"
+        );
+    }
+
+    global_asm!(
+        ".globl promotion_runtime_original_unwinds", ".seh_proc promotion_runtime_original_unwinds",
+        "promotion_runtime_original_unwinds:", "sub rsp,0x28", ".seh_stackalloc 0x28", ".seh_endprologue",
+        "lock inc qword ptr [rip+{count}]", "call {original}", "add rsp,0x28", "ret", ".seh_endproc",
+        count = sym NATIVE_ORIGINALS, original = sym promotion_original_unwinds,
+    );
+    unsafe extern "system" {
+        fn promotion_runtime_original_unwinds();
+        fn root_flags_restore_pushed();
+        fn root_flags_restore_pop();
+        fn root_flags_restore_ret();
+        fn root_flags_save_pushed();
+        fn root_flags_save_pop();
+        fn root_flags_save_ret();
+    }
+
+    #[test]
+    fn promotion_invocation_flags_helpers_unwind_to_exact_gateway_cookie() {
+        if !child("promotion_invocation_flags_helpers_unwind_to_exact_gateway_cookie") {
+            return;
+        }
+        runtime::allocate_trace().unwrap();
+        assert!(runtime::start_observation(MAX_ACTIVE_SECONDS));
+        #[repr(align(16))]
+        struct Stack([u64; 96]);
+        for (pc, pushed) in [
+            (root_flags_restore_pushed as *const () as u64, true),
+            (root_flags_restore_pop as *const () as u64, true),
+            (root_flags_restore_ret as *const () as u64, false),
+            (root_flags_save_pushed as *const () as u64, true),
+            (root_flags_save_pop as *const () as u64, true),
+            (root_flags_save_ret as *const () as u64, false),
+        ] {
+            let mut stack = Stack([0; 96]);
+            let gateway_sp = unsafe { stack.0.as_mut_ptr().add(4) } as u64;
+            let native = (gateway_sp + 0xc0) as *mut NativeInvocation;
+            begin(native, 0, 0, 0);
+            assert!(unsafe { (*native).cookie.load(Ordering::Acquire) } >= 2);
+            stack.0[3] = runtime_promotion_return as *const () as u64;
+            stack.0[2] = 0x202; // helper's temporary flags, never a return RIP
+            stack.0[4 + 0x1c8 / 8] = 0x11223344;
+            let mut context: CONTEXT = unsafe { std::mem::zeroed() };
+            context.Rsp = gateway_sp - if pushed { 16 } else { 8 };
+            context.Rip = pc;
+            let (mut base, mut data, mut establisher) = (0, null_mut(), 0);
+            let helper = unsafe { RtlLookupFunctionEntry(pc, &mut base, null_mut()) };
+            assert!(!helper.is_null());
+            unsafe {
+                RtlVirtualUnwind(
+                    0,
+                    base,
+                    pc,
+                    helper,
+                    &mut context,
+                    &mut data,
+                    &mut establisher,
+                    null_mut(),
+                )
+            };
+            assert_eq!(context.Rsp, gateway_sp);
+            assert_eq!(context.Rip, runtime_promotion_return as *const () as u64);
+            let gateway = unsafe { RtlLookupFunctionEntry(context.Rip, &mut base, null_mut()) };
+            assert!(!gateway.is_null());
+            let handler = unsafe {
+                RtlVirtualUnwind(
+                    2,
+                    base,
+                    context.Rip,
+                    gateway,
+                    &mut context,
+                    &mut data,
+                    &mut establisher,
+                    null_mut(),
+                )
+            };
+            assert_eq!(handler, unwind as *const () as usize);
+            assert_eq!(establisher, gateway_sp);
+            assert_eq!(context.Rip, 0x11223344);
+            assert_eq!(context.Rsp, gateway_sp + 0x1d0);
+            let mut record: EXCEPTION_RECORD = unsafe { std::mem::zeroed() };
+            record.ExceptionFlags = 2;
+            unsafe { unwind(&record, establisher as usize, &mut context, null_mut()) };
+            assert_eq!(unsafe { (*native).cookie.load(Ordering::Acquire) }, 0);
+        }
+        assert_eq!(runtime::BridgeRuntimeClose(null_mut()), 0);
+    }
+
+    #[test]
+    fn promotion_invocation_actual_seh_returns_to_native_caller_and_drains() {
+        if !child("promotion_invocation_actual_seh_returns_to_native_caller_and_drains") {
+            return;
+        }
+        runtime::allocate_trace().unwrap();
+        assert!(runtime::start_observation(MAX_ACTIVE_SECONDS));
+        let calls =
+            unsafe { invocation_calls(promotion_runtime_original_unwinds as *const () as *mut u8) };
+        let mut state = [0u64; 2];
+        for call in calls {
+            let before = NATIVE_ORIGINALS.load(Ordering::Acquire);
+            let landed = unsafe { promotion_unwind_driver(state.as_mut_ptr(), call as usize) };
+            assert_eq!(landed, 1);
+            assert_eq!(NATIVE_ORIGINALS.load(Ordering::Acquire), before + 1);
+            assert_eq!(
+                runtime::BridgeRuntimeClose(null_mut()),
+                0,
+                "actual native unwind must release frame lease"
+            );
+            assert_eq!(runtime::BridgeRuntimeRebuild(null_mut()), 0);
+        }
+        assert_eq!(runtime::BridgeRuntimeClose(null_mut()), 0);
+        unsafe { restore() }.unwrap();
+    }
+}
