@@ -1,7 +1,6 @@
 //! Explicit passive root capture. Never installed by BridgeRuntimeInstall.
 //! The only receivers retained are within the current native invocation.
 use super::*;
-mod submission;
 use civ6_bootstrap_rs::protocol::{
     ROOT_BYTES, ROOT_CLOSED, ROOT_CONFIG_VERSION, ROOT_MAGIC, ROOT_ROWS, ROOT_VERSION, RootConfig,
 };
