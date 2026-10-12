@@ -1198,7 +1198,7 @@ mod tests {
         let until = Instant::now() + Duration::from_secs(30);
         loop {
             if let Some(status) = process.try_wait().unwrap() {
-                assert!(status.success());
+                assert!(status.success(), "owned OS child {name}: {status:?}");
                 break;
             }
             if Instant::now() >= until {

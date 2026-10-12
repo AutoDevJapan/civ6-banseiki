@@ -726,6 +726,16 @@ impl SubmissionPipeline {
     fn prepare_code(&mut self) {
         submission_observed_fixture(self.core.base as usize, self.host.base as usize);
         h(15).store(0, Ordering::Release);
+        // Test gateways normally use injected originals. This pipeline must
+        // replay the real displaced prologues and their installed continuation.
+        submission::SUBMISSION_TEST_ORIGINALS[0].store(
+            submission::submission_push_original as *const () as u64,
+            Ordering::Release,
+        );
+        submission::SUBMISSION_TEST_ORIGINALS[1].store(
+            submission::submission_publish_original as *const () as u64,
+            Ordering::Release,
+        );
         let mut p = vec![0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xec, 0x20];
         // RSI=owner, RBX=list2, count++, own submit-control byte.
         p.extend_from_slice(&[
