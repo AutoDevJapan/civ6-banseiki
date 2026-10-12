@@ -1,7 +1,9 @@
 //! Two-wrapper opt-in capture, sharing the root gateway/CAS/stop machinery.
 //! Snapshot addresses are opaque scalars. No job pointer is followed at exit.
 use super::*;
-use civ6_bootstrap_rs::protocol::{SUBMISSION_BYTES, SUBMISSION_MAGIC, SUBMISSION_ROW};
+use civ6_bootstrap_rs::protocol::{
+    SUBMISSION_BYTES, SUBMISSION_MAGIC, SUBMISSION_ROW, SUBMISSION_ROWS,
+};
 pub(super) mod observed;
 pub(super) use observed::TRACE;
 #[cfg(test)]
@@ -22,9 +24,9 @@ pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE: u64 = SUBMISSION_BYTES as u
 pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
     for (i, v) in [
         SUBMISSION_MAGIC,
-        6,
+        7,
         SUBMISSION_BYTES as u64,
-        ROOT_ROWS as u64,
+        SUBMISSION_ROWS as u64,
         SUBMISSION_ROW as u64,
         u64::from(config.pid),
         config.created_filetime,

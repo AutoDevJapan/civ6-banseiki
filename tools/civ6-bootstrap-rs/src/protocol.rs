@@ -24,10 +24,19 @@ pub const SUBMISSION_V2_BYTES: usize = ROOT_HEADER + SUBMISSION_V2_ROW * ROOT_RO
 pub const SUBMISSION_V3_ROW: usize = 280;
 pub const SUBMISSION_V3_BYTES: usize = ROOT_HEADER + SUBMISSION_V3_ROW * ROOT_ROWS;
 pub const SUBMISSION_ROW: usize = 384;
-pub const SUBMISSION_HEADER: usize = 640;
+pub const SUBMISSION_V6_HEADER: usize = 640;
 pub const SUBMISSION_BIRTHS: usize = 16;
-pub const SUBMISSION_BYTES: usize =
-    SUBMISSION_HEADER + SUBMISSION_ROW * ROOT_ROWS + SUBMISSION_BIRTHS * 144;
+pub const SUBMISSION_V6_BYTES: usize =
+    SUBMISSION_V6_HEADER + SUBMISSION_ROW * ROOT_ROWS + SUBMISSION_BIRTHS * 144;
+pub const SUBMISSION_CHAIN_ROWS: usize = 12;
+pub const SUBMISSION_ROWS: usize = SUBMISSION_CHAIN_ROWS * SUBMISSION_BIRTHS;
+// Separate diagnostic pairs, bounded by the existing invocation depth (8).
+pub const SUBMISSION_EXTRA_ROWS: usize = 2 * 8;
+pub const SUBMISSION_HEADER: usize = 704;
+pub const SUBMISSION_BIRTH_WORDS: usize = 22;
+pub const SUBMISSION_BYTES: usize = SUBMISSION_HEADER
+    + SUBMISSION_ROW * (SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS)
+    + SUBMISSION_BIRTHS * SUBMISSION_BIRTH_WORDS * 8;
 
 #[cfg(test)]
 mod observed_submission_tests {
@@ -40,14 +49,14 @@ mod observed_submission_tests {
         b[word * 8..word * 8 + 8].copy_from_slice(&v.to_le_bytes());
     }
     fn row_word(row: usize, field: usize) -> usize {
-        SUBMISSION_HEADER / 8 + row * SUBMISSION_ROW / 8 + field
+        SUBMISSION_V6_HEADER / 8 + row * SUBMISSION_ROW / 8 + field
     }
     fn fixture() -> Vec<u8> {
-        let mut b = vec![0; SUBMISSION_BYTES];
+        let mut b = vec![0; SUBMISSION_V6_BYTES];
         for (i, v) in [
             (0, SUBMISSION_MAGIC),
             (1, 4),
-            (2, SUBMISSION_BYTES as u64),
+            (2, SUBMISSION_V6_BYTES as u64),
             (3, 128),
             (4, 384),
             (5, 23),
@@ -167,7 +176,7 @@ mod observed_submission_tests {
                 put(&mut b, row_word(row, 0), row as u64 + 1);
             }
         }
-        let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+        let ledger = (SUBMISSION_V6_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
         for (j, v) in [
             1,
             P,
@@ -241,7 +250,7 @@ mod observed_submission_tests {
         );
         for token in [0, 3, 7] {
             let mut b = fixture();
-            let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+            let ledger = (SUBMISSION_V6_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
             put(&mut b, ledger + 16, token);
             let v = submission_trace(&b, 23, 29).unwrap();
             assert_eq!(v["capture_complete"], false);
@@ -250,7 +259,7 @@ mod observed_submission_tests {
     }
     #[test]
     fn observed_pending_reused_epoch_partial_sites_and_dropped_remain_unknown() {
-        let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+        let ledger = (SUBMISSION_V6_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
         for (offset, value) in [
             (ledger + 7, 0),
             (ledger + 10, 2),
@@ -277,7 +286,7 @@ mod observed_submission_tests {
         put(&mut b, 1, 5);
         put(&mut b, 20, 100);
         put(&mut b, 21, 101);
-        let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+        let ledger = (SUBMISSION_V6_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
         put(&mut b, ledger, 101);
         for row in 0..12 {
             put(&mut b, row_word(row, 35), 101);
@@ -307,14 +316,14 @@ mod observed_submission_tests {
     #[test]
     fn observed_same_p_t_serial_reissue_needs_all_previous_normal_returns_before_new_entry() {
         let mut b = provisional_fixture();
-        let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+        let ledger = (SUBMISSION_V6_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
         for row in 0..12 {
-            let original = b[SUBMISSION_HEADER + row * SUBMISSION_ROW
-                ..SUBMISSION_HEADER + (row + 1) * SUBMISSION_ROW]
+            let original = b[SUBMISSION_V6_HEADER + row * SUBMISSION_ROW
+                ..SUBMISSION_V6_HEADER + (row + 1) * SUBMISSION_ROW]
                 .to_vec();
             let next = 12 + row;
-            b[SUBMISSION_HEADER + next * SUBMISSION_ROW
-                ..SUBMISSION_HEADER + (next + 1) * SUBMISSION_ROW]
+            b[SUBMISSION_V6_HEADER + next * SUBMISSION_ROW
+                ..SUBMISSION_V6_HEADER + (next + 1) * SUBMISSION_ROW]
                 .copy_from_slice(&original);
             for field in [0, 3] {
                 let value = word(&b, row_word(next, field) * 8).unwrap() + 12;
@@ -409,11 +418,25 @@ mod observed_submission_tests {
 
 fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
-    if b.len() != SUBMISSION_BYTES
+    let v7 = version == 7;
+    let header = if v7 {
+        SUBMISSION_HEADER
+    } else {
+        SUBMISSION_V6_HEADER
+    };
+    let capacity = if v7 { SUBMISSION_ROWS } else { ROOT_ROWS };
+    let trace_size = if v7 {
+        SUBMISSION_BYTES
+    } else {
+        SUBMISSION_V6_BYTES
+    };
+    let birth_words = if v7 { SUBMISSION_BIRTH_WORDS } else { 18 };
+    let physical_rows = capacity + if v7 { SUBMISSION_EXTRA_ROWS } else { 0 };
+    if b.len() != trace_size
         || word(b, 0)? != SUBMISSION_MAGIC
-        || !matches!(version, 4..=6)
-        || word(b, 16)? != SUBMISSION_BYTES as u64
-        || word(b, 24)? != ROOT_ROWS as u64
+        || !matches!(version, 4..=7)
+        || word(b, 16)? != trace_size as u64
+        || word(b, 24)? != capacity as u64
         || word(b, 32)? != SUBMISSION_ROW as u64
         || word(b, 40)? != u64::from(pid)
         || word(b, 48)? != created
@@ -425,10 +448,41 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
     let epoch = word(b, 72)?;
     let next = usize::try_from(word(b, 80)?).map_err(|_| "observed row count")?;
     let count = usize::try_from(word(b, 232)?).map_err(|_| "observed birth count")?;
-    if next > ROOT_ROWS || next % 2 != 0 || count > SUBMISSION_BIRTHS {
+    let extra = if v7 {
+        usize::try_from(word(b, 680)?).map_err(|_| "extra count")?
+    } else {
+        0
+    };
+    if next > capacity
+        || next % 2 != 0
+        || count > SUBMISSION_BIRTHS
+        || extra > SUBMISSION_EXTRA_ROWS
+        || extra % 2 != 0
+    {
         return Err("observed bounded count".into());
     }
     let mut unknown = Vec::<String>::new();
+    if v7 {
+        if (0..5)
+            .map(|i| word(b, 640 + i * 8).unwrap_or(0))
+            .collect::<Vec<_>>()
+            != vec![
+                SUBMISSION_ROWS as u64,
+                12,
+                16,
+                SUBMISSION_BIRTH_WORDS as u64,
+                SUBMISSION_EXTRA_ROWS as u64,
+            ]
+            || word(b, 696)? != 0
+            || next != count * SUBMISSION_CHAIN_ROWS
+        {
+            return Err("chain reservation layout/count mismatch".into());
+        }
+        if extra > 0 || word(b, 688)? != 0 {
+            unknown
+                .push("unassigned/duplicate/unsupported calls or diagnostic loss recorded".into());
+        }
+    }
     let serial = if version >= 5 {
         word(b, 168)?
     } else {
@@ -467,16 +521,24 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
     let mut pairs = std::collections::BTreeMap::<u64, ([u64; 48], [u64; 48])>::new();
     let mut rows = Vec::new();
     let mut events = std::collections::BTreeSet::new();
-    for i in (0..next).step_by(2) {
+    let mut unused = Vec::new();
+    for i in (0..next)
+        .step_by(2)
+        .chain((capacity..capacity + extra).step_by(2))
+    {
         let read = |row: usize| -> Result<[u64; 48], String> {
             let mut r = [0; 48];
             for (j, v) in r.iter_mut().enumerate() {
-                *v = word(b, SUBMISSION_HEADER + row * SUBMISSION_ROW + j * 8)?;
+                *v = word(b, header + row * SUBMISSION_ROW + j * 8)?;
             }
             Ok(r)
         };
         let a = read(i)?;
         let z = read(i + 1)?;
+        if v7 && i < capacity && a == [0; 48] && z == [0; 48] {
+            unused.push(i);
+            continue;
+        }
         for r in [&a, &z] {
             rows.push(json!({"raw":r.to_vec(),"kind":r[1],"edge":r[2],"invocation_id":r[3],
                 "parent":r[4],"tid":r[5],"thread_created_filetime":r[6],"observed_core_epoch":r[7],
@@ -484,11 +546,11 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
                 "observed_birth_id":r[35],"opaque_p":r[36],"opaque_t":r[37],
                 "raw_return_r8":if r[2]==2 {Some(r[34])}else{None},"errors":r[20],
                 "current_entry_object_copied":r[38],"current_entry_read_status":r[39],
-                "entry_snapshot_words":if version==6&&r[1]==7 {&r[40..42]}else{&r[40..48]},
-                "current_host_p_vft":if version==6&&r[1]==7 {Some(r[42])}else{None},
-                "current_host_p_vft_copied":if version==6&&r[1]==7 {Some(r[43])}else{None},
-                "current_host_p_vft_read_error":if version==6&&r[1]==7 {Some(r[44])}else{None},
-                "current_host_p_vft_read_raw_bool":if version==6&&r[1]==7 {Some(r[45])}else{None},
+                "entry_snapshot_words":if version>=6&&r[1]==7 {&r[40..42]}else{&r[40..48]},
+                "current_host_p_vft":if version>=6&&r[1]==7 {Some(r[42])}else{None},
+                "current_host_p_vft_copied":if version>=6&&r[1]==7 {Some(r[43])}else{None},
+                "current_host_p_vft_read_error":if version>=6&&r[1]==7 {Some(r[44])}else{None},
+                "current_host_p_vft_read_raw_bool":if version>=6&&r[1]==7 {Some(r[45])}else{None},
                 "status":match r[2]{1=>"entry",2=>"normal_return",3=>"exception_unwind",_=>"unknown"},
                 "snapshot_scope":"entry only; no pointer dereference after return"}));
         }
@@ -527,7 +589,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             ));
         }
     }
-    let ledger = SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW;
+    let ledger = header + physical_rows * SUBMISSION_ROW;
     let mut births = Vec::new();
     let mut used_p = std::collections::BTreeSet::new();
     let mut used_t = std::collections::BTreeSet::new();
@@ -537,15 +599,34 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
     let mut accounted_calls = std::collections::BTreeSet::new();
     let mut complete_chains = 0;
     for i in 0..SUBMISSION_BIRTHS {
-        let mut w = [0u64; 18];
-        for (j, v) in w.iter_mut().enumerate() {
-            *v = word(b, ledger + i * 144 + j * 8)?;
+        let mut w = [0u64; SUBMISSION_BIRTH_WORDS];
+        for (j, v) in w.iter_mut().enumerate().take(birth_words) {
+            *v = word(b, ledger + i * birth_words * 8 + j * 8)?;
         }
         if i >= count {
-            if w != [0; 18] {
+            if w != [0; SUBMISSION_BIRTH_WORDS] {
                 unknown.push("unused birth slot nonzero".into());
             }
             continue;
+        }
+        if v7 {
+            let expected = [w[3], w[4], w[16], w[5], w[6], w[7]];
+            if w[18] != i as u64 * 12 || w[19] & !63 != 0 || w[20] & !w[19] != 0 || w[21] & !3 != 0
+            {
+                unknown.push("birth reservation/mask mismatch".into());
+            }
+            for (r, token) in expected.into_iter().enumerate() {
+                let start = i * 12 + r * 2;
+                let used = w[19] & (1 << r) != 0;
+                if (used && (token != start as u64 + 1 || unused.contains(&start)))
+                    || (!used && (token != 0 || !unused.contains(&start)))
+                {
+                    unknown.push("reserved role token/unused slots differ".into());
+                }
+            }
+            if w[19] != 63 || w[20] != 63 || w[21] != 0 {
+                unknown.push("reserved cycle lacks complete observed pair settlement; never-executed T remains unresolved".into());
+            }
         }
         for token in [w[3], w[4], w[5], w[6], w[7], w[16]]
             .into_iter()
@@ -561,10 +642,12 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             }
         }
         let unresolved = w[2] != 0 && w[11] & 256 == 0;
-        births.push(json!({"raw":w.to_vec(),"observed_birth_id":w[0],"opaque_p":w[1],"opaque_t":w[2],
+        births.push(json!({"raw":w[..birth_words].to_vec(),"observed_birth_id":w[0],"opaque_p":w[1],"opaque_t":w[2],
             "producer":w[3],"submit":w[4],"publication":w[5],"host_exec":w[6],"core_exec":w[7],
             "actual_push_host":w[16],"actual_push_host_return_r8":w[17],
-            "errors":w[15],"unresolved_not_executed_t":unresolved,"world_generation":null,"world_permit_issued":false}));
+            "errors":w[15],"unresolved_not_executed_t":unresolved,"world_generation":null,"world_permit_issued":false,
+            "reservation":if v7 {Some(json!({"row_start":w[18],"entered_pair_mask":w[19],"settled_pair_mask":w[20],
+                "sampling_flight_held":w[21]&1!=0,"terminal_exception":w[21]&2!=0}))}else{None}}));
         let Some((p, pr)) = pairs.get(&w[3]) else {
             unknown.push(format!("birth{} producer pair missing", w[0]));
             continue;
@@ -727,7 +810,8 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
         && word(b, 224)? == 1
         && unknown.is_empty();
     Ok(
-        json!({"schema":match version {6=>"todo880-native-submission-observed-trace-v6",5=>"todo880-native-submission-observed-trace-v5",_=>"todo880-native-submission-observed-trace-v4"},"pid":pid,"created_filetime":created,
+        json!({"schema":match version {7=>"todo880-native-submission-observed-trace-v7",6=>"todo880-native-submission-observed-trace-v6",5=>"todo880-native-submission-observed-trace-v5",_=>"todo880-native-submission-observed-trace-v4"},"pid":pid,"created_filetime":created,
+        "reserved_unused_pair_starts":unused,"unassigned_diagnostic_rows":extra,
         "entered_producer_serials":serial,"stored_birth_count":count,"normal_no_submit_returns":no_submit,
         "observed_core_epoch":epoch,"reserved_rows":next,"site_witnesses":sites,"rows":rows,"births":births,
         "excluded_calls":word(b,240)?,"excluded_unreadable_current_t":word(b,248)?,
@@ -743,7 +827,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
 /// this parser never follows them. Correspondence is not job ownership/join.
 pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
-    if matches!(version, 4..=6) {
+    if matches!(version, 4..=7) {
         return submission_observed_trace(b, pid, created);
     }
     let (row_bytes, trace_bytes) = match version {

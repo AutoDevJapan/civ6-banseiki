@@ -1,6 +1,9 @@
 //! Governor-only observed call correspondence. No World permit or task ownership.
 use super::*;
-use civ6_bootstrap_rs::protocol::{SUBMISSION_BIRTHS, SUBMISSION_HEADER};
+use civ6_bootstrap_rs::protocol::{
+    SUBMISSION_BIRTHS, SUBMISSION_BIRTH_WORDS, SUBMISSION_CHAIN_ROWS, SUBMISSION_EXTRA_ROWS,
+    SUBMISSION_HEADER, SUBMISSION_ROWS,
+};
 pub(in super::super) const EXTRA: [(usize, bool, [u8; 8], usize); 4] = [
     (
         0x4a79b0,
@@ -31,14 +34,25 @@ pub(in super::super) const EXTRA: [(usize, bool, [u8; 8], usize); 4] = [
 pub struct ObservedTrace {
     pub(in super::super) header: [AtomicU64; 32],
     pub(in super::super) sites: [[AtomicU64; 8]; 6],
-    pub(in super::super) rows: [[AtomicU64; 48]; ROOT_ROWS],
-    births: [[AtomicU64; 18]; SUBMISSION_BIRTHS],
+    budget: [AtomicU64; 8],
+    pub(in super::super) rows: [[AtomicU64; 48]; SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS],
+    births: [[AtomicU64; SUBMISSION_BIRTH_WORDS]; SUBMISSION_BIRTHS],
 }
 pub(in super::super) static TRACE: ObservedTrace = ObservedTrace {
     header: [const { AtomicU64::new(0) }; 32],
     sites: [const { [const { AtomicU64::new(0) }; 8] }; 6],
-    rows: [const { [const { AtomicU64::new(0) }; 48] }; ROOT_ROWS],
-    births: [const { [const { AtomicU64::new(0) }; 18] }; SUBMISSION_BIRTHS],
+    budget: [
+        AtomicU64::new(SUBMISSION_ROWS as u64),
+        AtomicU64::new(SUBMISSION_CHAIN_ROWS as u64),
+        AtomicU64::new(SUBMISSION_BIRTHS as u64),
+        AtomicU64::new(SUBMISSION_BIRTH_WORDS as u64),
+        AtomicU64::new(SUBMISSION_EXTRA_ROWS as u64),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+    ],
+    rows: [const { [const { AtomicU64::new(0) }; 48] }; SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS],
+    births: [const { [const { AtomicU64::new(0) }; SUBMISSION_BIRTH_WORDS] }; SUBMISSION_BIRTHS],
 };
 const _: () = assert!(std::mem::size_of::<ObservedTrace>() == SUBMISSION_BYTES);
 const _: () = assert!(std::mem::offset_of!(ObservedTrace, rows) == SUBMISSION_HEADER);
@@ -58,7 +72,7 @@ const HOST_PUSH_START: u64 = 8192;
 const HOST_PUSH_RETURN: u64 = 16384;
 #[derive(Clone, Copy)]
 struct Birth {
-    w: [u64; 18],
+    w: [u64; SUBMISSION_BIRTH_WORDS],
 }
 const COMPLETE: u64 = BORN
     | SUBMITTED
@@ -84,7 +98,13 @@ thread_local! {
 // Completion is observed full-frame completion only. No heap reread, flags,
 // sameSetWait, ownership, destructor or World authority is inferred here.
 fn completed(b: &Birth) -> bool {
-    if b.w[11] != COMPLETE || b.w[15] != 0 || b.w[2] == 0 {
+    if b.w[11] != COMPLETE
+        || b.w[15] != 0
+        || b.w[2] == 0
+        || b.w[19] != 63
+        || b.w[20] != 63
+        || b.w[21] != 0
+    {
         return false;
     }
     for (token, kind) in [
@@ -98,7 +118,7 @@ fn completed(b: &Birth) -> bool {
         let Some(i) = token
             .checked_sub(1)
             .and_then(|n| usize::try_from(n).ok())
-            .filter(|i| i + 1 < ROOT_ROWS)
+            .filter(|i| i + 1 < SUBMISSION_ROWS)
         else {
             return false;
         };
@@ -157,9 +177,52 @@ fn completed_reuse(book: &[Birth; SUBMISSION_BIRTHS], p: u64, t: Option<u64>, ev
 fn reserve_rows(count: u64) -> Option<u64> {
     h(10)
         .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-            n.checked_add(count).filter(|n| *n <= ROOT_ROWS as u64)
+            n.checked_add(count)
+                .filter(|n| *n <= SUBMISSION_ROWS as u64)
         })
         .ok()
+}
+fn role(kind: u64) -> Option<usize> {
+    match kind {
+        6 => Some(0),
+        4 => Some(1),
+        9 => Some(2),
+        5 => Some(3),
+        7 => Some(4),
+        8 => Some(5),
+        _ => None,
+    }
+}
+fn reserve_extra() -> Option<u64> {
+    TRACE.budget[5]
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+            v.checked_add(2)
+                .filter(|n| *n <= SUBMISSION_EXTRA_ROWS as u64)
+        })
+        .ok()
+        .map(|v| v + SUBMISSION_ROWS as u64)
+}
+fn live_t(t: u64) -> bool {
+    t != 0
+        && TRACE.births.iter().any(|b| {
+            b[21].load(Ordering::Acquire) & 1 != 0
+                && b[0].load(Ordering::Acquire) != 0
+                && b[11].load(Ordering::Acquire) & BOUND != 0
+                && b[2].load(Ordering::Acquire) == t
+        })
+}
+fn acquire_call(tls: bool, t: Option<u64>) -> bool {
+    h(12)
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+            if v & ROOT_CLOSED != 0 && ((!tls && !t.is_some_and(live_t)) || v & !ROOT_CLOSED == 0) {
+                None
+            } else if v & !ROOT_CLOSED == ROOT_CLOSED - 1 {
+                None
+            } else {
+                Some(v + 1)
+            }
+        })
+        .is_ok()
 }
 fn commit_entry(index: usize, mut row: [u64; 48]) {
     row[0] = 0;
@@ -168,8 +231,11 @@ fn commit_entry(index: usize, mut row: [u64; 48]) {
     }
     TRACE.rows[index][0].store(index as u64 + 1, Ordering::Release);
 }
-static BOOK: Mutex<[Birth; SUBMISSION_BIRTHS]> =
-    Mutex::new([Birth { w: [0; 18] }; SUBMISSION_BIRTHS]);
+static BOOK: Mutex<[Birth; SUBMISSION_BIRTHS]> = Mutex::new(
+    [Birth {
+        w: [0; SUBMISSION_BIRTH_WORDS],
+    }; SUBMISSION_BIRTHS],
+);
 #[cfg(test)]
 static FAIL_THREAD_LOOKUP: AtomicBool = AtomicBool::new(false);
 fn publish(index: usize, b: Birth) {
@@ -210,10 +276,12 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         let kind = saved.invocation.kind;
         let stack = STACK.with(Cell::get);
         let parent = stack.depth.checked_sub(1).map(|n| stack.frames[n]);
-        let may_inherit = parent.is_some_and(|p| {
+        let tls_inherit = parent.is_some_and(|p| {
             p.cookie == COOKIE && matches!((kind, p.kind), (4 | 5, 6) | (9, 4) | (8, 7))
         });
-        if !acquire(may_inherit) {
+        let reserved_t = (kind == 7).then_some(saved.gpr[0]);
+        let may_inherit = tls_inherit || reserved_t.is_some_and(live_t);
+        if !acquire_call(tls_inherit, reserved_t) {
             return;
         }
         flight.0 = true;
@@ -444,15 +512,19 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             exclude();
             return;
         }
-        let Some(mut row) = reserve_rows(if promotion.is_some() { 4 } else { 2 }) else {
-            h(11).fetch_add(1, Ordering::Relaxed);
-            unknown();
-            return;
-        };
+        let mut row;
         if let Some((slot, mut producer, mut entry)) = promotion {
+            let Some(base) = reserve_rows(SUBMISSION_CHAIN_ROWS as u64) else {
+                h(11).fetch_add(1, Ordering::Relaxed);
+                unknown();
+                return;
+            };
+            row = base;
             producer.token = row + 1;
             producer.list = slot as u64 + 1;
-            let mut b = Birth { w: [0; 18] };
+            let mut b = Birth {
+                w: [0; SUBMISSION_BIRTH_WORDS],
+            };
             b.w[0] = producer.world;
             b.w[1] = producer.manager;
             b.w[3] = producer.token;
@@ -462,6 +534,12 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             b.w[11] = BORN;
             b.w[12] = producer.native_rsp;
             b.w[15] = producer.errors;
+            b.w[18] = base;
+            b.w[19] = 1;
+            b.w[21] = 1;
+            // Own one sampling flight until all reserved roles settle, or an
+            // erroneous/SEH cycle has no accepted live frames. Never job cancel.
+            assert!(acquire(true));
             book[slot] = b;
             index = Some(slot);
             h(29).fetch_add(1, Ordering::AcqRel);
@@ -475,6 +553,37 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             });
             saved.invocation.parent = producer.token;
             row += 2;
+            b.w[19] |= 2;
+            book[slot] = b;
+        } else if let Some(slot) = index {
+            let r = role(kind).unwrap();
+            let mask = 1u64 << r;
+            if book[slot].w[19] & mask == 0 {
+                row = book[slot].w[18] + (r * 2) as u64;
+                book[slot].w[19] |= mask;
+            } else {
+                index = None;
+                detached = true;
+                fail(&mut saved.invocation, REUSED);
+                let Some(extra) = reserve_extra() else {
+                    TRACE.budget[6].fetch_add(1, Ordering::Relaxed);
+                    h(11).fetch_add(1, Ordering::Relaxed);
+                    unknown();
+                    return;
+                };
+                row = extra;
+            }
+        } else {
+            let Some(extra) = reserve_extra() else {
+                TRACE.budget[6].fetch_add(1, Ordering::Relaxed);
+                h(11).fetch_add(1, Ordering::Relaxed);
+                unknown();
+                return;
+            };
+            row = extra;
+            if saved.invocation.errors == 0 {
+                fail(&mut saved.invocation, EARLY);
+            }
         }
         let inv = &mut saved.invocation;
         inv.cookie = COOKIE;
@@ -752,6 +861,26 @@ fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) 
     r[37] = inv.set;
     // All snapshot fields are cloned; neither P nor T is followed after return.
     commit(index + 1, r);
+    if inv.list > 0 {
+        if let Ok(mut book) = BOOK.lock() {
+            let b = &mut book[inv.list as usize - 1];
+            b.w[20] |= 1 << role(inv.kind).unwrap();
+            if edge == 3 {
+                b.w[21] |= 2;
+            }
+            let retire =
+                b.w[21] & 1 != 0 && (b.w[20] == 63 || (b.w[15] != 0 && (b.w[19] & !b.w[20]) == 0));
+            if retire {
+                b.w[21] &= !1;
+            }
+            publish(inv.list as usize - 1, *b);
+            if retire {
+                h(12).fetch_sub(1, Ordering::Release);
+            }
+        } else {
+            unknown();
+        }
+    }
 }
 #[unsafe(no_mangle)]
 static OBSERVED_CONTINUE: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
@@ -869,12 +998,15 @@ pub(in super::super) fn fixture_continue(i: usize, target: usize) {
 }
 #[cfg(test)]
 pub(in super::super) fn fixture_birth(p: u64, t: u64) {
-    let mut b = Birth { w: [0; 18] };
+    let mut b = Birth {
+        w: [0; SUBMISSION_BIRTH_WORDS],
+    };
     b.w[0] = 1;
     b.w[1] = p;
     b.w[2] = t;
     b.w[10] = h(9).load(Ordering::Acquire);
     b.w[11] = BORN | SUBMITTED | BOUND;
+    b.w[18] = reserve_rows(SUBMISSION_CHAIN_ROWS as u64).unwrap();
     BOOK.lock().unwrap()[0] = b;
     publish(0, b);
     h(29).store(1, Ordering::Release);
@@ -882,7 +1014,26 @@ pub(in super::super) fn fixture_birth(p: u64, t: u64) {
 }
 #[cfg(test)]
 pub(in super::super) fn fixture_book(index: usize) -> [u64; 18] {
-    BOOK.lock().unwrap()[index].w
+    BOOK.lock().unwrap()[index].w[..18].try_into().unwrap()
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_extra_next() -> usize {
+    TRACE.budget[5].load(Ordering::Acquire) as usize
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_last_entry() -> usize {
+    TRACE
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r[0].load(Ordering::Acquire) != 0 && r[2].load(Ordering::Acquire) == 1)
+        .max_by_key(|(_, r)| r[23].load(Ordering::Acquire))
+        .unwrap()
+        .0
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_budget(index: usize) -> u64 {
+    TRACE.budget[index].load(Ordering::Acquire)
 }
 #[cfg(test)]
 pub(in super::super) fn fixture_bytes() -> Vec<u8> {
@@ -890,6 +1041,7 @@ pub(in super::super) fn fixture_bytes() -> Vec<u8> {
         .header
         .iter()
         .chain(TRACE.sites.iter().flatten())
+        .chain(TRACE.budget.iter())
         .chain(TRACE.rows.iter().flatten())
         .chain(TRACE.births.iter().flatten())
         .flat_map(|v| v.load(Ordering::Acquire).to_le_bytes())

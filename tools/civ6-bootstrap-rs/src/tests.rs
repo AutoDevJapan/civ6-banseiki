@@ -166,7 +166,9 @@ fn fresh_submission_prepare_selector_checks_current_v4_exports_without_installin
     }
     let image = CaptureImage::new(true);
     let input = image.input(true);
-    assert_eq!(protocol::SUBMISSION_BYTES, 52096);
+    assert_eq!(protocol::SUBMISSION_ROWS, 12 * 16);
+    assert_eq!(protocol::ROOT_ROWS, 128);
+    assert_eq!(protocol::SUBMISSION_BYTES, 83392);
     assert_eq!(RustBridgeBootstrapPrepareSubmissionObservation(&input), 0);
     let d = prepare_diagnostic_words();
     assert_eq!(&d[..5], &[1, 64, 2, 19, 0]);
