@@ -108,6 +108,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
             && a[3] == i as u64 + 1
             && a[3] == z[3]
             && a[4..21] == z[4..21]
+            && a[24..28] == z[24..28]
             && a[1] == z[1]
             && a[29] == z[29]
             && a[5] > 0
@@ -390,6 +391,44 @@ mod submission_protocol_tests {
                 false
             );
         }
+    }
+    #[test]
+    fn submission_return_copy_counts_and_read_errors_are_frozen_but_output_rdx_is_not() {
+        assert_eq!(
+            submission_trace(&fixture(), 23, 29).unwrap()["capture_complete"],
+            true
+        );
+        for row in [1usize, 3] {
+            for (field, value) in [
+                (24, if row == 1 { 0 } else { 1 }),
+                (25, 299),
+                (26, if row == 1 { 0 } else { 1 }),
+                (27, 299),
+            ] {
+                let mut b = fixture();
+                put(&mut b, ROOT_HEADER / 8 + row * 32 + field, value);
+                let trace = submission_trace(&b, 23, 29).unwrap();
+                assert_eq!(
+                    trace["capture_complete"], false,
+                    "return row{row} field{field}"
+                );
+                assert!(!trace["unknown"].as_array().unwrap().is_empty());
+                assert_eq!(
+                    trace["rows"][row]["raw"][field], value,
+                    "original changed bytes remain visible"
+                );
+            }
+        }
+        let mut b = fixture();
+        for row in [1usize, 3] {
+            put(&mut b, ROOT_HEADER / 8 + row * 32 + 28, 0x11223344);
+        }
+        let trace = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(
+            trace["capture_complete"], true,
+            "native output RDX is not the frozen input copy"
+        );
+        assert_eq!(trace["rows"][1]["output_rdx"], 0x11223344_u64);
     }
     #[test]
     fn submission_selector_is_exact_and_requires_explicit_controller_lifetime() {
