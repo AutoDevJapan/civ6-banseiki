@@ -5,7 +5,170 @@ pub const HEADER: usize = 72;
 pub const ROW: usize = 104;
 pub const CAPACITY: usize = 128;
 pub const TRACE_BYTES: usize = HEADER + ROW * CAPACITY;
+pub const ROOT_PREPARE_VERSION: u32 = 0x0880_1001;
+pub const ROOT_CONFIG_VERSION: u32 = 0x0880_1002;
+pub const ROOT_MAGIC: u64 = 0x544f_4f52_3038_3830;
+pub const ROOT_VERSION: u64 = 1;
+pub const ROOT_HEADER: usize = 448;
+pub const ROOT_ROW: usize = 192;
+pub const ROOT_ROWS: usize = 128;
+pub const ROOT_BYTES: usize = ROOT_HEADER + ROOT_ROW * ROOT_ROWS;
+pub const ROOT_CLOSED: u64 = 1 << 63;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RootConfig {
+    pub version: u32,
+    pub size: u32,
+    pub pid: u32,
+    pub max_seconds: u32,
+    pub created_filetime: u64,
+    pub core: u64,
+    pub trace_address: u64,
+    pub trace_size: u32,
+    pub reserved: u32,
+}
+
+/// Layout/record correspondence only. A normal wrapper return is not a join
+/// certificate; equal copies must be reported by the controller separately.
+pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    if b.len() != ROOT_BYTES
+        || word(b, 0)? != ROOT_MAGIC
+        || word(b, 8)? != ROOT_VERSION
+        || word(b, 16)? != ROOT_BYTES as u64
+        || word(b, 24)? != ROOT_ROWS as u64
+        || word(b, 32)? != ROOT_ROW as u64
+        || word(b, 40)? != pid as u64
+        || word(b, 48)? != created
+        || (25..32).any(|i| word(b, i * 8).ok() != Some(0))
+    {
+        return Err("root trace size/version/identity/reserved mismatch".into());
+    }
+    let next = usize::try_from(word(b, 80)?).map_err(|_| "root count")?;
+    if next > ROOT_ROWS || next % 2 != 0 {
+        return Err("root trace reservation count invalid".into());
+    }
+    let mut rows = Vec::new();
+    let mut pairs = std::collections::BTreeMap::new();
+    let mut unknown = Vec::new();
+    let mut events = std::collections::BTreeSet::new();
+    for i in 0..next {
+        let p = ROOT_HEADER + i * ROOT_ROW;
+        let w = |j: usize| word(b, p + j * 8);
+        if w(0)? != i as u64 + 1 {
+            unknown.push(format!("uncommitted row {i}"));
+            continue;
+        }
+        let kind = w(1)?;
+        let edge = w(2)?;
+        let id = w(3)?;
+        if !(1..=3).contains(&kind)
+            || !(1..=3).contains(&edge)
+            || id == 0
+            || id % 2 != 1
+            || id > next as u64
+            || w(23)? == 0
+            || w(23)? > word(b, 192)?
+            || !events.insert(w(23)?)
+            || (edge == 1 && id != i as u64 + 1)
+            || (edge != 1 && id != i as u64)
+        {
+            return Err("root row kind/edge/reservation invalid".into());
+        }
+        let raw: Vec<u64> = (0..24).map(w).collect::<Result<_, _>>()?;
+        pairs.entry(id).or_insert_with(Vec::new).push(raw.clone());
+        rows.push(json!({"sequence":raw[0],"kind":kind,"edge":edge,
+            "invocation":id,"parent":raw[4],"tid":raw[5],"thread_created_filetime":raw[6],
+            "core_epoch":raw[7],"original_caller":raw[8],"gateway_entry_rsp":raw[9],
+            "world":raw[10],"manager":raw[11],"set_address":raw[12],"list_id":raw[13],
+            "set_words":[raw[14],raw[15]],"metadata_words":[raw[16],raw[17]],
+            "original_rax":raw[18],"read_or_binding_errors":raw[19],"last_error":raw[20],
+            "native_entry_rsp":raw[21],"entry_rbx":raw[22],"event_sequence":raw[23]}));
+    }
+    let core = word(b, 56)?;
+    let mut wait_pairs = 0usize;
+    for (id, pair) in &pairs {
+        if pair.len() != 2 || pair[0][2] != 1 || pair[1][2] != 2 {
+            unknown.push(format!("invocation {id} has no normal return"));
+            continue;
+        }
+        let a = &pair[0];
+        let z = &pair[1];
+        if [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 21, 22]
+            .into_iter()
+            .any(|j| a[j] != z[j])
+            || a[19] != 0
+            || z[19] != 0
+        {
+            unknown.push(format!("invocation {id} binding/read mismatch"));
+            continue;
+        }
+        if a[1] == 3 {
+            let Some(parent) = pairs.get(&a[4]).filter(|v| v.len() == 2) else {
+                unknown.push(format!("wait {id} has no complete manager"));
+                continue;
+            };
+            let m = &parent[0];
+            let Some(world) = pairs.get(&m[4]).filter(|v| v.len() == 2) else {
+                unknown.push(format!("manager {} has no complete world", m[3]));
+                continue;
+            };
+            let r = &world[0];
+            // Reservation row order is not execution order.
+            let binding = m[1] == 2
+                && r[1] == 1
+                && parent[1][2] == 2
+                && world[1][2] == 2
+                && m[19] == 0
+                && parent[1][19] == 0
+                && r[19] == 0
+                && world[1][19] == 0
+                && a[8] == core.checked_add(0x4a1196).ok_or("core overflow")?
+                && m[8] == core.checked_add(0x63e1d5).ok_or("core overflow")?
+                && a[12].checked_sub(0x400) == Some(m[11])
+                && a[9].checked_add(0x40) == Some(m[21])
+                && m[9].checked_add(0x30) == Some(r[21])
+                && a[22] == m[11]
+                && m[22] == r[10]
+                && [5, 6, 7, 10]
+                    .into_iter()
+                    .all(|j| a[j] == m[j] && m[j] == r[j])
+                && r[23] < m[23]
+                && m[23] < a[23]
+                && a[23] < z[23]
+                && z[23] < parent[1][23]
+                && parent[1][23] < world[1][23];
+            if binding {
+                wait_pairs += 1;
+            } else {
+                unknown.push(format!("wait {id} exact parent mismatch"));
+            }
+        }
+    }
+    let stopped = word(b, 184)? == 2 && word(b, 96)? == ROOT_CLOSED;
+    let clean = stopped
+        && word(b, 88)? == 0
+        && word(b, 104)? == 0
+        && word(b, 112)? == 0
+        && word(b, 120)? == 7
+        && word(b, 128)? == 0
+        && word(b, 176)? == 0
+        && unknown.is_empty();
+    Ok(
+        json!({"schema":"todo880-root-observation-trace-v1","pid":pid,
+        "created_filetime":created,"core":core,"core_epoch":word(b,72)?,
+        "reserved_rows":next,"rows":rows,"accepted_calls_stopped":stopped,
+        "same_manager_wait_normal_returns":wait_pairs,
+        "capture_complete":clean && wait_pairs > 0,"unknown":unknown,
+        "site_witnesses":(0..3).map(|i| (0..8).map(|j| word(b,256+i*64+j*8)).collect::<Result<Vec<_>,_>>()).collect::<Result<Vec<_>,_>>()?,
+        "not_established_by_this_capture":["native producer admission seal","pending publication or cancellation",
+            "rePush absence","host indirect target and arena join path","all six other domains exited",
+            "synchronous4A7AD0/5E2D0 and higher callers exited","world lifetime","runtime activation authority"]}),
+    )
+}
 pub struct Request {
+    /// Only the distinct root schema can opt into the passive three-entry shim.
+    pub root_only: bool,
     pub pid: u32,
     pub created: u64,
     pub seconds: u32,
@@ -61,6 +224,7 @@ impl Request {
         let fields = match v["schema"].as_str() {
             Some("todo880-bootstrap-controller-v2") => &fields[..9],
             Some("todo880-bootstrap-controller-v3") => &fields[..],
+            Some("todo880-root-observation-controller-v1") => &fields[..],
             _ => return Err("bootstrap request schema/fields".into()),
         };
         if map.len() != fields.len() || map.keys().any(|k| !fields.contains(&k.as_str())) {
@@ -85,6 +249,7 @@ impl Request {
         };
         let (seconds, controller_seconds) = Self::durations(v)?;
         Ok(Self {
+            root_only: v["schema"] == "todo880-root-observation-controller-v1",
             pid: u32::try_from(num("pid")?).map_err(|_| "PID overflow")?,
             created: num("created_filetime")?,
             seconds,
