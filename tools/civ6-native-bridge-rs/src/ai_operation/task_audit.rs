@@ -431,6 +431,462 @@ mod worker_payload {
                 "992280 publication of this payload","Cancel and reissue completion",
                 "safe old-epoch ticket transfer","all-domain Close/Rebuild authority"]}))
     }
+
+    /// Appended to the ordinary fixed-file audit after BOTH original hash gates.
+    pub(super) fn inspect_governor_birth(core: &[u8]) -> Result<Value, String> {
+        governor_birth::inspect(core)
+    }
+    mod governor_birth {
+        use super::*;
+        const GOV_CTOR_PREFIX: &[u8] = &[
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x48, 0x89, 0x7c, 0x24,
+            0x18, 0x55, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x8b, 0xec, 0x48,
+            0x83, 0xec, 0x50, 0x48, 0x8b, 0xf9, 0xe8, 0x79, 0xc3, 0xb9, 0xff, 0x48, 0x8d, 0x05,
+            0x32, 0x08, 0x56, 0x00, 0x45, 0x33, 0xe4, 0x48, 0x89, 0x07,
+        ];
+        const GOV_JOB_INIT: &[u8] = &[
+            0x48, 0x8d, 0x05, 0x4c, 0xff, 0x51, 0x00, 0x4c, 0x89, 0xa7, 0xd8, 0x00, 0x00, 0x00,
+            0x4c, 0x89, 0xa7, 0xe0, 0x00, 0x00, 0x00, 0x48, 0x8d, 0x0d, 0x67, 0x39, 0x55, 0x00,
+            0x48, 0x89, 0x87, 0xe8, 0x00, 0x00, 0x00, 0x0f, 0x57, 0xc0, 0x4c, 0x89, 0xa7, 0xf0,
+            0x00, 0x00, 0x00, 0x48, 0x8d, 0x05, 0xa7, 0x05, 0x56, 0x00, 0x48, 0x89, 0x87, 0xd0,
+            0x00, 0x00, 0x00, 0x48, 0x8d, 0x05, 0x4e, 0x39, 0x55, 0x00, 0x2b, 0xc1, 0x4c, 0x89,
+            0xa7, 0xf8, 0x00, 0x00, 0x00, 0xff, 0xc0, 0x66, 0xc7, 0x87, 0x08, 0x01, 0x00, 0x00,
+            0x01, 0x00,
+        ];
+        const GOV_CTOR_RETURN: &[u8] = &[
+            0x4c, 0x8d, 0x5c, 0x24, 0x50, 0x48, 0x8b, 0xc7, 0x49, 0x8b, 0x5b, 0x30, 0x49, 0x8b,
+            0x73, 0x38, 0x49, 0x8b, 0x7b, 0x40, 0x49, 0x8b, 0xe3, 0x41, 0x5f, 0x41, 0x5e, 0x41,
+            0x5d, 0x41, 0x5c, 0x5d, 0xc3,
+        ];
+        const GOV_OWNER_DROP: &[u8] = &[
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d, 0x05, 0xdf,
+            0x02, 0x56, 0x00, 0x48, 0x8b, 0xd9, 0x48, 0x89, 0x01, 0x48, 0x8d, 0x05, 0x4a, 0x02,
+            0x56, 0x00, 0x48, 0x89, 0x81, 0x90, 0x01, 0x00, 0x00, 0x48, 0x8b, 0x89, 0x98, 0x01,
+            0x00, 0x00, 0x48, 0x85, 0xc9, 0x74, 0x0c, 0x48, 0x8d, 0x93, 0x90, 0x01, 0x00, 0x00,
+            0xe8, 0x83, 0x0b, 0x4f, 0x00, 0x48, 0x8d, 0x8b, 0xa0, 0x01, 0x00, 0x00, 0xe8, 0x37,
+            0xff, 0xff, 0xff, 0x48, 0x8d, 0x8b, 0x90, 0x01, 0x00, 0x00, 0xe8, 0x3b, 0xef, 0x4e,
+            0x00, 0x48, 0x8b, 0x8b, 0x30, 0x01, 0x00, 0x00, 0x48, 0x8d, 0x05, 0x7d, 0x01, 0x56,
+            0x00, 0x48, 0x89, 0x83, 0x28, 0x01, 0x00, 0x00, 0x48, 0x85, 0xc9, 0x74, 0x0c, 0x48,
+            0x8d, 0x93, 0x28, 0x01, 0x00, 0x00, 0xe8, 0x45, 0x0b, 0x4f, 0x00, 0x48, 0x8d, 0x8b,
+            0x38, 0x01, 0x00, 0x00, 0xe8, 0x89, 0xfe, 0xff, 0xff, 0x48, 0x8d, 0x8b, 0x28, 0x01,
+            0x00, 0x00, 0xe8, 0xfd, 0xee, 0x4e, 0x00, 0x48, 0x8b, 0x8b, 0x18, 0x01, 0x00, 0x00,
+            0x48, 0x8d, 0x05, 0xe7, 0x4b, 0x55, 0x00, 0x48, 0x89, 0x83, 0x10, 0x01, 0x00, 0x00,
+            0x48, 0x85, 0xc9, 0x74, 0x0c, 0x48, 0x8d, 0x93, 0x10, 0x01, 0x00, 0x00, 0xe8, 0x07,
+            0x0b, 0x4f, 0x00, 0x48, 0x8d, 0x8b, 0x10, 0x01, 0x00, 0x00, 0xe8, 0xcb, 0xee, 0x4e,
+            0x00, 0x48, 0x8d, 0x8b, 0xd0, 0x00, 0x00, 0x00, 0xe8, 0xdf, 0xbb, 0x4e, 0x00, 0x48,
+            0x8d, 0x8b, 0xc0, 0x00, 0x00, 0x00, 0xe8, 0x23, 0xc4, 0x15, 0x00, 0x48, 0x8d, 0x8b,
+            0xb0, 0x00, 0x00, 0x00, 0xe8, 0x17, 0xc4, 0x15, 0x00, 0x48, 0x8d, 0x8b, 0xa0, 0x00,
+            0x00, 0x00, 0xe8, 0x0b, 0xc4, 0x15, 0x00, 0x48, 0x8d, 0x4b, 0x08, 0xe8, 0x32, 0xf2,
+            0x4e, 0x00, 0x48, 0x8b, 0xcb, 0x48, 0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83, 0xc4, 0x20,
+            0x5f, 0xe9, 0x30, 0xbd, 0xb9, 0xff,
+        ];
+        const GOV_JOB_DROP: &[u8] = &[
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20, 0x8b, 0xda, 0x48, 0x8b,
+            0xf9, 0xe8, 0x9c, 0xaf, 0x4e, 0x00, 0xf6, 0xc3, 0x01, 0x74, 0x0d, 0xba, 0x40, 0x00,
+            0x00, 0x00, 0x48, 0x8b, 0xcf, 0xe8, 0xe2, 0x8c, 0x50, 0x00, 0x48, 0x8b, 0xc7, 0x48,
+            0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83, 0xc4, 0x20, 0x5f, 0xc3,
+        ];
+        const GOV_OWNER_DELETE: &[u8] = &[
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20, 0x8b, 0xda, 0x48, 0x8b,
+            0xf9, 0xe8, 0xac, 0xf2, 0xff, 0xff, 0xf6, 0xc3, 0x01, 0x74, 0x0d, 0xba, 0xf0, 0x01,
+            0x00, 0x00, 0x48, 0x8b, 0xcf, 0xe8, 0xa2, 0x8c, 0x50, 0x00, 0x48, 0x8b, 0xc7, 0x48,
+            0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83, 0xc4, 0x20, 0x5f, 0xc3,
+        ];
+        const GOV_CREATE: &[u8] = &[
+            0x48, 0x83, 0xec, 0x38, 0xe8, 0x97, 0xc2, 0xee, 0xff, 0x41, 0xb9, 0x86, 0x01, 0x00,
+            0x00, 0xc7, 0x44, 0x24, 0x28, 0x00, 0x00, 0x00, 0x00, 0x8b, 0xd0, 0xc7, 0x44, 0x24,
+            0x20, 0x33, 0x00, 0x00, 0x00, 0x4c, 0x8d, 0x05, 0x68, 0xf4, 0x55, 0x00, 0x41, 0x8d,
+            0x49, 0x6a, 0xe8, 0x4f, 0x95, 0x4e, 0x00, 0x48, 0x85, 0xc0, 0x74, 0x0c, 0x48, 0x8b,
+            0xc8, 0x48, 0x83, 0xc4, 0x38, 0xe9, 0x6e, 0xeb, 0xff, 0xff, 0x48, 0x83, 0xc4, 0x38,
+            0xc3,
+        ];
+        const GOV_JOB_BASE_RESET: &[u8] = &[
+            0x48, 0x8d, 0x05, 0x79, 0x3e, 0x03, 0x00, 0x48, 0x89, 0x01, 0xc3,
+        ];
+
+        fn spans(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+            let mut result = Vec::new();
+            for (rva, bytes, whole) in [
+                (0x4a5f30, GOV_CTOR_PREFIX, false),
+                (0x4a606d, GOV_JOB_INIT, false),
+                (0x4a638c, GOV_CTOR_RETURN, false),
+                (0x4a64a0, GOV_OWNER_DROP, true),
+                (0x4a71a0, GOV_JOB_DROP, true),
+                (0x4a71e0, GOV_OWNER_DELETE, true),
+                (0x4a7380, GOV_CREATE, true),
+                (0x992150, GOV_JOB_BASE_RESET, false),
+            ] {
+                result.push(pe.witness(rva, bytes, whole)?);
+            }
+            // Separate neighboring table belongs to another destination R15,
+            // not to P=RDI+D0. Do not extend the two-method job table into it.
+            result.push(pe.witness(
+                0x4a600e,
+                &[
+                    0x48, 0x8d, 0x05, 0x43, 6, 0x56, 0, 0x48, 0x8b, 0x55, 0xe0, 0x49, 0x89, 7,
+                ],
+                false,
+            )?);
+            let (_, producer) = MANAGER_FLOW_BLOCKS
+                .iter()
+                .find(|(r, _)| *r == 0x4a7a27)
+                .ok_or("governor existing producer block absent")?;
+            result.push(pe.witness(0x4a7a27, producer, false)?);
+            Ok(result)
+        }
+        fn references(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+            let mut result = Vec::new();
+            for (rva, op, target) in [
+                (0x4a5f52, 0xe8, 0x422d0),
+                (0x4a73ac, 0xe8, 0x990900),
+                (0x4a73bd, 0xe9, 0x4a5f30),
+                (0x4a71af, 0xe8, 0x992150),
+                (0x4a71c1, 0xe8, 0x9afea8),
+                (0x4a71ef, 0xe8, 0x4a64a0),
+                (0x4a7201, 0xe8, 0x9afea8),
+                (0x4a656c, 0xe8, 0x992150),
+                (0x4a65ab, 0xe9, 0x422e0),
+                (0x4a7a4b, 0xe8, 0x4a1100),
+                (0x4a7a53, 0xe8, 0x4a10b0),
+            ] {
+                let actual = rel_target(rva, pe.span(rva, 5, true)?, op, 5, 1)?;
+                if actual != target {
+                    return Err("governor birth relative call/tail differs".into());
+                }
+                pe.span(target, 1, true)?;
+                result.push(
+                    json!({"rva":rva,"kind":if op==0xe8 {"direct_call"} else {"direct_tail"},
+                    "computed_target_rva":actual}),
+                );
+            }
+            for (rva, prefix, target) in [
+                (0x4a5f57, [0x48, 0x8d, 0x05], 0xa06790),
+                (0x4a606d, [0x48, 0x8d, 0x05], 0x9c5fc0),
+                (0x4a609a, [0x48, 0x8d, 0x05], 0xa06648),
+                (0x4a64aa, [0x48, 0x8d, 0x05], 0xa06790),
+                (0x4a600e, [0x48, 0x8d, 0x05], 0xa06658),
+                (0x992150, [0x48, 0x8d, 0x05], 0x9c5fd0),
+                (0x4a7a27, [0x48, 0x8b, 0x05], 0xb8aa68),
+                (0x4a7a3a, [0x4c, 0x8d, 0x05], 0xa06920),
+            ] {
+                let b = pe.span(rva, 7, true)?;
+                if b[..3] != prefix || rel_target(rva, b, prefix[0], 7, 3)? != target {
+                    return Err("governor birth RIP reference differs".into());
+                }
+                pe.span_any(target, 1)?;
+                result.push(json!({"rva":rva,"kind":"rip_relative_reference",
+                    "opcode_bytes":prefix,"computed_target_rva":target}));
+            }
+            Ok(result)
+        }
+        fn complete(
+            pe: &Pe<'_>,
+            begin: u32,
+            end: u32,
+            unwind: u32,
+            expected_sha: &str,
+            codes: &[u8],
+        ) -> Result<Value, String> {
+            let f = pe
+                .function(begin)
+                .ok_or("governor function pdata missing")?;
+            if f != (Function { begin, end, unwind }) || pe.chain(f)?.len() != 1 {
+                return Err("governor full function/unwind range differs".into());
+            }
+            let body = pe.span(begin, (end - begin) as usize, true)?;
+            if format!("{:x}", Sha256::digest(body)) != expected_sha {
+                return Err("governor complete function SHA differs".into());
+            }
+            if pe.span(unwind, codes.len(), false)? != codes {
+                return Err("governor full unwind bytes differ".into());
+            }
+            let h = pe.span(unwind, 4, false)?;
+            let prologue = pe.span(begin, usize::from(h[1]), true)?;
+            Ok(
+                json!({"begin_rva":begin,"end_rva":end,"span_bytes":body.len(),
+                "span_sha256":expected_sha,"unwind_rva":unwind,
+                "unwind_bytes_hex":codes.iter().map(|b|format!("{b:02x}")).collect::<String>(),
+                "prologue_bytes_hex":prologue.iter().map(|b|format!("{b:02x}")).collect::<String>(),
+                "claim_scope":"complete fixed disk function, not observed control flow/lifetime"}),
+            )
+        }
+        fn rtti_failure(pe: &Pe<'_>) -> Result<Value, String> {
+            let slot = 0xa06640;
+            let raw = u64_at(pe.span(slot, 8, false)?, 0)?;
+            if raw != 0xffff_ffff || raw.checked_sub(pe.base).is_some() {
+                return Err("governor fixed non-COL predecessor differs".into());
+            }
+            Ok(
+                json!({"table_rva":0xa06648,"preceding_slot_rva":slot,"raw_qword":raw,
+                "status":"not_established_invalid_COL_pointer","source_type_name":null,
+                "reason":"fixed predecessor is below preferred ImageBase; not a valid absolute x64 RTTI locator",
+                "scope":"this table predecessor only; no claim about RTTI elsewhere"}),
+            )
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+            fn image() -> Vec<u8> {
+                let mut b = vec![0u8; 0xb58000];
+                for (rva, bytes) in [
+                    (0x4a5f30, GOV_CTOR_PREFIX),
+                    (0x4a606d, GOV_JOB_INIT),
+                    (0x4a638c, GOV_CTOR_RETURN),
+                    (0x4a64a0, GOV_OWNER_DROP),
+                    (0x4a71a0, GOV_JOB_DROP),
+                    (0x4a71e0, GOV_OWNER_DELETE),
+                    (0x4a7380, GOV_CREATE),
+                    (0x992150, GOV_JOB_BASE_RESET),
+                ] {
+                    let p = (rva - 0xc00) as usize;
+                    b[p..p + bytes.len()].copy_from_slice(bytes);
+                }
+                let p = 0x4a600e - 0xc00;
+                b[p..p + 14].copy_from_slice(&[
+                    0x48, 0x8d, 0x05, 0x43, 6, 0x56, 0, 0x48, 0x8b, 0x55, 0xe0, 0x49, 0x89, 7,
+                ]);
+                let (_, block) = MANAGER_FLOW_BLOCKS
+                    .iter()
+                    .find(|(r, _)| *r == 0x4a7a27)
+                    .unwrap();
+                let p = 0x4a7a27 - 0xc00;
+                b[p..p + block.len()].copy_from_slice(block);
+                let p = 0xa06640 - 0x1400;
+                b[p..p + 8].copy_from_slice(&0xffff_ffffu64.to_le_bytes());
+                for (slot, target) in [
+                    (0xa06648, 0x4a71a0),
+                    (0xa06650, 0x4a8530),
+                    (0xa06790, 0x4a71e0),
+                ] {
+                    let p = slot - 0x1400;
+                    b[p..p + 8].copy_from_slice(&(0x180000000u64 + target).to_le_bytes());
+                }
+                b
+            }
+            fn pe(b: &[u8]) -> Pe<'_> {
+                Pe {
+                    image: b,
+                    base: 0x180000000,
+                    sections: vec![
+                        Section {
+                            name: *b".text\0\0\0",
+                            rva: 0x1000,
+                            virtual_size: 0x9b6000,
+                            raw: 0x400,
+                            size: 0x9b6000,
+                            flags: 0x60000020,
+                        },
+                        Section {
+                            name: *b".rdata\0\0",
+                            rva: 0x9b7000,
+                            virtual_size: 0x1a8124,
+                            raw: 0x9b5c00,
+                            size: 0x1a8200,
+                            flags: 0x40000040,
+                        },
+                    ],
+                    functions: vec![
+                        Function {
+                            begin: 0x4a5f30,
+                            end: 0x4a63ad,
+                            unwind: 0xaf1928,
+                        },
+                        Function {
+                            begin: 0x4a64a0,
+                            end: 0x4a65b0,
+                            unwind: 0xacae3c,
+                        },
+                        Function {
+                            begin: 0x4a71a0,
+                            end: 0x4a71d4,
+                            unwind: 0xacae3c,
+                        },
+                        Function {
+                            begin: 0x4a71e0,
+                            end: 0x4a7214,
+                            unwind: 0xacae3c,
+                        },
+                        Function {
+                            begin: 0x4a7380,
+                            end: 0x4a73c7,
+                            unwind: 0xb578e8,
+                        },
+                    ],
+                    relocations: [0xa06648, 0xa06650, 0xa06790].into_iter().collect(),
+                }
+            }
+            #[test]
+            fn governor_birth_owner_offsets_prologues_and_destroy_receiver_mutations_reject() {
+                let mut b = image();
+                assert!(spans(&pe(&b)).is_ok());
+                assert!(references(&pe(&b)).is_ok());
+                for rva in [
+                    0x4a5f50, 0x4a60a4, 0x4a607e, 0x4a6568, 0x4a71b7, 0x4a71ba, 0x4a7a31, 0x4a7a44,
+                ] {
+                    let p = rva - 0xc00;
+                    b[p] ^= 1;
+                    assert!(spans(&pe(&b)).is_err(), "mutation {rva:#x}");
+                    b[p] ^= 1;
+                }
+                let mut wrong = pe(&b);
+                wrong.functions[2].end += 1;
+                assert!(spans(&wrong).is_err());
+                assert!(spans(&pe(&b[..0x4a71d3 - 0xc00])).is_err());
+            }
+            #[test]
+            fn governor_birth_computed_rel32_rip_targets_and_bounds_reject() {
+                let mut b = image();
+                assert!(references(&pe(&b)).is_ok());
+                for rva in [0x4a73be, 0x4a71b0, 0x4a71f0, 0x4a656d, 0x4a609d, 0x4a7a2a] {
+                    let p = rva - 0xc00;
+                    b[p] ^= 1;
+                    assert!(references(&pe(&b)).is_err());
+                    b[p] ^= 1;
+                }
+                assert!(rel_target(0, &[0xe8, 0xf0, 0xff, 0xff, 0xff], 0xe8, 5, 1).is_err());
+            }
+            #[test]
+            fn governor_birth_rtti_absence_is_fixed_failure_not_a_type_or_adjacent_table_claim() {
+                let mut b = image();
+                let v = rtti_failure(&pe(&b)).unwrap();
+                assert!(v["source_type_name"].is_null());
+                assert_eq!(v["status"], "not_established_invalid_COL_pointer");
+                let p = 0xa06640 - 0x1400;
+                b[p..p + 8].copy_from_slice(&0x180a06600u64.to_le_bytes());
+                assert!(rtti_failure(&pe(&b)).is_err());
+                let mut table = pe(&b);
+                assert!(table.pointer(0xa06648, 0x4a71a0).is_ok());
+                table.relocations.remove(&0xa06648);
+                assert!(table.pointer(0xa06648, 0x4a71a0).is_err());
+                assert!(pe(&b).pointer(0xa06648, 0x4a71e0).is_err());
+            }
+            #[test]
+            fn governor_birth_full_span_sha_unwind_and_pdata_are_independent_guards() {
+                let mut b = image();
+                let p = 0xacae3c - 0x1400;
+                let codes = [1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70];
+                b[p..p + codes.len()].copy_from_slice(&codes);
+                let expected = "41fb6cefb7c5ab572672b84742aadf990669304009240219a5bafac49973d3f2";
+                assert!(complete(&pe(&b), 0x4a64a0, 0x4a65b0, 0xacae3c, expected, &codes).is_ok());
+                b[0x4a6508 - 0xc00] ^= 1;
+                assert!(complete(&pe(&b), 0x4a64a0, 0x4a65b0, 0xacae3c, expected, &codes).is_err());
+                b[0x4a6508 - 0xc00] ^= 1;
+                b[p + 5] ^= 1;
+                assert!(complete(&pe(&b), 0x4a64a0, 0x4a65b0, 0xacae3c, expected, &codes).is_err());
+            }
+        }
+        pub(super) fn inspect(core: &[u8]) -> Result<Value, String> {
+            let pe = Pe::parse(core)?;
+            let witnesses = spans(&pe)?;
+            let refs = references(&pe)?;
+            let functions = [
+                complete(
+                    &pe,
+                    0x4a5f30,
+                    0x4a63ad,
+                    0xaf1928,
+                    "0ae7315ceae95bf6def7024c984d9d5bd63df84886df36f494fbef1d321542c2",
+                    &[
+                        1, 0x1f, 0xc, 0, 0x1f, 0x74, 0x12, 0, 0x1f, 0x64, 0x11, 0, 0x1f, 0x34,
+                        0x10, 0, 0x1f, 0x92, 0x18, 0xf0, 0x16, 0xe0, 0x14, 0xd0, 0x12, 0xc0, 0x10,
+                        0x50,
+                    ],
+                )?,
+                complete(
+                    &pe,
+                    0x4a64a0,
+                    0x4a65b0,
+                    0xacae3c,
+                    "41fb6cefb7c5ab572672b84742aadf990669304009240219a5bafac49973d3f2",
+                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
+                )?,
+                complete(
+                    &pe,
+                    0x4a71a0,
+                    0x4a71d4,
+                    0xacae3c,
+                    "0cb7eaae207fc94bb18c31525afbd42e3b24c07c75b7c17f034493f6c6be8506",
+                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
+                )?,
+                complete(
+                    &pe,
+                    0x4a71e0,
+                    0x4a7214,
+                    0xacae3c,
+                    "8e77fe1a8e1ba3a58e2b1c3185bfd34991a0d0ac33769a366e3983f19e55594a",
+                    &[1, 0xa, 4, 0, 0xa, 0x34, 6, 0, 0xa, 0x32, 6, 0x70],
+                )?,
+                complete(
+                    &pe,
+                    0x4a7380,
+                    0x4a73c7,
+                    0xb578e8,
+                    "e23163f9d558e1676b6c93752235170e9df6f3a08c1f23deb41ad60b41a37a6c",
+                    &[1, 4, 1, 0, 4, 0x62, 0, 0],
+                )?,
+            ];
+            let slots = [
+                pe.pointer(0xa06648, 0x4a71a0)?,
+                pe.pointer(0xa06650, 0x4a8530)?,
+                pe.pointer(0xa06790, 0x4a71e0)?,
+            ];
+            if pe.span(0x9c5fc0, 16, false)? != b"<Null Job Name>\0"
+                || pe.span(0xa06920, 18, false)? != b"Governor Analyzer\0"
+            {
+                return Err("governor fixed name strings differ".into());
+            }
+            let fragment = pe
+                .function(0x4a7a4b)
+                .ok_or("governor producer pdata absent")?;
+            let producer_chain = pe.chain(fragment)?;
+            if producer_chain.last().is_none_or(|f| f.begin != 0x4a79b0) {
+                return Err("governor producer chain owner differs".into());
+            }
+            Ok(
+                json!({"schema":"todo880-governor-job-birth-owner-static-v1",
+                "core_sha256":format!("{:x}",Sha256::digest(core)),"witnesses":witnesses,
+                "complete_functions":functions,"computed_references":refs,"relocated_table_slots":slots,
+                "rtti":rtti_failure(&pe)?,
+                "owner_constructor":{"entry_rva":0x4a5f30,"input_receiver":"RCX saved into RDI at4A5F4F",
+                    "normal_return":"RAX=RDI at4A6391, conditional on normal returns and Win64 nonvolatile ABI",
+                    "table_rva":0xa06790,"allocation_caller_rva":0x4a7380,
+                    "allocation_call_rva":0x4a73ac,"allocation_size_argument":0x1f0,
+                    "constructor_tail_rva":0x4a73bd},
+                "embedded_job":{"relation":"each checked function uses its own input owner+D0; cross-invocation receiver equality unestablished",
+                    "offset":0xd0,"table_store_rva":0x4a60a1,"table_rva":0xa06648,
+                    "sized_deallocation_argument":0x40,"argument_rva":0x4a71b9,
+                    "construction_scope":"embedded initialization at this owner D0; no independent32-byte allocation in this slice",
+                    "initial_fields":[{"offset":8,"value":0},{"offset":16,"value":0},
+                        {"offset":24,"value":"Core+9C5FC0: <Null Job Name>"},
+                        {"offset":32,"value":0},{"offset":40,"value":0},
+                        {"offset":56,"width":2,"value":1}],
+                    "native_ticket_field_write":false},
+                "publication":{"producer_owner_entry":0x4a79b0,"job_address_rva":0x4a7a2e,
+                    "job_address":"RDX=RSI+D0; RSI saved from incoming RCX",
+                    "manager_load_rva":0x4a7a41,"manager_basis":"[Core+B8AA68]+250, not owner+250",
+                    "manager_receiver":"RBX passed to both4A1100 and4A10B0 after normal Push return",
+                    "metadata_rva":0xa06920,"metadata_text":"Governor Analyzer",
+                    "producer_chain":producer_chain.iter().map(|f|json!({"begin":f.begin,"end":f.end,"unwind":f.unwind})).collect::<Vec<_>>()},
+                "destruction":{"owner_table_virtual0":0x4a71e0,"owner_body":0x4a64a0,
+                    "embedded_receiver_rva":0x4a6565,"embedded_receiver":"RCX=RBX+D0; RBX saved from owner RCX",
+                    "base_reset_call_rva":0x4a656c,"base_reset_target":0x992150,"base_table_rva":0x9c5fd0,
+                    "job_table_virtual0":0x4a71a0,"job_base_reset_call_rva":0x4a71af,
+                    "distinct_paths":"owner body calls base reset directly, not the job virtual0",
+                    "conditional_sized_call_target":0x9afea8,
+                    "condition":"job/owner scalar paths test original DL bit0 after normal cleanup return",
+                    "owner_size_argument":0x1f0,"job_size_argument":0x40},
+                "certificate_issued":false,"runtime_calls":0,"game_runs":0,"observations_accepted":false,
+                "zero_count_basis":"buffer-only implementation structure; not measured process counters",
+                "not_established_by_this_audit":["executed constructor/producer/drop receiver equality",
+                    "owner lifetime and its World epoch at construction","global manager identity with owner or its stored receiver",
+                    "constructor/destruction ordering against pending or running proxy T",
+                    "retain/copy/release/Cancel/reissue completion","safe birthticket transfer",
+                    "4A8530 whole executed frame and SEH completion","985BF0 never-executed task recovery",
+                    "all-domain Close/Rebuild authority"]}),
+            )
+        }
+    }
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -1069,6 +1525,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
         "release_leaf":{"wrapper_rva":0x58ff70,"leaf_rva":0x7bbf0,"instruction_bytes":14,"same_byte_target_rva":read_target,"behavior":"non-atomic read then write of one RIP-relative byte; not world teardown","world_shutdown_link_evidence":"not established by this audit"},
         "byte_b61e00_consumer":byte_b61e00_consumer(core, read_target)?,
         "manager_receiver_flow":manager_receiver_flow(core)?,
+        "governor_job_birth_owner":worker_payload::inspect_governor_birth(core)?,
         "context_world_path":context_world_path(core)?,
         "shutdown_guard":{"entry_rva":0x63e160,"compare_rva":0x63e166,"compare_base":"RCX at63E166","receiver_byte_offset":0x2a4,"compare_value":0,"zero_branch_target":0x63e2d9,"virtual_call_rva":0x63e1b5,"virtual_slot":0x48,"virtual_load_base":"RBX saved from entry RCX at63E16D; contiguous prefix has no later RBX assignment, conditional on normal-return callees obeying Win64 nonvolatile ABI","local_byte_store_offset":0x2a7,"receiver_type_evidence":"constructor/table path recorded separately; source-language type name not established","manager_load_base":"same conditional RBX+250 at63E1C9 under the stated ABI assumption","caller_evidence":"verified conditional call at471BD in RBX+60 block; receiver identity across blocks unestablished","runtime_lifetime_order_evidence":"not established by this audit"},
         "shutdown_pre_wait_flow":{
