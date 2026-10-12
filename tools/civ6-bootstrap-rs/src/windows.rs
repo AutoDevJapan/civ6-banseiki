@@ -445,13 +445,7 @@ fn api(module: usize, name: &[u8]) -> Result<Api, String> {
 fn validate_api(module: usize, address: usize) -> Result<Api, String> {
     let f = address as *const ();
     let mut m = MEMORY_BASIC_INFORMATION::default();
-    if unsafe {
-        VirtualQuery(
-            f as *const () as _,
-            &mut m,
-            size_of::<MEMORY_BASIC_INFORMATION>(),
-        )
-    } == 0
+    if unsafe { VirtualQuery(f.cast(), &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
         || m.AllocationBase as usize != module
         || m.State != MEM_COMMIT
         || m.Protect & PAGE_GUARD != 0
