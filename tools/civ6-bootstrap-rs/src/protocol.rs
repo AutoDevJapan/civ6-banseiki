@@ -60,6 +60,9 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     let core = word(b, 56)?;
     let epoch = word(b, 72)?;
     let mut unknown = Vec::<String>::new();
+    if version == 3 && word(b, 232)? != 1 {
+        unknown.push("actual cached Push target unconfirmed; raw R8 is not typed T".into());
+    }
     let mut sites = Vec::new();
     for (i, (rva, bytes)) in [
         (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
@@ -127,11 +130,14 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         if version == 3 {
             for (offset, r) in [&a, &z].into_iter().enumerate() {
                 let index = rows.len() - 2 + offset;
-                rows[index]["normal_return_r8_t"] = json!(if r[2] == 2 && r[1] == 4 {
-                    Some(r[34])
-                } else {
-                    None
-                });
+                rows[index]["normal_return_r8_raw"] =
+                    json!(if r[2] == 2 { Some(r[34]) } else { None });
+                rows[index]["normal_return_r8_t"] =
+                    json!(if r[2] == 2 && r[1] == 4 && word(b, 232)? == 1 {
+                        Some(r[34])
+                    } else {
+                        None
+                    });
             }
         }
         let valid = a[0] == i as u64 + 1
@@ -540,6 +546,9 @@ mod submission_protocol_tests {
         );
         put(&mut b, slot, 0x11223344);
         put(&mut b, 29, 0);
+        let unknown = submission_trace(&b, 23, 29).unwrap();
+        assert!(unknown["rows"][1]["normal_return_r8_t"].is_null());
+        assert_eq!(unknown["rows"][1]["normal_return_r8_raw"], 0x11223344_u64);
         assert_eq!(
             submission_trace(&b, 23, 29).unwrap()["capture_complete"],
             false

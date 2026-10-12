@@ -662,6 +662,36 @@ pub(super) fn verify_r8_flow(
     {
         return Err("R8 host direct-call target differs");
     }
-    h(29).store(1, Ordering::Release);
+    let target = core
+        .checked_add(0xb90688)
+        .and_then(|p| copy_current::<8>(p as u64))
+        .map(u64::from_le_bytes);
+    h(29).store(
+        u64::from(r8_target_confirmed(target, exe)),
+        Ordering::Release,
+    );
     Ok(())
+}
+pub(super) fn r8_target_confirmed(target: Option<u64>, exe: usize) -> bool {
+    exe.checked_add(0x986060)
+        .is_some_and(|expected| target == Some(expected as u64))
+}
+#[cfg(test)]
+mod r8_actual_target_tests {
+    use super::*;
+    #[test]
+    fn same_code_bytes_with_wrong_or_zero_actual_target_do_not_certify_r8_as_t() {
+        let base = 0x140000000usize;
+        assert_eq!(WORDS[0], [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]);
+        assert!(r8_target_confirmed(Some(base as u64 + 0x986060), base));
+        for target in [
+            None,
+            Some(0),
+            Some(base as u64 + 0x986080),
+            Some(0x180992210),
+        ] {
+            assert!(!r8_target_confirmed(target, base));
+        }
+        assert!(!r8_target_confirmed(Some(0), usize::MAX));
+    }
 }
