@@ -620,3 +620,17 @@ The supported entry123 used Core VFT A06648, metadata A06920 and list2. Fixed-im
 The new pure file-audit segment verifies complete function spans, pdata/unwind, RIP/rel32 references, adjacent-table separation and invalid RTTI without issuing a certificate. Two initial tests exposed a missing.data fixture and an incorrect demand for disk bytes at singleton B8AA68, which is in loader-zero-filled data. Address validation now uses its unique readable/writable virtual.data mapping; data strings and tables still require actual file bytes. The corrected15 tests, Clippy, release and both fixed-image CLI selectors passed. Existing legacy JSON values/arrays remain equal after projecting out the additive segment. Separate-model review found no remaining Must.
 
 Run185 original22files(2171888bytes), original30 autosave files, options and COS1 save were preserved and compared by SHA. The standard chain's held handle confirmed exit1; owned game/chain/lock/recovery records are absent. Same-job actual games8 and unlaunched attempts3 remain distinct. The original product acceptance is still0/7; ordinary runtime and AI candidate remain inactive. Public2e7552b9 passed all7 CI checks; this additional file audit has separate local validation.
+
+## 2026-10-12 観測の受付上限と完全な16件の対応
+
+公開3a68f92bはBOOK内の再判定を含み、関連67件、Clippy、限定別モデルの指摘0を確認した。原192は通常一ターンと同一プロセスの保存再読込を含む10/10、一般判定5/5、標準chain同保持HANDLEの終了0。v8の83392bytes二本は一致し、初めの16件の発行・Host実行・Core実行・各完全frame退出が対応した。未解決の記録Tと観測pendingは0、unknownは0。native pendingの数は未測定でnullであり、除外1220180回を全排出に数えない。原23files/2337266bytesをSHA一致で保全し、元auto30/COS1/AppOptionsのSHA復元を確認した。本担当の実ゲーム15回、未起動3受付を保持する。
+
+原191の容量超過と未知処理は失敗のまま保持する。原192は部分観測の成功であり、World世代、未実行Tの取消、他の仕事と同期外側の退出、通常RuntimeClose/Rebuildの権限はまだ証明していない。通常runtime/AI候補は未有効化、製品7条件0/7・PR86未マージを維持する。
+
+16件のproducer帰還先は固定Coreの4C87CDで一致した。固定画像の4C87CAは[RDXとして渡されたclosure+8]への間接CALLを行う4C8780の内部で、続けてcleanupを実行して4C87FFで帰還する。4A79B0の帰還をその外側frameの全退出へ拡張しない。原の数値資料はbounded192-primary-analysis、producer-caller-binding、proof-preservation-20261012に保持する。
+
+### pending発行経路の一次監査
+
+fb9234edは固定EXEの985BF0→E3E840→E41320/E3E3B0を追加した。10関数の全体SHAと25個のpdata/CHAIN分割、連続blockでのRDX/R8搬送、preferred ImageBaseでのT表pointerを照合する。EXEにDIR64必須を誤適用した初回失敗と私有fnのコンパイル失敗を保持し、Coreの必須条件を弱めずEXE専用読取を分けた。片側だけ存在する再配置directoryは両方向とも拒否する。
+
+最終関連5件(監査4件と既存native_flightのpending回帰1件)とClippy成功、固定実画像CLIは旧2argsとworker selectorの両方で終了0。追加前3aの実release監査と全既存値/配列をキー順序に依存しない再帰比較で一致確認し、追加keyはpending_publication_sliceだけ。限定再レビューの残Must0。queue取出しから実行・未実行T取消/破棄・全joinは未確立であり、静的監査を通常runtimeの稼働やWorldの終了証明へ使わない。
