@@ -609,7 +609,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 )
             };
             let error = if ok == 0 {
-                Some(unsafe { GetLastError() })
+                Some(unsafe { windows_sys::Win32::Foundation::GetLastError() })
             } else {
                 None
             };
