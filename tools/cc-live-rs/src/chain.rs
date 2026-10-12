@@ -2375,7 +2375,7 @@ fn main_owned(
             let protection = token
                 .map(|token| {
                     open_close_protection(&mut budget, &p.here.join("civ6.lock"), token)
-                        .and_then(|p| p.ok_or("lock ownership changed before driver close"))
+                        .and_then(|p| p.ok_or("lock ownership changed before driver close".into()))
                 })
                 .transpose()?;
             close_civ6_with_renderer(
