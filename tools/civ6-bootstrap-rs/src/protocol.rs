@@ -366,13 +366,52 @@ mod observed_submission_tests {
             );
         }
     }
+    #[test]
+    fn observed_v6_current_host_p_vft_read_witness_is_required_and_frozen() {
+        let mut b = provisional_fixture();
+        put(&mut b, 1, 6);
+        put(&mut b, 30, 1000);
+        for row in [8, 9] {
+            for (field, value) in [(42, CORE + 0xa06648), (43, 8), (44, 0), (45, 1)] {
+                put(&mut b, row_word(row, field), value);
+            }
+        }
+        let v = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["schema"], "todo880-native-submission-observed-trace-v6");
+        assert_eq!(v["world_permit_issued"], false);
+        assert_eq!(
+            v["rows"][8]["entry_snapshot_words"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        for (field, value) in [(42, CORE + 0xa06650), (43, 0), (43, 4), (44, 299), (45, 0)] {
+            let mut bad = b.clone();
+            for row in [8, 9] {
+                put(&mut bad, row_word(row, field), value);
+            }
+            assert_eq!(
+                submission_trace(&bad, 23, 29).unwrap()["capture_complete"],
+                false,
+                "field{field}"
+            );
+        }
+        let mut late = b.clone();
+        put(&mut late, row_word(9, 42), CORE + 0xa06650);
+        assert_eq!(
+            submission_trace(&late, 23, 29).unwrap()["capture_complete"],
+            false
+        );
+    }
 }
 
 fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
     if b.len() != SUBMISSION_BYTES
         || word(b, 0)? != SUBMISSION_MAGIC
-        || !matches!(version, 4 | 5)
+        || !matches!(version, 4 | 5 | 6)
         || word(b, 16)? != SUBMISSION_BYTES as u64
         || word(b, 24)? != ROOT_ROWS as u64
         || word(b, 32)? != SUBMISSION_ROW as u64
@@ -390,13 +429,13 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
         return Err("observed bounded count".into());
     }
     let mut unknown = Vec::<String>::new();
-    let serial = if version == 5 {
+    let serial = if version >= 5 {
         word(b, 168)?
     } else {
         count as u64
     };
-    let no_submit = if version == 5 { word(b, 160)? } else { 0 };
-    if version == 5
+    let no_submit = if version >= 5 { word(b, 160)? } else { 0 };
+    if version >= 5
         && (count as u64 > serial
             || no_submit
                 .checked_add(count as u64)
@@ -445,7 +484,11 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
                 "observed_birth_id":r[35],"opaque_p":r[36],"opaque_t":r[37],
                 "raw_return_r8":if r[2]==2 {Some(r[34])}else{None},"errors":r[20],
                 "current_entry_object_copied":r[38],"current_entry_read_status":r[39],
-                "entry_snapshot_words":r[40..48],
+                "entry_snapshot_words":if version==6&&r[1]==7 {&r[40..42]}else{&r[40..48]},
+                "current_host_p_vft":if version==6&&r[1]==7 {Some(r[42])}else{None},
+                "current_host_p_vft_copied":if version==6&&r[1]==7 {Some(r[43])}else{None},
+                "current_host_p_vft_read_error":if version==6&&r[1]==7 {Some(r[44])}else{None},
+                "current_host_p_vft_read_raw_bool":if version==6&&r[1]==7 {Some(r[45])}else{None},
                 "status":match r[2]{1=>"entry",2=>"normal_return",3=>"exception_unwind",_=>"unknown"},
                 "snapshot_scope":"entry only; no pointer dereference after return"}));
         }
@@ -623,6 +666,11 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             && h[39] == 1
             && exe.checked_add(0x106b3c8) == Some(h[40])
             && h[41] == w[1]
+            && (version < 6
+                || (h[42] == core.checked_add(0xa06648).unwrap_or(0)
+                    && h[43] == 8
+                    && h[44] == 0
+                    && h[45] != 0))
             && sr[23] < h[23]
             && x[1] == 8
             && x[4] == h[3]
@@ -638,13 +686,13 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             && h[23] < x[23]
             && xr[23] < hr[23]
             && w[11] == (511 | 8192 | 16384)
-            && (version == 5 || used_t.insert(w[2]))
+            && (version >= 5 || used_t.insert(w[2]))
             && (version == 4
                 || (previous_p.get(&w[1]).is_none_or(|end| *end < p[23])
                     && previous_t.get(&w[2]).is_none_or(|end| *end < p[23])));
         if relation {
             complete_chains += 1;
-            if version == 5 {
+            if version >= 5 {
                 let ended = [pr[23], sr[23], ur[23], hr[23], xr[23], cr[23]]
                     .into_iter()
                     .max()
@@ -679,7 +727,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
         && word(b, 224)? == 1
         && unknown.is_empty();
     Ok(
-        json!({"schema":if version==5 {"todo880-native-submission-observed-trace-v5"}else{"todo880-native-submission-observed-trace-v4"},"pid":pid,"created_filetime":created,
+        json!({"schema":match version {6=>"todo880-native-submission-observed-trace-v6",5=>"todo880-native-submission-observed-trace-v5",_=>"todo880-native-submission-observed-trace-v4"},"pid":pid,"created_filetime":created,
         "entered_producer_serials":serial,"stored_birth_count":count,"normal_no_submit_returns":no_submit,
         "observed_core_epoch":epoch,"reserved_rows":next,"site_witnesses":sites,"rows":rows,"births":births,
         "excluded_calls":word(b,240)?,"excluded_unreadable_current_t":word(b,248)?,
@@ -695,7 +743,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
 /// this parser never follows them. Correspondence is not job ownership/join.
 pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
-    if matches!(version, 4 | 5) {
+    if matches!(version, 4 | 5 | 6) {
         return submission_observed_trace(b, pid, created);
     }
     let (row_bytes, trace_bytes) = match version {

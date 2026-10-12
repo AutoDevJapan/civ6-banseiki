@@ -73,6 +73,7 @@ fn submission_observed_seed(data: &mut [u8], kind: u64, core: u64, exe: u64) {
         7 => {
             data[..8].copy_from_slice(&(exe + 0x106b3c8).to_le_bytes());
             data[8..16].copy_from_slice(&(p + 0xd0).to_le_bytes());
+            data[0xd0..0xd8].copy_from_slice(&(core + 0xa06648).to_le_bytes());
             submission_observed::fixture_birth(p + 0xd0, p);
         }
         8 => {
@@ -193,6 +194,9 @@ fn submission_owned_os_observed_stop_freezes_exclusions_lookup_failure_and_book_
         submission_observed::fixture_continue(i, body + [5, 6, 6, 8][i]);
     }
     let mut native = vec![0u8; 0x500];
+    let other_p = Box::new([ret - 0x992267 + 0xa06650]);
+    native[..8].copy_from_slice(&(ret - 0x985ef4 + 0x106b3c8).to_le_bytes());
+    native[8..16].copy_from_slice(&(other_p.as_ptr() as u64).to_le_bytes());
     // A non-Governor real call is excluded while open and releases its flight.
     unsafe {
         submission_observed_probe_driver(
@@ -877,6 +881,109 @@ impl Drop for SubmissionPipeline {
     fn drop(&mut self) {
         assert!(unsafe { restore_all() }.is_ok());
     }
+}
+#[test]
+fn submission_owned_os_observed_generic_proxy_reused_t_other_p_is_excluded_before_rows() {
+    if !child("submission_owned_os_observed_generic_proxy_reused_t_other_p_is_excluded_before_rows")
+    {
+        return;
+    }
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let t = p.task.as_ptr();
+    p.execute(t);
+    let old = submission_observed::fixture_book(0);
+    let recorded = h(10).load(Ordering::Acquire);
+    let mut other = Box::new([0u64; 8]);
+    other[0] = p.core.base as u64 + 0xa06650;
+    let counter = Box::new(AtomicU64::new(0));
+    let mut body = vec![0x49, 0xbb];
+    body.extend_from_slice(&(std::ptr::addr_of!(*counter) as u64).to_le_bytes());
+    body.extend_from_slice(&[0x49, 0xff, 3, 0x48, 0x8d, 0x64, 0x24, 0x20, 0x5f, 0xc3]);
+    p.write(false, 0x4a8539, &body);
+    p.task[1] = other.as_ptr() as u64;
+    for _ in 0..100 {
+        p.execute(t);
+    }
+    assert_eq!(
+        counter.load(Ordering::Acquire),
+        100,
+        "every original fixture body still executed"
+    );
+    assert_eq!(h(10).load(Ordering::Acquire), recorded);
+    assert_eq!(submission_observed::fixture_book(0), old);
+    assert_eq!(h(14).load(Ordering::Acquire), 0);
+    assert!(h(30).load(Ordering::Acquire) >= 100);
+    // Restore the legitimate current P; a fresh complete Gov cycle still binds.
+    p.task[1] = old[1];
+    p.producer(true);
+    p.execute(t);
+    assert_eq!(submission_observed::fixture_book(1)[15], 0);
+    assert_eq!(h(29).load(Ordering::Acquire), 2);
+    assert_eq!(h(10).load(Ordering::Acquire), 24);
+    assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    let frozen = submission_observed::fixture_bytes();
+    let before = counter.load(Ordering::Acquire);
+    p.task[1] = other.as_ptr() as u64;
+    p.execute(t);
+    assert_eq!(counter.load(Ordering::Acquire), before + 1);
+    assert_eq!(
+        submission_observed::fixture_bytes(),
+        frozen,
+        "closed gate performs no scope reads or writes"
+    );
+}
+#[test]
+fn submission_owned_os_observed_active_tuple_wrong_p_vft_is_error_not_exclusion() {
+    if !child("submission_owned_os_observed_active_tuple_wrong_p_vft_is_error_not_exclusion") {
+        return;
+    }
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let t = p.task.as_ptr();
+    let row = h(10).load(Ordering::Acquire) as usize;
+    let excluded = h(30).load(Ordering::Acquire);
+    p.owner[0xd0 / 8] = p.core.base as u64 + 0xa06650;
+    p.execute(t);
+    assert_eq!(h(30).load(Ordering::Acquire), excluded);
+    assert_ne!(
+        submission::TRACE.rows[row][20].load(Ordering::Acquire) & 0x400,
+        0
+    );
+    assert_eq!(
+        submission::TRACE.rows[row][42].load(Ordering::Acquire),
+        p.core.base as u64 + 0xa06650
+    );
+    assert_eq!(submission::TRACE.rows[row][43].load(Ordering::Acquire), 8);
+    assert_ne!(submission_observed::fixture_book(0)[15], 0);
+    assert!(h(14).load(Ordering::Acquire) > 0);
+}
+#[test]
+fn submission_owned_os_observed_untracked_governor_and_unreadable_current_p_remain_unknown() {
+    if !child(
+        "submission_owned_os_observed_untracked_governor_and_unreadable_current_p_remain_unknown",
+    ) {
+        return;
+    }
+    let p = SubmissionPipeline::new();
+    let governor = Box::new([p.core.base as u64 + 0xa06648, 0, 0, 0, 0, 0, 0, 0]);
+    let good = Box::new([p.host.base as u64 + 0x106b3c8, governor.as_ptr() as u64]);
+    let bad = Box::new([p.host.base as u64 + 0x106b3c8, 1]);
+    let excluded = h(30).load(Ordering::Acquire);
+    p.execute(good.as_ptr());
+    p.execute(bad.as_ptr());
+    assert_eq!(h(29).load(Ordering::Acquire), 0);
+    assert_eq!(h(30).load(Ordering::Acquire), excluded);
+    assert_eq!(h(10).load(Ordering::Acquire), 8);
+    for row in [0, 4] {
+        assert_eq!(submission::TRACE.rows[row][35].load(Ordering::Acquire), 0);
+        assert_ne!(submission::TRACE.rows[row][20].load(Ordering::Acquire), 0);
+    }
+    assert_eq!(submission::TRACE.rows[0][43].load(Ordering::Acquire), 8);
+    assert_eq!(submission::TRACE.rows[4][43].load(Ordering::Acquire), 0);
+    assert_ne!(submission::TRACE.rows[4][44].load(Ordering::Acquire), 0);
+    assert_eq!(submission::TRACE.rows[4][45].load(Ordering::Acquire), 0);
+    assert!(h(14).load(Ordering::Acquire) > 0);
 }
 #[test]
 fn submission_owned_os_observed_no_submit_100_then_real_submit_and_current_t_p_bind() {

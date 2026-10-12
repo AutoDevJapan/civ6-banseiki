@@ -287,6 +287,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             .map_err(|_| ())
             .unwrap_or_else(|_| panic!("observed book poisoned"));
         let mut snapshot = None;
+        let mut p_snapshot = None;
         let mut index = None;
         let mut promotion = None;
         let mut detached = false;
@@ -358,6 +359,31 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             } else {
                 0
             };
+            // CURRENT Host input only: this original frame writes P+8/+10 and
+            // then reads P.vft. Never follow a historical/returned descriptor.
+            let active = book.iter().any(|b| {
+                b.w[0] != 0
+                    && b.w[11] & BOUND != 0
+                    && b.w[2] == saved.gpr[0]
+                    && b.w[1] == p
+                    && !completed(b)
+            });
+            let (pbytes, pn, pe, pok) = if n == 16 && ok != 0 && e == 0 {
+                read_once::<8>(p)
+            } else {
+                ([0; 8], 0, 0, 0)
+            };
+            let pvft = u64::from_le_bytes(pbytes);
+            p_snapshot = Some((pvft, pn, pe, pok));
+            let identified = pn == 8 && pe == 0 && pok != 0;
+            let governor = identified && pvft == bind.core as u64 + 0xa06648;
+            if identified && !governor && !active {
+                exclude();
+                return; // explicit other-native-job exclusion inside this admission flight
+            }
+            if !governor {
+                fail(&mut saved.invocation, 0x400);
+            }
             let mut exact = book.iter().enumerate().filter(|(_, b)| {
                 b.w[0] != 0
                     && b.w[11] & BOUND != 0
@@ -371,16 +397,8 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             if exact.next().is_some() {
                 index = None;
             }
-            if index.is_none()
-                && !book
-                    .iter()
-                    .any(|b| b.w[0] != 0 && (b.w[1] == p || b.w[2] == saved.gpr[0]))
-            {
-                exclude();
-                if n != 16 || ok == 0 {
-                    h(31).fetch_add(1, Ordering::Relaxed);
-                }
-                return;
+            if n != 16 || ok == 0 || e != 0 || !identified {
+                h(31).fetch_add(1, Ordering::Relaxed);
             }
             if index.is_none() {
                 detached = true;
@@ -555,6 +573,12 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             if ok == 0 || e != 0 || n != if kind == 7 { 16 } else { 64 } {
                 saved.invocation.errors |= 1;
             }
+        }
+        if let Some((vft, n, e, ok)) = p_snapshot {
+            r[42] = vft;
+            r[43] = n as u64;
+            r[44] = u64::from(e);
+            r[45] = ok;
         }
         r[20] = saved.invocation.errors;
         if r[20] != 0 {
