@@ -3284,4 +3284,5 @@ mod tests {
         assert_eq!(stop_at(Instant::now() + Duration::from_secs(1)), 0);
         assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
     }
+    include!("root_observation/submission/observed_tests.rs");
 }

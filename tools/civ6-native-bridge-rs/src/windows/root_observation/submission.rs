@@ -2,7 +2,7 @@
 //! Snapshot addresses are opaque scalars. No job pointer is followed at exit.
 use super::*;
 use civ6_bootstrap_rs::protocol::{SUBMISSION_BYTES, SUBMISSION_MAGIC, SUBMISSION_ROW};
-mod observed;
+pub(super) mod observed;
 pub(super) use observed::TRACE;
 #[cfg(test)]
 pub(super) static LEGACY_FIXTURE: AtomicBool = AtomicBool::new(false);

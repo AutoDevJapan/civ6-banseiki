@@ -1,7 +1,7 @@
 //! Governor-only observed call correspondence. No World permit or task ownership.
 use super::*;
 use civ6_bootstrap_rs::protocol::{SUBMISSION_BIRTHS, SUBMISSION_HEADER};
-pub(super) const EXTRA: [(usize, bool, [u8; 8], usize); 4] = [
+pub(in super::super) const EXTRA: [(usize, bool, [u8; 8], usize); 4] = [
     (
         0x4a79b0,
         false,
@@ -63,6 +63,8 @@ struct Birth {
 }
 static BOOK: Mutex<[Birth; SUBMISSION_BIRTHS]> =
     Mutex::new([Birth { w: [0; 18] }; SUBMISSION_BIRTHS]);
+#[cfg(test)]
+static FAIL_THREAD_LOOKUP: AtomicBool = AtomicBool::new(false);
 fn publish(index: usize, b: Birth) {
     for (dst, v) in TRACE.births[index].iter().zip(b.w) {
         dst.store(v, Ordering::Release);
@@ -83,26 +85,57 @@ fn valid_parent(p: Invocation, kind: u64, inv: &Invocation) -> bool {
 }
 pub(super) extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
+    // Exclusion/read failures are writes too. They acquire the SAME flight
+    // before filtering; accepted reservations transfer it to normal/SEH finish.
+    struct EntryFlight(bool);
+    impl Drop for EntryFlight {
+        fn drop(&mut self) {
+            if self.0 {
+                h(12).fetch_sub(1, Ordering::Release);
+            }
+        }
+    }
+    let mut flight = EntryFlight(false);
+    let mut admitted = false;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let saved = unsafe { &mut *raw };
         let Some(bind) = BIND.get() else { return };
         let kind = saved.invocation.kind;
-        let Some((tid, ft)) = thread_key() else {
+        let stack = STACK.with(Cell::get);
+        let parent = stack.depth.checked_sub(1).map(|n| stack.frames[n]);
+        let may_inherit = parent.is_some_and(|p| {
+            p.cookie == COOKIE && matches!((kind, p.kind), (4 | 5, 6) | (9, 4) | (8, 7))
+        });
+        if !acquire(may_inherit) {
+            return;
+        }
+        flight.0 = true;
+        admitted = true;
+        if !may_inherit && Instant::now() >= bind.until {
+            h(12).fetch_or(ROOT_CLOSED, Ordering::AcqRel);
+            return;
+        }
+        #[cfg(test)]
+        let identity = if FAIL_THREAD_LOOKUP.load(Ordering::Acquire) {
+            None
+        } else {
+            thread_key()
+        };
+        #[cfg(not(test))]
+        let identity = thread_key();
+        let Some((tid, ft)) = identity else {
             unknown();
             return;
         };
         saved.invocation.tid = tid;
         saved.invocation.thread_created = ft;
         saved.invocation.epoch = h(9).load(Ordering::Acquire);
-        let stack = STACK.with(Cell::get);
-        let parent = stack.depth.checked_sub(1).map(|n| stack.frames[n]);
         let mut book = BOOK
             .lock()
             .map_err(|_| ())
             .unwrap_or_else(|_| panic!("observed book poisoned"));
         let mut snapshot = None;
         let mut index = None;
-        let mut inherited = false;
         if kind == 6 {
             // ID is reserved at this function entry BEFORE any receiver pointer fetch.
             // P is only a scalar offset here. It is not a World/ownership assertion.
@@ -123,7 +156,6 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                 return;
             }
             index = book.iter().position(|b| b.w[0] == p.world);
-            inherited = true;
             saved.invocation.parent = p.token;
             if kind == 4 && saved.gpr[1] != p.manager {
                 fail(&mut saved.invocation, 0x400);
@@ -141,7 +173,6 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                 return;
             }
             index = book.iter().position(|b| b.w[0] == p.world);
-            inherited = true;
             saved.invocation.parent = p.token;
         } else if kind == 7 {
             // One read of the CURRENT native input T, not a historical P read.
@@ -172,7 +203,6 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                 return;
             }
             if let Some(p) = parent.filter(|p| valid_parent(*p, 7, &saved.invocation)) {
-                inherited = true;
                 saved.invocation.parent = p.token;
                 if saved.invocation.caller != h(8).load(Ordering::Acquire) + 0x985ef4
                     || saved.invocation.caller_rsp.checked_add(0x30) != Some(p.native_rsp)
@@ -188,22 +218,15 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             exclude();
             return;
         }
-        if !inherited && Instant::now() >= bind.until {
-            h(12).fetch_or(ROOT_CLOSED, Ordering::AcqRel);
-        }
-        if !acquire(inherited) {
-            exclude();
-            return;
-        }
         let Ok(row) = h(10).fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
             (n <= (ROOT_ROWS - 2) as u64).then_some(n + 2)
         }) else {
             h(11).fetch_add(1, Ordering::Relaxed);
-            h(12).fetch_sub(1, Ordering::Release);
             return;
         };
         let inv = &mut saved.invocation;
         inv.cookie = COOKIE;
+        flight.0 = false; // reservation owns this flight until finish/unwind
         inv.token = row + 1;
         if h(19).load(Ordering::Acquire) != 3 || h(15).load(Ordering::Acquire) != 63 {
             fail(inv, 8);
@@ -336,7 +359,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         }
         commit(row as usize, r);
     }));
-    if result.is_err() {
+    if result.is_err() && admitted {
         unknown();
         unsafe {
             (*raw).invocation.errors |= 0x20;
@@ -345,12 +368,22 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
-    let mut inv = raw.invocation;
+    let inv = raw.invocation;
     if inv.cookie != COOKIE {
         return;
     }
     raw.invocation.cookie = 0;
     let _release = Release;
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        finish_admitted(raw, inv, edge, error)
+    }))
+    .is_err()
+    {
+        // Unknown must be published BEFORE the accepted flight reaches zero.
+        unknown();
+    }
+}
+fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) {
     let _ = STACK.try_with(|s| {
         let mut stack = s.get();
         if stack.depth > 0 && stack.frames[stack.depth - 1].token == inv.token {
@@ -449,10 +482,14 @@ global_asm!(
     "mov [rsp+0x18],rsi",
     ".seh_savereg rsi,0x18",
     ".seh_endprologue",
+    ".globl observed_producer_original_body",
+    "observed_producer_original_body:",
     "mov [rsp+8],rax",
     "mov rax,[rip+OBSERVED_CONTINUE]",
     "mov [rsp+0x10],rax",
     "mov rax,[rsp+8]",
+    ".globl observed_producer_original_branch",
+    "observed_producer_original_branch:",
     "jmp qword ptr [rsp+0x10]",
     ".seh_endproc",
     ".globl observed_host_original",
@@ -463,10 +500,14 @@ global_asm!(
     "sub rsp,0x20",
     ".seh_stackalloc 0x20",
     ".seh_endprologue",
+    ".globl observed_host_original_body",
+    "observed_host_original_body:",
     "mov [rsp+0x10],rax",
     "mov rax,[rip+OBSERVED_CONTINUE+8]",
     "mov [rsp+0x18],rax",
     "mov rax,[rsp+0x10]",
+    ".globl observed_host_original_branch",
+    "observed_host_original_branch:",
     "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
     ".globl observed_push_host_original",
@@ -475,11 +516,15 @@ global_asm!(
     "sub rsp,0x38",
     ".seh_stackalloc 0x38",
     ".seh_endprologue",
+    ".globl observed_push_host_original_body",
+    "observed_push_host_original_body:",
     "movups xmm0,[r9]",
     "mov [rsp+0x10],rax",
     "mov rax,[rip+OBSERVED_CONTINUE+24]",
     "mov [rsp+0x18],rax",
     "mov rax,[rsp+0x10]",
+    ".globl observed_push_host_original_branch",
+    "observed_push_host_original_branch:",
     "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
     ".globl observed_core_original",
@@ -490,10 +535,14 @@ global_asm!(
     "sub rsp,0x20",
     ".seh_stackalloc 0x20",
     ".seh_endprologue",
+    ".globl observed_core_original_body",
+    "observed_core_original_body:",
     "mov [rsp+0x10],rax",
     "mov rax,[rip+OBSERVED_CONTINUE+16]",
     "mov [rsp+0x18],rax",
     "mov rax,[rsp+0x10]",
+    ".globl observed_core_original_branch",
+    "observed_core_original_branch:",
     "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
 );
@@ -516,6 +565,106 @@ gateway!(
     observed_push_host_original
 );
 static EXTRA_HOOKS: [Mutex<Option<RootHook>>; 4] = [const { Mutex::new(None) }; 4];
+#[cfg(test)]
+pub(in super::super) fn fixture_gateways() -> [usize; 4] {
+    [
+        observed_producer_gateway as *const () as usize,
+        observed_host_gateway as *const () as usize,
+        observed_core_gateway as *const () as usize,
+        observed_push_host_gateway as *const () as usize,
+    ]
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_originals() -> [usize; 4] {
+    [
+        observed_producer_original as *const () as usize,
+        observed_host_original as *const () as usize,
+        observed_core_original as *const () as usize,
+        observed_push_host_original as *const () as usize,
+    ]
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_continue(i: usize, target: usize) {
+    OBSERVED_CONTINUE[i].store(target as u64, Ordering::Release);
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_birth(p: u64, t: u64) {
+    let mut b = Birth { w: [0; 18] };
+    b.w[0] = 1;
+    b.w[1] = p;
+    b.w[2] = t;
+    b.w[10] = h(9).load(Ordering::Acquire);
+    b.w[11] = BORN | SUBMITTED | BOUND;
+    BOOK.lock().unwrap()[0] = b;
+    publish(0, b);
+    h(29).store(1, Ordering::Release);
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_bytes() -> Vec<u8> {
+    TRACE
+        .header
+        .iter()
+        .chain(TRACE.sites.iter().flatten())
+        .chain(TRACE.rows.iter().flatten())
+        .chain(TRACE.births.iter().flatten())
+        .flat_map(|v| v.load(Ordering::Acquire).to_le_bytes())
+        .collect()
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_poison_book() {
+    let _ = std::panic::catch_unwind(|| {
+        let _lock = BOOK.lock().unwrap();
+        panic!("fixture poison");
+    });
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_lookup_fail() {
+    FAIL_THREAD_LOOKUP.store(true, Ordering::Release);
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_parent(kind: u64, input: u64, rsp: u64) {
+    if !matches!(kind, 8 | 9) || !acquire(false) {
+        return;
+    }
+    let (tid, ft) = thread_key().unwrap();
+    let mut s = STACK.with(Cell::get);
+    s.frames[0] = Invocation {
+        cookie: COOKIE,
+        kind: if kind == 8 { 7 } else { 4 },
+        token: 999,
+        tid,
+        thread_created: ft,
+        epoch: h(9).load(Ordering::Acquire),
+        world: 1,
+        manager: if kind == 8 { input } else { 0x5566 },
+        set: if kind == 8 { 1 } else { 0 },
+        native_rsp: rsp + if kind == 8 { 0x30 } else { 0x40 },
+        ..Invocation::default()
+    };
+    s.depth = 1;
+    STACK.with(|x| x.set(s));
+    if kind == 9 {
+        let mut b = BOOK.lock().unwrap();
+        b[0].w[13] = 0x7788;
+        b[0].w[14] = input;
+    }
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_parent_end() {
+    STACK.with(|x| {
+        let mut s = x.get();
+        if s.depth == 1 && s.frames[0].token == 999 {
+            s.depth = 0;
+            s.frames[0] = Invocation::default();
+            x.set(s);
+            h(12).fetch_sub(1, Ordering::Release);
+        }
+    });
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_owners() -> [bool; 4] {
+    std::array::from_fn(|i| EXTRA_HOOKS[i].lock().unwrap().is_some())
+}
 pub(super) unsafe fn install_extra(core: usize) -> Result<(), &'static str> {
     h(19).store(2, Ordering::Release);
     let exe = h(8).load(Ordering::Acquire) as usize;
@@ -582,6 +731,14 @@ pub(super) unsafe fn install_extra(core: usize) -> Result<(), &'static str> {
         if result.exchanged {
             h(15).fetch_or(1 << (i + 2), Ordering::Release);
             TRACE.sites[i + 2][4].store(1, Ordering::Release);
+        }
+        #[cfg(test)]
+        if result.exchanged && FAIL_AFTER_PUBLISH.load(Ordering::Acquire) == i + 3 {
+            return Err(site_error(
+                i + 2,
+                16,
+                "injected observed partial publication",
+            ));
         }
         if !result.exchanged
             || !result.protection_restored
