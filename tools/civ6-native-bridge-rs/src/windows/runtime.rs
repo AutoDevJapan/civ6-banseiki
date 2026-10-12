@@ -23,6 +23,45 @@ pub static BRIDGE_RUNTIME_PROMOTION_GATEWAY: unsafe extern "system" fn() =
     promotion::runtime_promotion_gateway;
 static OWNED: AtomicBool = AtomicBool::new(false);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
+static INVOCATIONS: crate::invocation_gate::InvocationGate =
+    crate::invocation_gate::InvocationGate::new();
+static INVOCATION_FAILURE: AtomicBool = AtomicBool::new(false);
+
+// 0 is a refused runtime call; 1 is the existing non-runtime diagnostic path.
+// Higher cookies hold a single generation until normal return or SEH cleanup.
+pub(super) fn invocation_start() -> u64 {
+    if !owned() {
+        return 1;
+    }
+    if !INSTALLED.load(Ordering::Acquire) {
+        return 0;
+    }
+    INVOCATIONS
+        .enter()
+        .map_or(0, |generation| u64::from(generation) + 1)
+}
+pub(super) fn invocation_admitted(cookie: u64) -> bool {
+    cookie != 0
+}
+pub(super) unsafe fn invocation_finish(cookie: *const AtomicU64) {
+    let Some(cookie) = (unsafe { cookie.as_ref() }) else {
+        return;
+    };
+    let held = cookie.swap(0, Ordering::AcqRel);
+    if held > 1 && !INVOCATIONS.leave((held - 1) as u32) {
+        INVOCATION_FAILURE.store(true, Ordering::Release);
+        INVOCATIONS.close();
+        product_deactivate();
+    }
+}
+pub(super) unsafe fn invocation_unwind(
+    record: *const windows_sys::Win32::System::Diagnostics::Debug::EXCEPTION_RECORD,
+    cookie: *const AtomicU64,
+) {
+    if !record.is_null() && unsafe { (*record).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
+        unsafe { invocation_finish(cookie) };
+    }
+}
 // One atomic word orders admission against closure. A successful stop cannot
 // miss a writer between a separate enabled check and counter increment.
 static SAMPLE_GATE: civ6_bootstrap_rs::observation::ObservationGate =
@@ -460,7 +499,7 @@ fn pause_reset() {
     }
 }
 
-pub(super) fn start_observation(seconds: u32) {
+pub(super) fn start_observation(seconds: u32) -> bool {
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     DEADLINE_MS.store(now + u64::from(seconds) * 1000, Ordering::Release);
     SAMPLE_GATE.initialize_before_publish();
@@ -468,6 +507,12 @@ pub(super) fn start_observation(seconds: u32) {
     // concurrent stop could succeed against the initial closed word and then
     // be undone by this store of zero.
     INSTALLED.store(true, Ordering::Release);
+    if INVOCATIONS.open_next().is_none() {
+        INSTALLED.store(false, Ordering::Release);
+        product_deactivate();
+        return false;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -601,7 +646,9 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             }
             return status as u32;
         }
-        start_observation(config.max_seconds);
+        if !start_observation(config.max_seconds) {
+            return BridgeStatus::Critical as u32;
+        }
         config.version = RUNTIME_CONFIG_VERSION;
         unsafe {
             ptr::write(input.cast::<BridgeConfig>(), config);
@@ -646,7 +693,18 @@ fn close() -> u32 {
     if !INSTALLED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput as u32;
     }
+    INVOCATIONS.close();
     product_deactivate();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while !INVOCATIONS.drained() {
+        if std::time::Instant::now() >= deadline {
+            return BridgeStatus::Critical as u32;
+        }
+        std::thread::yield_now();
+    }
+    if INVOCATION_FAILURE.load(Ordering::Acquire) {
+        return BridgeStatus::Critical as u32;
+    }
     for state in &STATE {
         state.store(0);
     }
@@ -669,6 +727,10 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
         return BridgeStatus::Critical as u32;
     }
     if !product_activate() {
+        return BridgeStatus::Critical as u32;
+    }
+    if INVOCATIONS.open_next().is_none() {
+        product_deactivate();
         return BridgeStatus::Critical as u32;
     }
     // Each owner enters rebuilding on its own natural reset getter. No
