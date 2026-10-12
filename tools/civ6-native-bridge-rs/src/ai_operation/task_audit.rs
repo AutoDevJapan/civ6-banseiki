@@ -147,8 +147,11 @@ mod worker_payload {
             }
             let reloc_rva = u32_at(image, opt + 112 + 5 * 8)?;
             let reloc_size = u32_at(image, opt + 116 + 5 * 8)? as usize;
+            if (reloc_rva == 0) != (reloc_size == 0) {
+                return Err("payload relocation directory address/size disagree".into());
+            }
             if reloc_size == 0 {
-                if require_relocations || reloc_rva != 0 {
+                if require_relocations {
                     return Err("payload relocation directory absent".into());
                 }
                 return Ok(pe);
@@ -1169,6 +1172,12 @@ mod worker_payload {
                     "one-sided absent directory is malformed"
                 );
                 b[0x130..0x134].fill(0);
+                b[0x134..0x138].copy_from_slice(&8u32.to_le_bytes());
+                assert!(
+                    Pe::parse_executable(&b).is_err(),
+                    "reverse one-sided directory is malformed"
+                );
+                b[0x134..0x138].fill(0);
                 b[0x96..0x98].copy_from_slice(&0x2002u16.to_le_bytes());
                 assert!(
                     Pe::parse_executable(&b).is_err(),
