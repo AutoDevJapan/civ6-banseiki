@@ -471,17 +471,81 @@ fn live_chain_waiter_rejects_a_reused_pid_owned_by_another_program() {
 #[cfg(windows)]
 #[test]
 fn live_chain_waiter_rejects_mismatched_process_creation_time() {
+    use std::os::windows::process::CommandExt;
+    // Route this OS fixture through the current injectable native API. Keep
+    // deterministic lease time, and reject any attempted command fallback.
+    struct Native(Fake);
+    impl Runner for Native {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            self.0.calls.push(call);
+            Err("command timed out".into())
+        }
+        fn process_identity(
+            &mut self,
+            pid: u32,
+            _: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            process::native_process_identity(pid).map_err(|error| error.to_string())
+        }
+        fn now(&mut self) -> f64 {
+            self.0.now()
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.0.sleep(seconds)
+        }
+    }
+    struct Child(std::process::Child);
+    impl Drop for Child {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
     let f = Fixture::new();
-    let pid = std::process::id();
+    // Suspended: no shell instructions or descendants execute. The name is
+    // a real live_chain image, rather than a fabricated tasklist response.
+    let executable = f.root.join("live_chain_identity_test.exe");
+    fs::copy(std::env::var_os("COMSPEC").unwrap(), &executable).unwrap();
+    let mut child = Child(
+        std::process::Command::new(&executable)
+            .creation_flags(CREATE_NO_WINDOW | 0x4)
+            .spawn()
+            .unwrap(),
+    );
+    let pid = child.0.id();
     let actual = process_created_filetime(pid).unwrap().unwrap();
     assert!(actual > 0);
-    let output = format!("\"live_chain.exe\",\"{pid}\"");
-    let mut matching = Fake::outputs(&[(&output, "", 0)]);
+    let mut matching = Native(Fake::success());
     let owner = json!({"live_chain":true,"pid":pid,"pid_created_filetime":actual});
     assert!(holder_alive(&mut matching, &f.p, &owner).unwrap());
-    let mut r = Fake::outputs(&[(&output, "", 0)]);
+    assert!(matching.0.calls.is_empty(), "must not launch tasklist");
+    f.json("here/queue/waiter.json", owner.clone());
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","acquired_at":0}),
+    );
+    let limit = process::LeaseLimit::new(&f.p, "owned", 120.0);
+    assert_eq!(
+        process::observe_lease(&mut matching, &limit).unwrap(),
+        process::LeaseProbe::Contended(1800.0)
+    );
+    assert!(
+        matching.0.calls.is_empty(),
+        "two-second probe must not spawn a command"
+    );
+    let mut r = Native(Fake::success());
     let owner = json!({"live_chain":true,"pid":pid,"pid_created_filetime":0});
     assert!(!holder_alive(&mut r, &f.p, &owner).unwrap());
+    // A correct creation time must not qualify an unrelated executable.
+    let current = std::process::id();
+    let owner = json!({"live_chain":true,"pid":current,"pid_created_filetime":process_created_filetime(current).unwrap().unwrap()});
+    assert!(!holder_alive(&mut r, &f.p, &owner).unwrap());
+    // A retained PID with a terminated process is not a live waiter.
+    child.0.kill().unwrap();
+    child.0.wait().unwrap();
+    let owner = json!({"live_chain":true,"pid":pid,"pid_created_filetime":actual});
+    assert!(!holder_alive(&mut r, &f.p, &owner).unwrap());
+    assert!(r.0.calls.is_empty());
 }
 
 #[test]
@@ -811,10 +875,40 @@ fn dispatched_job_in_queue_uses_arrival_order_instead_of_blocking_earlier_waiter
     );
     assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
     assert!(!my_turn(&mut Fake::success(), &f.p, &peer).unwrap());
-    // The 996 integration reserves an assigned worker only through its actual
-    // queue/lease. A worker now building/reviewing must not block the queue.
+    // Assignment may be reviewing/building without Civ6. Until an actual
+    // queue entry exists it cannot reserve the game or block the first waiter.
     fs::remove_file(peer).unwrap();
     assert!(my_turn(&mut Fake::success(), &f.p, &me).unwrap());
+}
+#[test]
+fn ready_todo_with_registered_job_uses_queue_rank_until_registration_is_removed() {
+    let f = Fixture::new();
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":10}),
+    );
+    let peer = f.json(
+        "here/queue/peer.json",
+        json!({"job":"peer","long":0,"since":20}),
+    );
+    for job in ["mine", "peer"] {
+        f.json(&format!("jobs/{job}/job.json"), json!({"status":"running"}));
+    }
+    f.json(
+        "todo/todo.json",
+        json!({"items":[{
+            "id":437,"created_s":1,"status":"todo","dispatchable":true,
+            "spec":"s.md","needs":["civ6"],"scheduler":{"job":"peer"}
+        }]}),
+    );
+    let mut r = Fake {
+        time: 30.,
+        ..Fake::default()
+    };
+    assert!(my_turn(&mut r, &f.p, &me).unwrap());
+    assert!(!my_turn(&mut r, &f.p, &peer).unwrap());
+    fs::remove_file(peer).unwrap();
+    assert!(!my_turn(&mut r, &f.p, &me).unwrap());
 }
 #[test]
 fn stale_waiter_removed_and_broken_waiter_ignored() {
@@ -1994,6 +2088,55 @@ fn lease_monitor_missing_lock_uses_the_same_absolute_outage_deadline() {
 
 #[cfg(windows)]
 #[test]
+fn lease_observer_reads_while_tick_holds_a_writer_and_retains_deadline_during_save() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let f = Fixture::new();
+    let path = f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","acquired_at":0}),
+    );
+    let mut tick = cc_live::fairness::Lock::open(&f.p).unwrap().unwrap();
+    // The previous observation flags reject even a valid, quiet writer.
+    assert_eq!(
+        fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap_err()
+            .raw_os_error(),
+        Some(32)
+    );
+    let mut runner = Fake::success();
+    let limit = process::LeaseLimit::new(&f.p, "owned", 120.0);
+    assert_eq!(
+        process::observe_lease(&mut runner, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    // Model the truncate/rewrite interval through the real tick handle.
+    tick.file.set_len(0).unwrap();
+    limit.record_probe(&process::LeaseProbe::Contended(1800.0));
+    assert_eq!(
+        process::observe_lease(&mut runner, &limit).unwrap(),
+        process::LeaseProbe::Unavailable
+    );
+    assert_eq!(limit.hard_deadline(), Some(1800.0));
+    tick.save().unwrap();
+    assert_eq!(
+        process::observe_lease(&mut runner, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    assert_eq!(limit.hard_deadline(), None);
+    tick.info["lock_token"] = json!("peer");
+    tick.save().unwrap();
+    assert!(process::observe_lease(&mut runner, &limit)
+        .unwrap_err()
+        .contains("ownership changed"));
+    drop(tick);
+    assert_eq!(read_json(path).unwrap()["lock_token"], "peer");
+}
+
+#[cfg(windows)]
+#[test]
 fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
     use std::os::windows::fs::OpenOptionsExt;
     let f = Fixture::new();
@@ -3011,6 +3154,63 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         assert_eq!(round["driver_exit_code"], 0);
         assert_eq!(round["cleanup"]["game_closed"], true);
         assert_eq!(round["cleanup"]["lock_released"], true);
+    }
+}
+
+#[test]
+fn ordinary_hotseat_selects_its_autosaves_and_preserves_single_player() {
+    for session in ["hotseat", "unsupported"] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        fs::write(
+            f.p.live()
+                .join("tools/target/release/civ6-save-isolation.exe"),
+            "fixture binary",
+        )
+        .unwrap();
+        let saves =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves");
+        for folder in ["Single", "Hotseat"] {
+            fs::create_dir_all(saves.join(folder).join("auto")).unwrap();
+            fs::write(
+                saves.join(folder).join("auto/owner-save"),
+                folder.as_bytes(),
+            )
+            .unwrap();
+        }
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        r.expect_fifo = false;
+        r.running = false;
+        let scenario_path = f.p.live().join("tools/civ6-autotest/scenarios/cycle.json");
+        let mut scenario = read_json(&scenario_path).unwrap();
+        scenario["session_type"] = json!(session);
+        write_json(&scenario_path, &scenario).unwrap();
+        let result = cli(&mut r, &f.p, &args(&["main:cycle.json"]));
+        if session == "hotseat" {
+            assert_eq!(result.unwrap(), 0);
+            assert_eq!(r.restore_calls, 1);
+            assert_eq!(r.artifacts.len(), 1);
+            assert_eq!(
+                &r.isolation_calls[0].args[6..],
+                &args(&["--session-type", "hotseat"])
+            );
+        } else {
+            assert!(result.unwrap_err().contains("unsupported autosave session"));
+            assert!(r.artifacts.is_empty());
+            assert!(r.isolation_calls.is_empty());
+        }
+        for folder in ["Single", "Hotseat"] {
+            assert_eq!(
+                fs::read(saves.join(folder).join("auto/owner-save")).unwrap(),
+                folder.as_bytes()
+            );
+        }
+        assert!(!f.p.here.join("reliability-auto-state.json").exists());
+        assert!(!f.p.here.join("civ6.lock").exists());
     }
 }
 
@@ -4675,6 +4875,43 @@ fn ready_scheduler_item_counts_as_competitor_and_blocks_requeued_chain() {
 }
 
 #[test]
+fn session_without_a_chain_does_not_reserve_the_game() {
+    let f = Fixture::new();
+    f.json("todo/todo.json", json!({"items":[{"id":995,"status":"doing","needs":["civ6"],"scheduler":{"job":"waiting"}}]}));
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":2}),
+    );
+    for status in ["queued", "starting", "running"] {
+        f.json("jobs/waiting/job.json", json!({"status":status}));
+        let mut r = Fake::success();
+        assert!(my_turn(&mut r, &f.p, &me).unwrap(), "{status}");
+        assert!(r.calls.is_empty());
+    }
+}
+
+#[test]
+fn session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
+    let f = Fixture::new();
+    let me = f.json(
+        "here/queue/me.json",
+        json!({"job":"mine","long":0,"since":2}),
+    );
+    let owner = json!({"job":"waiting","live_chain":true,"pid":123,"long":0,"since":1});
+    let other = f.json("here/queue/other.json", owner.clone());
+    for status in ["queued", "starting", "running"] {
+        f.json("jobs/waiting/job.json", json!({"status":status}));
+        let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+        assert!(!my_turn(&mut r, &f.p, &me).unwrap(), "{status}");
+        assert!(other.exists());
+        assert_eq!(r.calls.len(), 1);
+        let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
+        assert!(holder_alive(&mut r, &f.p, &owner).unwrap(), "{status}");
+        assert_eq!(r.calls.len(), 1);
+    }
+}
+
+#[test]
 fn review_launch_failure_or_missing_job_id_never_returns_success() {
     let f = Fixture::new();
     let facts = f.root.join("facts.txt");
@@ -4792,63 +5029,6 @@ fn queued_session_with_a_live_chain_keeps_its_actual_queue_and_lock() {
     let mut r = Fake::outputs(&[("\"live_chain.exe\",\"123\"", "", 0)]);
     assert!(holder_alive(&mut r, &f.p, &owner).unwrap());
     assert_eq!(r.calls.len(), 1);
-}
-
-#[test]
-fn ordinary_hotseat_selects_its_autosaves_and_preserves_single_player() {
-    for session in ["hotseat", "unsupported"] {
-        let f = Fixture::new();
-        f.json(
-            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
-            json!("fixture source"),
-        );
-        fs::write(
-            f.p.live()
-                .join("tools/target/release/civ6-save-isolation.exe"),
-            "fixture binary",
-        )
-        .unwrap();
-        let saves =
-            f.p.profile
-                .join("Documents/My Games/Sid Meier's Civilization VI/Saves");
-        for folder in ["Single", "Hotseat"] {
-            fs::create_dir_all(saves.join(folder).join("auto")).unwrap();
-            fs::write(
-                saves.join(folder).join("auto/owner-save"),
-                folder.as_bytes(),
-            )
-            .unwrap();
-        }
-        let mut r = ReliabilityRunner::new(&f, vec![0]);
-        r.expect_fifo = false;
-        r.running = false;
-        let scenario_path = f.p.live().join("tools/civ6-autotest/scenarios/cycle.json");
-        let mut scenario = read_json(&scenario_path).unwrap();
-        scenario["session_type"] = json!(session);
-        write_json(&scenario_path, &scenario).unwrap();
-        let result = cli(&mut r, &f.p, &args(&["main:cycle.json"]));
-        if session == "hotseat" {
-            assert_eq!(result.unwrap(), 0);
-            assert_eq!(r.restore_calls, 1);
-            assert_eq!(r.artifacts.len(), 1);
-            assert_eq!(
-                &r.isolation_calls[0].args[6..],
-                &args(&["--session-type", "hotseat"])
-            );
-        } else {
-            assert!(result.unwrap_err().contains("unsupported autosave session"));
-            assert!(r.artifacts.is_empty());
-            assert!(r.isolation_calls.is_empty());
-        }
-        for folder in ["Single", "Hotseat"] {
-            assert_eq!(
-                fs::read(saves.join(folder).join("auto/owner-save")).unwrap(),
-                folder.as_bytes()
-            );
-        }
-        assert!(!f.p.here.join("reliability-auto-state.json").exists());
-        assert!(!f.p.here.join("civ6.lock").exists());
-    }
 }
 
 #[test]

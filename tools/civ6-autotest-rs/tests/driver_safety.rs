@@ -321,6 +321,119 @@ fn test_busy_core_cannot_admit_a_loaded_game_or_repeat_begin_game() {
 }
 
 #[test]
+fn load_action_installs_observation_before_begin_game() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    let logs = f.logs.clone();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "FrontEnd".into(),
+            "LoadScreen".into(),
+            "InGame".into(),
+            "JAC_Absorption_HeroKeys".into(),
+        ])
+    });
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("LoadGame") {
+            append(&logs.join("Lua.log"), &format!("{LOADSCREEN_READY}\n"));
+        }
+        Ok("true".into())
+    });
+    let step = json!({"action":"load","name":"observation-load","exact_name":true,"timeout":2,
+      "before_begin_lua":{"state_name":"JAC_Absorption_HeroKeys","code":"ARM_NATIVE_OBSERVER=true;return true"}});
+    validate_scenario(&scenario(step.clone())).unwrap();
+    let mut runner = f.direct_runner(scenario(step.clone()), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    fs::create_dir_all(runner.save_path("observation-load").parent().unwrap()).unwrap();
+    fs::write(
+        runner.save_path("observation-load"),
+        b"owned simulated save",
+    )
+    .unwrap();
+    runner.run_step(&step).unwrap();
+    let trace = f.trace();
+    let arm = trace
+        .lua
+        .iter()
+        .position(|(_, code, _)| code.contains("ARM_NATIVE_OBSERVER"))
+        .unwrap();
+    let begin = trace
+        .lua
+        .iter()
+        .position(|(_, code, _)| code.contains("OnActivateButtonClicked"))
+        .unwrap();
+    assert!(arm < begin);
+    assert_eq!(lua_count(&f, "ARM_NATIVE_OBSERVER"), 1);
+}
+
+#[test]
+fn load_observation_hook_precedes_begin_and_never_replays_unknown_setup() {
+    for lost in [false, true] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_states = Box::new(|_| {
+            Ok(vec![
+                "LoadScreen".into(),
+                "InGame".into(),
+                "JAC_Absorption_HeroKeys".into(),
+            ])
+        });
+        backend.on_lua = Box::new(move |_, code, _| {
+            if lost && code.contains("ARM_NATIVE_OBSERVER") {
+                return Err(Error::unknown("listener response lost"));
+            }
+            Ok("true".into())
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        ready(&f, &mut runner);
+        let hook = json!({"state_name":"JAC_Absorption_HeroKeys","code":"ARM_NATIVE_OBSERVER=true;return true"});
+        let result = runner.enter_game_after_loadscreen_with_hook(0, 1.0, None, false, Some(&hook));
+        let t = f.trace();
+        assert_eq!(t.lua[0].0, "JAC_Absorption_HeroKeys");
+        assert_eq!(lua_count(&f, "ARM_NATIVE_OBSERVER"), 1);
+        assert!(t.presses.is_empty());
+        if lost {
+            assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
+            assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+        } else {
+            result.unwrap();
+            assert!(t.lua[1].1.contains("OnActivateButtonClicked"));
+        }
+    }
+}
+
+#[test]
+fn load_observation_hook_missing_state_or_false_stops_before_publication() {
+    for missing in [false, true] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_states = Box::new(move |_| {
+            Ok(if missing {
+                vec!["LoadScreen".into(), "InGame".into()]
+            } else {
+                vec![
+                    "LoadScreen".into(),
+                    "InGame".into(),
+                    "JAC_Absorption_HeroKeys".into(),
+                ]
+            })
+        });
+        backend.on_lua = Box::new(|_, _, _| Ok("false".into()));
+        let mut runner = f.direct_runner(json!({}), backend);
+        ready(&f, &mut runner);
+        let hook = json!({"state_name":"JAC_Absorption_HeroKeys","code":"return true"});
+        assert!(runner
+            .enter_game_after_loadscreen_with_hook(0, 0.02, None, false, Some(&hook))
+            .is_err());
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+        assert!(f.trace().presses.is_empty());
+    }
+    for action in ["save", "ui_lua"] {
+        assert!(validate_scenario(&scenario(json!({"action":action,"name":"test","state_name":"InGame","code":"return true","before_begin_lua":{"state_name":"InGame","code":"return true"}}))).is_err());
+    }
+}
+
+#[test]
 fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
     for (reached_ingame, log_writable) in
         [(true, true), (true, false), (false, true), (false, false)]

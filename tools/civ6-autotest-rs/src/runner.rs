@@ -2863,6 +2863,22 @@ impl Runner {
         deadline: Option<f64>,
         response_unknown: bool,
     ) -> Result<()> {
+        self.enter_game_after_loadscreen_with_hook(
+            before,
+            timeout,
+            deadline,
+            response_unknown,
+            None,
+        )
+    }
+    pub fn enter_game_after_loadscreen_with_hook(
+        &mut self,
+        before: usize,
+        timeout: f64,
+        deadline: Option<f64>,
+        response_unknown: bool,
+        hook: Option<&Value>,
+    ) -> Result<()> {
         let end = deadline.unwrap_or_else(|| self.clock.now() + timeout);
         let mut sent = false;
         let mut begin_unknown = false;
@@ -2880,6 +2896,25 @@ impl Runner {
                     Err(e) if retryable(&e) => vec![],
                     Err(e) => return Err(e),
                 };
+                if let Some(hook) = hook {
+                    let state = text(hook, "state_name");
+                    if !state_available(&states, state) {
+                        last = format!("before-begin observation state {state} unavailable");
+                        self.sleep_until(end, 0.5);
+                        continue;
+                    }
+                    // Install observation before either Begin Game or its
+                    // keyboard fallback can publish automatic product work.
+                    // A lost/failed response stops here; never replay a hook
+                    // whose listener may already have been registered.
+                    let result = self.lua(state, text(hook, "code"), self.budget(end, 5.0)?)?;
+                    if result != "true" {
+                        return Err(Error::scenario(
+                            "before-begin observation did not return true",
+                        ));
+                    }
+                    self.log("load_before_begin", "READY", state)?;
+                }
                 if state_available(&states, "LoadScreen") {
                     let begin = self.lua(
                         "LoadScreen",
@@ -4080,7 +4115,13 @@ impl Runner {
         if session == scenario::SessionType::Hotseat {
             unknown |= self.launch_hotseat_staging(before, deadline)?;
         }
-        self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+        self.enter_game_after_loadscreen_with_hook(
+            before,
+            timeout,
+            Some(deadline),
+            unknown,
+            step.get("before_begin_lua"),
+        )?;
         self.accept_hotseat_turn(deadline, true)?;
         self.activate_persona_runtime(deadline)?;
         self.backend.check_native_bootstrap()?;

@@ -1,0 +1,711 @@
+//! Native-carrier witness controller; separate from the growth witness.
+use civ6_autotest_rs::{
+    hotseat_bridge::{SystemTransport, TransportIo},
+    judge,
+    runner::Runner,
+    scenario,
+};
+use civ6_autotest_rs::{Error, Result};
+use clap::{Parser, Subcommand};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
+use civ6_autotest_rs::hotseat_native_carrier as protocol;
+use civ6_autotest_rs::native_carrier_witness::WitnessRoute;
+
+#[derive(Parser)]
+#[command(about = "Validate the fixed native-carrier hotseat log protocol")]
+struct Args {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    Prepare {
+        output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long, value_enum, default_value = "human")]
+        route: WitnessRoute,
+    },
+    Pregame {
+        output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
+        logs: PathBuf,
+        #[arg(long)]
+        saves: PathBuf,
+        #[arg(long, default_value_t = 4318)]
+        port: u16,
+    },
+    Audit {
+        input: PathBuf,
+        #[arg(long)]
+        nonce: String,
+    },
+    Init {
+        output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
+        nonce: String,
+        #[arg(long)]
+        logs: PathBuf,
+        #[arg(long)]
+        saves: PathBuf,
+    },
+    Drive {
+        output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
+        logs: PathBuf,
+        #[arg(long)]
+        saves: PathBuf,
+        #[arg(long, default_value_t = 1200.)]
+        timeout: f64,
+        #[arg(long, default_value_t = 4318)]
+        port: u16,
+    },
+}
+
+const NONCE_KEY: &str = "JAC_NATIVE_CARRIER_WITNESS_NONCE";
+const BINDINGS: [&str; 5] = [
+    "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
+    "poc/JAC_PoC_Absorption/UI/JAC_NativeCarrierWitness_UI.lua",
+    "poc/JAC_PoC_JapanMapScale/UI/JAC_NativeCarrierWitness_Staging.lua",
+    civ6_autotest_rs::native_carrier_witness::STAGING_ROOM,
+    civ6_autotest_rs::native_carrier_witness::FRONTEND_MENU,
+];
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Bundle {
+    version: u8,
+    nonce: String,
+    route: WitnessRoute,
+    bindings: std::collections::BTreeMap<String, String>,
+}
+
+fn file_hash(path: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!("{:x}", Sha256::digest(fs::read(path)?)))
+}
+
+fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
+    let b: Bundle = serde_json::from_slice(&fs::read(output.join("bundle.json"))?)?;
+    if b.version != 4 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
+        return Err(Error::scenario("invalid fixed witness bundle"));
+    }
+    for relative in BINDINGS {
+        if b.bindings.get(relative) != Some(&file_hash(&repo.join(relative))?) {
+            return Err(Error::scenario(
+                "deployed witness differs from prepared bytes",
+            ));
+        }
+    }
+    Ok(b)
+}
+
+fn pregame_flags(nonce: &str, route: WitnessRoute) -> String {
+    let key = scenario::lua_string(NONCE_KEY);
+    let value = scenario::lua_string(nonce);
+    let hotseat = scenario::lua_string(civ6_autotest_rs::native_carrier_witness::HOTSEAT_KEY);
+    let route_key = scenario::lua_string(civ6_autotest_rs::native_carrier_witness::ROUTE_KEY);
+    let route_value = scenario::lua_string(route.identifier());
+    format!("assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat() and GameConfiguration.IsAnyMultiplayer(),'actual hotseat frontend required')\nGameConfiguration.SetValue({key}, {value})\nGameConfiguration.SetValue({route_key}, {route_value})\nassert(GameConfiguration.GetValue({route_key})=={route_value},'witness route was not applied')\nGameConfiguration.SetValue({hotseat}, true)\nlocal confirmed=GameConfiguration.GetValue({hotseat})\nassert(confirmed==true or confirmed==1,'hotseat confirmation was not applied')\nGameConfiguration.SetValue('GAMEMODE_HEROES',true)\nlocal mode=GameConfiguration.GetValue('GAMEMODE_HEROES')\nassert(mode==true or mode==1,'Heroes & Legends not enabled')\nlocal observed=GameConfiguration.GetValue({key})\nassert(observed=={value},'witness nonce was not applied')\nreturn observed")
+}
+
+fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
+    verify_lease()?;
+    let b = bundle(output, repo)?;
+    let state = state(&output.join("controller.jsonl"))?;
+    if state.journal.nonce != b.nonce || state.route != b.route || state.processed != 0 {
+        return Err(Error::scenario(
+            "pregame requires this new initialized controller",
+        ));
+    }
+    let mut io = SystemTransport { logs };
+    verify_owner(&mut io, &state)?;
+    // Fixed shipped configuration only; never accept arbitrary runtime Lua.
+    let fixed: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../civ6-autotest/scenarios/absorption-native-carrier-hotseat-save.json"
+    ))?;
+    let mut runner = Runner::new(
+        fixed.clone(),
+        output.to_owned(),
+        logs.to_owned(),
+        saves.to_owned(),
+        port,
+    );
+    let sent = output.join("pregame-sent.jsonl");
+    let mut receipt = OpenOptions::new().write(true).create_new(true).open(sent)?;
+    for index in 0..2 {
+        verify_owner(&mut io, &state)?;
+        writeln!(receipt, "setup {index}")?;
+        receipt.sync_all()?;
+        runner.run_frontend_setup_step_checked(&fixed["steps"][index], || {
+            verify_owner(&mut io, &state)
+        })?;
+    }
+    let flag = pregame_flags(&b.nonce, b.route);
+    writeln!(receipt, "nonce")?;
+    receipt.sync_all()?;
+    let deadline = io.now() + 30.;
+    let answer = runner
+        .send_frontend_transition_checked(&flag, deadline, || verify_owner(&mut io, &state))?;
+    if answer.trim().trim_matches('"') != b.nonce {
+        return Err(Error::scenario("witness nonce was not observed"));
+    }
+    writeln!(receipt, "host")?;
+    receipt.sync_all()?;
+    let code="assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat(),'hotseat frontend required')\nNetwork.HostGame(ServerType.SERVER_TYPE_HOTSEAT)\nreturn true";
+    runner
+        .send_frontend_transition_checked(code, io.now() + 15., || verify_owner(&mut io, &state))?;
+    runner.disconnect();
+    println!("HostGame sent once; fixed staging witness handles the official Ready button");
+    Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct State {
+    journal: protocol::Journal,
+    route: WitnessRoute,
+    baseline: serde_json::Value,
+    processed: usize,
+    prefix_hash: String,
+    #[serde(default)]
+    load_baselines: std::collections::BTreeMap<u8, serde_json::Value>,
+}
+
+fn append_state(path: &Path, state: &State) -> Result<()> {
+    let mut file = OpenOptions::new().append(true).open(path)?;
+    serde_json::to_writer(&mut file, state)?;
+    file.write_all(b"\n")?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn state(path: &Path) -> Result<State> {
+    let bytes = fs::read(path)?;
+    if !bytes.ends_with(b"\n") {
+        return Err(Error::scenario(
+            "incomplete controller journal; do not replay",
+        ));
+    }
+    let line = bytes
+        .split(|b| *b == b'\n')
+        .rev()
+        .find(|row| !row.is_empty())
+        .ok_or_else(|| Error::scenario("empty controller journal"))?;
+    Ok(serde_json::from_slice(line)?)
+}
+
+fn digest(frames: &[protocol::Frame]) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(frames)?)))
+}
+
+fn verify_boot_route(frame: &protocol::Frame, route: WitnessRoute) -> Result<()> {
+    if frame.kind == "BOOT" && frame.payload()?.code.as_deref() != Some(route.identifier()) {
+        return Err(Error::scenario(
+            "observed witness route differs from prepared route",
+        ));
+    }
+    Ok(())
+}
+
+fn verify_owner(io: &mut SystemTransport<'_>, state: &State) -> Result<()> {
+    verify_lease()?;
+    if io.owner()? != state.journal.owner {
+        return Err(Error::input("Civ6 PID/start/window changed"));
+    }
+    Ok(())
+}
+
+fn verify_lease() -> Result<()> {
+    let expected = std::env::var("CODEX_JOB_ID")
+        .map_err(|_| Error::input("CODEX_JOB_ID is required for the shared live lease"))?;
+    let path = std::env::var_os("CIV6_LIVE_LOCK_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("D:/CC/Tools/civ6-live/civ6.lock"));
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(path)?)?;
+    if value["job"].as_str() != Some(expected.as_str()) || value["live_chain"] != true {
+        return Err(Error::input("shared Civ6 lease is not owned by this job"));
+    }
+    Ok(())
+}
+
+fn completed_lines(text: &str) -> &str {
+    text.rfind('\n').map_or("", |end| &text[..=end])
+}
+
+fn drive(
+    output: &Path,
+    repo: &Path,
+    logs: &Path,
+    saves: &Path,
+    timeout: f64,
+    _port: u16,
+) -> Result<()> {
+    if !timeout.is_finite() || !(1.0..=1200.).contains(&timeout) {
+        return Err(Error::input("drive timeout must be 1..1200 seconds"));
+    }
+    let path = output.join("controller.jsonl");
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(output.join("controller.lock"))?;
+    lock.try_lock()
+        .map_err(|_| Error::scenario("native carrier controller is already active"))?;
+    let mut state = state(&path)?;
+    let prepared = bundle(output, repo)?;
+    if prepared.nonce != state.journal.nonce || prepared.route != state.route {
+        return Err(Error::scenario("controller bundle nonce differs"));
+    }
+    if state.journal.complete {
+        return Err(Error::scenario(
+            "completed controller will not execute again",
+        ));
+    }
+    let mut io = SystemTransport { logs };
+    verify_owner(&mut io, &state)?;
+    let deadline = io.now() + timeout;
+    loop {
+        verify_owner(&mut io, &state)?;
+        if io.now() >= deadline {
+            return Err(Error::scenario(
+                "native carrier fixture incomplete at deadline",
+            ));
+        }
+        let fresh = judge::read_since(logs, &state.baseline)?;
+        let failed: Vec<_> = judge::judge(&fresh, "generic", None, true)
+            .into_iter()
+            .filter(|c| !c.passed)
+            .map(|c| c.name)
+            .collect();
+        if !failed.is_empty() {
+            return Err(Error::scenario(format!(
+                "native runtime log failed: {failed:?}"
+            )));
+        }
+        let frames = protocol::parse_available_frames(
+            completed_lines(fresh.get("Lua.log").map(String::as_str).unwrap_or("")),
+            &state.journal.nonce,
+        )?;
+        if frames.len() < state.processed
+            || digest(&frames[..state.processed])? != state.prefix_hash
+        {
+            return Err(Error::scenario("consumed log frames changed"));
+        }
+        for frame in &frames[state.processed..] {
+            verify_boot_route(frame, state.route)?;
+            let action = state.journal.consume(frame)?;
+            state.processed += 1;
+            state.prefix_hash = digest(&frames[..state.processed])?;
+            // Write before any key or load: unknown outcomes retain sent markers.
+            append_state(&path, &state)?;
+            match action {
+                Some(protocol::Action::Begin { .. }) => {
+                    let baseline = state
+                        .load_baselines
+                        .get(&frame.generation)
+                        .unwrap_or(&state.baseline);
+                    loop {
+                        verify_owner(&mut io, &state)?;
+                        let loading = judge::read_since(logs, baseline)?;
+                        if loading.get("Lua.log").is_some_and(|text| {
+                            text.contains(
+                                civ6_autotest_rs::native_carrier_witness::ENGINE_LOAD_READY,
+                            )
+                        }) {
+                            break;
+                        }
+                        if io.now() >= deadline {
+                            return Err(Error::scenario(
+                                "early hook is armed but engine load completion is unproved",
+                            ));
+                        }
+                        io.sleep(0.2);
+                    }
+                    // Stock LoadScreen.OnLoadGameViewStateDone automatically
+                    // calls OnActivateButtonClicked for AnyMultiplayer. A key
+                    // here could instead dismiss PlayerChange or end a turn.
+                }
+                Some(protocol::Action::AcceptDialog { .. }) => {
+                    verify_owner(&mut io, &state)?;
+                    io.key(0x0D, deadline)?;
+                }
+                Some(protocol::Action::Load { generation }) => {
+                    let name = protocol::save_name(&state.journal.nonce, generation)?;
+                    let save = saves.join(format!("{name}.Civ6Save"));
+                    while !save.is_file() || fs::metadata(&save)?.len() == 0 {
+                        verify_owner(&mut io, &state)?;
+                        if io.now() >= deadline {
+                            return Err(Error::scenario(
+                                "SaveComplete lacks a new nonempty physical file",
+                            ));
+                        }
+                        io.sleep(0.2);
+                    }
+                    state
+                        .load_baselines
+                        .insert(generation, judge::snapshot_logs(logs)?);
+                    append_state(&path, &state)?;
+                    verify_owner(&mut io, &state)?;
+                    io.key(0x7E, deadline)?; // F15; fixed visible frontend handler only.
+                }
+                Some(protocol::Action::Complete) => {
+                    println!("native carrier exact saved reload complete");
+                    return Ok(());
+                }
+                None => {}
+            }
+        }
+        if let Some(generation) = state.journal.pending_frontend() {
+            let text = completed_lines(fresh.get("Lua.log").map(String::as_str).unwrap_or(""));
+            if let Some(scene) =
+                protocol::frontend_after_exit(text, &state.journal.nonce, generation)
+            {
+                let name = protocol::save_name(&state.journal.nonce, generation)?;
+                let save = saves.join(format!("{name}.Civ6Save"));
+                if save.is_file() && fs::metadata(&save)?.len() > 0 {
+                    state.journal.arm_frontend(generation, scene)?;
+                    // Entire packet is spent before the first input, including partial delivery.
+                    append_state(&path, &state)?;
+                    let packet_deadline = deadline.min(io.now() + 15.);
+                    for vk in protocol::frontend_keys(&state.journal.nonce, generation)? {
+                        verify_owner(&mut io, &state)?;
+                        io.key(vk, packet_deadline)?;
+                    }
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+fn run(args: Args) -> Result<()> {
+    match args.command {
+        Command::Prepare {
+            output,
+            repo,
+            route,
+        } => {
+            if fs::read_dir(&output)?.next().is_some() {
+                return Err(Error::scenario(
+                    "prepared output must be an empty owned directory",
+                ));
+            }
+            let mut bindings = std::collections::BTreeMap::new();
+            for relative in BINDINGS {
+                bindings.insert(relative.to_owned(), file_hash(&repo.join(relative))?);
+            }
+            let value = Bundle {
+                version: 4,
+                nonce: uuid::Uuid::new_v4().simple().to_string(),
+                route,
+                bindings,
+            };
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(output.join("bundle.json"))?;
+            serde_json::to_writer_pretty(&mut file, &value)?;
+            file.sync_all()?;
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        }
+        Command::Pregame {
+            output,
+            repo,
+            logs,
+            saves,
+            port,
+        } => pregame(&output, &repo, &logs, &saves, port)?,
+        Command::Audit { input, nonce } => {
+            let frames = protocol::parse_available_frames(&fs::read_to_string(input)?, &nonce)?;
+            let mut receipts = protocol::Receipts::default();
+            for frame in &frames {
+                frame.payload()?;
+                receipts.accept(frame)?;
+            }
+            println!("{}", serde_json::to_string_pretty(&frames)?);
+        }
+        Command::Init {
+            output,
+            repo,
+            nonce,
+            logs,
+            saves,
+        } => {
+            verify_lease()?;
+            let prepared = bundle(&output, &repo)?;
+            if prepared.nonce != nonce {
+                return Err(Error::scenario("init bundle nonce differs"));
+            }
+            for generation in [1, 2] {
+                let name = protocol::save_name(&nonce, generation)?;
+                if saves.join(format!("{name}.Civ6Save")).exists() {
+                    return Err(Error::scenario(
+                        "unique native-carrier save exists; choose a new run, do not overwrite",
+                    ));
+                }
+            }
+            let mut io = SystemTransport { logs: &logs };
+            let owner = io.owner()?;
+            let journal = protocol::Journal::new(&nonce, owner)?;
+            let path = output.join("controller.jsonl");
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)?;
+            let value = State {
+                journal,
+                route: prepared.route,
+                baseline: judge::snapshot_logs(&logs)?,
+                processed: 0,
+                prefix_hash: digest(&[])?,
+                load_baselines: std::collections::BTreeMap::new(),
+            };
+            serde_json::to_writer(&mut file, &value)?;
+            file.write_all(b"\n")?;
+            file.sync_all()?;
+            println!("controller initialized; no operation issued");
+        }
+        Command::Drive {
+            output,
+            repo,
+            logs,
+            saves,
+            timeout,
+            port,
+        } => drive(&output, &repo, &logs, &saves, timeout, port)?,
+    }
+    Ok(())
+}
+
+fn main() {
+    if let Err(error) = run(Args::parse()) {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn nonce() -> &'static str {
+        static VALUE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        VALUE
+            .get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+            .as_str()
+    }
+
+    #[test]
+    fn ai_route_is_selected_explicitly_and_boot_matches_the_frozen_bundle() {
+        let args = Args::try_parse_from([
+            "controller",
+            "prepare",
+            "out",
+            "--repo",
+            "repo",
+            "--route",
+            "ai",
+        ])
+        .unwrap();
+        assert!(matches!(
+            args.command,
+            Command::Prepare {
+                route: WitnessRoute::Ai,
+                ..
+            }
+        ));
+        assert!(Args::try_parse_from([
+            "controller",
+            "prepare",
+            "out",
+            "--repo",
+            "repo",
+            "--route",
+            "unknown"
+        ])
+        .is_err());
+        let lua = mlua::Lua::new();
+        lua.load("VALUES={};UI={IsInFrontEnd=function() return true end};GameConfiguration={IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,SetValue=function(k,v) VALUES[k]=v end,GetValue=function(k) return VALUES[k] end}").exec().unwrap();
+        lua.load(format!("local observed=(function() {} end)();assert(observed=={} and VALUES.JAC_NATIVE_CARRIER_WITNESS_ROUTE=={})",pregame_flags(nonce(),WitnessRoute::Ai),scenario::lua_string(nonce()),scenario::lua_string(WitnessRoute::Ai.identifier()))).exec().unwrap();
+        for code in [
+            None,
+            Some(WitnessRoute::Human.identifier()),
+            Some(WitnessRoute::Ai.identifier()),
+        ] {
+            let frame = protocol::Frame {
+                nonce: nonce().into(),
+                scene: "scene0".into(),
+                serial: 1,
+                generation: 0,
+                step: 0,
+                kind: "BOOT".into(),
+                body: serde_json::json!({"generation":0,"canonical":"actual","code":code})
+                    .to_string(),
+            };
+            assert_eq!(
+                verify_boot_route(&frame, WitnessRoute::Ai).is_ok(),
+                code == Some(WitnessRoute::Ai.identifier())
+            );
+        }
+    }
+
+    #[test]
+    fn pregame_flags_use_the_stock_value_api_and_verify_the_actual_mode() {
+        let lua = mlua::Lua::new();
+        lua.load("local values={};UI={IsInFrontEnd=function() return true end};GameConfiguration={IsHotseat=function() return true end,IsAnyMultiplayer=function() return true end,SetValue=function(k,v) values[k]=v end,GetValue=function(k) return values[k] end}").exec().unwrap();
+        assert_eq!(
+            lua.load(pregame_flags(nonce(), WitnessRoute::Human))
+                .eval::<String>()
+                .unwrap(),
+            nonce()
+        );
+        assert!(lua
+            .load("return GameConfiguration.GetValue('GAMEMODE_HEROES')")
+            .eval::<bool>()
+            .unwrap());
+        lua.load("GameConfiguration.SetValue=function() end")
+            .exec()
+            .unwrap();
+        let other = uuid::Uuid::new_v4().simple().to_string();
+        assert_ne!(other, nonce());
+        assert!(lua
+            .load(pregame_flags(&other, WitnessRoute::Human))
+            .eval::<String>()
+            .is_err());
+        lua.load("local read=GameConfiguration.GetValue;GameConfiguration.GetValue=function(k) if k=='GAMEMODE_HEROES' then return false end;return read(k) end").exec().unwrap();
+        assert!(lua
+            .load(pregame_flags(nonce(), WitnessRoute::Human))
+            .eval::<String>()
+            .is_err());
+    }
+
+    #[test]
+    fn incomplete_final_journal_record_never_restores_an_older_unsent_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("controller.jsonl");
+        let value = State {
+            journal: protocol::Journal::new(
+                nonce(),
+                civ6_autotest_rs::hotseat_bridge::WindowOwner {
+                    pid: 1,
+                    started: 1.,
+                    hwnd: 1,
+                },
+            )
+            .unwrap(),
+            route: WitnessRoute::Human,
+            baseline: serde_json::json!({}),
+            processed: 0,
+            prefix_hash: digest(&[]).unwrap(),
+            load_baselines: std::collections::BTreeMap::new(),
+        };
+        fs::write(
+            &path,
+            format!("{}\n", serde_json::to_string(&value).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(state(&path).unwrap().processed, 0);
+        OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(b"{\"processed\":1")
+            .unwrap();
+        assert!(state(&path).is_err());
+    }
+
+    #[test]
+    fn written_input_receipt_survives_restart_and_cannot_be_reissued() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("controller.jsonl");
+        let mut value = State {
+            journal: protocol::Journal::new(
+                nonce(),
+                civ6_autotest_rs::hotseat_bridge::WindowOwner {
+                    pid: 1,
+                    started: 1.,
+                    hwnd: 1,
+                },
+            )
+            .unwrap(),
+            route: WitnessRoute::Human,
+            baseline: serde_json::json!({}),
+            processed: 0,
+            prefix_hash: digest(&[]).unwrap(),
+            load_baselines: std::collections::BTreeMap::new(),
+        };
+        fs::write(&path, b"").unwrap();
+        let frame = |serial, kind| protocol::Frame {
+            nonce: nonce().into(),
+            scene: "scene0".into(),
+            serial,
+            generation: 0,
+            step: 0,
+            kind,
+            body: serde_json::json!({"generation":0,"canonical":"actual"}).to_string(),
+        };
+        value.journal.consume(&frame(1, "BOOT".into())).unwrap();
+        let begin = frame(2, "DIALOG_OPEN".into());
+        assert!(matches!(
+            value.journal.consume(&begin).unwrap(),
+            Some(protocol::Action::AcceptDialog { .. })
+        ));
+        append_state(&path, &value).unwrap();
+        let mut restored = state(&path).unwrap();
+        assert_eq!(restored.journal.consume(&begin).unwrap(), None);
+    }
+
+    #[test]
+    fn unfinished_log_line_is_not_decoded_as_a_malformed_finished_frame() {
+        assert_eq!(completed_lines("noise\nJAC_NC|1|partial"), "noise\n");
+        assert_eq!(completed_lines("JAC_NC|1|partial"), "");
+    }
+}
+#[test]
+fn current_bundle_requires_five_matching_files_and_refuses_legacy_version() {
+    let run_nonce = uuid::Uuid::new_v4().simple().to_string();
+    let temp = tempfile::tempdir().unwrap();
+    let output = temp.path().join("output");
+    let repo = temp.path().join("repo");
+    fs::create_dir(&output).unwrap();
+    for relative in BINDINGS {
+        let file = repo.join(relative);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, b"deployed bytes").unwrap();
+    }
+    let mut value = Bundle {
+        version: 4,
+        nonce: run_nonce.clone(),
+        route: WitnessRoute::Human,
+        bindings: std::collections::BTreeMap::new(),
+    };
+    for relative in BINDINGS {
+        value
+            .bindings
+            .insert(relative.into(), file_hash(&repo.join(relative)).unwrap());
+    }
+    let path = output.join("bundle.json");
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert_eq!(bundle(&output, &repo).unwrap().nonce, run_nonce);
+    value.version = 1;
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert!(bundle(&output, &repo).is_err());
+    value.version = 4;
+    value.bindings.remove(BINDINGS[4]);
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    assert!(bundle(&output, &repo).is_err());
+}

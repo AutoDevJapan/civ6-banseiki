@@ -2287,6 +2287,21 @@ mod native_transport {
         assert!(mp_receive(&lua, &raw));
     }
 
+    #[test]
+    fn mp_human_palace_carrier_advances_with_an_inactive_human_recipient() {
+        // Existing product model IDs are source1/recipient2, whereas the live
+        // witness uses source0/recipient1. This verifies the role-based guard,
+        // not real-engine city creation or a live hotseat acceptance result.
+        let lua = palace_world(1, true);
+        lua.load("Players[2].IsTurnActive=function() return false end;MP_PLAN()")
+            .exec()
+            .unwrap();
+        mp_until(&lua, "DISPATCH");
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Actor==1 and c.MP.MoveOwner==1 and c.MP.Loans[2].Owner==2);assert(not Players[2]:IsTurnActive());assert(not MP_OBSERVE() and UI_MOVES==1)").exec().unwrap();
+        mp_until(&lua, "DONE");
+        lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.Phase=='PROVED' and CITIES[4].owner==1 and CITIES[16].owner==2 and WORK_X==16 and UI_MOVES==1 and not Players[2]:IsTurnActive())").exec().unwrap();
+    }
+
     fn extended_world(local: i64, mode: &str) -> Lua {
         let lua = mp_world(local, false);
         lua.globals().set("EXTENDED_MODE", mode).unwrap();

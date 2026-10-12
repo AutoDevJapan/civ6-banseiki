@@ -200,9 +200,16 @@ fn frontend_xml_binds_stock_wrappers_without_unsupported_replacement_actions() {
             .attribute("File"),
         Some("StagingRoom")
     );
+    let wrapper = read_repo("poc/JAC_PoC_JapanMapScale/UI/JAC_JapanMainMenu.lua");
+    new_lua().load(&wrapper).into_function().unwrap();
     assert_eq!(
-        read_repo("poc/JAC_PoC_JapanMapScale/UI/JAC_JapanMainMenu.lua").trim(),
-        "include(\"MainMenu\")"
+        wrapper.matches("include(\"MainMenu\")").count()
+            + wrapper.matches("include('MainMenu')").count(),
+        1
+    );
+    assert!(
+        wrapper.contains("local stockShow=assert(OnShow)")
+            && wrapper.contains("local stockUpdate=assert(OnUpdate)")
     );
     let source = read_repo(STAGING);
     new_lua().load(&source).into_function().unwrap();

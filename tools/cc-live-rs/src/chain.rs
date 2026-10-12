@@ -3056,6 +3056,44 @@ mod source_manifest_tests {
 mod queue_entry_tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn cleanup_pin_accepts_helper_readers_and_denies_mutation_until_release() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = std::env::temp_dir().join(format!("cc-live-cleanup-{}", new_lock_token()));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("civ6.lock");
+        let token = "cleanup-test";
+        write_json(
+            &path,
+            &json!({"live_chain":true,"pid":std::process::id(),"chain_pid":std::process::id(),
+                "pid_created_filetime":process_created_filetime(std::process::id()).unwrap().unwrap(),
+                "lock_token":token}),
+        )
+        .unwrap();
+        let mut runner = process::RealRunner;
+        let pin = open_close_protection(&mut runner, &path, token)
+            .unwrap()
+            .unwrap();
+        let helper = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+        assert_eq!(
+            fs::write(&path, "other owner").unwrap_err().raw_os_error(),
+            Some(32)
+        );
+        assert_eq!(
+            open_for_owned_delete(&path).unwrap_err().raw_os_error(),
+            Some(32)
+        );
+        drop(helper);
+        pin.release(&mut runner, &path, token).unwrap();
+        assert!(!path.exists());
+        fs::remove_dir(root).unwrap();
+    }
+
     #[test]
     fn preparation_contention_survives_the_first_driver_observation_timeout() {
         struct Probe {
