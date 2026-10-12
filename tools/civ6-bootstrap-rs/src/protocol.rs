@@ -17,21 +17,29 @@ pub const ROOT_CLOSED: u64 = 1 << 63;
 pub const SUBMISSION_PREPARE_VERSION: u32 = 0x0880_2001;
 pub const SUBMISSION_CONFIG_VERSION: u32 = 0x0880_2002;
 pub const SUBMISSION_MAGIC: u64 = 0x424f_4a53_3038_3830;
-pub const SUBMISSION_ROW: usize = 256;
+pub const SUBMISSION_V1_ROW: usize = 256;
+pub const SUBMISSION_V1_BYTES: usize = ROOT_HEADER + SUBMISSION_V1_ROW * ROOT_ROWS;
+pub const SUBMISSION_ROW: usize = 272;
 pub const SUBMISSION_BYTES: usize = ROOT_HEADER + SUBMISSION_ROW * ROOT_ROWS;
 
 /// Copies made at entry only. Scalar addresses in these records are opaque;
 /// this parser never follows them. Correspondence is not job ownership/join.
 pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
-    if b.len() != SUBMISSION_BYTES
+    let version = word(b, 8)?;
+    let (row_bytes, trace_bytes) = match version {
+        1 => (SUBMISSION_V1_ROW, SUBMISSION_V1_BYTES),
+        2 => (SUBMISSION_ROW, SUBMISSION_BYTES),
+        _ => return Err("submission trace version".into()),
+    };
+    if b.len() != trace_bytes
         || word(b, 0)? != SUBMISSION_MAGIC
-        || word(b, 8)? != 1
-        || word(b, 16)? != SUBMISSION_BYTES as u64
+        || word(b, 16)? != trace_bytes as u64
         || word(b, 24)? != ROOT_ROWS as u64
-        || word(b, 32)? != SUBMISSION_ROW as u64
+        || word(b, 32)? != row_bytes as u64
         || word(b, 40)? != u64::from(pid)
         || word(b, 48)? != created
-        || (28..32).any(|i| word(b, i * 8).ok() != Some(0))
+        || (if version == 1 { 28..32 } else { 29..32 }).any(|i| word(b, i * 8).ok() != Some(0))
+        || (version == 2 && word(b, 224)? & !1 != 0)
     {
         return Err("submission trace size/version/identity/reserved mismatch".into());
     }
@@ -62,14 +70,14 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     if (0..8).any(|j| word(b, 384 + j * 8).ok() != Some(0)) {
         unknown.push("unused submission site is not zero".into());
     }
-    let mut pairs = Vec::<([u64; 32], [u64; 32])>::new();
+    let mut pairs = Vec::<([u64; 34], [u64; 34])>::new();
     let mut rows = Vec::new();
     let mut events = std::collections::BTreeSet::new();
     for i in (0..next).step_by(2) {
-        let read = |row: usize| -> Result<[u64; 32], String> {
-            let mut r = [0; 32];
-            for (j, v) in r.iter_mut().enumerate() {
-                *v = word(b, ROOT_HEADER + row * SUBMISSION_ROW + j * 8)?;
+        let read = |row: usize| -> Result<[u64; 34], String> {
+            let mut r = [0; 34];
+            for (j, v) in r.iter_mut().enumerate().take(row_bytes / 8) {
+                *v = word(b, ROOT_HEADER + row * row_bytes + j * 8)?;
             }
             Ok(r)
         };
@@ -84,7 +92,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
                     .collect::<Vec<_>>()
             };
             rows.push(
-                json!({"raw":r.to_vec(),"invocation_id":r[3],"kind":r[1],"edge":r[2],
+                json!({"raw":r[..row_bytes/8].to_vec(),"invocation_id":r[3],"kind":r[1],"edge":r[2],
                 "tid":r[5],"thread_created_filetime":r[6],"core_epoch":r[7],
                 "caller":r[8],"entry_rsp":r[9],"rcx_list":r[10],"rdx_opaque":r[11],
                 "r8_set_opaque":r[12],"r9_metadata_opaque":r[13],
@@ -99,6 +107,12 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
                 "descriptor_read_raw_bool":r[30],"metadata_read_raw_bool":r[31],
                 "native_entry_rsp":r[29],"snapshot_scope":"entry_only_no_pointer_reread"}),
             );
+            if version == 2 {
+                let last = rows.last_mut().unwrap();
+                last["submit_wrapper_original_caller"] = json!(r[32]);
+                last["submit_wrapper_caller_read"] = json!({"copied":r[33]&255,
+                    "succeeded":r[33]&256!=0,"win32_error":r[33]>>32});
+            }
         }
         let valid = a[0] == i as u64 + 1
             && z[0] == i as u64 + 2
@@ -137,7 +151,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
                     && a[25] == 0
                     && a[27] == 0
             } else {
-                a[14..20] == [0; 6] && a[24..28] == [0; 4] && a[30..] == [0, 0]
+                a[14..20] == [0; 6] && a[24..28] == [0; 4] && a[30..] == [0; 4]
             };
         if valid {
             pairs.push((a, z));
@@ -148,25 +162,88 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
             ));
         }
     }
-    // One fixed, fully checked direct-call loop. RSP is the native caller
-    // frame identity; an equal list value alone cannot supply this relation.
+    // These keys establish observed caller-stack correspondence, never full
+    // frame lifetime. Manager Push subtracts38h and CALL pushes8; Spawn restores
+    // its frame before tail-forwarding, so its rawRSP is submit.rawRSP+40h.
+    let frame_key = |r: &[u64; 34]| -> Option<(u64, u64, u64, u64)> {
+        let rsp = if r[1] == 4 && core.checked_add(0x4a114a) == Some(r[8]) {
+            r[9].checked_add(0x40)?
+        } else {
+            r[9]
+        };
+        Some((r[5], r[6], r[7], rsp))
+    };
     let mut matched = std::collections::BTreeSet::new();
+    let mut matched_publications = std::collections::BTreeSet::new();
+    let mut manager_matches = 0usize;
     for (publish, publish_return) in pairs.iter().filter(|(a, _)| a[1] == 5) {
-        if core.checked_add(0x38888e) != Some(publish[8]) {
+        let governor =
+            version == 2 && core.checked_add(0x4a7a58) == Some(publish[8]) && word(b, 224)? == 1;
+        let generic = core.checked_add(0x38888e) == Some(publish[8]);
+        if (!generic && !governor) || publish[4] != 0 {
             continue;
         }
-        for (submit, returned) in pairs.iter().filter(|(a, _)| a[1] == 4) {
-            if core.checked_add(0x388871)==Some(submit[8])
-                && submit[4]==0 && publish[4]==0
-                && submit[5..8]==publish[5..8] && submit[9]==publish[9]
-                && submit[10]>0 && submit[10]==publish[10]
-                && returned[23]<publish[23] && publish[23]<publish_return[23]
-                // A later/interleaved publication for this frame cuts the batch.
-                && !pairs.iter().any(|(other,_)|other[1]==5 && other[5..8]==submit[5..8]
-                    && other[9]==submit[9] && returned[23]<other[23] && other[23]<publish[23])
-            {
+        let key = frame_key(publish);
+        // Nested/interleaved publications cannot own the same observed batch.
+        if pairs.iter().any(|(other, end)| {
+            other[1] == 5
+                && other[3] != publish[3]
+                && frame_key(other) == key
+                && other[23] < publish_return[23]
+                && publish[23] < end[23]
+        }) {
+            unknown.push(format!(
+                "publication {} overlaps another on the same caller stack",
+                publish[3]
+            ));
+            continue;
+        }
+        let previous = pairs
+            .iter()
+            .filter(|(a, z)| a[1] == 5 && frame_key(a) == key && z[23] < publish[23])
+            .map(|(_, z)| z[23])
+            .max()
+            .unwrap_or(0);
+        let pending: Vec<_> = pairs
+            .iter()
+            .filter(|(a, z)| {
+                a[1] == 4 && frame_key(a) == key && a[23] > previous && z[23] < publish[23]
+            })
+            .collect();
+        // This producer submits exactly once before its next call. Two pending
+        // submissions at one stack address are ambiguous, including SP reuse.
+        if governor && pending.len() != 1 {
+            continue;
+        }
+        for (submit, _) in pending {
+            let origin = if governor {
+                core.checked_add(0x4a114a) == Some(submit[8])
+                    && core.checked_add(0x4a7a50) == Some(submit[32])
+                    && submit[33] == 0x108
+                    && submit[9].checked_add(0x28) == Some(submit[13])
+                    && core.checked_add(0xa06920) == Some(submit[18])
+                    && submit[19] == 0x1f00000000
+                    && submit[12] > 0
+            } else {
+                core.checked_add(0x388871) == Some(submit[8])
+            };
+            if origin && submit[4] == 0 && submit[10] > 0 && submit[10] == publish[10] {
                 matched.insert(submit[3]);
+                matched_publications.insert(publish[3]);
+                if governor {
+                    manager_matches += 1;
+                }
             }
+        }
+    }
+    for (a, _) in &pairs {
+        if (a[1] == 4 && !matched.contains(&a[3]))
+            || (a[1] == 5 && !matched_publications.contains(&a[3]))
+        {
+            unknown.push(format!(
+                "invocation {} has no unambiguous supported submission/publication correspondence",
+                a[3]
+            ));
         }
     }
     let submitted = pairs.iter().filter(|(a, _)| a[1] == 4).count();
@@ -186,10 +263,11 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         && word(b, 216)? == 1
         && unknown.is_empty();
     Ok(
-        json!({"schema":"todo880-native-submission-trace-v1","pid":pid,
+        json!({"schema":if version==1 {"todo880-native-submission-trace-v1"} else {"todo880-native-submission-trace-v2"},"pid":pid,
         "created_filetime":created,"core":core,"core_epoch":epoch,"reserved_rows":next,
         "rows":rows,"site_witnesses":sites,"accepted_calls_stopped":stopped,
         "submitted_normal_returns":submitted,"matched_published_submissions":matched.len(),
+        "governor_analyzer_matched_submissions":manager_matches,
         "capture_complete":clean && submitted>0 && !matched.is_empty(),"unknown":unknown,
         "runtime_activated":false,"scope":"accepted_two_wrapper_calls_sampling_only",
         "not_established_by_this_capture":["descriptor C++ type and ownership","birth generation ticket",
@@ -221,11 +299,11 @@ mod submission_protocol_tests {
         b[word * 8..word * 8 + 8].copy_from_slice(&v.to_le_bytes());
     }
     fn fixture() -> Vec<u8> {
-        let mut b = vec![0; SUBMISSION_BYTES];
+        let mut b = vec![0; SUBMISSION_V1_BYTES];
         for (i, v) in [
             SUBMISSION_MAGIC,
             1,
-            SUBMISSION_BYTES as u64,
+            SUBMISSION_V1_BYTES as u64,
             128,
             256,
             23,
@@ -322,6 +400,186 @@ mod submission_protocol_tests {
                 .unwrap()
                 .len()
                 > 6
+        );
+    }
+    fn v2(b: &[u8]) -> Vec<u8> {
+        let mut out = vec![0; SUBMISSION_BYTES];
+        out[..ROOT_HEADER].copy_from_slice(&b[..ROOT_HEADER]);
+        put(&mut out, 1, 2);
+        put(&mut out, 2, SUBMISSION_BYTES as u64);
+        put(&mut out, 4, SUBMISSION_ROW as u64);
+        put(&mut out, 28, 1);
+        let next = word(b, 80).unwrap() as usize;
+        for row in 0..next {
+            out[ROOT_HEADER + row * SUBMISSION_ROW
+                ..ROOT_HEADER + row * SUBMISSION_ROW + SUBMISSION_V1_ROW]
+                .copy_from_slice(
+                    &b[ROOT_HEADER + row * SUBMISSION_V1_ROW
+                        ..ROOT_HEADER + (row + 1) * SUBMISSION_V1_ROW],
+                );
+        }
+        out
+    }
+    fn governor() -> Vec<u8> {
+        let mut b = v2(&fixture());
+        for row in 0..4 {
+            let p = ROOT_HEADER / 8 + row * (SUBMISSION_ROW / 8);
+            let submit = row < 2;
+            let rsp = if submit { 0x1000 } else { 0x1040 };
+            put(
+                &mut b,
+                p + 8,
+                0x180000000 + if submit { 0x4a114a } else { 0x4a7a58 },
+            );
+            put(&mut b, p + 9, rsp);
+            put(&mut b, p + 29, rsp - 0x1d0);
+            if submit {
+                for (field, value) in [
+                    (13, rsp + 0x28),
+                    (18, 0x180a06920),
+                    (19, 0x1f00000000),
+                    (32, 0x1804a7a50),
+                    (33, 0x108),
+                ] {
+                    put(&mut b, p + field, value);
+                }
+            }
+        }
+        b
+    }
+    fn sequence(kinds: &[bool]) -> Vec<u8> {
+        let template = governor();
+        let mut b = template.clone();
+        for (i, &publish) in kinds.iter().enumerate() {
+            for edge in 0..2 {
+                let source = ROOT_HEADER + ((if publish { 2 } else { 0 }) + edge) * SUBMISSION_ROW;
+                let row = i * 2 + edge;
+                let dest = ROOT_HEADER + row * SUBMISSION_ROW;
+                b[dest..dest + SUBMISSION_ROW]
+                    .copy_from_slice(&template[source..source + SUBMISSION_ROW]);
+                for (field, value) in [
+                    (0, row as u64 + 1),
+                    (3, (i * 2 + 1) as u64),
+                    (23, row as u64 + 1),
+                ] {
+                    put(&mut b, dest / 8 + field, value);
+                }
+            }
+        }
+        put(&mut b, 10, (kinds.len() * 2) as u64);
+        put(&mut b, 24, (kinds.len() * 2) as u64);
+        b
+    }
+    #[test]
+    fn submission_governor_fixed_parent_metadata_and_exact_wrapper_rsp_match() {
+        let v = submission_trace(&governor(), 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["governor_analyzer_matched_submissions"], 1);
+        assert_eq!(v["schema"], "todo880-native-submission-trace-v2");
+        let old = submission_trace(&fixture(), 23, 29).unwrap();
+        assert_eq!(old["capture_complete"], true);
+        assert_eq!(old["rows"][0]["raw"].as_array().unwrap().len(), 32);
+        assert_eq!(
+            submission_trace(&v2(&fixture()), 23, 29).unwrap()["capture_complete"],
+            true
+        );
+    }
+    #[test]
+    fn submission_governor_wrong_parent_caller_rsp_and_metadata_never_match() {
+        for (row, field, value) in [
+            (0, 32, 0x1804a7a51),
+            (0, 33, 0),
+            (0, 33, 0x107),
+            (0, 33, (299 << 32) | 0x108),
+            (0, 13, 0x1020),
+            (0, 18, 0x180a06921),
+            (0, 19, 31),
+            (2, 8, 0x1804a7a59),
+            (2, 9, 0x1038),
+            (0, 8, 0x1804a114b),
+            (2, 6, 999),
+            (2, 7, 2),
+        ] {
+            let mut b = governor();
+            for r in row..row + 2 {
+                put(
+                    &mut b,
+                    ROOT_HEADER / 8 + r * (SUBMISSION_ROW / 8) + field,
+                    value,
+                );
+            }
+            let v = submission_trace(&b, 23, 29).unwrap();
+            assert_eq!(v["capture_complete"], false, "row{row} field{field}");
+            assert!(!v["unknown"].as_array().unwrap().is_empty());
+        }
+        let mut b = governor();
+        put(&mut b, 28, 0);
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            false
+        );
+    }
+    #[test]
+    fn submission_governor_multiple_publications_need_new_submit_and_sp_reuse_is_ambiguous() {
+        assert_eq!(
+            submission_trace(&sequence(&[false, true, false, true]), 23, 29).unwrap()
+                ["capture_complete"],
+            true
+        );
+        for kinds in [&[false, true, true][..], &[false, false, true][..]] {
+            let v = submission_trace(&sequence(kinds), 23, 29).unwrap();
+            assert_eq!(v["capture_complete"], false);
+            assert!(!v["unknown"].as_array().unwrap().is_empty());
+        }
+    }
+    #[test]
+    fn submission_governor_interleaved_distinct_frames_match_but_overlapping_publications_do_not() {
+        let mut b = sequence(&[false, false, true, true]);
+        for (row, rsp) in [(2, 0x2000), (3, 0x2000), (4, 0x2040), (5, 0x2040)] {
+            let p = ROOT_HEADER / 8 + row * (SUBMISSION_ROW / 8);
+            put(&mut b, p + 9, rsp);
+            put(&mut b, p + 29, rsp - 0x1d0);
+            if row < 4 {
+                put(&mut b, p + 13, rsp + 0x28);
+            }
+        }
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            true
+        );
+        let mut b = sequence(&[false, true, true]);
+        for (row, event) in [(2, 3), (3, 6), (4, 4), (5, 5)] {
+            put(
+                &mut b,
+                ROOT_HEADER / 8 + row * (SUBMISSION_ROW / 8) + 23,
+                event,
+            );
+        }
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            false
+        );
+    }
+    #[test]
+    fn submission_governor_v1_unwitnessed_wrapper_or_unmatched_submit_stays_unknown() {
+        let mut b = fixture();
+        for row in 0..4 {
+            put(
+                &mut b,
+                ROOT_HEADER / 8 + row * 32 + 8,
+                0x180000000 + if row < 2 { 0x4a114a } else { 0x4a7a58 },
+            );
+        }
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            false
+        );
+        let mut b = governor();
+        put(&mut b, 10, 2);
+        put(&mut b, 24, 2);
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            false
         );
     }
     #[test]

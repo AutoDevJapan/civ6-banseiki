@@ -1,7 +1,7 @@
 //! Two-wrapper opt-in capture, sharing the root gateway/CAS/stop machinery.
 //! Snapshot addresses are opaque scalars. No job pointer is followed at exit.
 use super::*;
-use civ6_bootstrap_rs::protocol::{SUBMISSION_BYTES, SUBMISSION_MAGIC};
+use civ6_bootstrap_rs::protocol::{SUBMISSION_BYTES, SUBMISSION_MAGIC, SUBMISSION_ROW};
 pub(super) static PROFILE: AtomicBool = AtomicBool::new(false);
 pub(super) fn active() -> bool {
     PROFILE.load(Ordering::Acquire)
@@ -15,12 +15,12 @@ pub(super) const WORDS: [[u8; 8]; 3] = [
 pub struct SubmissionTrace {
     pub(super) header: [AtomicU64; 32],
     pub(super) sites: [[AtomicU64; 8]; 3],
-    pub(super) rows: [[AtomicU64; 32]; ROOT_ROWS],
+    pub(super) rows: [[AtomicU64; 34]; ROOT_ROWS],
 }
 pub(super) static TRACE: SubmissionTrace = SubmissionTrace {
     header: [const { AtomicU64::new(0) }; 32],
     sites: [const { [const { AtomicU64::new(0) }; 8] }; 3],
-    rows: [const { [const { AtomicU64::new(0) }; 32] }; ROOT_ROWS],
+    rows: [const { [const { AtomicU64::new(0) }; 34] }; ROOT_ROWS],
 };
 const _: () = assert!(std::mem::size_of::<SubmissionTrace>() == SUBMISSION_BYTES);
 #[unsafe(no_mangle)]
@@ -30,10 +30,10 @@ pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE: u64 = SUBMISSION_BYTES as u
 pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
     for (i, v) in [
         SUBMISSION_MAGIC,
-        1,
+        2,
         SUBMISSION_BYTES as u64,
         ROOT_ROWS as u64,
-        256,
+        SUBMISSION_ROW as u64,
         u64::from(config.pid),
         config.created_filetime,
         core as u64,
@@ -51,7 +51,7 @@ pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
         site_row(i)[1].store(u64::from_le_bytes(*words), Ordering::Release);
     }
 }
-fn commit(index: usize, mut row: [u64; 32]) {
+fn commit(index: usize, mut row: [u64; 34]) {
     row[23] = h(24).fetch_add(1, Ordering::AcqRel) + 1;
     for (dst, v) in TRACE.rows[index].iter().zip(row) {
         dst.store(v, Ordering::Relaxed);
@@ -79,8 +79,8 @@ fn read_once<const N: usize>(address: u64) -> ([u8; N], usize, u32, u64) {
     };
     (bytes, copied, error, ok as u32 as u64)
 }
-fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 32] {
-    let mut r = [0; 32];
+fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 34] {
+    let mut r = [0; 34];
     r[1] = inv.kind;
     r[2] = 1;
     r[3] = inv.token;
@@ -95,6 +95,20 @@ fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 32] {
     r[21] = saved.gpr[4];
     r[22] = u64::from(error);
     r[29] = inv.native_rsp;
+    if inv.kind == 4
+        && BIND
+            .get()
+            .and_then(|b| (b.core as u64).checked_add(0x4a114a))
+            == Some(inv.caller)
+    {
+        let slot = inv.caller_rsp.checked_add(0x40).unwrap_or(0);
+        let (bytes, n, e, ok) = read_once::<8>(slot);
+        r[32] = u64::from_le_bytes(bytes);
+        r[33] = (u64::from(e) << 32) | (u64::from(ok != 0) << 8) | n.min(255) as u64;
+        if n != 8 || ok == 0 || e != 0 {
+            r[20] |= 0x200;
+        }
+    }
     if inv.kind == 4 {
         let address = saved.gpr[1];
         let wanted = if committed_range(address as usize, 32, 1, false) {
@@ -224,7 +238,7 @@ pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
     }
     // Clone the already copied entry row; NEVER reread RDX, R9, set or list.
     let index = inv.token as usize - 1;
-    let mut r = [0; 32];
+    let mut r = [0; 34];
     for (dst, src) in r.iter_mut().zip(&TRACE.rows[index]) {
         *dst = src.load(Ordering::Acquire);
     }
@@ -364,6 +378,172 @@ const CALLER: &[u8] = &[
     0xc3, 0x50, 0x48, 0x3b, 0xdf, 0x75, 0xd6, 0x0f, 0x28, 0xb4, 0x24, 0x60, 1, 0, 0, 0x49, 0x8b,
     0x8d, 0x50, 1, 0, 0, 0xe8, 0xf2, 0x99, 0x60, 0,
 ];
+// Same three complete spans as ai_operation/task_audit.rs MANAGER_FLOW_BLOCKS.
+// No shared-global pointer is followed; only instructions/rel32 are checked.
+const MANAGER_BLOCKS: &[(usize, &[u8])] = &[
+    (
+        0x4a7a27,
+        &[
+            0x48, 0x8b, 0x05, 0x3a, 0x30, 0x6e, 0, 0x48, 0x8d, 0x96, 0xd0, 0, 0, 0, 0x48, 0x89,
+            0x5c, 0x24, 0x38, 0x4c, 0x8d, 0x05, 0xdf, 0xee, 0x55, 0, 0x48, 0x8b, 0x98, 0x50, 2, 0,
+            0, 0x48, 0x8b, 0xcb, 0xe8, 0xb0, 0x96, 0xff, 0xff, 0x48, 0x8b, 0xcb, 0xe8, 0x58, 0x96,
+            0xff, 0xff,
+        ],
+    ),
+    (
+        0x4a1100,
+        &[
+            0x48, 0x83, 0xec, 0x38, 0x4d, 0x85, 0xc0, 0xc7, 0x44, 0x24, 0x28, 0, 0, 0, 0, 0xc7,
+            0x44, 0x24, 0x2c, 0x1f, 0, 0, 0, 0x48, 0x8d, 0x05, 0xa2, 0x4e, 0x52, 0, 0x49, 0x0f,
+            0x45, 0xc0, 0x4c, 0x8d, 0x4c, 0x24, 0x20, 0x48, 0x89, 0x44, 0x24, 0x20, 0x4c, 0x8d,
+            0x81, 0, 4, 0, 0, 0x0f, 0x28, 0x44, 0x24, 0x20, 0x48, 0x8b, 0x89, 0x10, 4, 0, 0, 0x66,
+            0x0f, 0x7f, 0x44, 0x24, 0x20, 0xe8, 0xc6, 0x10, 0x4f, 0, 0x48, 0x83, 0xc4, 0x38, 0xc3,
+        ],
+    ),
+    (
+        0x4a10b0,
+        &[
+            0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xac, 0x38, 0, 0, 0, 0x48, 0x8b, 0xd9,
+            0x75, 0x2b, 0x48, 0x8b, 0x0d, 0xb7, 0x99, 0x6e, 0, 0x48, 0x8b, 0x01, 0xff, 0x50, 0x30,
+            0x88, 0x83, 0xad, 0x38, 0, 0, 0x84, 0xc0, 0x74, 0x0d, 0x48, 0x8b, 0x0d, 0xa0, 0x99,
+            0x6e, 0, 0x48, 0x8b, 0x01, 0xff, 0x50, 0x38, 0xc6, 0x83, 0xac, 0x38, 0, 0, 1, 0x48,
+            0x8b, 0x8b, 0x10, 4, 0, 0, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xe9, 0x82, 0x11, 0x4f, 0,
+        ],
+    ),
+];
+fn check_span(file: &mut File, core: usize, rva: usize, bytes: &[u8]) -> Result<(), &'static str> {
+    if disk(file, rva, bytes.len())? != bytes {
+        return Err("manager source complete span differs");
+    }
+    for (n, b) in bytes.iter().enumerate() {
+        if copy_current::<1>((core + rva + n) as u64) != Some([*b]) {
+            return Err("manager live complete span differs");
+        }
+    }
+    Ok(())
+}
+fn check_unwind(
+    file: &mut File,
+    core: usize,
+    pc: usize,
+    chain: &[(u32, u32, u32, &[u8])],
+) -> Result<(), &'static str> {
+    use windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry;
+    let mut image = 0;
+    let entry = unsafe { RtlLookupFunctionEntry((core + pc) as u64, &mut image, null_mut()) };
+    if entry.is_null() || image != core as u64 {
+        return Err("manager live pdata missing");
+    }
+    let mut actual = copy_current::<12>(entry as u64).ok_or("manager pdata read")?;
+    let entry_rva = (entry as usize)
+        .checked_sub(core)
+        .ok_or("manager pdata outside source")?;
+    if disk(file, entry_rva, 12)? != actual {
+        return Err("manager pdata source differs");
+    }
+    for (depth, &(start, end, unwind, expected)) in chain.iter().enumerate() {
+        let mut encoded = [0u8; 12];
+        encoded[..4].copy_from_slice(&start.to_le_bytes());
+        encoded[4..8].copy_from_slice(&end.to_le_bytes());
+        encoded[8..].copy_from_slice(&unwind.to_le_bytes());
+        if actual != encoded {
+            return Err("manager full unwind ownership chain differs");
+        }
+        check_span(file, core, unwind as usize, expected)?;
+        let prologue_len = usize::from(expected[1]);
+        let prologue = disk(file, start as usize, prologue_len)?;
+        check_span(file, core, start as usize, &prologue)?;
+        let chained = expected[0] & 0x20 != 0;
+        if chained != (depth + 1 < chain.len()) {
+            return Err("manager unwind chain termination differs");
+        }
+        if chained {
+            let offset = 4 + usize::from(expected[2]).div_ceil(2) * 4;
+            actual = copy_current::<12>((core + unwind as usize + offset) as u64)
+                .ok_or("manager chained entry read")?;
+        }
+    }
+    Ok(())
+}
+fn verify_manager(file: &mut File, core: usize) -> Result<(), &'static str> {
+    for &(rva, bytes) in MANAGER_BLOCKS {
+        check_span(file, core, rva, bytes)?;
+    }
+    for (rva, op, target) in [
+        (0x4a7a4busize, 0xe8, 0x4a1100),
+        (0x4a7a53, 0xe8, 0x4a10b0),
+        (0x4a1145, 0xe8, 0x992210),
+        (0x4a10f9, 0xe9, 0x992280),
+    ] {
+        let bytes = disk(file, rva, 5)?;
+        if bytes[0] != op
+            || (rva + 5)
+                .checked_add_signed(i32::from_le_bytes(bytes[1..].try_into().unwrap()) as isize)
+                != Some(target)
+        {
+            return Err("manager computed direct call/tail differs");
+        }
+    }
+    // Metadata selected by nonzero incoming R8 at the producer. No getter call.
+    let bytes = disk(file, 0x4a7a3a, 7)?;
+    if (0x4a7a41usize)
+        .checked_add_signed(i32::from_le_bytes(bytes[3..].try_into().unwrap()) as isize)
+        != Some(0xa06920)
+    {
+        return Err("manager metadata RIP target differs");
+    }
+    check_unwind(
+        file,
+        core,
+        0x4a1100,
+        &[(0x4a1100, 0x4a114f, 0xb578e8, &[1, 4, 1, 0, 4, 0x62, 0, 0])],
+    )?;
+    check_unwind(
+        file,
+        core,
+        0x4a10b0,
+        &[(
+            0x4a10b0,
+            0x4a10fe,
+            0xb45024,
+            &[1, 6, 2, 0, 6, 0x32, 2, 0x30],
+        )],
+    )?;
+    let owner: (u32, u32, u32, &[u8]) = (
+        0x4a79b0,
+        0x4a7a35,
+        0xacedf8,
+        &[1, 0xa, 4, 0, 0xa, 0x64, 8, 0, 0xa, 0x32, 6, 0x70],
+    );
+    check_unwind(file, core, 0x4a7a27, &[owner])?;
+    check_unwind(
+        file,
+        core,
+        0x4a7a4b,
+        &[
+            (
+                0x4a7a35,
+                0x4a7aa6,
+                0xb09cac,
+                &[
+                    0x21, 5, 2, 0, 5, 0x34, 7, 0, 0xb0, 0x79, 0x4a, 0, 0x35, 0x7a, 0x4a, 0, 0xf8,
+                    0xed, 0xac, 0,
+                ],
+            ),
+            owner,
+        ],
+    )?;
+    // Checked sub38 + CALL8 => ancestor slot +40 / metadata +28; the
+    // complete Spawn add20/popRBX/JMP removes its frame before992280 entry.
+    check_span(
+        file,
+        core,
+        0x4a79b0,
+        &[0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xec, 0x20],
+    )?;
+    h(28).store(1, Ordering::Release);
+    Ok(())
+}
 pub(super) fn verify(file: &mut File, core: usize) -> Result<(), &'static str> {
     use windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry;
     for (i, (rva, len)) in [(0x992210usize, 0x6c), (0x992280, 0x33)]
@@ -424,5 +604,6 @@ pub(super) fn verify(file: &mut File, core: usize) -> Result<(), &'static str> {
         }
     }
     h(27).store(1, Ordering::Release);
+    verify_manager(file, core).map_err(|e| site_error(0, 35, e))?;
     Ok(())
 }

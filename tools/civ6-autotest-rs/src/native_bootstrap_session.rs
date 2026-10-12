@@ -362,14 +362,14 @@ mod root_terminal_tests {
         .unwrap();
     }
     fn submission_fixture(path: &Path) -> Vec<Value> {
-        let mut b = vec![0; wire::SUBMISSION_BYTES];
+        let mut b = vec![0; wire::SUBMISSION_V1_BYTES];
         let put = |b: &mut [u8], word: usize, v: u64| {
             b[word * 8..word * 8 + 8].copy_from_slice(&v.to_le_bytes())
         };
         for (i, v) in [
             wire::SUBMISSION_MAGIC,
             1,
-            wire::SUBMISSION_BYTES as u64,
+            wire::SUBMISSION_V1_BYTES as u64,
             128,
             256,
             23,
