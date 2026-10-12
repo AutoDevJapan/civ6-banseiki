@@ -309,3 +309,99 @@ fn integrated_actions_keep_order_and_resident_modes_exclusive_with_bootstrap() {
         }
     }
 }
+
+#[test]
+fn root_observation_selector_is_explicit_and_uses_prepare_without_game_lua() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    struct Passive(Arc<AtomicBool>);
+    impl Backend for Passive {
+        fn start_native_bootstrap(
+            &mut self,
+            _: &std::path::Path,
+            step: &serde_json::Value,
+            deadline: std::time::Instant,
+        ) -> Result<()> {
+            assert_eq!(step["observation"], "native_shutdown");
+            assert!(deadline > std::time::Instant::now());
+            self.0.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let prepared = Arc::new(AtomicBool::new(false));
+    let mut runner = Runner::with_backend(
+        json!({"steps":[]}),
+        temp.path().into(),
+        temp.path().into(),
+        temp.path().into(),
+        4318,
+        Box::new(Passive(prepared.clone())),
+        std::sync::Arc::new(SystemClock),
+    );
+    let step = json!({"action":"start_native_bootstrap","observation":"native_shutdown",
+        "max_seconds":60,"controller_seconds":300,"timeout":40});
+    assert!(runner
+        .run_step(&step)
+        .unwrap()
+        .contains("activation absent"));
+    assert!(prepared.load(Ordering::SeqCst));
+    for selector in [json!(null), json!(true), json!("shutdown"), json!(0)] {
+        let mut invalid = step.clone();
+        invalid["observation"] = selector;
+        assert!(runner
+            .run_step(&invalid)
+            .unwrap_err()
+            .message
+            .contains("selector"));
+    }
+    let mut missing = step;
+    missing
+        .as_object_mut()
+        .unwrap()
+        .remove("controller_seconds");
+    assert!(runner
+        .run_step(&missing)
+        .unwrap_err()
+        .message
+        .contains("explicit controller_seconds"));
+}
+
+#[test]
+fn root_scenario_keeps_same_process_load_and_legacy_request_meaning() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut start = json!({"action":"start_native_bootstrap","name":"root",
+        "max_seconds":60,"controller_seconds":300,"runtime_dll":temp.path().join("r.dll"),
+        "runtime_sha256":"a".repeat(64),"bootstrap_dll":temp.path().join("b.dll"),
+        "bootstrap_sha256":"b".repeat(64)});
+    let original =
+        civ6_bootstrap_rs::protocol::scenario_request(&start, 1, 2, &temp.path().join("out.jsonl"));
+    assert!(
+        !civ6_bootstrap_rs::protocol::Request::parse(&original)
+            .unwrap()
+            .root_only
+    );
+    start["observation"] = json!("native_shutdown");
+    let root =
+        civ6_bootstrap_rs::protocol::scenario_request(&start, 1, 2, &temp.path().join("out.jsonl"));
+    assert!(
+        civ6_bootstrap_rs::protocol::Request::parse(&root)
+            .unwrap()
+            .root_only
+    );
+    let scene = json!({"name":"root lifetime","steps":[{"action":"restart_game"},start,
+        {"action":"load","name":"original","exact_name":true},{"action":"exit_to_menu"},
+        {"action":"load","name":"original","exact_name":true},{"action":"stop_native_bootstrap"}]});
+    validate_scenario(&scene).unwrap();
+    let mut unknown = scene.clone();
+    unknown["steps"][1]["observation"] = json!("other");
+    assert!(validate_scenario(&unknown).is_err());
+    let mut second = scene;
+    second["steps"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"action":"start_native_paid_runtime","max_seconds":60}));
+    assert!(validate_scenario(&second).is_err());
+}

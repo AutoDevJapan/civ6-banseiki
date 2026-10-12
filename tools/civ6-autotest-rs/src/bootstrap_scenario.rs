@@ -21,6 +21,7 @@ pub fn validate(data: &Value) -> Result<()> {
             world = true;
         }
         if action == "start_native_bootstrap" {
+            civ6_bootstrap_rs::protocol::Request::root_scenario(step).map_err(Error::scenario)?;
             if !fresh || world || used || !other_native.is_empty() {
                 return Err(Error::scenario(
                     "bootstrap needs fresh restart before any world start/load; one Prepare only",

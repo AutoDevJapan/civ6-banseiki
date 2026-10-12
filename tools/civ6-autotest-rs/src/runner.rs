@@ -3252,6 +3252,8 @@ impl Runner {
         }
         match action {
             "start_native_bootstrap" => {
+                let root_only = civ6_bootstrap_rs::protocol::Request::root_scenario(step)
+                    .map_err(Error::scenario)?;
                 let (_, controller_seconds) = civ6_bootstrap_rs::protocol::Request::durations(step)
                     .map_err(Error::scenario)?;
                 // FrontEnd gets at most five seconds, then the *entire*
@@ -3271,16 +3273,23 @@ impl Runner {
                         "live_chain lease cannot cover bootstrap observation",
                     ));
                 }
-                self.lua(
-                    "FrontEnd",
-                    "assert(UI.IsInFrontEnd(),'fresh MainMenu required'); return true",
-                    self.budget(deadline, 5.0)?,
-                )?;
+                if !root_only {
+                    self.lua(
+                        "FrontEnd",
+                        "assert(UI.IsInFrontEnd(),'fresh MainMenu required'); return true",
+                        self.budget(deadline, 5.0)?,
+                    )?;
+                }
                 let preparation_deadline = std::time::Instant::now()
                     + std::time::Duration::from_secs_f64(self.remaining(deadline)?.min(30.0));
                 self.backend
                     .start_native_bootstrap(&self.output, step, preparation_deadline)?;
-                Ok("bootstrap prepared; target runtime not yet installed".into())
+                Ok(if root_only {
+                    "root observation prepared; product runtime activation absent"
+                } else {
+                    "bootstrap prepared; target runtime not yet installed"
+                }
+                .into())
             }
             "stop_native_bootstrap" => {
                 let path = self

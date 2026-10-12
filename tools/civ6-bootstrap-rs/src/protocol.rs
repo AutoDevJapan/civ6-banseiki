@@ -205,6 +205,18 @@ pub fn digest(value: &str) -> Result<[u8; 32], String> {
     Ok(b)
 }
 impl Request {
+    pub fn root_scenario(step: &Value) -> Result<bool, String> {
+        match step.get("observation") {
+            None => Ok(false),
+            Some(Value::String(value)) if value == "native_shutdown" => {
+                if step.get("controller_seconds").is_none() {
+                    return Err("root observation requires explicit controller_seconds".into());
+                }
+                Ok(true)
+            }
+            _ => Err("unknown bootstrap observation selector".into()),
+        }
+    }
     pub fn durations(v: &Value) -> Result<(u32, u32), String> {
         let seconds = v["max_seconds"]
             .as_u64()
@@ -287,6 +299,9 @@ pub fn scenario_request(step: &Value, pid: u32, created: u64, output: &std::path
     if let Some(controller) = step.get("controller_seconds") {
         value["schema"] = json!("todo880-bootstrap-controller-v3");
         value["controller_seconds"] = controller.clone();
+    }
+    if step["observation"] == "native_shutdown" {
+        value["schema"] = json!("todo880-root-observation-controller-v1");
     }
     value
 }

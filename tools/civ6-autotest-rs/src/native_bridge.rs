@@ -1001,6 +1001,7 @@ mod platform {
         resident_runtime: bool,
         _binary_pins: Vec<std::fs::File>,
         bootstrap: bool,
+        bootstrap_root: bool,
     }
 
     impl Session {
@@ -1214,6 +1215,7 @@ mod platform {
                 resident_runtime,
                 _binary_pins: binary_pins,
                 bootstrap,
+                bootstrap_root: false,
             };
             let wait = readiness_deadline.map_or(Duration::from_secs(30), |deadline| {
                 deadline
@@ -1284,7 +1286,7 @@ mod platform {
                 )));
             }
             if self.bootstrap {
-                bootstrap_terminal(&self.artifact, self.pid, self.created)?;
+                bootstrap_terminal(&self.artifact, self.pid, self.created, self.bootstrap_root)?;
                 return Ok(self.artifact.clone());
             }
             if self.resident_runtime {
@@ -1595,6 +1597,7 @@ mod platform {
                 assignment_subject: None,
                 resident_runtime: true,
                 bootstrap: false,
+                bootstrap_root: false,
                 _binary_pins: vec![
                     std::fs::File::open(&artifact).unwrap(),
                     std::fs::File::open(&artifact).unwrap(),
