@@ -969,7 +969,7 @@ mod worker_payload {
                 "computed_target_rva":0x106b3c8}));
             Ok(out)
         }
-        fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
+        pub(super) fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
             let frames = FRAMES
                 .iter()
                 .map(|s| frame(pe, s))
