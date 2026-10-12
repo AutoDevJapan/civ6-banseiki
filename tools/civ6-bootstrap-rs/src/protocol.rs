@@ -281,7 +281,7 @@ mod observed_submission_tests {
             );
         }
     }
-    fn provisional_fixture() -> Vec<u8> {
+    pub(super) fn provisional_fixture() -> Vec<u8> {
         let mut b = fixture();
         put(&mut b, 1, 5);
         put(&mut b, 20, 100);
@@ -413,6 +413,150 @@ mod observed_submission_tests {
             submission_trace(&late, 23, 29).unwrap()["capture_complete"],
             false
         );
+    }
+}
+
+#[cfg(test)]
+mod submission_reservation_tests {
+    use super::*;
+    fn put(b: &mut [u8], offset: usize, v: u64) {
+        b[offset..offset + 8].copy_from_slice(&v.to_le_bytes());
+    }
+    fn fixture(cycles: usize) -> Vec<u8> {
+        let old = super::observed_submission_tests::provisional_fixture();
+        let mut b = vec![0; SUBMISSION_BYTES];
+        b[..640].copy_from_slice(&old[..640]);
+        for (i, v) in [
+            (1, 7),
+            (2, SUBMISSION_BYTES as u64),
+            (3, SUBMISSION_ROWS as u64),
+            (10, (cycles * 12) as u64),
+            (20, 100),
+            (21, 100 + cycles as u64),
+            (24, 100 + (cycles * 12) as u64),
+            (29, cycles as u64),
+        ] {
+            put(&mut b, i * 8, v);
+        }
+        for (i, v) in [
+            SUBMISSION_ROWS as u64,
+            12,
+            16,
+            SUBMISSION_BIRTH_WORDS as u64,
+            SUBMISSION_EXTRA_ROWS as u64,
+            0,
+            0,
+            0,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            put(&mut b, 640 + i * 8, v);
+        }
+        let ledger = SUBMISSION_HEADER + (SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS) * SUBMISSION_ROW;
+        let old_ledger = SUBMISSION_V6_HEADER + ROOT_ROWS * SUBMISSION_ROW;
+        for cycle in 0..cycles {
+            for row in 0..12 {
+                let pos = SUBMISSION_HEADER + (cycle * 12 + row) * SUBMISSION_ROW;
+                b[pos..pos + SUBMISSION_ROW].copy_from_slice(
+                    &old[SUBMISSION_V6_HEADER + row * SUBMISSION_ROW
+                        ..SUBMISSION_V6_HEADER + (row + 1) * SUBMISSION_ROW],
+                );
+                for f in [0, 3] {
+                    let v = word(&b, pos + f * 8).unwrap() + cycle as u64 * 12;
+                    put(&mut b, pos + f * 8, v);
+                }
+                let p = word(&b, pos + 4 * 8).unwrap();
+                if p > 0 {
+                    put(&mut b, pos + 4 * 8, p + cycle as u64 * 12);
+                }
+                let event = word(&b, pos + 23 * 8).unwrap() + cycle as u64 * 12;
+                put(&mut b, pos + 23 * 8, event);
+                put(&mut b, pos + 35 * 8, 101 + cycle as u64);
+                if row == 8 || row == 9 {
+                    for (f, v) in [(42, 0x180a06648), (43, 8), (44, 0), (45, 1)] {
+                        put(&mut b, pos + f * 8, v);
+                    }
+                }
+            }
+            for f in 0..18 {
+                let mut v = word(&old, old_ledger + f * 8).unwrap();
+                if [3, 4, 5, 6, 7, 16].contains(&f) {
+                    v += cycle as u64 * 12;
+                }
+                if f == 0 {
+                    v = 101 + cycle as u64;
+                }
+                put(&mut b, ledger + (cycle * SUBMISSION_BIRTH_WORDS + f) * 8, v);
+            }
+            for (f, v) in [(18, (cycle * 12) as u64), (19, 63), (20, 63), (21, 0)] {
+                put(&mut b, ledger + (cycle * SUBMISSION_BIRTH_WORDS + f) * 8, v);
+            }
+        }
+        b
+    }
+    #[test]
+    fn submission_v7_sixteen_cycles_use_derived_192_rows_and_keep_v6_layout() {
+        assert_eq!(SUBMISSION_ROWS, 16 * 12);
+        assert_eq!(ROOT_ROWS, 128);
+        assert_eq!(SUBMISSION_V6_BYTES, 52096);
+        let v = submission_trace(&fixture(16), 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["complete_observed_p_t_execution_chains"], 16);
+        assert_eq!(v["reserved_rows"], 192);
+        assert_eq!(v["world_permit_issued"], false);
+        assert_eq!(
+            submission_trace(
+                &super::observed_submission_tests::provisional_fixture(),
+                23,
+                29
+            )
+            .unwrap()["capture_complete"],
+            true
+        );
+    }
+    #[test]
+    fn submission_v7_unused_owned_pairs_are_unresolved_not_cancelled_or_completed() {
+        let mut b = fixture(1);
+        let ledger = SUBMISSION_HEADER + (SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS) * SUBMISSION_ROW;
+        b[SUBMISSION_HEADER + 8 * SUBMISSION_ROW..SUBMISSION_HEADER + 12 * SUBMISSION_ROW].fill(0);
+        for (f, v) in [
+            (6, 0),
+            (7, 0),
+            (11, 1 | 2 | 4 | 8 | 16 | 8192 | 16384),
+            (19, 15),
+            (20, 15),
+            (21, 1),
+        ] {
+            put(&mut b, ledger + f * 8, v);
+        }
+        let v = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], false);
+        assert_eq!(v["reserved_unused_pair_starts"], json!([8, 10]));
+        assert_eq!(v["births"][0]["unresolved_not_executed_t"], true);
+        assert_eq!(v["births"][0]["reservation"]["sampling_flight_held"], true);
+    }
+    #[test]
+    fn submission_v7_seh_wrong_owner_duplicate_mask_extra_and_partial_pairs_stay_unknown() {
+        let good = fixture(1);
+        let ledger = SUBMISSION_HEADER + (SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS) * SUBMISSION_ROW;
+        for (offset, value) in [
+            (ledger + 18 * 8, 12),
+            (ledger + 19 * 8, 127),
+            (ledger + 20 * 8, 31),
+            (ledger + 21 * 8, 2),
+            (SUBMISSION_HEADER + 9 * SUBMISSION_ROW + 2 * 8, 3),
+            (688, 1),
+            (SUBMISSION_HEADER + 11 * SUBMISSION_ROW, 0),
+        ] {
+            let mut b = good.clone();
+            put(&mut b, offset, value);
+            assert_eq!(
+                submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+                false,
+                "offset{offset}"
+            );
+        }
     }
 }
 

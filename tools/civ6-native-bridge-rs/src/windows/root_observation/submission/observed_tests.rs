@@ -144,15 +144,16 @@ fn submission_owned_os_observed_four_gateways_real_shims_state_and_normal_return
         } else {
             assert_eq!(
                 h(10).load(Ordering::Acquire),
-                first as u64 + 2,
+                first as u64,
                 "real entry accepted"
             );
+            let recorded = submission_observed::fixture_last_entry();
             assert_eq!(
-                submission::TRACE.rows[first + 1][2].load(Ordering::Acquire),
+                submission::TRACE.rows[recorded + 1][2].load(Ordering::Acquire),
                 2
             );
             assert_eq!(
-                submission::TRACE.rows[first + 1][34].load(Ordering::Acquire),
+                submission::TRACE.rows[recorded + 1][34].load(Ordering::Acquire),
                 0x3344
             );
         }
@@ -325,7 +326,12 @@ fn submission_observed_late(name: &str, index: usize) {
     }
     let status = stop_at(Instant::now());
     let pending = h(12).load(Ordering::Acquire) & !ROOT_CLOSED;
-    let uncommitted = submission::TRACE.rows[1][0].load(Ordering::Acquire) == 0;
+    let pendingrow = if index == 0 {
+        0
+    } else {
+        submission_observed::fixture_last_entry() + 1
+    };
+    let uncommitted = submission::TRACE.rows[pendingrow][0].load(Ordering::Acquire) == 0;
     data[1].store(1, Ordering::Release);
     worker.join().unwrap();
     assert_eq!(status, 2);
@@ -335,9 +341,12 @@ fn submission_observed_late(name: &str, index: usize) {
         assert_eq!(h(20).load(Ordering::Acquire), 1);
         assert_eq!(h(10).load(Ordering::Acquire), 0);
     } else {
-        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 2);
         assert_eq!(
-            submission::TRACE.rows[1][34].load(Ordering::Acquire),
+            submission::TRACE.rows[pendingrow][2].load(Ordering::Acquire),
+            2
+        );
+        assert_eq!(
+            submission::TRACE.rows[pendingrow][34].load(Ordering::Acquire),
             0x3344
         );
     }
@@ -626,7 +635,7 @@ fn submission_observed_seh(name: &str, index: usize) {
     assert_eq!(u64_at(&data, 0x80), 1);
     assert_eq!(
         h(10).load(Ordering::Acquire),
-        if index == 0 { 0 } else { 2 }
+        if index == 0 { 0 } else { 12 }
     );
     assert_eq!(h(13).load(Ordering::Acquire), 1);
     assert_eq!(h(12).load(Ordering::Acquire), 0);
@@ -635,9 +644,10 @@ fn submission_observed_seh(name: &str, index: usize) {
         assert_eq!(h(20).load(Ordering::Acquire), 0);
         assert!(h(14).load(Ordering::Acquire) > 0);
     } else {
-        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 3);
-        assert_eq!(submission::TRACE.rows[1][21].load(Ordering::Acquire), 0);
-        assert_eq!(submission::TRACE.rows[1][34].load(Ordering::Acquire), 0);
+        let row = submission_observed::fixture_last_entry() + 1;
+        assert_eq!(submission::TRACE.rows[row][2].load(Ordering::Acquire), 3);
+        assert_eq!(submission::TRACE.rows[row][21].load(Ordering::Acquire), 0);
+        assert_eq!(submission::TRACE.rows[row][34].load(Ordering::Acquire), 0);
     }
     assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
 }
@@ -941,7 +951,7 @@ fn submission_owned_os_observed_active_tuple_wrong_p_vft_is_error_not_exclusion(
     let mut p = SubmissionPipeline::new();
     p.producer(true);
     let t = p.task.as_ptr();
-    let row = h(10).load(Ordering::Acquire) as usize;
+    let row = 8; // Host role of the first complete-chain reservation
     let excluded = h(30).load(Ordering::Acquire);
     p.owner[0xd0 / 8] = p.core.base as u64 + 0xa06650;
     p.execute(t);
@@ -974,15 +984,26 @@ fn submission_owned_os_observed_untracked_governor_and_unreadable_current_p_rema
     p.execute(bad.as_ptr());
     assert_eq!(h(29).load(Ordering::Acquire), 0);
     assert_eq!(h(30).load(Ordering::Acquire), excluded);
-    assert_eq!(h(10).load(Ordering::Acquire), 8);
-    for row in [0, 4] {
+    assert_eq!(h(10).load(Ordering::Acquire), 0);
+    assert_eq!(submission_observed::fixture_extra_next(), 8);
+    let base = civ6_bootstrap_rs::protocol::SUBMISSION_ROWS;
+    for row in [base, base + 4] {
         assert_eq!(submission::TRACE.rows[row][35].load(Ordering::Acquire), 0);
         assert_ne!(submission::TRACE.rows[row][20].load(Ordering::Acquire), 0);
     }
-    assert_eq!(submission::TRACE.rows[0][43].load(Ordering::Acquire), 8);
-    assert_eq!(submission::TRACE.rows[4][43].load(Ordering::Acquire), 0);
-    assert_ne!(submission::TRACE.rows[4][44].load(Ordering::Acquire), 0);
-    assert_eq!(submission::TRACE.rows[4][45].load(Ordering::Acquire), 0);
+    assert_eq!(submission::TRACE.rows[base][43].load(Ordering::Acquire), 8);
+    assert_eq!(
+        submission::TRACE.rows[base + 4][43].load(Ordering::Acquire),
+        0
+    );
+    assert_ne!(
+        submission::TRACE.rows[base + 4][44].load(Ordering::Acquire),
+        0
+    );
+    assert_eq!(
+        submission::TRACE.rows[base + 4][45].load(Ordering::Acquire),
+        0
+    );
     assert!(h(14).load(Ordering::Acquire) > 0);
 }
 #[test]
@@ -1021,19 +1042,21 @@ fn submission_owned_os_observed_completed_p_t_reissue_and_late_old_or_unknown_t_
     let old = p.task.as_ptr();
     p.execute(old);
     let first = submission_observed::fixture_book(0);
-    let preserved = submission_observed::fixture_bytes()[640..640 + 12 * 384].to_vec();
+    let header = civ6_bootstrap_rs::protocol::SUBMISSION_HEADER;
+    let preserved = submission_observed::fixture_bytes()[header..header + 12 * 384].to_vec();
     // Same T address is accepted only after all old normal full-frame returns.
     p.producer(true);
     p.execute(old);
     assert_eq!(submission_observed::fixture_book(1)[15], 0);
     assert_eq!(
-        submission_observed::fixture_bytes()[640..640 + 12 * 384],
+        submission_observed::fixture_bytes()[header..header + 12 * 384],
         preserved
     );
     let old_owner = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106b3c8, 0]));
     p.bind_task();
     p.producer(true);
-    let before = h(10).load(Ordering::Acquire) as usize;
+    let before =
+        civ6_bootstrap_rs::protocol::SUBMISSION_ROWS + submission_observed::fixture_extra_next();
     let unresolved = Box::new([p.host.base as u64 + 0x106b3c8, first[1]]);
     p.execute(old_owner.as_ptr());
     p.execute(unresolved.as_ptr());
@@ -1069,4 +1092,194 @@ fn submission_owned_os_observed_open_birth_reissue_refused_without_overwriting_o
     assert_eq!(h(29).load(Ordering::Acquire), 1);
     assert!(h(14).load(Ordering::Acquire) > 0);
     assert_eq!(h(20).load(Ordering::Acquire), 0);
+}
+#[test]
+fn submission_owned_os_observed_sixteen_full_cycles_own_all_192_rows_without_overwrite() {
+    if !child("submission_owned_os_observed_sixteen_full_cycles_own_all_192_rows_without_overwrite")
+    {
+        return;
+    }
+    use civ6_bootstrap_rs::protocol::{
+        SUBMISSION_BYTES, SUBMISSION_HEADER, SUBMISSION_ROW, SUBMISSION_ROWS,
+    };
+    let mut p = SubmissionPipeline::new();
+    let t = p.task.as_ptr();
+    for cycle in 0..16 {
+        let old = submission_observed::fixture_bytes()
+            [SUBMISSION_HEADER..SUBMISSION_HEADER + cycle * 12 * SUBMISSION_ROW]
+            .to_vec();
+        p.producer(true);
+        assert_eq!(
+            h(10).load(Ordering::Acquire),
+            (cycle as u64 + 1) * 12,
+            "whole cycle reserved at dispatch"
+        );
+        assert_eq!(
+            h(12).load(Ordering::Acquire),
+            1,
+            "unobserved execution holds its sampling reservation"
+        );
+        p.execute(t);
+        assert_eq!(submission_observed::fixture_book(cycle)[15], 0);
+        for role in 0..6 {
+            let i = cycle * 12 + role * 2;
+            assert_eq!(
+                submission::TRACE.rows[i][0].load(Ordering::Acquire),
+                i as u64 + 1
+            );
+            assert_eq!(submission::TRACE.rows[i + 1][2].load(Ordering::Acquire), 2);
+        }
+        assert_eq!(
+            &submission_observed::fixture_bytes()[SUBMISSION_HEADER..SUBMISSION_HEADER + old.len()],
+            old.as_slice()
+        );
+        assert_eq!(h(12).load(Ordering::Acquire), 0);
+    }
+    assert_eq!(h(10).load(Ordering::Acquire), SUBMISSION_ROWS as u64);
+    assert_eq!(h(29).load(Ordering::Acquire), 16);
+    assert_eq!(h(11).load(Ordering::Acquire), 0);
+    assert_eq!(h(14).load(Ordering::Acquire), 0);
+    assert_eq!(submission_observed::fixture_bytes().len(), SUBMISSION_BYTES);
+    assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    let sealed = submission_observed::fixture_bytes();
+    p.execute(t);
+    assert_eq!(submission_observed::fixture_bytes(), sealed);
+}
+#[test]
+fn submission_owned_os_observed_closed_reserved_cycle_records_late_host_and_core_returns() {
+    if !child(
+        "submission_owned_os_observed_closed_reserved_cycle_records_late_host_and_core_returns",
+    ) {
+        return;
+    }
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let t = p.task.as_ptr();
+    assert_eq!(h(10).load(Ordering::Acquire), 12);
+    assert_eq!(h(12).load(Ordering::Acquire), 1);
+    assert_eq!(
+        stop_at(Instant::now()),
+        2,
+        "absent execution is unresolved, not cancellation or flight zero"
+    );
+    assert_eq!(submission::TRACE.rows[8][0].load(Ordering::Acquire), 0);
+    p.execute(t);
+    assert_eq!(submission::TRACE.rows[9][2].load(Ordering::Acquire), 2);
+    assert_eq!(submission::TRACE.rows[11][2].load(Ordering::Acquire), 2);
+    assert_eq!(h(10).load(Ordering::Acquire), 12);
+    assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+    assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    let sealed = submission_observed::fixture_bytes();
+    p.execute(t);
+    assert_eq!(submission_observed::fixture_bytes(), sealed);
+}
+#[test]
+fn submission_owned_os_observed_out_of_order_duplicate_unknown_frames_use_separate_loss_budget() {
+    if !child("submission_owned_os_observed_out_of_order_duplicate_unknown_frames_use_separate_loss_budget") {return;}
+    use civ6_bootstrap_rs::protocol::{
+        SUBMISSION_EXTRA_ROWS, SUBMISSION_HEADER, SUBMISSION_ROW, SUBMISSION_ROWS,
+    };
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let t = p.task.as_ptr();
+    let b = submission_observed::fixture_book(0);
+    let core = unsafe {
+        std::mem::transmute::<usize, unsafe extern "system" fn(u64)>(
+            p.core.base as usize + 0x4a8530,
+        )
+    };
+    unsafe {
+        core(b[1]);
+    } // No accepted Host parent: never consume the owned Core pair.
+    assert_eq!(submission::TRACE.rows[10][0].load(Ordering::Acquire), 0);
+    assert_eq!(h(10).load(Ordering::Acquire), 12);
+    p.execute(t);
+    let good = submission_observed::fixture_bytes()
+        [SUBMISSION_HEADER..SUBMISSION_HEADER + 12 * SUBMISSION_ROW]
+        .to_vec();
+    for _ in 0..8 {
+        p.execute(t);
+    }
+    assert_eq!(
+        submission_observed::fixture_extra_next(),
+        SUBMISSION_EXTRA_ROWS
+    );
+    assert!(submission_observed::fixture_budget(6) > 0);
+    assert!(h(11).load(Ordering::Acquire) > 0);
+    assert!(h(14).load(Ordering::Acquire) > 0);
+    assert_eq!(h(10).load(Ordering::Acquire), 12);
+    assert_eq!(
+        &submission_observed::fixture_bytes()[SUBMISSION_HEADER..SUBMISSION_HEADER + good.len()],
+        good.as_slice()
+    );
+    assert_eq!(h(12).load(Ordering::Acquire), 0);
+    assert_ne!(
+        submission::TRACE.rows[SUBMISSION_ROWS][20].load(Ordering::Acquire),
+        0
+    );
+}
+global_asm!(
+    ".globl submission_reserved_unwind_driver",
+    ".seh_proc submission_reserved_unwind_driver",
+    "submission_reserved_unwind_driver:",
+    "push rbx",
+    ".seh_pushreg rbx",
+    "sub rsp,0x80",
+    ".seh_stackalloc 0x80",
+    ".seh_endprologue",
+    "mov rbx,rcx",
+    "mov rax,[rcx+8]",
+    "mov [rax+0x20],rsp",
+    "lea r10,[rip+submission_reserved_unwind_landed]",
+    "mov [rax+0x28],r10",
+    "call rdx",
+    "xor eax,eax",
+    "jmp 1f",
+    "submission_reserved_unwind_landed:",
+    "mov eax,1",
+    "1:",
+    "lea rsp,[rsp+0x80]",
+    "pop rbx",
+    "ret",
+    ".seh_endproc",
+);
+unsafe extern "system" {
+    fn submission_reserved_unwind_driver(t: *const u64, target: usize) -> u64;
+}
+#[test]
+fn submission_owned_os_observed_reserved_cycle_seh_settles_once_with_unresolved_status() {
+    if !child("submission_owned_os_observed_reserved_cycle_seh_settles_once_with_unresolved_status")
+    {
+        return;
+    }
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let t = p.task.as_ptr();
+    let mut table: Box<[IMAGE_RUNTIME_FUNCTION_ENTRY; 1]> = Box::new(unsafe { std::mem::zeroed() });
+    // This fixture Host body has the same RBX push/20h allocation as its native
+    // entry. Register the private-image unwind table for the actual SEH walk.
+    p.write(true, 0xa0f000, &[1, 6, 2, 0, 6, 0x32, 2, 0x30]);
+    table[0].BeginAddress = 0x985ec0;
+    table[0].EndAddress = 0x985efb;
+    table[0].Anonymous.UnwindData = 0xa0f000;
+    assert_ne!(
+        unsafe { RtlAddFunctionTable(table.as_mut_ptr(), 1, p.host.base as u64) },
+        0
+    );
+    // The same Core release displaced shim runs before the static SEH fixture's
+    // remaining large-frame prologue/body; it never fabricates a native RET.
+    submission_observed::fixture_continue(
+        2,
+        submission_observed_seh_core as *const () as usize + 6,
+    );
+    let landed = unsafe { submission_reserved_unwind_driver(t, p.host.base as usize + 0x985ec0) };
+    assert_eq!(landed, 1);
+    assert_eq!(h(13).load(Ordering::Acquire), 2);
+    assert_eq!(submission::TRACE.rows[9][2].load(Ordering::Acquire), 3);
+    assert_eq!(submission::TRACE.rows[11][2].load(Ordering::Acquire), 3);
+    assert_eq!(submission::TRACE.rows[9][34].load(Ordering::Acquire), 0);
+    assert_eq!(h(12).load(Ordering::Acquire), 0);
+    assert_ne!(submission_observed::fixture_book(0)[15], 0);
+    assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    assert_ne!(unsafe { RtlDeleteFunctionTable(table.as_mut_ptr()) }, 0);
 }
