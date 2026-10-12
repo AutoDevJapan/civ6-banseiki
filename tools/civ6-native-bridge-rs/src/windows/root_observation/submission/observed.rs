@@ -54,12 +54,119 @@ const HOST_RETURN: u64 = 256;
 const EXCEPTION: u64 = 512;
 const EARLY: u64 = 1024;
 const REUSED: u64 = 2048;
-const NO_SUBMIT: u64 = 4096;
 const HOST_PUSH_START: u64 = 8192;
 const HOST_PUSH_RETURN: u64 = 16384;
 #[derive(Clone, Copy)]
 struct Birth {
     w: [u64; 18],
+}
+const COMPLETE: u64 = BORN
+    | SUBMITTED
+    | BOUND
+    | PUBLISHED
+    | PRODUCER_RETURN
+    | HOST_START
+    | CORE_START
+    | CORE_RETURN
+    | HOST_RETURN
+    | HOST_PUSH_START
+    | HOST_PUSH_RETURN;
+#[derive(Clone, Copy)]
+struct Provisional {
+    id: u64,
+    row: [u64; 48],
+    attempted: bool,
+}
+thread_local! {
+    static PROVISIONAL:std::cell::RefCell<[Provisional;DEPTH]>=const {std::cell::RefCell::new(
+        [Provisional {id:0,row:[0;48],attempted:false};DEPTH])};
+}
+// Completion is observed full-frame completion only. No heap reread, flags,
+// sameSetWait, ownership, destructor or World authority is inferred here.
+fn completed(b: &Birth) -> bool {
+    if b.w[11] != COMPLETE || b.w[15] != 0 || b.w[2] == 0 {
+        return false;
+    }
+    for (token, kind) in [
+        (b.w[3], 6),
+        (b.w[4], 4),
+        (b.w[5], 5),
+        (b.w[6], 7),
+        (b.w[7], 8),
+        (b.w[16], 9),
+    ] {
+        let Some(i) = token
+            .checked_sub(1)
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|i| i + 1 < ROOT_ROWS)
+        else {
+            return false;
+        };
+        let a = &TRACE.rows[i];
+        let z = &TRACE.rows[i + 1];
+        let get = |r: &[AtomicU64; 48], j: usize| r[j].load(Ordering::Acquire);
+        if get(a, 0) != token
+            || get(z, 0) != token + 1
+            || get(a, 1) != kind
+            || get(z, 1) != kind
+            || get(z, 2) != 2
+            || get(a, 20) != 0
+            || get(z, 20) != 0
+            || get(a, 35) != b.w[0]
+            || get(z, 35) != b.w[0]
+            || get(a, 36) != b.w[1]
+            || get(a, 5) == 0
+            || get(a, 6) == 0
+            || get(a, 5) != get(z, 5)
+            || get(a, 6) != get(z, 6)
+            || get(a, 7) != b.w[10]
+            || get(z, 7) != b.w[10]
+        {
+            return false;
+        }
+        if kind == 4
+            && (get(a, 24) != 32
+                || get(a, 25) != 0
+                || get(a, 26) != 16
+                || get(a, 27) != 0
+                || get(a, 30) == 0
+                || get(a, 31) == 0)
+        {
+            return false;
+        }
+        if kind == 7 && (get(a, 38) != 16 || get(a, 39) != 1 || get(a, 41) != b.w[1]) {
+            return false;
+        }
+        if kind == 8 && (get(a, 38) != 64 || get(a, 39) != 1) {
+            return false;
+        }
+    }
+    true
+}
+fn completed_before(b: &Birth, event: u64) -> bool {
+    completed(b)
+        && [b.w[3], b.w[4], b.w[5], b.w[6], b.w[7], b.w[16]]
+            .into_iter()
+            .all(|token| TRACE.rows[token as usize][23].load(Ordering::Acquire) < event)
+}
+fn completed_reuse(book: &[Birth; SUBMISSION_BIRTHS], p: u64, t: Option<u64>, event: u64) -> bool {
+    book.iter()
+        .filter(|b| b.w[0] != 0 && (b.w[1] == p || t.is_some_and(|t| t != 0 && b.w[2] == t)))
+        .all(|b| completed_before(b, event))
+}
+fn reserve_rows(count: u64) -> Option<u64> {
+    h(10)
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            n.checked_add(count).filter(|n| *n <= ROOT_ROWS as u64)
+        })
+        .ok()
+}
+fn commit_entry(index: usize, mut row: [u64; 48]) {
+    row[0] = 0;
+    for (dst, v) in TRACE.rows[index].iter().zip(row) {
+        dst.store(v, Ordering::Relaxed);
+    }
+    TRACE.rows[index][0].store(index as u64 + 1, Ordering::Release);
 }
 static BOOK: Mutex<[Birth; SUBMISSION_BIRTHS]> =
     Mutex::new([Birth { w: [0; 18] }; SUBMISSION_BIRTHS]);
@@ -130,16 +237,60 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         saved.invocation.tid = tid;
         saved.invocation.thread_created = ft;
         saved.invocation.epoch = h(9).load(Ordering::Acquire);
+        if kind == 6 {
+            if stack.depth == DEPTH {
+                h(11).fetch_add(1, Ordering::Relaxed);
+                unknown();
+                return;
+            }
+            let Ok(serial) =
+                h(21).fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_add(1))
+            else {
+                h(11).fetch_add(1, Ordering::Relaxed);
+                unknown();
+                return;
+            };
+            let inv = &mut saved.invocation;
+            inv.world = serial + 1;
+            inv.manager = saved.gpr[0].checked_add(0xd0).unwrap_or(0);
+            if inv.manager == 0 {
+                fail(inv, REUSED);
+            }
+            if h(19).load(Ordering::Acquire) != 3 || h(15).load(Ordering::Acquire) != 63 {
+                fail(inv, 8);
+                h(22).fetch_add(1, Ordering::Relaxed);
+            }
+            let mut row = entry_snapshot(saved, saved.invocation, error);
+            row[23] = h(24).fetch_add(1, Ordering::AcqRel) + 1;
+            row[35] = saved.invocation.world;
+            row[36] = saved.invocation.manager;
+            PROVISIONAL.with(|p| {
+                p.borrow_mut()[stack.depth] = Provisional {
+                    id: saved.invocation.world,
+                    row,
+                    attempted: false,
+                }
+            });
+            saved.invocation.cookie = COOKIE;
+            let mut next = stack;
+            next.frames[next.depth] = saved.invocation;
+            next.depth += 1;
+            STACK.with(|s| s.set(next));
+            flight.0 = false; // before-fetch frame exists; no BOOK or output rows yet
+            if saved.invocation.errors != 0 {
+                unknown();
+            }
+            return;
+        }
         let mut book = BOOK
             .lock()
             .map_err(|_| ())
             .unwrap_or_else(|_| panic!("observed book poisoned"));
         let mut snapshot = None;
         let mut index = None;
-        if kind == 6 {
-            // ID is reserved at this function entry BEFORE any receiver pointer fetch.
-            // P is only a scalar offset here. It is not a World/ownership assertion.
-        } else if kind == 4 || kind == 5 {
+        let mut promotion = None;
+        let mut detached = false;
+        if kind == 4 || kind == 5 {
             let expected = if kind == 4 { 0x4a114a } else { 0x4a7a58 };
             let Some(p) = parent.filter(|p| valid_parent(*p, 6, &saved.invocation)) else {
                 exclude();
@@ -155,8 +306,32 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                 exclude();
                 return;
             }
-            index = book.iter().position(|b| b.w[0] == p.world);
+            index = book.iter().position(|b| b.w[0] != 0 && b.w[0] == p.world);
             saved.invocation.parent = p.token;
+            if kind == 4 && p.token == 0 {
+                let prior = PROVISIONAL.with(|tls| {
+                    let mut entries = tls.borrow_mut();
+                    let entry = &mut entries[stack.depth - 1];
+                    if entry.id != p.world {
+                        return None;
+                    }
+                    entry.attempted = true;
+                    Some(entry.row)
+                });
+                if let Some(row) = prior {
+                    if !completed_reuse(&book, p.manager, None, row[23]) {
+                        fail(&mut saved.invocation, REUSED);
+                        detached = true;
+                    } else if let Some(slot) = book.iter().position(|b| b.w[0] == 0) {
+                        promotion = Some((slot, p, row));
+                    } else {
+                        h(11).fetch_add(1, Ordering::Relaxed);
+                        fail(&mut saved.invocation, 0x2000);
+                    }
+                } else {
+                    fail(&mut saved.invocation, 0x20);
+                }
+            }
             if kind == 4 && saved.gpr[1] != p.manager {
                 fail(&mut saved.invocation, 0x400);
             }
@@ -172,7 +347,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                 exclude();
                 return;
             }
-            index = book.iter().position(|b| b.w[0] == p.world);
+            index = book.iter().position(|b| b.w[0] != 0 && b.w[0] == p.world);
             saved.invocation.parent = p.token;
         } else if kind == 7 {
             // One read of the CURRENT native input T, not a historical P read.
@@ -183,34 +358,67 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             } else {
                 0
             };
-            index = book
-                .iter()
-                .position(|b| b.w[2] != 0 && b.w[2] == saved.gpr[0])
-                .or_else(|| book.iter().position(|b| b.w[1] != 0 && b.w[1] == p));
-            if index.is_none() {
+            let mut exact = book.iter().enumerate().filter(|(_, b)| {
+                b.w[0] != 0
+                    && b.w[11] & BOUND != 0
+                    && b.w[2] != 0
+                    && b.w[2] == saved.gpr[0]
+                    && b.w[1] == p
+                    && b.w[6] == 0
+                    && !completed(b)
+            });
+            index = exact.next().map(|(i, _)| i);
+            if exact.next().is_some() {
+                index = None;
+            }
+            if index.is_none()
+                && !book
+                    .iter()
+                    .any(|b| b.w[0] != 0 && (b.w[1] == p || b.w[2] == saved.gpr[0]))
+            {
                 exclude();
                 if n != 16 || ok == 0 {
                     h(31).fetch_add(1, Ordering::Relaxed);
                 }
                 return;
             }
-        } else if kind == 8 {
-            index = book
-                .iter()
-                .position(|b| b.w[1] != 0 && b.w[1] == saved.gpr[0]);
             if index.is_none() {
-                exclude();
-                return;
+                detached = true;
+                fail(&mut saved.invocation, EARLY | REUSED);
+                saved.invocation.manager = p;
+                saved.invocation.set = saved.gpr[0];
             }
+        } else if kind == 8 {
             if let Some(p) = parent.filter(|p| valid_parent(*p, 7, &saved.invocation)) {
                 saved.invocation.parent = p.token;
+                index = p
+                    .list
+                    .checked_sub(1)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .filter(|i| *i < SUBMISSION_BIRTHS)
+                    .filter(|i| {
+                        book[*i].w[0] == p.world
+                            && book[*i].w[1] == saved.gpr[0]
+                            && book[*i].w[2] == p.set
+                            && book[*i].w[6] == p.token
+                            && book[*i].w[7] == 0
+                    });
                 if saved.invocation.caller != h(8).load(Ordering::Acquire) + 0x985ef4
                     || saved.invocation.caller_rsp.checked_add(0x30) != Some(p.native_rsp)
                 {
                     fail(&mut saved.invocation, 0x800);
                 }
             } else {
+                if !book.iter().any(|b| b.w[0] != 0 && b.w[1] == saved.gpr[0]) {
+                    exclude();
+                    return;
+                }
                 fail(&mut saved.invocation, EARLY);
+            }
+            if index.is_none() {
+                detached = true;
+                fail(&mut saved.invocation, EARLY);
+                saved.invocation.manager = saved.gpr[0];
             }
             let (bytes, n, e, ok) = read_once::<64>(saved.gpr[0]);
             snapshot = Some((bytes.to_vec(), n, e, ok));
@@ -218,12 +426,38 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             exclude();
             return;
         }
-        let Ok(row) = h(10).fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-            (n <= (ROOT_ROWS - 2) as u64).then_some(n + 2)
-        }) else {
+        let Some(mut row) = reserve_rows(if promotion.is_some() { 4 } else { 2 }) else {
             h(11).fetch_add(1, Ordering::Relaxed);
+            unknown();
             return;
         };
+        if let Some((slot, mut producer, mut entry)) = promotion {
+            producer.token = row + 1;
+            producer.list = slot as u64 + 1;
+            let mut b = Birth { w: [0; 18] };
+            b.w[0] = producer.world;
+            b.w[1] = producer.manager;
+            b.w[3] = producer.token;
+            b.w[8] = producer.tid;
+            b.w[9] = producer.thread_created;
+            b.w[10] = producer.epoch;
+            b.w[11] = BORN;
+            b.w[12] = producer.native_rsp;
+            b.w[15] = producer.errors;
+            book[slot] = b;
+            index = Some(slot);
+            h(29).fetch_add(1, Ordering::AcqRel);
+            entry[3] = producer.token;
+            entry[20] |= producer.errors;
+            commit_entry(row as usize, entry);
+            STACK.with(|s| {
+                let mut current = s.get();
+                current.frames[current.depth - 1] = producer;
+                s.set(current);
+            });
+            saved.invocation.parent = producer.token;
+            row += 2;
+        }
         let inv = &mut saved.invocation;
         inv.cookie = COOKIE;
         flight.0 = false; // reservation owns this flight until finish/unwind
@@ -234,32 +468,6 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         }
         if stack.depth == DEPTH {
             fail(inv, 0x10);
-        }
-        if kind == 6 {
-            let id = h(29).fetch_add(1, Ordering::AcqRel) + 1;
-            let p = saved.gpr[0].checked_add(0xd0).unwrap_or(0);
-            inv.world = id;
-            inv.manager = p;
-            if let Some(slot) = book.iter().position(|b| b.w[0] == 0) {
-                let reused = book.iter().any(|b| b.w[1] == p && p != 0);
-                let mut b = Birth { w: [0; 18] };
-                b.w[0] = id;
-                b.w[1] = p;
-                b.w[3] = inv.token;
-                b.w[8] = tid;
-                b.w[9] = ft;
-                b.w[10] = inv.epoch;
-                b.w[11] = BORN;
-                b.w[12] = inv.native_rsp;
-                if reused || p == 0 {
-                    b.w[11] |= REUSED;
-                    fail(inv, REUSED);
-                }
-                book[slot] = b;
-                index = Some(slot);
-            } else {
-                fail(inv, 0x2000);
-            }
         }
         if let Some(slot) = index {
             inv.list = slot as u64 + 1;
@@ -329,11 +537,12 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             b.w[15] |= inv.errors;
             publish(slot, *b);
         }
-        if index.is_none() {
+        if index.is_none() && !detached {
             fail(&mut saved.invocation, 0x2000);
         }
         drop(book);
         let mut r = entry_snapshot(saved, saved.invocation, error);
+        saved.invocation.errors |= r[20];
         r[35] = saved.invocation.world;
         r[36] = saved.invocation.manager;
         r[37] = saved.invocation.set;
@@ -351,7 +560,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         if r[20] != 0 {
             unknown();
         }
-        let mut next = stack;
+        let mut next = STACK.with(Cell::get);
         if next.depth < DEPTH {
             next.frames[next.depth] = saved.invocation;
             next.depth += 1;
@@ -384,9 +593,35 @@ pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
     }
 }
 fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) {
+    let mut attempted = false;
     let _ = STACK.try_with(|s| {
         let mut stack = s.get();
-        if stack.depth > 0 && stack.frames[stack.depth - 1].token == inv.token {
+        if stack.depth > 0
+            && stack.frames[stack.depth - 1].kind == inv.kind
+            && stack.frames[stack.depth - 1].world == inv.world
+            && (stack.frames[stack.depth - 1].token == inv.token
+                || (inv.kind == 6 && inv.token == 0))
+        {
+            if inv.kind == 6 {
+                let current = stack.frames[stack.depth - 1];
+                inv.token = current.token;
+                inv.list = current.list;
+                inv.set = current.set;
+                inv.errors |= current.errors;
+                PROVISIONAL.with(|p| {
+                    let mut entries = p.borrow_mut();
+                    let entry = &mut entries[stack.depth - 1];
+                    attempted = entry.attempted;
+                    if entry.id != inv.world {
+                        fail(&mut inv, 0x20);
+                    }
+                    *entry = Provisional {
+                        id: 0,
+                        row: [0; 48],
+                        attempted: false,
+                    };
+                });
+            }
             stack.depth -= 1;
             stack.frames[stack.depth] = Invocation::default();
             s.set(stack);
@@ -403,14 +638,33 @@ fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) 
         fail(&mut inv, 0x40);
         h(13).fetch_add(1, Ordering::Relaxed);
     }
+    if inv.kind == 6 && inv.token == 0 {
+        if edge == 2 && inv.errors == 0 && !attempted {
+            h(20).fetch_add(1, Ordering::Relaxed);
+        } else {
+            unknown();
+        }
+        return; // no-submit/failed provisional frame consumes no BOOK or raw rows
+    }
     if inv.list > 0 {
         if let Ok(mut book) = BOOK.lock() {
             let index = inv.list as usize - 1;
+            let entered = if inv.kind == 4 {
+                book[index].w[3]
+                    .checked_sub(1)
+                    .and_then(|n| TRACE.rows.get(n as usize))
+                    .map(|r| r[23].load(Ordering::Acquire))
+                    .unwrap_or(0)
+            } else {
+                0
+            };
             let reused_t = inv.kind == 4
-                && book
-                    .iter()
-                    .enumerate()
-                    .any(|(i, other)| i != index && other.w[2] == raw.gpr[2] && raw.gpr[2] != 0);
+                && book.iter().enumerate().any(|(i, other)| {
+                    i != index
+                        && other.w[2] == raw.gpr[2]
+                        && raw.gpr[2] != 0
+                        && !completed_before(other, entered)
+                });
             let b = &mut book[index];
             if edge == 3 {
                 b.w[11] |= EXCEPTION;
@@ -418,13 +672,15 @@ fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) 
                 match inv.kind {
                     6 => {
                         b.w[11] |= PRODUCER_RETURN;
-                        if b.w[4] == 0 {
-                            b.w[11] |= NO_SUBMIT;
-                        }
                     }
                     4 => {
                         let t = raw.gpr[2];
-                        if b.w[11] & HOST_PUSH_RETURN == 0 || b.w[16] == 0 || b.w[17] != t {
+                        if inv.errors != 0
+                            || b.w[15] != 0
+                            || b.w[11] & HOST_PUSH_RETURN == 0
+                            || b.w[16] == 0
+                            || b.w[17] != t
+                        {
                             fail(&mut inv, 0x4000); // actual per-invocation callee witness missing
                         } else if t == 0 || b.w[2] != 0 || reused_t {
                             fail(&mut inv, REUSED);
@@ -598,6 +854,11 @@ pub(in super::super) fn fixture_birth(p: u64, t: u64) {
     BOOK.lock().unwrap()[0] = b;
     publish(0, b);
     h(29).store(1, Ordering::Release);
+    h(21).fetch_max(1, Ordering::Release);
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_book(index: usize) -> [u64; 18] {
+    BOOK.lock().unwrap()[index].w
 }
 #[cfg(test)]
 pub(in super::super) fn fixture_bytes() -> Vec<u8> {

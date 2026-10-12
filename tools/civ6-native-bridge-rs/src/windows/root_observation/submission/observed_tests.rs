@@ -133,19 +133,28 @@ fn submission_owned_os_observed_four_gateways_real_shims_state_and_normal_return
         if i == 0 {
             assert_eq!(u64_at(&hooked, 56), u64_at(&hooked, 0x98));
         }
-        assert_eq!(
-            h(10).load(Ordering::Acquire),
-            first as u64 + 2,
-            "real entry accepted"
-        );
-        assert_eq!(
-            submission::TRACE.rows[first + 1][2].load(Ordering::Acquire),
-            2
-        );
-        assert_eq!(
-            submission::TRACE.rows[first + 1][34].load(Ordering::Acquire),
-            0x3344
-        );
+        if i == 0 {
+            assert_eq!(h(10).load(Ordering::Acquire), first as u64);
+            assert_eq!(
+                h(20).load(Ordering::Acquire),
+                1,
+                "no-submit aggregate; no rows"
+            );
+        } else {
+            assert_eq!(
+                h(10).load(Ordering::Acquire),
+                first as u64 + 2,
+                "real entry accepted"
+            );
+            assert_eq!(
+                submission::TRACE.rows[first + 1][2].load(Ordering::Acquire),
+                2
+            );
+            assert_eq!(
+                submission::TRACE.rows[first + 1][34].load(Ordering::Acquire),
+                0x3344
+            );
+        }
         assert_eq!(h(12).load(Ordering::Acquire), 0);
     }
     assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
@@ -318,11 +327,16 @@ fn submission_observed_late(name: &str, index: usize) {
     assert_eq!(status, 2);
     assert!(pending > 0 && uncommitted);
     assert_eq!(data[2].load(Ordering::Acquire), 1);
-    assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 2);
-    assert_eq!(
-        submission::TRACE.rows[1][34].load(Ordering::Acquire),
-        0x3344
-    );
+    if index == 0 {
+        assert_eq!(h(20).load(Ordering::Acquire), 1);
+        assert_eq!(h(10).load(Ordering::Acquire), 0);
+    } else {
+        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 2);
+        assert_eq!(
+            submission::TRACE.rows[1][34].load(Ordering::Acquire),
+            0x3344
+        );
+    }
     assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
     assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
 }
@@ -606,13 +620,21 @@ fn submission_observed_seh(name: &str, index: usize) {
         "actual RtlUnwindEx landed outside complete original frame"
     );
     assert_eq!(u64_at(&data, 0x80), 1);
-    assert_eq!(h(10).load(Ordering::Acquire), 2);
+    assert_eq!(
+        h(10).load(Ordering::Acquire),
+        if index == 0 { 0 } else { 2 }
+    );
     assert_eq!(h(13).load(Ordering::Acquire), 1);
     assert_eq!(h(12).load(Ordering::Acquire), 0);
     assert_eq!(STACK.with(Cell::get).depth, 0);
-    assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 3);
-    assert_eq!(submission::TRACE.rows[1][21].load(Ordering::Acquire), 0);
-    assert_eq!(submission::TRACE.rows[1][34].load(Ordering::Acquire), 0);
+    if index == 0 {
+        assert_eq!(h(20).load(Ordering::Acquire), 0);
+        assert!(h(14).load(Ordering::Acquire) > 0);
+    } else {
+        assert_eq!(submission::TRACE.rows[1][2].load(Ordering::Acquire), 3);
+        assert_eq!(submission::TRACE.rows[1][21].load(Ordering::Acquire), 0);
+        assert_eq!(submission::TRACE.rows[1][34].load(Ordering::Acquire), 0);
+    }
     assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
 }
 #[test]
@@ -642,4 +664,292 @@ fn submission_owned_os_observed_actual_callee_actual_seh_no_return() {
         "submission_owned_os_observed_actual_callee_actual_seh_no_return",
         3,
     );
+}
+
+// Owned synthetic code at the same finite caller RVAs. No game DLL, scheduler,
+// constructor fields or World interface is invoked. All six real CAS gateways
+// and their release displaced shims execute; their original fixture bodies run
+// once. Counters/control bytes below belong only to this owned fixture.
+struct SubmissionPipeline {
+    core: OwnedCore,
+    host: OwnedCore,
+    owner: Box<[u64; 160]>,
+    task: Box<[u64; 2]>,
+}
+impl SubmissionPipeline {
+    fn new() -> Self {
+        let core = OwnedCore::new();
+        let host = OwnedCore::new();
+        let mut owner = Box::new([0u64; 160]);
+        let mut task = Box::new([0u64; 2]);
+        owner[0xd0 / 8] = core.base as u64 + 0xa06648;
+        task[0] = host.base as u64 + 0x106b3c8;
+        let mut this = Self {
+            core,
+            host,
+            owner,
+            task,
+        };
+        this.prepare_code();
+        this
+    }
+    fn write(&self, host: bool, rva: usize, bytes: &[u8]) {
+        let p = (if host {
+            self.host.base as usize
+        } else {
+            self.core.base as usize
+        }) + rva;
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(p as _, bytes.len(), PAGE_EXECUTE_READWRITE, &mut old) },
+            0
+        );
+        unsafe {
+            ptr::copy_nonoverlapping(bytes.as_ptr(), p as *mut u8, bytes.len());
+        }
+        let mut discard = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(p as _, bytes.len(), old, &mut discard) },
+            0
+        );
+        assert_ne!(
+            unsafe { FlushInstructionCache(GetCurrentProcess(), p as _, bytes.len()) },
+            0
+        );
+    }
+    fn branch(&self, host: bool, rva: usize, op: u8, to: usize) {
+        let mut bytes = vec![op];
+        bytes
+            .extend_from_slice(&(i32::try_from(to as i64 - rva as i64 - 5).unwrap()).to_le_bytes());
+        self.write(host, rva, &bytes);
+    }
+    fn prepare_code(&mut self) {
+        submission_observed_fixture(self.core.base as usize, self.host.base as usize);
+        h(15).store(0, Ordering::Release);
+        let mut p = vec![0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83, 0xec, 0x20];
+        // RSI=owner, RBX=list2, count++, own submit-control byte.
+        p.extend_from_slice(&[
+            0x48, 0x89, 0x5c, 0x24, 0x38, 0x48, 0x8b, 0xf1, 0x48, 0xff, 0x86, 0x80, 0, 0, 0, 0x80,
+            0xbe, 0x88, 0, 0, 0, 0, 0x0f, 0x84,
+        ]);
+        let jz = p.len();
+        p.extend_from_slice(&[0; 4]);
+        p.extend_from_slice(&[
+            0x48, 0x8d, 0x96, 0xd0, 0, 0, 0, 0xbb, 2, 0, 0, 0, 0x48, 0x8b, 0xcb,
+        ]);
+        let jmp = p.len();
+        p.extend_from_slice(&[0xe9, 0, 0, 0, 0]);
+        p[jz..jz + 4].copy_from_slice(&(0x4a7a58i32 - (0x4a79b0 + jz + 4) as i32).to_le_bytes());
+        p[jmp + 1..jmp + 5]
+            .copy_from_slice(&(0x4a7a4bi32 - (0x4a79b0 + jmp + 5) as i32).to_le_bytes());
+        self.write(false, 0x4a79b0, &p);
+        self.branch(false, 0x4a7a4b, 0xe8, 0x4a1100);
+        self.write(false, 0x4a7a50, &[0x48, 0x8b, 0xcb]);
+        self.branch(false, 0x4a7a53, 0xe8, 0x4a10b0);
+        self.write(
+            false,
+            0x4a7a58,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x38, 0x48, 0x8b, 0x74, 0x24, 0x40, 0x48, 0x8d, 0x64, 0x24,
+                0x20, 0x5f, 0xc3,
+            ],
+        );
+        let mut wrapper = vec![0x48, 0x83, 0xec, 0x38, 0x48, 0xb8];
+        wrapper.extend_from_slice(&(self.core.base as u64 + 0xa06920).to_le_bytes());
+        wrapper.extend_from_slice(&[0x48, 0x89, 0x44, 0x24, 0x20, 0x48, 0xb8]);
+        wrapper.extend_from_slice(&0x1f00000000u64.to_le_bytes());
+        wrapper.extend_from_slice(&[
+            0x48, 0x89, 0x44, 0x24, 0x28, 0x4c, 0x8d, 0x4c, 0x24, 0x20, 0x41, 0xb8, 0, 0, 3, 0,
+        ]);
+        self.write(false, 0x4a1100, &wrapper);
+        self.branch(false, 0x4a1100 + wrapper.len(), 0xe9, 0x4a1145);
+        self.branch(false, 0x4a1145, 0xe8, 0x992210);
+        self.write(false, 0x4a114a, &[0x48, 0x83, 0xc4, 0x38, 0xc3]);
+        // Publication's native tail restores its full frame before forwarding.
+        self.write(
+            false,
+            0x4a10b0,
+            &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xd9],
+        );
+        self.branch(false, 0x4a10b9, 0xe9, 0x4a10f4);
+        self.write(false, 0x4a10f4, &[0x48, 0x83, 0xc4, 0x20, 0x5b]);
+        self.branch(false, 0x4a10f9, 0xe9, 0x992280);
+        self.write(
+            false,
+            0x992210,
+            &[
+                0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24,
+                0x18, 0x57, 0x48, 0x83, 0xec, 0x30,
+            ],
+        );
+        let mut target = vec![0x48, 0xb8];
+        target.extend_from_slice(&(self.host.base as u64 + 0x986060).to_le_bytes());
+        self.write(false, 0x992224, &target);
+        self.branch(false, 0x99222e, 0xe9, 0x992265);
+        self.write(
+            false,
+            0x992265,
+            &[
+                0xff, 0xd0, 0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x8d, 0x64, 0x24, 0x30, 0x5f, 0xc3,
+            ],
+        );
+        self.write(
+            false,
+            0x992280,
+            &[
+                0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xc1, 0x48, 0x8d, 0x64, 0x24, 0x20,
+                0x5b, 0xc3,
+            ],
+        );
+        self.write(
+            false,
+            0x4a8530,
+            &[
+                0x40, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xc1, 0x48, 0x8d, 0x64, 0x24, 0x20,
+                0x5f, 0xc3,
+            ],
+        );
+        self.write(
+            true,
+            0x985ec0,
+            &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x49, 8],
+        );
+        self.branch(true, 0x985eca, 0xe9, 0x985ee0);
+        let mut call = vec![0x48, 0xb8];
+        call.extend_from_slice(&(self.core.base as u64 + 0x4a8530).to_le_bytes());
+        self.write(true, 0x985ee0, &call);
+        self.branch(true, 0x985eea, 0xe9, 0x985ef2);
+        self.write(
+            true,
+            0x985ef2,
+            &[0xff, 0xd0, 0x48, 0x8d, 0x64, 0x24, 0x20, 0x5b, 0xc3],
+        );
+        self.bind_task();
+        assert!(unsafe { install_sites(self.core.base as usize, submission::WORDS) }.is_ok());
+        assert!(unsafe { submission::install_extra(self.core.base as usize) }.is_ok());
+    }
+    fn bind_task(&self) {
+        let mut bytes = vec![0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1, 0x49, 0xb8];
+        bytes.extend_from_slice(&(self.task.as_ptr() as u64).to_le_bytes());
+        bytes.extend_from_slice(&[
+            0x49, 0x89, 0x50, 8, 0x4c, 0x89, 0xc0, 0x48, 0x8d, 0x64, 0x24, 0x38, 0xc3,
+        ]);
+        // Before hooks only; later rebind preserves the installed first word.
+        if h(15).load(Ordering::Acquire) & 32 != 0 {
+            self.write(true, 0x986068, &bytes[8..]);
+        } else {
+            self.write(true, 0x986060, &bytes);
+        }
+    }
+    fn producer(&mut self, submit: bool) {
+        self.owner[0x88 / 8] = u64::from(submit);
+        let call = unsafe {
+            std::mem::transmute::<usize, unsafe extern "system" fn(*mut u64)>(
+                self.core.base as usize + 0x4a79b0,
+            )
+        };
+        unsafe {
+            call(self.owner.as_mut_ptr());
+        }
+    }
+    fn execute(&self, t: *const u64) {
+        let call = unsafe {
+            std::mem::transmute::<usize, unsafe extern "system" fn(*const u64)>(
+                self.host.base as usize + 0x985ec0,
+            )
+        };
+        unsafe {
+            call(t);
+        }
+    }
+}
+impl Drop for SubmissionPipeline {
+    fn drop(&mut self) {
+        assert!(unsafe { restore_all() }.is_ok());
+    }
+}
+#[test]
+fn submission_owned_os_observed_no_submit_100_then_real_submit_and_current_t_p_bind() {
+    if !child("submission_owned_os_observed_no_submit_100_then_real_submit_and_current_t_p_bind") {
+        return;
+    }
+    let mut p = SubmissionPipeline::new();
+    for _ in 0..100 {
+        p.producer(false);
+    }
+    assert_eq!(h(20).load(Ordering::Acquire), 100);
+    assert_eq!(h(21).load(Ordering::Acquire), 100);
+    assert_eq!(h(10).load(Ordering::Acquire), 0);
+    assert_eq!(h(29).load(Ordering::Acquire), 0);
+    p.producer(true);
+    let task = p.task.as_ptr();
+    p.execute(task);
+    let b = submission_observed::fixture_book(0);
+    assert_eq!(b[0], 101);
+    assert_eq!(b[2], task as u64);
+    assert_eq!(b[15], 0);
+    assert_eq!(b[11], 511 | 8192 | 16384);
+    assert_eq!(h(29).load(Ordering::Acquire), 1);
+    assert_eq!(h(10).load(Ordering::Acquire), 12);
+    assert_eq!(h(11).load(Ordering::Acquire), 0);
+    assert_eq!(h(14).load(Ordering::Acquire), 0);
+    assert_eq!(h(12).load(Ordering::Acquire), 0);
+    assert_eq!(p.owner[0x80 / 8], 101);
+}
+#[test]
+fn submission_owned_os_observed_completed_p_t_reissue_and_late_old_or_unknown_t_stay_unassigned() {
+    if !child("submission_owned_os_observed_completed_p_t_reissue_and_late_old_or_unknown_t_stay_unassigned") {return;}
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let old = p.task.as_ptr();
+    p.execute(old);
+    let first = submission_observed::fixture_book(0);
+    let preserved = submission_observed::fixture_bytes()[640..640 + 12 * 384].to_vec();
+    // Same T address is accepted only after all old normal full-frame returns.
+    p.producer(true);
+    p.execute(old);
+    assert_eq!(submission_observed::fixture_book(1)[15], 0);
+    assert_eq!(
+        submission_observed::fixture_bytes()[640..640 + 12 * 384],
+        preserved
+    );
+    let old_owner = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106b3c8, 0]));
+    p.bind_task();
+    p.producer(true);
+    let before = h(10).load(Ordering::Acquire) as usize;
+    let unresolved = Box::new([p.host.base as u64 + 0x106b3c8, first[1]]);
+    p.execute(old_owner.as_ptr());
+    p.execute(unresolved.as_ptr());
+    for i in [before, before + 4] {
+        assert_eq!(submission::TRACE.rows[i][35].load(Ordering::Acquire), 0);
+        assert!(submission::TRACE.rows[i][20].load(Ordering::Acquire) > 0);
+        assert_eq!(
+            submission::TRACE.rows[i + 2][35].load(Ordering::Acquire),
+            0,
+            "Core uses current unknown host, never oldest P"
+        );
+    }
+    assert_eq!(
+        submission_observed::fixture_book(2)[6],
+        0,
+        "unknown T receives no new birth"
+    );
+    assert!(h(14).load(Ordering::Acquire) > 0);
+    assert_eq!(h(29).load(Ordering::Acquire), 3);
+}
+#[test]
+fn submission_owned_os_observed_open_birth_reissue_refused_without_overwriting_old_book() {
+    if !child(
+        "submission_owned_os_observed_open_birth_reissue_refused_without_overwriting_old_book",
+    ) {
+        return;
+    }
+    let mut p = SubmissionPipeline::new();
+    p.producer(true);
+    let first = submission_observed::fixture_book(0);
+    p.producer(true);
+    assert_eq!(submission_observed::fixture_book(0), first);
+    assert_eq!(h(29).load(Ordering::Acquire), 1);
+    assert!(h(14).load(Ordering::Acquire) > 0);
+    assert_eq!(h(20).load(Ordering::Acquire), 0);
 }
