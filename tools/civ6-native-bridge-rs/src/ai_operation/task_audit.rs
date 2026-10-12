@@ -573,7 +573,24 @@ mod worker_payload {
                 if b[..3] != prefix || rel_target(rva, b, prefix[0], 7, 3)? != target {
                     return Err("governor birth RIP reference differs".into());
                 }
-                pe.span_any(target, 1)?;
+                if target == 0xb8aa68 {
+                    // This mutable singleton is in the loader-zero-filled
+                    // tail of .data. Validate its virtual address, never
+                    // invent file bytes for it or read a runtime value.
+                    let mut sections = pe.sections.iter().filter(|s| {
+                        s.name == *b".data\0\0\0"
+                            && s.flags & 0xe000_0000 == 0xc000_0000
+                            && target >= s.rva
+                            && s.rva
+                                .checked_add(s.virtual_size)
+                                .is_some_and(|end| target < end)
+                    });
+                    if sections.next().is_none() || sections.next().is_some() {
+                        return Err("governor singleton virtual data target differs".into());
+                    }
+                } else {
+                    pe.span_any(target, 1)?;
+                }
                 result.push(json!({"rva":rva,"kind":"rip_relative_reference",
                     "opcode_bytes":prefix,"computed_target_rva":target}));
             }
@@ -685,6 +702,14 @@ mod worker_payload {
                             size: 0x1a8200,
                             flags: 0x40000040,
                         },
+                        Section {
+                            name: *b".data\0\0\0",
+                            rva: 0xb60000,
+                            virtual_size: 0x30ff8,
+                            raw: 0xb5de00,
+                            size: 0x2a800,
+                            flags: 0xc0000040,
+                        },
                     ],
                     functions: vec![
                         Function {
@@ -720,7 +745,7 @@ mod worker_payload {
             fn governor_birth_owner_offsets_prologues_and_destroy_receiver_mutations_reject() {
                 let mut b = image();
                 assert!(spans(&pe(&b)).is_ok());
-                assert!(references(&pe(&b)).is_ok());
+                references(&pe(&b)).expect("valid governor reference fixture");
                 for rva in [
                     0x4a5f50, 0x4a60a4, 0x4a607e, 0x4a6568, 0x4a71b7, 0x4a71ba, 0x4a7a31, 0x4a7a44,
                 ] {
@@ -737,7 +762,7 @@ mod worker_payload {
             #[test]
             fn governor_birth_computed_rel32_rip_targets_and_bounds_reject() {
                 let mut b = image();
-                assert!(references(&pe(&b)).is_ok());
+                references(&pe(&b)).expect("valid governor reference fixture");
                 for rva in [0x4a73be, 0x4a71b0, 0x4a71f0, 0x4a656d, 0x4a609d, 0x4a7a2a] {
                     let p = rva - 0xc00;
                     b[p] ^= 1;
@@ -745,6 +770,21 @@ mod worker_payload {
                     b[p] ^= 1;
                 }
                 assert!(rel_target(0, &[0xe8, 0xf0, 0xff, 0xff, 0xff], 0xe8, 5, 1).is_err());
+            }
+            #[test]
+            fn governor_singleton_zero_fill_is_an_address_not_disk_bytes() {
+                let b = image();
+                let mut mapped = pe(&b);
+                references(&mapped).unwrap();
+                assert!(mapped.span_any(0xb8aa68, 1).is_err());
+                mapped.sections[2].virtual_size = 0x2aa68;
+                assert!(references(&mapped).is_err());
+                mapped.sections[2].virtual_size = 0x30ff8;
+                mapped.sections[2].flags &= !0x8000_0000;
+                assert!(references(&mapped).is_err());
+                mapped.sections[2].flags = 0xc0000040;
+                mapped.sections.push(mapped.sections[2].clone());
+                assert!(references(&mapped).is_err());
             }
             #[test]
             fn governor_birth_rtti_absence_is_fixed_failure_not_a_type_or_adjacent_table_claim() {
