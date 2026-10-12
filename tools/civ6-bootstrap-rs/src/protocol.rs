@@ -19,7 +19,9 @@ pub const SUBMISSION_CONFIG_VERSION: u32 = 0x0880_2002;
 pub const SUBMISSION_MAGIC: u64 = 0x424f_4a53_3038_3830;
 pub const SUBMISSION_V1_ROW: usize = 256;
 pub const SUBMISSION_V1_BYTES: usize = ROOT_HEADER + SUBMISSION_V1_ROW * ROOT_ROWS;
-pub const SUBMISSION_ROW: usize = 272;
+pub const SUBMISSION_V2_ROW: usize = 272;
+pub const SUBMISSION_V2_BYTES: usize = ROOT_HEADER + SUBMISSION_V2_ROW * ROOT_ROWS;
+pub const SUBMISSION_ROW: usize = 280;
 pub const SUBMISSION_BYTES: usize = ROOT_HEADER + SUBMISSION_ROW * ROOT_ROWS;
 
 /// Copies made at entry only. Scalar addresses in these records are opaque;
@@ -28,7 +30,8 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     let version = word(b, 8)?;
     let (row_bytes, trace_bytes) = match version {
         1 => (SUBMISSION_V1_ROW, SUBMISSION_V1_BYTES),
-        2 => (SUBMISSION_ROW, SUBMISSION_BYTES),
+        2 => (SUBMISSION_V2_ROW, SUBMISSION_V2_BYTES),
+        3 => (SUBMISSION_ROW, SUBMISSION_BYTES),
         _ => return Err("submission trace version".into()),
     };
     if b.len() != trace_bytes
@@ -38,8 +41,15 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         || word(b, 32)? != row_bytes as u64
         || word(b, 40)? != u64::from(pid)
         || word(b, 48)? != created
-        || (if version == 1 { 28..32 } else { 29..32 }).any(|i| word(b, i * 8).ok() != Some(0))
-        || (version == 2 && word(b, 224)? & !1 != 0)
+        || (if version == 1 {
+            28..32
+        } else if version == 2 {
+            29..32
+        } else {
+            31..32
+        })
+        .any(|i| word(b, i * 8).ok() != Some(0))
+        || (version >= 2 && word(b, 224)? & !1 != 0)
     {
         return Err("submission trace size/version/identity/reserved mismatch".into());
     }
@@ -70,12 +80,12 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     if (0..8).any(|j| word(b, 384 + j * 8).ok() != Some(0)) {
         unknown.push("unused submission site is not zero".into());
     }
-    let mut pairs = Vec::<([u64; 34], [u64; 34])>::new();
+    let mut pairs = Vec::<([u64; 35], [u64; 35])>::new();
     let mut rows = Vec::new();
     let mut events = std::collections::BTreeSet::new();
     for i in (0..next).step_by(2) {
-        let read = |row: usize| -> Result<[u64; 34], String> {
-            let mut r = [0; 34];
+        let read = |row: usize| -> Result<[u64; 35], String> {
+            let mut r = [0; 35];
             for (j, v) in r.iter_mut().enumerate().take(row_bytes / 8) {
                 *v = word(b, ROOT_HEADER + row * row_bytes + j * 8)?;
             }
@@ -107,11 +117,21 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
                 "descriptor_read_raw_bool":r[30],"metadata_read_raw_bool":r[31],
                 "native_entry_rsp":r[29],"snapshot_scope":"entry_only_no_pointer_reread"}),
             );
-            if version == 2 {
+            if version >= 2 {
                 let last = rows.last_mut().unwrap();
                 last["submit_wrapper_original_caller"] = json!(r[32]);
                 last["submit_wrapper_caller_read"] = json!({"copied":r[33]&255,
                     "succeeded":r[33]&256!=0,"win32_error":r[33]>>32});
+            }
+        }
+        if version == 3 {
+            for (offset, r) in [&a, &z].into_iter().enumerate() {
+                let index = rows.len() - 2 + offset;
+                rows[index]["normal_return_r8_t"] = json!(if r[2] == 2 && r[1] == 4 {
+                    Some(r[34])
+                } else {
+                    None
+                });
             }
         }
         let valid = a[0] == i as u64 + 1
@@ -141,7 +161,9 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
             && z[23] <= word(b, 192)?
             && events.insert(a[23])
             && events.insert(z[23])
-            && a[30..] == z[30..]
+            && a[30..34] == z[30..34]
+            && a[34] == 0
+            && (version != 3 || a[1] != 4 || z[34] > 0)
             && if a[1] == 4 {
                 a[30] != 0
                     && a[31] != 0
@@ -151,7 +173,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
                     && a[25] == 0
                     && a[27] == 0
             } else {
-                a[14..20] == [0; 6] && a[24..28] == [0; 4] && a[30..] == [0; 4]
+                a[14..20] == [0; 6] && a[24..28] == [0; 4] && a[30..34] == [0; 4]
             };
         if valid {
             pairs.push((a, z));
@@ -165,7 +187,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     // These keys establish observed caller-stack correspondence, never full
     // frame lifetime. Manager Push subtracts38h and CALL pushes8; Spawn restores
     // its frame before tail-forwarding, so its rawRSP is submit.rawRSP+40h.
-    let frame_key = |r: &[u64; 34]| -> Option<(u64, u64, u64, u64)> {
+    let frame_key = |r: &[u64; 35]| -> Option<(u64, u64, u64, u64)> {
         let rsp = if r[1] == 4 && core.checked_add(0x4a114a) == Some(r[8]) {
             r[9].checked_add(0x40)?
         } else {
@@ -178,7 +200,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     let mut manager_matches = 0usize;
     for (publish, publish_return) in pairs.iter().filter(|(a, _)| a[1] == 5) {
         let governor =
-            version == 2 && core.checked_add(0x4a7a58) == Some(publish[8]) && word(b, 224)? == 1;
+            version >= 2 && core.checked_add(0x4a7a58) == Some(publish[8]) && word(b, 224)? == 1;
         let generic = core.checked_add(0x38888e) == Some(publish[8]);
         if (!generic && !governor) || publish[4] != 0 {
             continue;
@@ -249,6 +271,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     let submitted = pairs.iter().filter(|(a, _)| a[1] == 4).count();
     let stopped = word(b, 96)? == ROOT_CLOSED && word(b, 184)? == 2;
     let clean = stopped
+        && (version != 3 || word(b, 232)? == 1)
         && word(b, 88)? == 0
         && word(b, 104)? == 0
         && word(b, 112)? == 0
@@ -263,7 +286,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         && word(b, 216)? == 1
         && unknown.is_empty();
     Ok(
-        json!({"schema":if version==1 {"todo880-native-submission-trace-v1"} else {"todo880-native-submission-trace-v2"},"pid":pid,
+        json!({"schema":match version {1=>"todo880-native-submission-trace-v1",2=>"todo880-native-submission-trace-v2",_=>"todo880-native-submission-trace-v3"},"pid":pid,
         "created_filetime":created,"core":core,"core_epoch":epoch,"reserved_rows":next,
         "rows":rows,"site_witnesses":sites,"accepted_calls_stopped":stopped,
         "submitted_normal_returns":submitted,"matched_published_submissions":matched.len(),
@@ -273,6 +296,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
         "not_established_by_this_capture":["descriptor C++ type and ownership","birth generation ticket",
         "retain/copy/release/cancel/reissue","native publication completion","job execution or Join",
         "World root identity/lifetime or all-domain drainage","runtime activation authority",
+        "normal-return R8 is an opaque T observation, not ownership or execution completion",
         "caller-frame lifetime or stack address reuse outside the two observed wrappers",
         "992210 copies R9 metadata16; it forwards RDX unchanged"]}),
     )
@@ -403,16 +427,16 @@ mod submission_protocol_tests {
         );
     }
     fn v2(b: &[u8]) -> Vec<u8> {
-        let mut out = vec![0; SUBMISSION_BYTES];
+        let mut out = vec![0; SUBMISSION_V2_BYTES];
         out[..ROOT_HEADER].copy_from_slice(&b[..ROOT_HEADER]);
         put(&mut out, 1, 2);
-        put(&mut out, 2, SUBMISSION_BYTES as u64);
-        put(&mut out, 4, SUBMISSION_ROW as u64);
+        put(&mut out, 2, SUBMISSION_V2_BYTES as u64);
+        put(&mut out, 4, SUBMISSION_V2_ROW as u64);
         put(&mut out, 28, 1);
         let next = word(b, 80).unwrap() as usize;
         for row in 0..next {
-            out[ROOT_HEADER + row * SUBMISSION_ROW
-                ..ROOT_HEADER + row * SUBMISSION_ROW + SUBMISSION_V1_ROW]
+            out[ROOT_HEADER + row * SUBMISSION_V2_ROW
+                ..ROOT_HEADER + row * SUBMISSION_V2_ROW + SUBMISSION_V1_ROW]
                 .copy_from_slice(
                     &b[ROOT_HEADER + row * SUBMISSION_V1_ROW
                         ..ROOT_HEADER + (row + 1) * SUBMISSION_V1_ROW],
@@ -423,7 +447,7 @@ mod submission_protocol_tests {
     fn governor() -> Vec<u8> {
         let mut b = v2(&fixture());
         for row in 0..4 {
-            let p = ROOT_HEADER / 8 + row * (SUBMISSION_ROW / 8);
+            let p = ROOT_HEADER / 8 + row * (SUBMISSION_V2_ROW / 8);
             let submit = row < 2;
             let rsp = if submit { 0x1000 } else { 0x1040 };
             put(
@@ -452,11 +476,12 @@ mod submission_protocol_tests {
         let mut b = template.clone();
         for (i, &publish) in kinds.iter().enumerate() {
             for edge in 0..2 {
-                let source = ROOT_HEADER + ((if publish { 2 } else { 0 }) + edge) * SUBMISSION_ROW;
+                let source =
+                    ROOT_HEADER + ((if publish { 2 } else { 0 }) + edge) * SUBMISSION_V2_ROW;
                 let row = i * 2 + edge;
-                let dest = ROOT_HEADER + row * SUBMISSION_ROW;
-                b[dest..dest + SUBMISSION_ROW]
-                    .copy_from_slice(&template[source..source + SUBMISSION_ROW]);
+                let dest = ROOT_HEADER + row * SUBMISSION_V2_ROW;
+                b[dest..dest + SUBMISSION_V2_ROW]
+                    .copy_from_slice(&template[source..source + SUBMISSION_V2_ROW]);
                 for (field, value) in [
                     (0, row as u64 + 1),
                     (3, (i * 2 + 1) as u64),
@@ -485,6 +510,42 @@ mod submission_protocol_tests {
         );
     }
     #[test]
+    fn submission_r8_normal_return_is_preserved_without_exit_heap_reads_or_world_certificate() {
+        let old = governor();
+        let mut b = vec![0; SUBMISSION_BYTES];
+        b[..ROOT_HEADER].copy_from_slice(&old[..ROOT_HEADER]);
+        put(&mut b, 1, 3);
+        put(&mut b, 2, SUBMISSION_BYTES as u64);
+        put(&mut b, 4, SUBMISSION_ROW as u64);
+        put(&mut b, 29, 1);
+        for i in 0..4 {
+            b[ROOT_HEADER + i * SUBMISSION_ROW
+                ..ROOT_HEADER + i * SUBMISSION_ROW + SUBMISSION_V2_ROW]
+                .copy_from_slice(
+                    &old[ROOT_HEADER + i * SUBMISSION_V2_ROW
+                        ..ROOT_HEADER + (i + 1) * SUBMISSION_V2_ROW],
+                );
+        }
+        let slot = ROOT_HEADER / 8 + SUBMISSION_ROW / 8 + 34;
+        put(&mut b, slot, 0x11223344);
+        let v = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["rows"][1]["normal_return_r8_t"], 0x11223344_u64);
+        assert!(v["rows"][0]["normal_return_r8_t"].is_null());
+        assert_eq!(v["runtime_activated"], false);
+        put(&mut b, slot, 0);
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            false
+        );
+        put(&mut b, slot, 0x11223344);
+        put(&mut b, 29, 0);
+        assert_eq!(
+            submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+            false
+        );
+    }
+    #[test]
     fn submission_governor_wrong_parent_caller_rsp_and_metadata_never_match() {
         for (row, field, value) in [
             (0, 32, 0x1804a7a51),
@@ -504,7 +565,7 @@ mod submission_protocol_tests {
             for r in row..row + 2 {
                 put(
                     &mut b,
-                    ROOT_HEADER / 8 + r * (SUBMISSION_ROW / 8) + field,
+                    ROOT_HEADER / 8 + r * (SUBMISSION_V2_ROW / 8) + field,
                     value,
                 );
             }
@@ -536,7 +597,7 @@ mod submission_protocol_tests {
     fn submission_governor_interleaved_distinct_frames_match_but_overlapping_publications_do_not() {
         let mut b = sequence(&[false, false, true, true]);
         for (row, rsp) in [(2, 0x2000), (3, 0x2000), (4, 0x2040), (5, 0x2040)] {
-            let p = ROOT_HEADER / 8 + row * (SUBMISSION_ROW / 8);
+            let p = ROOT_HEADER / 8 + row * (SUBMISSION_V2_ROW / 8);
             put(&mut b, p + 9, rsp);
             put(&mut b, p + 29, rsp - 0x1d0);
             if row < 4 {
@@ -551,7 +612,7 @@ mod submission_protocol_tests {
         for (row, event) in [(2, 3), (3, 6), (4, 4), (5, 5)] {
             put(
                 &mut b,
-                ROOT_HEADER / 8 + row * (SUBMISSION_ROW / 8) + 23,
+                ROOT_HEADER / 8 + row * (SUBMISSION_V2_ROW / 8) + 23,
                 event,
             );
         }

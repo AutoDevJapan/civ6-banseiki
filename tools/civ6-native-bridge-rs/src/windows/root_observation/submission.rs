@@ -15,12 +15,12 @@ pub(super) const WORDS: [[u8; 8]; 3] = [
 pub struct SubmissionTrace {
     pub(super) header: [AtomicU64; 32],
     pub(super) sites: [[AtomicU64; 8]; 3],
-    pub(super) rows: [[AtomicU64; 34]; ROOT_ROWS],
+    pub(super) rows: [[AtomicU64; 35]; ROOT_ROWS],
 }
 pub(super) static TRACE: SubmissionTrace = SubmissionTrace {
     header: [const { AtomicU64::new(0) }; 32],
     sites: [const { [const { AtomicU64::new(0) }; 8] }; 3],
-    rows: [const { [const { AtomicU64::new(0) }; 34] }; ROOT_ROWS],
+    rows: [const { [const { AtomicU64::new(0) }; 35] }; ROOT_ROWS],
 };
 const _: () = assert!(std::mem::size_of::<SubmissionTrace>() == SUBMISSION_BYTES);
 #[unsafe(no_mangle)]
@@ -30,7 +30,7 @@ pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE: u64 = SUBMISSION_BYTES as u
 pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
     for (i, v) in [
         SUBMISSION_MAGIC,
-        2,
+        3,
         SUBMISSION_BYTES as u64,
         ROOT_ROWS as u64,
         SUBMISSION_ROW as u64,
@@ -51,7 +51,7 @@ pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
         site_row(i)[1].store(u64::from_le_bytes(*words), Ordering::Release);
     }
 }
-fn commit(index: usize, mut row: [u64; 34]) {
+fn commit(index: usize, mut row: [u64; 35]) {
     row[23] = h(24).fetch_add(1, Ordering::AcqRel) + 1;
     for (dst, v) in TRACE.rows[index].iter().zip(row) {
         dst.store(v, Ordering::Relaxed);
@@ -79,8 +79,8 @@ fn read_once<const N: usize>(address: u64) -> ([u8; N], usize, u32, u64) {
     };
     (bytes, copied, error, ok as u32 as u64)
 }
-fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 34] {
-    let mut r = [0; 34];
+fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 35] {
+    let mut r = [0; 35];
     r[1] = inv.kind;
     r[2] = 1;
     r[3] = inv.token;
@@ -238,7 +238,7 @@ pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
     }
     // Clone the already copied entry row; NEVER reread RDX, R9, set or list.
     let index = inv.token as usize - 1;
-    let mut r = [0; 34];
+    let mut r = [0; 35];
     for (dst, src) in r.iter_mut().zip(&TRACE.rows[index]) {
         *dst = src.load(Ordering::Acquire);
     }
@@ -247,6 +247,7 @@ pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
     r[21] = if edge == 3 { 0 } else { raw.gpr[4] };
     r[22] = u64::from(error);
     r[28] = if edge == 3 { 0 } else { raw.gpr[1] };
+    r[34] = if edge == 2 { raw.gpr[2] } else { 0 }; // R8 captured BEFORE end helper; no heap reread
     commit(index + 1, r);
 }
 
@@ -605,5 +606,62 @@ pub(super) fn verify(file: &mut File, core: usize) -> Result<(), &'static str> {
     }
     h(27).store(1, Ordering::Release);
     verify_manager(file, core).map_err(|e| site_error(0, 35, e))?;
+    Ok(())
+}
+pub(super) fn verify_r8_flow(
+    core_file: &mut File,
+    exe_file: &mut File,
+    core: usize,
+    exe: usize,
+) -> Result<(), &'static str> {
+    for (file, base, rva, length) in [
+        (&mut *core_file, core, 0x992210, 0x6c),
+        (&mut *exe_file, exe, 0x985b20, 0xca),
+    ] {
+        let source = disk(file, rva, length)?;
+        for (n, b) in source.iter().enumerate() {
+            if copy_current::<1>((base + rva + n) as u64) != Some([*b]) {
+                return Err("complete R8 forwarding function differs from pinned source");
+            }
+        }
+    }
+    // Read-only fixed return suffixes: output R8 is not changed after T creation.
+    for (base, rva, bytes) in [
+        (
+            exe,
+            0x985b7e,
+            &[0x4c, 0x8b, 0xc0, 0x48, 0x85, 0xc0, 0x74, 0x14][..],
+        ),
+        (exe, 0x985b94, &[0x49, 0x89, 0x78, 8, 0xeb, 3][..]),
+        (exe, 0x986077, &[0x48, 0x83, 0xc4, 0x38, 0xc3][..]),
+        (
+            core,
+            0x992267,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x8b, 0x6c, 0x24, 0x48, 0x48, 0x8b, 0x74, 0x24,
+                0x50, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ][..],
+        ),
+    ] {
+        for (n, b) in bytes.iter().enumerate() {
+            if copy_current::<1>((base + rva + n) as u64) != Some([*b]) {
+                return Err("fixed R8 return continuation differs");
+            }
+        }
+    }
+    let prefix = disk(exe_file, 0x986060, 0x1c)?;
+    for (n, b) in prefix.iter().enumerate() {
+        if copy_current::<1>((exe + 0x986060 + n) as u64) != Some([*b]) {
+            return Err("complete host push export differs");
+        }
+    }
+    if prefix[18] != 0xe8
+        || (0x986077usize)
+            .checked_add_signed(i32::from_le_bytes(prefix[19..23].try_into().unwrap()) as isize)
+            != Some(0x985b20)
+    {
+        return Err("R8 host direct-call target differs");
+    }
+    h(29).store(1, Ordering::Release);
     Ok(())
 }

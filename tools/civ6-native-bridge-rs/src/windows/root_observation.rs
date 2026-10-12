@@ -995,6 +995,13 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
     }
     if submission::active() {
         submission::verify(&mut files[0], core as usize)?;
+        let (core_file, exe_file) = files.split_at_mut(1);
+        submission::verify_r8_flow(
+            &mut core_file[0],
+            &mut exe_file[0],
+            core as usize,
+            exe as usize,
+        )?;
     } else {
         verify_call_spans(core as usize)?;
     }
@@ -1002,6 +1009,7 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
     // keep an image mapped. No hook or unwind target is ever freed/unpinned.
     for address in [
         core as usize,
+        exe as usize,
         BridgeRootObservationInstall as *const () as usize,
     ] {
         let mut pinned = null_mut();
@@ -1548,6 +1556,11 @@ mod tests {
             }
             assert_eq!(u64_at(&observed, 0x80), 1);
             assert_eq!(u64_at(&observed, 0x90), 0x1234);
+            assert_eq!(
+                submission::TRACE.rows[i * 2 + 1][34].load(Ordering::Acquire),
+                0x3344,
+                "native R8 output is captured before the end helper"
+            );
             assert_eq!(unsafe { GetLastError() }, 0x880);
             assert_eq!(&observed[0x200..0x238], &original[0x200..0x238]);
             assert_eq!(&observed[0x300..0x360], &original[0x300..0x360]);
