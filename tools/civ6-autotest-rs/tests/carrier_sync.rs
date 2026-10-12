@@ -1540,6 +1540,75 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_public_recovery_with_unborrowable_endpoints_waits_on_both_clients() {
+        // A Palace source cannot travel. An only-city target cannot be loaned.
+        // Do not substitute an unrelated relay or a newly generated original.
+        fn blocked_world(local: i64) -> Lua {
+            let lua = ai_palace_world(local);
+            lua.load(r#"
+              CityManager.TransferCity(CITIES[12],3);TRANSFERS=0
+              local cities=Players[2].GetCities
+              Players[2].GetCities=function()
+                local out=cities()
+                out.GetCapitalCity=function() return CITIES[16] end
+                return out
+              end
+              assert(Players[2]:GetCities():GetCount()==1)
+              GameEvents.JAC_NativeInventory_Operation={Add=function() end}
+              TEST_STATE_EDIT(function(s)
+                local source=JAC_AbsorptionRules.Copy(s.Transactions.checkpoint.NativeWorks[1].Source)
+                s.Archive['native-work:900']={ID='native-work:900',Kind='ITEM',
+                  Owner=-1,NativeOwnerMoves=2,NativeWork=source}
+                s.Transactions={}
+              end)
+              function MP_PLAN()
+                return JAC_AbsorptionGameplay.RecoverArchived(
+                  'native-work:900',2,'recovery:blocked').Status=='COMPLETE'
+              end
+              function MP_OBSERVE()
+                return JAC_ObserveNativeCarrierMP(JAC_AbsorptionGameplay.GetState().Recoveries['recovery:blocked'].NativeCarrier)
+              end
+            "#).exec().unwrap();
+            lua.load(
+                fs::read_to_string(
+                    repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_NativeInventory.lua"),
+                )
+                .unwrap(),
+            )
+            .exec()
+            .unwrap();
+            lua
+        }
+        let left = blocked_world(2);
+        let right = blocked_world(3);
+        for lua in [&left, &right] {
+            assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+        }
+        for _ in 0..3 {
+            assert!(!right.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+            let packet = mp_publish(&left);
+            for lua in [&right, &left] {
+                assert!(!mp_receive(lua, &packet));
+                lua.load(r#"
+                  local state=JAC_AbsorptionGameplay.GetState();local r=state.Recoveries['recovery:blocked']
+                  local m=r.NativeCarrier.MP
+                  assert(m.Phase=='SELECT' and m.WaitingFor=='TARGET_SLOT' and not m.Claimed,'blocked source or target was accepted: '..tostring(m.Phase)..'/'..tostring(m.WaitingFor))
+                  assert(not m.Loans or #m.Loans==0,'blocked cities have a saved loan')
+                  assert(TRANSFERS==0 and UI_MOVES==0 and WORK_X==4,'blocked recovery mutated the world')
+                  assert(CITIES[4].owner==1 and CITIES[16].owner==2,'blocked recovery changed a city owner')
+                  assert(state.Archive['native-work:900'].NativeOwnerMoves==2,'blocked recovery changed move history')
+                  local original=JAC_AbsorptionGameplay.NativeWorkLocations(900)
+                  assert(#original==1 and original[1].Index==900 and original[1].Owner==1,'blocked recovery lost the unique original')
+                "#).exec().unwrap();
+                assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+            }
+            assert_eq!(
+                left.load("return JAC_AbsorptionGameplay.Canonical(JAC_AbsorptionGameplay.GetState())").eval::<String>().unwrap(),
+                right.load("return JAC_AbsorptionGameplay.Canonical(JAC_AbsorptionGameplay.GetState())").eval::<String>().unwrap());
+        }
+    }
+
+    #[test]
     fn mp_ai_palace_recovery_uses_the_same_human_sender_and_preserves_capital() {
         let left = ai_palace_world(2);
         let right = ai_palace_world(3);
@@ -2428,7 +2497,9 @@ mod native_transport {
         lua.load(r#"
           local cities={};for x,c in pairs(CITIES) do cities[x]={Owner=c.owner,ID=c.id,Properties=c.props} end
           return JAC_CarrierMP.Encode({State=JAC_AbsorptionGameplay.GetState(),Cities=cities,
-            Work=WORK_X,Transfers=TRANSFERS,Creators=OTHER_CREATOR})
+            Work=WORK_X,Transfers=TRANSFERS,Creators=OTHER_CREATOR,
+            World={Counter=COUNTER_X,Occupied=OCCUPIED_TARGET,Lost=LOST_OTHER,
+              Relocated=RELOCATED_OTHER_HOME,Duplicate=DUPLICATE_OTHER}})
         "#).eval().unwrap()
     }
 
@@ -2450,6 +2521,9 @@ mod native_transport {
           end
           for _,plot in pairs(PLOTS) do if plot.city then plot.owner=CITIES[plot.city].owner end end
           WORK_X=saved.Work;TRANSFERS=saved.Transfers;OTHER_CREATOR=saved.Creators
+          local world=saved.World or {}
+          COUNTER_X=world.Counter;OCCUPIED_TARGET=world.Occupied;LOST_OTHER=world.Lost
+          RELOCATED_OTHER_HOME=world.Relocated;DUPLICATE_OTHER=world.Duplicate
           Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,saved.State)
         "#,
         )
@@ -3288,6 +3362,50 @@ mod native_transport {
         }
         assert_eq!(lua.load("return HELD_SAVES").eval::<i64>().unwrap(), 0);
         lua.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Phase=='DISPATCH' and c.MP.WaitingFor=='HELD_NATIVE_PLACEMENT' and c.MP.HeldObservation and c.MP.HeldReason);assert(TRANSFERS==2 and UI_MOVES==1 and WORK_X==16 and COUNTER_X==4 and CITIES[4].owner==2 and CITIES[16].owner==2);for _,i in ipairs({900,901,902,903,904}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(i)==1) end;assert(OTHER_CREATOR[904]==3)").exec().unwrap();
+    }
+
+    #[test]
+    fn mp_queued_artifact_swap_stays_held_after_saved_rejoin_on_two_clients() {
+        let original = artifact_world(2, false, 3);
+        original.load("MP_PLAN()").exec().unwrap();
+        mp_until(&original, "DISPATCH");
+        original.load("QUEUED_SWAP=true").exec().unwrap();
+        assert!(!original.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+        assert!(!mp_receive(&original, &mp_publish(&original)));
+        let saved = artifact_saved(&original);
+        let actor = artifact_loaded(2, false, 3, &saved);
+        let peer = artifact_loaded(3, false, 3, &saved);
+        for lua in [&actor, &peer] {
+            lua.load(
+                r#"
+              assert(WORK_X==16 and COUNTER_X==4,'saved swap lost one original location')
+              assert(CITIES[4].owner==2 and CITIES[16].owner==2 and TRANSFERS==2)
+              for _,index in ipairs({900,901,902,903,904}) do
+                assert(#JAC_AbsorptionGameplay.NativeWorkLocations(index)==1)
+              end
+              assert(JAC_AbsorptionGameplay.NativeWorkLocations(904)[1].X==4)
+              assert(UI_MOVES==0)
+            "#,
+            )
+            .exec()
+            .unwrap();
+            assert_eq!(artifact_saved(lua), saved);
+        }
+        for _ in 0..3 {
+            assert!(!peer.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+            let packet = mp_publish(&actor);
+            for lua in [&peer, &actor] {
+                assert!(!mp_receive(lua, &packet));
+                assert!(!mp_receive(lua, &packet));
+                lua.load(r#"
+                  local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+                  assert(m.Phase=='DISPATCH' and m.WaitingFor=='HELD_NATIVE_PLACEMENT')
+                  assert(WORK_X==16 and COUNTER_X==4 and TRANSFERS==2 and UI_MOVES==0)
+                  assert(m.HeldReason and m.HeldObservation)
+                "#).exec().unwrap();
+            }
+            assert_eq!(artifact_saved(&actor), artifact_saved(&peer));
+        }
     }
 
     #[test]
