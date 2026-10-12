@@ -173,6 +173,7 @@ struct Model {
     sync_phase: Option<&'static str>,
     broken_output: bool,
     panic_output: bool,
+    quit_output_failure: Option<bool>,
     restore_code: i32,
     publish_collision: Option<PathBuf>,
     replaced_before_termination: bool,
@@ -203,6 +204,7 @@ impl Model {
             sync_phase: None,
             broken_output: false,
             panic_output: false,
+            quit_output_failure: None,
             restore_code: 0,
             publish_collision: None,
             replaced_before_termination: false,
@@ -436,6 +438,12 @@ impl Runner for Model {
         Ok(())
     }
     fn print(&mut self, text: &str) -> Result<(), String> {
+        if text.starts_with("Civ6 quit response") || text.starts_with("Civ6 graceful close") {
+            if let Some(panic) = self.quit_output_failure {
+                assert!(!panic, "fixture quit output panicked");
+                return Err("quit output pipe closed".into());
+            }
+        }
         assert!(!self.panic_output, "fixture output panicked");
         if self.broken_output && text.starts_with("CIV6_CLOSE") {
             return Err("output pipe closed".into());
@@ -853,6 +861,68 @@ fn cleanup_only_live_game_refusal_keeps_pending_original_receipt_and_lock() {
     assert_eq!(r.count("taskkill"), 0);
     assert!(r.tuner_calls("lua").is_empty());
     assert!(r.running[0]);
+}
+
+#[test]
+fn lost_quit_output_error_and_panic_keep_one_request_and_finish_real_recovery() {
+    for response in [QuitResponse::Lost, QuitResponse::Nonzero] {
+        for panic in [false, true] {
+            for restore_code in [0, 1] {
+                let f = Fixture::new(true);
+                let source = f
+                    .paths
+                    .live()
+                    .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+                fs::create_dir_all(source.parent().unwrap()).unwrap();
+                fs::write(source, "fixture").unwrap();
+                fs::write(
+                    f.paths
+                        .live()
+                        .join("tools/target/release/civ6-steam-sync.exe"),
+                    "fixture",
+                )
+                .unwrap();
+                let state = f.paths.here.join("reliability-auto-state.json");
+                fs::write(&state, b"original recovery receipt").unwrap();
+                let mut r = Model::new([true, false]);
+                r.response = response;
+                r.quit_output_failure = Some(panic);
+                r.restore_code = restore_code;
+                let error = chain::close_civ6_with_paths(&mut r, &f.paths).unwrap_err();
+                assert!(
+                    error.contains(if panic {
+                        "panicked"
+                    } else {
+                        "quit output pipe closed"
+                    }),
+                    "{error}"
+                );
+                assert!(!r.running.iter().any(|running| *running));
+                assert_eq!(r.tuner_calls("lua").len(), 1);
+                assert_eq!(r.count("taskkill"), 0);
+                assert_eq!(r.pinned_terminations, 0);
+                assert_eq!(
+                    r.calls
+                        .iter()
+                        .filter(|(_, c)| c.args.get(1).is_some_and(|a| a == "--cursor"))
+                        .count(),
+                    1
+                );
+                assert_eq!(
+                    r.calls
+                        .iter()
+                        .filter(|(_, c)| c.args.get(1).is_some_and(|a| a == "--restore"))
+                        .count(),
+                    1
+                );
+                assert_eq!(state.exists(), restore_code != 0);
+                if restore_code != 0 {
+                    assert!(error.contains("owner autosave recovery failed"));
+                    assert_eq!(fs::read(&state).unwrap(), b"original recovery receipt");
+                }
+            }
+        }
+    }
 }
 
 #[test]

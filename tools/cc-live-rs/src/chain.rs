@@ -544,6 +544,7 @@ fn close_civ6_with_renderer(
     if let Some((run, token, stage)) = renderer {
         retain_renderer(r, p, Some(token), Some(run), stage);
     }
+    let mut printed = Ok(());
     let outcome = if cursor.is_some() || source.is_file() {
         close_civ6_outcome(
             &mut ExitGenerationRunner {
@@ -551,13 +552,14 @@ fn close_civ6_with_renderer(
                 games: &expected_games,
             },
             p,
+            &mut printed,
         )?
     } else {
-        close_civ6_outcome(r, p)?
+        close_civ6_outcome(r, p, &mut printed)?
     };
     evidence["game_close_outcome"] = json!(outcome);
     // A diagnostic sink cannot be allowed to interrupt the actual recovery.
-    let mut printed = cleanup_print(r, &format!("CIV6_CLOSE outcome={outcome}"));
+    printed = printed.and(cleanup_print(r, &format!("CIV6_CLOSE outcome={outcome}")));
     let sync_result = (|| -> Result<(), String> {
         if outcome == "absent" && cursor.is_none() {
             evidence["sync_phase"] = json!("not_needed_game_absent");
@@ -701,7 +703,11 @@ fn restore_autosaves(
     Ok(())
 }
 
-fn close_civ6_outcome(r: &mut impl Runner, p: &Paths) -> Result<&'static str, String> {
+fn close_civ6_outcome(
+    r: &mut impl Runner,
+    p: &Paths,
+    printed: &mut Result<(), String>,
+) -> Result<&'static str, String> {
     if !civ6_running(r)? {
         close_stale_civ6_reporters(r)?;
         return Ok("absent");
@@ -713,6 +719,7 @@ fn close_civ6_outcome(r: &mut impl Runner, p: &Paths) -> Result<&'static str, St
             deadline,
         },
         p,
+        printed,
     );
     match requested {
         Ok(()) => {
@@ -723,7 +730,10 @@ fn close_civ6_outcome(r: &mut impl Runner, p: &Paths) -> Result<&'static str, St
                 return Ok("closed");
             }
         }
-        Err(error) => r.print(&format!("Civ6 graceful close unavailable: {error}"))?,
+        Err(error) => {
+            let message = cleanup_print(r, &format!("Civ6 graceful close unavailable: {error}"));
+            *printed = printed.clone().and(message);
+        }
     }
     // A failed request, or a process exiting exactly at the graceful deadline,
     // must not cause us to force-kill a game which has already disappeared.
@@ -750,7 +760,11 @@ fn close_civ6_outcome(r: &mut impl Runner, p: &Paths) -> Result<&'static str, St
     Ok("killed")
 }
 
-fn request_graceful_close(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
+fn request_graceful_close(
+    r: &mut impl Runner,
+    p: &Paths,
+    printed: &mut Result<(), String>,
+) -> Result<(), String> {
     let tuner = driver::tuner(p, &p.live())?;
     let mut states = tuner.clone();
     states.push("states".into());
@@ -792,12 +806,21 @@ fn request_graceful_close(r: &mut impl Runner, p: &Paths) -> Result<(), String> 
     ]));
     match r.run(Call::new(argv).timeout(15.0)) {
         Ok(out) if out.code == 0 => {}
-        Ok(out) => r.print(&format!(
-            "Civ6 quit response unavailable (exit {}): {}",
-            out.code,
-            tail(&out.stderr, 300)
-        ))?,
-        Err(error) => r.print(&format!("Civ6 quit response unavailable: {error}"))?,
+        Ok(out) => {
+            let message = cleanup_print(
+                r,
+                &format!(
+                    "Civ6 quit response unavailable (exit {}): {}",
+                    out.code,
+                    tail(&out.stderr, 300)
+                ),
+            );
+            *printed = printed.clone().and(message);
+        }
+        Err(error) => {
+            let message = cleanup_print(r, &format!("Civ6 quit response unavailable: {error}"));
+            *printed = printed.clone().and(message);
+        }
     }
     // The Lua call may have reached the game even when its response was lost.
     // Do not resend it or force-kill before allowing the bounded exit wait.
@@ -852,7 +875,9 @@ pub fn close_stale_civ6_reporters(r: &mut impl Runner) -> Result<(), String> {
 }
 /// Close the previous game under the shared lock before restart_game relaunches it.
 pub fn ensure_responsive_civ6(r: &mut impl Runner, p: &Paths) -> Result<&'static str, String> {
-    close_civ6_outcome(r, p)
+    let mut printed = Ok(());
+    let outcome = close_civ6_outcome(r, p, &mut printed)?;
+    printed.map(|()| outcome)
 }
 /// Job records take precedence over a PID; the game and Steam cannot own a run.
 pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool, String> {
@@ -2159,13 +2184,18 @@ fn main_owned(
         } else {
             None
         };
-        close_civ6_with_paths(
+        let mut preparation_exit = json!({});
+        let closed = close_civ6_with_renderer(
             &mut WithinDeadline {
                 runner: r,
                 deadline,
             },
             p,
-        )?;
+            &mut preparation_exit,
+            None,
+        );
+        *game_closed = close_cleanup_confirmed(&preparation_exit);
+        closed?;
         if let Some(protection) = protection.as_ref() {
             protection.check(
                 &mut WithinDeadline {
