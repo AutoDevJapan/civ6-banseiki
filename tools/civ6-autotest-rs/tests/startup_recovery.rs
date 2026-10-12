@@ -14,6 +14,38 @@ use std::{
     sync::{Arc, Mutex},
 };
 use support_driver::ManualClock;
+#[test]
+fn startup_lock_preparation_consumes_restart_budget_before_any_launch() {
+    struct Preparing(Arc<ManualClock>);
+    impl Backend for Preparing {
+        fn acquire_startup_lock_until(&mut self, deadline: std::time::Instant) -> Result<()> {
+            assert!(deadline > std::time::Instant::now());
+            self.0.advance(11.0);
+            Ok(())
+        }
+        fn authorize_game_control(&mut self, _: Option<GameProcess>) -> Result<()> {
+            panic!("expired preparation cannot authorize game control");
+        }
+        fn launch(&mut self) -> Result<()> {
+            panic!("expired preparation cannot launch a game");
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let clock = Arc::new(ManualClock::default());
+    let mut runner = Runner::with_backend(
+        json!({"name":"preparation bound","steps":[]}),
+        directory.path().into(),
+        directory.path().into(),
+        directory.path().into(),
+        4318,
+        Box::new(Preparing(clock.clone())),
+        clock,
+    );
+    assert_eq!(
+        runner.restart_game(10.0).unwrap_err().message,
+        "Step deadline expired"
+    );
+}
 fn clear_idle() -> IdleProof {
     IdleProof {
         software_adapters: Vec::new(),
@@ -80,8 +112,14 @@ struct State {
     events: Vec<String>,
     alive: Option<(u32, f64)>,
     launches: usize,
-    lock_checks: usize,
+
     steam_marks: usize,
+    lock_held: bool,
+}
+#[derive(Clone, Copy)]
+enum LockLoss {
+    BeforeShutdown,
+    AfterShutdown,
 }
 struct Game {
     state: Arc<Mutex<State>>,
@@ -99,7 +137,7 @@ struct Game {
     no_window: bool,
     changed_after_diagnostics: bool,
     change_start_only: bool,
-    lost_lock_at: Option<usize>,
+    lost_lock_at: Option<LockLoss>,
     deny_lock: bool,
     resist_shutdown: bool,
     reset_clears_pending: bool,
@@ -247,20 +285,30 @@ impl Backend for Game {
         if self.deny_lock {
             Err(Error::input("fixture missing shared lock"))
         } else {
+            self.state.lock().unwrap().lock_held = true;
             Ok(())
         }
     }
     fn check_startup_lock(&mut self) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        state.lock_checks += 1;
         state.events.push("lock:check".into());
-        if self.lost_lock_at.is_some_and(|n| state.lock_checks >= n) {
+        let lost = match self.lost_lock_at {
+            Some(LockLoss::BeforeShutdown) => {
+                state.events.iter().any(|e| e.starts_with("diagnostics:"))
+            }
+            Some(LockLoss::AfterShutdown) => {
+                state.events.iter().any(|e| e.starts_with("terminate:"))
+            }
+            None => false,
+        };
+        if !state.lock_held || lost {
             Err(Error::input("fixture lock lost"))
         } else {
             Ok(())
         }
     }
     fn release_startup_lock(&mut self) {
+        self.state.lock().unwrap().lock_held = false;
         self.state
             .lock()
             .unwrap()
@@ -513,22 +561,24 @@ fn missing_or_lost_lock_prevents_shutdown_reset_and_retry_and_releases_guard() {
     for deny_lock in [true, false] {
         let mut fixture = Fixture::new(|game| {
             game.deny_lock = deny_lock;
-            game.lost_lock_at = Some(1);
+            game.lost_lock_at = Some(LockLoss::BeforeShutdown);
         });
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
-        assert_eq!(count(&events, "launch"), 1);
+        assert_eq!(count(&events, "launch"), if deny_lock { 0 } else { 1 });
         assert!(!events
             .iter()
             .any(|e| e.starts_with("terminate:") || e.starts_with("reset:")));
         assert_eq!(events.last().unwrap(), "lock:release");
-        assert_eq!(fixture.report()["retry"]["status"], "not_started");
+        if !deny_lock {
+            assert_eq!(fixture.report()["retry"]["status"], "not_started");
+        }
     }
 }
 
 #[test]
 fn lock_loss_after_shutdown_prevents_reset_and_retry() {
-    let mut fixture = Fixture::new(|game| game.lost_lock_at = Some(2));
+    let mut fixture = Fixture::new(|game| game.lost_lock_at = Some(LockLoss::AfterShutdown));
     fixture.runner.restart_game(20.0).unwrap_err();
     let events = fixture.events();
     assert_eq!(count(&events, "terminate:11:101"), 1);
@@ -567,9 +617,15 @@ fn initial_cancellation_and_launch_or_window_or_executable_failure_do_not_recove
             assert_eq!(error.kind, ErrorKind::Interrupted);
         }
         let events = fixture.events();
-        assert!(!events.iter().any(|e| e.starts_with("diagnostics:")
-            || e.starts_with("lock:")
-            || e.starts_with("reset:")));
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("diagnostics:") || e.starts_with("reset:")));
+        if mode == 0 {
+            assert!(!events.iter().any(|e| e.starts_with("lock:")));
+        } else {
+            assert_eq!(count(&events, "lock:acquire"), 1);
+            assert_eq!(events.last().unwrap(), "lock:release");
+        }
         assert!(fs::read_dir(&fixture.runner.output)
             .unwrap()
             .next()
@@ -602,9 +658,9 @@ fn menu_already_reached_and_invalid_tuner_configuration_do_not_recover() {
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
         assert_eq!(count(&events, "launch"), 1);
-        assert!(!events.iter().any(|e| e.starts_with("lock:")
-            || e.starts_with("reset:")
-            || e.starts_with("terminate:")));
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("reset:") || e.starts_with("terminate:")));
         if invalid_config {
             assert_eq!(fixture.report()["result"], "recovery_refused");
         }

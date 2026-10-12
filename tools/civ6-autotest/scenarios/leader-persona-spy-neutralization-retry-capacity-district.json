@@ -1,0 +1,16 @@
+{
+  "name": "Build the real Government Plaza on a native eligible owned plot",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); assert(p.stage=='BUILD_DISTRICT' and p.cityID and p.plot and p.x and p.y and p.occupied==1 and p.capacity==1,'Government Plaza has no eligible owned plot'); b.Queue('BUILD_CAPACITY_DISTRICT'); return 'native district BUILD requested at plot '..p.plot"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BUILD_CAPACITY_DISTRICT' or a=='REJECTED_BUILD_CAPACITY_DISTRICT' then error(a) end; return a=='READY_BUILD_CAPACITY_DISTRICT'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; assert(b.CaptiveCapacityPlan().stage=='DISTRICT_QUEUED','native Government Plaza queue not observed'); b.Queue('PROGRESS_CAPACITY_DISTRICT'); return 'one native district progress request queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_PROGRESS_CAPACITY_DISTRICT' or a=='UNKNOWN_PROGRESS_CAPACITY_DISTRICT' or a=='REJECTED_PROGRESS_CAPACITY_DISTRICT' then error(a) end; return a=='ACCEPTED_PROGRESS_CAPACITY_DISTRICT'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS')); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome(); assert(o.owner==r.owner and o.cityOwner==r.cityOwner and o.cityID==r.cityID and o.districtID==r.districtID and o.plot==r.plot and o.memberKey==r.memberKey and o.acceptedNonce==r.acceptedNonce and o.occupied==1 and o.captured==1,'native district progress receipt or captive changed'); return o.stage"},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"exit_to_menu"}
+  ]
+}

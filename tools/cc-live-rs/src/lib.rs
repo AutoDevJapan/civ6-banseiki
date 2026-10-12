@@ -6,6 +6,7 @@ pub mod process;
 mod process_tree;
 pub mod review;
 pub mod ship;
+mod software_renderer;
 pub use process::{Call, Output, Runner};
 use serde_json::Value;
 use std::path::{Path, PathBuf};

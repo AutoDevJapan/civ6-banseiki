@@ -1,0 +1,16 @@
+{
+  "name": "Queue one official Government Plaza prerequisite or spy building with real city progress",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); assert((p.stage=='BUILD_TIER1' or p.stage=='BUILD_SPIES') and p.capacity==1 and p.occupied==1,'official building prerequisites not ready: '..p.stage); b.Queue('BUILD_CAPACITY'); return p.buildingType"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BUILD_CAPACITY' or a=='REJECTED_BUILD_CAPACITY' then error(a) end; return a=='READY_BUILD_CAPACITY'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; assert(b.CaptiveCapacityPlan().stage=='BUILD_QUEUED','native building queue not observed'); b.Queue('PROGRESS_CAPACITY'); return 'one official city progress request queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_PROGRESS_CAPACITY' or a=='UNKNOWN_PROGRESS_CAPACITY' or a=='REJECTED_PROGRESS_CAPACITY' then error(a) end; return a=='ACCEPTED_PROGRESS_CAPACITY'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local p=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')); return 'native progress recorded; building and capacity require a real turn'"},
+    {"action":"exit_to_menu"}
+  ]
+}

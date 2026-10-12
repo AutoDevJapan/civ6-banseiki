@@ -1,0 +1,12 @@
+{
+  "name": "Read the living native spy route after the failed mission without advancing",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()~='ARRIVAL_UNOBSERVED'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()"},
+    {"action":"exit_to_menu"}
+  ]
+}

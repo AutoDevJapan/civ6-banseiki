@@ -5,7 +5,11 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 17] = [
+pub const ACTIONS: [&str; 44] = [
+    "audit_thread_visibility",
+    "start_native_order_capture",
+    "set_native_order_phase",
+    "stop_native_order_capture",
     "restart_game",
     "enable_mods",
     "configure",
@@ -21,8 +25,31 @@ pub const ACTIONS: [&str; 17] = [
     "exit_to_menu",
     "load",
     "wait_for",
+    "observe_captive_session",
+    "inspect_native_spy_failures",
+    "inspect_native_spy_research",
     "pause",
     "manual",
+    "start_native_governor_trace",
+    "stop_native_governor_trace",
+    "start_native_can_ever_trace",
+    "stop_native_can_ever_trace",
+    "start_native_can_ever_calibration",
+    "start_native_assign_calibration",
+    "stop_native_assign_calibration",
+    "stop_native_can_ever_calibration",
+    "start_native_joined_admission",
+    "stop_native_joined_admission",
+    "start_native_production_admission",
+    "stop_native_production_admission",
+    "start_native_paid_runtime",
+    "stop_native_paid_runtime_observation",
+    "start_native_property_trace",
+    "stop_native_property_trace",
+    "start_native_promotion_call_trace",
+    "stop_native_promotion_call_trace",
+    "start_native_bootstrap",
+    "stop_native_bootstrap",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -60,6 +87,7 @@ pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(normalized))
 }
 pub fn validate_scenario(data: &Value) -> Result<()> {
+    crate::bootstrap_scenario::validate(data)?;
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
     }
@@ -104,13 +132,39 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         .as_array()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Error::scenario("Scenario needs a nonempty steps array"))?;
+    let mut trace_open = false;
+    let mut bridge_open = false;
+    let mut property_open = false;
+    let mut calibration_open = false;
+    let mut assignment_open = false;
+    let mut joined_open = false;
+    let mut production_open = false;
+    let mut promotion_open = false;
+    let mut runtime_open = false;
+    let mut runtime_used = false;
+    let mut property_used = false;
+    let mut promotion_used = false;
+    let mut assignment_used = false;
+    let mut trace_names = BTreeSet::new();
     let mut lua_captures = BTreeSet::new();
+    let mut carrier_captures = BTreeSet::new();
+    let mut order_open = false;
+    let mut order_changes = 0;
+    let mut order_phase = None;
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
             .as_str()
             .filter(|s| ACTIONS.contains(s))
             .ok_or_else(|| fail("unknown action".into()))?;
+        if order_open
+            && (action == "restart_game"
+                || (action.starts_with("start_native_") && action != "start_native_order_capture"))
+        {
+            return Err(fail(
+                "stop native order capture before restart or another observer".into(),
+            ));
+        }
         let bool_flags = |names: &[&str]| -> Result<()> {
             for name in names {
                 if step.get(*name).is_some_and(|v| !v.is_boolean()) {
@@ -119,6 +173,70 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             Ok(())
         };
+        if let Some(flag) = step.get("preserve_diplomacy_session") {
+            if !matches!(action, "ui_lua" | "save") || !flag.is_boolean() {
+                return Err(fail(
+                    "preserve_diplomacy_session needs a boolean ui_lua or save flag".into(),
+                ));
+            }
+        }
+        if let Some(flag) = step["condition"].get("preserve_diplomacy_session") {
+            if action != "wait_for" || step["condition"]["type"] != "lua" || !flag.is_boolean() {
+                return Err(fail(
+                    "preserve_diplomacy_session needs a boolean Lua wait flag".into(),
+                ));
+            }
+        }
+        if bridge_open
+            && matches!(
+                action,
+                "restart_game" | "start_game" | "exit_to_menu" | "load"
+            )
+        {
+            return Err(fail(
+                "stop native CanEver bridge before changing game lifecycle".into(),
+            ));
+        }
+        if (property_open || joined_open || production_open)
+            && matches!(action, "save" | "end_turn" | "autoplay")
+        {
+            return Err(fail(
+                "stop native property observation before a save or turn change".into(),
+            ));
+        }
+        if action == "restart_game" {
+            if bridge_open || trace_open {
+                return Err(fail(
+                    "stop native observation before restarting the game".into(),
+                ));
+            }
+            property_used = false;
+            promotion_used = false;
+            assignment_used = false;
+            runtime_used = false;
+        }
+        if runtime_used && matches!(action, "load" | "start_game" | "exit_to_menu") {
+            return Err(fail(
+                "resident runtime load-generation hook is not verified; restart_game first".into(),
+            ));
+        }
+        if runtime_used
+            && matches!(
+                action,
+                "start_native_can_ever_trace"
+                    | "start_native_can_ever_calibration"
+                    | "start_native_assign_calibration"
+                    | "start_native_joined_admission"
+                    | "start_native_production_admission"
+                    | "start_native_promotion_call_trace"
+                    | "start_native_property_trace"
+                    | "start_native_governor_trace"
+            )
+        {
+            return Err(fail(
+                "resident runtime owns native entries until restart_game".into(),
+            ));
+        }
         if let Some(hook) = step.get("before_begin_lua") {
             if action != "load"
                 || !hook.is_object()
@@ -135,14 +253,230 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 .map_err(|e| fail(e.to_string()))?;
         }
         match action {
-            "restart_game"
+            "audit_thread_visibility" => {
+                crate::native_order::validate_audit_options(step)?;
+                if order_open || bridge_open || trace_open || runtime_used {
+                    return Err(fail(
+                        "thread audit cannot overlap native intervention".into(),
+                    ));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_string()) {
+                    return Err(fail("native audit names must be unique".into()));
+                }
+            }
+            "start_native_order_capture" => {
+                crate::native_order::validate_options(step)?;
+                if order_open || trace_open || bridge_open || runtime_used {
+                    return Err(fail("another native observation is active".into()));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_owned()) {
+                    return Err(fail("native capture names must be unique".into()));
+                }
+                order_open = true;
+                order_changes = 0;
+                order_phase = step["phase"].as_str();
+            }
+            "set_native_order_phase" | "stop_native_order_capture" => {
+                if !order_open {
+                    return Err(fail("native order capture is not active".into()));
+                }
+                let phase_change = action == "set_native_order_phase";
+                if step.as_object().unwrap().keys().any(|key| {
+                    !(["action", "timeout"].contains(&key.as_str())
+                        || phase_change && key == "phase")
+                }) {
+                    return Err(fail("unexpected native order option".into()));
+                }
+                if phase_change {
+                    if !matches!(
+                        step["phase"].as_str(),
+                        Some("front" | "load" | "native-outer" | "native-shutdown")
+                    ) || order_changes >= 8
+                        || order_phase == step["phase"].as_str()
+                    {
+                        return Err(fail(
+                            "native order requires a known phase and at most eight changes".into(),
+                        ));
+                    }
+                    order_changes += 1;
+                    order_phase = step["phase"].as_str();
+                } else {
+                    order_open = false;
+                }
+            }
+            "start_native_can_ever_trace"
+            | "start_native_can_ever_calibration"
+            | "start_native_assign_calibration"
+            | "start_native_joined_admission"
+            | "start_native_production_admission"
+            | "start_native_paid_runtime"
+            | "start_native_promotion_call_trace"
+            | "start_native_property_trace" => {
+                if bridge_open
+                    || trace_open
+                    || (action == "start_native_paid_runtime"
+                        && (runtime_used || property_used || assignment_used || promotion_used))
+                {
+                    return Err(fail("native observation already active".into()));
+                }
+                let uses_property = matches!(
+                    action,
+                    "start_native_property_trace"
+                        | "start_native_joined_admission"
+                        | "start_native_production_admission"
+                        | "start_native_paid_runtime"
+                );
+                if (uses_property && property_used)
+                    || (action == "start_native_promotion_call_trace" && promotion_used)
+                    || (action == "start_native_assign_calibration" && assignment_used)
+                {
+                    return Err(fail("native property, promotion and assignment observations are each single-use until restart_game".into()));
+                }
+                if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"])
+                    || !trace_names.insert(step["name"].as_str().unwrap().to_owned())
+                    || !step["max_seconds"].as_u64().is_some_and(|n| {
+                        (1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&n)
+                    })
+                    || step.as_object().unwrap().keys().any(|k| {
+                        ![
+                            "action",
+                            "name",
+                            "max_seconds",
+                            "timeout",
+                            "scope",
+                            "owner",
+                            "leader",
+                        ]
+                        .contains(&k.as_str())
+                    })
+                    || (action != "start_native_property_trace" && step.get("scope").is_some())
+                    || ((step.get("owner").is_some() || step.get("leader").is_some())
+                        && (action != "start_native_assign_calibration"
+                            || step["owner"].as_u64().is_none_or(|n| n >= 64)
+                            || !type_id(&step["leader"])))
+                    || (action == "start_native_property_trace"
+                        && step.get("scope").is_some_and(|v| {
+                            v != "numeric_test_keys_853271_853272" && v != "ashina_admission_853304"
+                        }))
+                {
+                    return Err(fail("invalid bounded native CanEver bridge start".into()));
+                }
+                bridge_open = true;
+                property_open = action == "start_native_property_trace";
+                calibration_open = action == "start_native_can_ever_calibration";
+                assignment_open = action == "start_native_assign_calibration";
+                joined_open = action == "start_native_joined_admission";
+                production_open = action == "start_native_production_admission";
+                runtime_open = action == "start_native_paid_runtime";
+                runtime_used |= runtime_open;
+                promotion_open = action == "start_native_promotion_call_trace";
+                property_used |= uses_property;
+                promotion_used |= promotion_open;
+                assignment_used |= assignment_open;
+            }
+            "stop_native_can_ever_trace"
+            | "stop_native_can_ever_calibration"
+            | "stop_native_assign_calibration"
+            | "stop_native_joined_admission"
+            | "stop_native_production_admission"
+            | "stop_native_paid_runtime_observation"
+            | "stop_native_promotion_call_trace"
+            | "stop_native_property_trace" => {
+                if !bridge_open
+                    || property_open != (action == "stop_native_property_trace")
+                    || calibration_open != (action == "stop_native_can_ever_calibration")
+                    || assignment_open != (action == "stop_native_assign_calibration")
+                    || joined_open != (action == "stop_native_joined_admission")
+                    || production_open != (action == "stop_native_production_admission")
+                    || runtime_open != (action == "stop_native_paid_runtime_observation")
+                    || promotion_open != (action == "stop_native_promotion_call_trace")
+                    || step
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .any(|k| !["action", "timeout"].contains(&k.as_str()))
+                {
+                    return Err(fail("invalid native CanEver bridge stop".into()));
+                }
+                bridge_open = false;
+                property_open = false;
+                calibration_open = false;
+                assignment_open = false;
+                joined_open = false;
+                production_open = false;
+                runtime_open = false;
+                promotion_open = false;
+            }
+            "start_native_governor_trace" => {
+                if trace_open || bridge_open {
+                    return Err(fail("native governor trace is already active".into()));
+                }
+                if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
+                    return Err(fail("trace name must be a safe artifact basename".into()));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_owned()) {
+                    return Err(fail("trace name must be unique within the scenario".into()));
+                }
+                if !step["max_seconds"]
+                    .as_u64()
+                    .is_some_and(|n| (1..=300).contains(&n))
+                {
+                    return Err(fail("max_seconds must be 1..300".into()));
+                }
+                if step.get("mode").is_some()
+                    && !matches!(
+                        step["mode"].as_str(),
+                        Some("governor" | "property" | "lifecycle")
+                    )
+                {
+                    return Err(fail(
+                        "trace mode must be governor, property or lifecycle".into(),
+                    ));
+                }
+                if step["mode"] == "lifecycle"
+                    && step["max_seconds"]
+                        .as_u64()
+                        .is_some_and(|n| n > civ6_native_probe_rs::MAX_LIFECYCLE_SECONDS)
+                {
+                    return Err(fail(
+                        "lifecycle observation is limited to 20 seconds".into(),
+                    ));
+                }
+                if step.as_object().unwrap().keys().any(|k| {
+                    !["action", "name", "max_seconds", "mode", "timeout"].contains(&k.as_str())
+                }) {
+                    return Err(fail("unexpected trace start field".into()));
+                }
+                trace_open = true;
+            }
+            "stop_native_governor_trace" => {
+                if !trace_open {
+                    return Err(fail("native governor trace is not active".into()));
+                }
                 if step
                     .as_object()
                     .unwrap()
                     .keys()
-                    .any(|k| k != "action" && k != "timeout") =>
-            {
-                return Err(fail("restart_game only accepts timeout".into()));
+                    .any(|k| !["action", "timeout"].contains(&k.as_str()))
+                {
+                    return Err(fail("unexpected trace stop field".into()));
+                }
+                trace_open = false;
+            }
+            "restart_game" => {
+                if trace_open || bridge_open {
+                    return Err(fail(
+                        "stop native governor trace before restarting Civ6".into(),
+                    ));
+                }
+                if step
+                    .as_object()
+                    .unwrap()
+                    .keys()
+                    .any(|k| k != "action" && k != "timeout")
+                {
+                    return Err(fail("restart_game only accepts timeout".into()));
+                }
             }
             "enable_mods" => {
                 bool_flags(&["exclusive_user_mods"])?;
@@ -181,7 +515,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail("seed must be a signed 32-bit integer".into()));
                 }
                 if step.get("map_file").is_some_and(|v| {
-                    !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
+                    !matches!(v.as_str(), Some("Continents.lua" | "Pangaea.lua"))
+                        && !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
                 }) {
                     return Err(fail("invalid map_file".into()));
                 }
@@ -258,11 +593,35 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
+            "inspect_native_spy_failures"
+                if step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout"].contains(&key.as_str()))
+                }) =>
+            {
+                return Err(fail(
+                    "native spy failure inspection only accepts timeout".into(),
+                ));
+            }
             "choose_dedication"
                 if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) =>
             {
                 return Err(fail(
                     "choose_dedication human must be an integer in [0, 63]".into(),
+                ));
+            }
+            "inspect_native_spy_research"
+                if (step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout", "phase"].contains(&key.as_str()))
+                }) || !crate::spy_research::PHASES
+                    .contains(&step["phase"].as_str().unwrap_or_default())) =>
+            {
+                return Err(fail(
+                    "native spy research inspection needs a known phase and only accepts timeout"
+                        .into(),
                 ));
             }
             "carrier_checkpoint" | "carrier_exchange" => {
@@ -282,12 +641,37 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     )?;
                 }
                 for key in ["capture_as", "equals_capture"] {
-                    if step.get(key).is_some_and(|v| !type_id(v)) {
-                        return Err(fail(format!("invalid {key}")));
+                    if let Some(value) = step.get(key) {
+                        if action == "carrier_exchange" {
+                            return Err(fail(format!("carrier_exchange does not support {key}")));
+                        }
+                        if !type_id(value) {
+                            return Err(fail(format!("invalid {key}")));
+                        }
+                    }
+                }
+                if action == "carrier_checkpoint" {
+                    if let Some(key) = step["equals_capture"].as_str() {
+                        if !carrier_captures.contains(key) {
+                            return Err(fail(
+                                "carrier equals_capture needs an earlier capture_as".into(),
+                            ));
+                        }
+                    }
+                    if let Some(key) = step["capture_as"].as_str() {
+                        carrier_captures.insert(key.to_owned());
                     }
                 }
             }
             "ui_lua" => {
+                if step.get("lua_timeout").is_some_and(|v| {
+                    !v.as_f64()
+                        .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 600.0)
+                }) {
+                    return Err(fail(
+                        "lua_timeout must be finite and between 0 and 600 seconds".into(),
+                    ));
+                }
                 if !step["state_name"].is_string()
                     || step["code"].as_str().is_none_or(|s| s.trim().is_empty())
                 {
@@ -333,10 +717,28 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "save" | "load" => {
+                if step.get("save_sha256").is_some()
+                    && (action != "load"
+                        || !step["save_sha256"].as_str().is_some_and(|s| {
+                            s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+                        }))
+                {
+                    return Err(fail(
+                        "save_sha256 requires load and 64 hexadecimal characters".into(),
+                    ));
+                }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
                     return Err(fail("invalid save name".into()));
                 }
-                bool_flags(&["exact_name", "metrics"])?;
+                bool_flags(&["exact_name", "metrics", "checkpoint", "resume_once"])?;
+                if step.get("resume_once").is_some()
+                    && (action != "load" || step.get("save_sha256").is_none())
+                {
+                    return Err(fail("resume_once requires load with save_sha256".into()));
+                }
+                if step["checkpoint"] == true && step["exact_name"] != true {
+                    return Err(fail("checkpoint requires exact_name: true".into()));
+                }
             }
             "wait_for" => {
                 let c = &step["condition"];
@@ -370,6 +772,30 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
+            "observe_captive_session" => {
+                let attacker = step["attacker"].as_u64();
+                let captor = step["captor"].as_u64();
+                if attacker.is_none_or(|n| n > 63)
+                    || captor.is_none_or(|n| n > 63)
+                    || attacker == captor
+                {
+                    return Err(fail(
+                        "captive session observation needs distinct player IDs in 0..63".into(),
+                    ));
+                }
+                if !step["lua_timeout"]
+                    .as_f64()
+                    .is_some_and(|n| n.is_finite() && (5.0..=20.0).contains(&n))
+                    || !step["timeout"]
+                        .as_f64()
+                        .is_some_and(|n| n.is_finite() && (30.0..=120.0).contains(&n))
+                {
+                    return Err(fail(
+                        "captive session observation needs 5..20s Lua and 30..120s total timeouts"
+                            .into(),
+                    ));
+                }
+            }
             "pause"
                 if !step["seconds"]
                     .as_f64()
@@ -395,6 +821,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         {
             return Err(fail("timeout must be a finite positive number".into()));
         }
+    }
+    if trace_open || bridge_open || order_open {
+        return Err(Error::scenario("native governor trace has no stop step"));
     }
     Ok(())
 }
@@ -457,6 +886,7 @@ pub fn configure_code_for_session(step: &Value, session: SessionType) -> String 
             "MapConfiguration.SetValue('MAP_SCRIPT', {})",
             lua_string(file)
         ));
+        lines.push(map_readback_code(file, "configured"));
     }
     lines.extend([format!("MapConfiguration.SetMapSize({})",lua_string(step["map_size"].as_str().unwrap())),format!("GameConfiguration.SetGameSpeedType({})",lua_string(step["speed"].as_str().unwrap())),format!("MapConfiguration.SetValue('RANDOM_SEED', {})",step["seed"]),format!("GameConfiguration.SetValue('GAME_SYNC_RANDOM_SEED', {})",step["seed"]),format!("MapConfiguration.SetMaxMajorPlayers({})",players.len()),format!("GameConfiguration.SetParticipatingPlayerCount({} + GameConfiguration.GetHiddenPlayerCount())",players.len())]);
     if let Some(count) = step.get("city_states") {
@@ -492,6 +922,9 @@ pub fn build_setup_code(step: &Value) -> String {
         "GameConfiguration.SetParticipatingPlayerCount(participatingCount)".into(),
         "if GameConfiguration.GetParticipatingPlayerCount() ~= participatingCount then error('setup changed participating player count') end".into(),
     ];
+    if let Some(file) = step["map_file"].as_str() {
+        lines.push(map_readback_code(file, "setup-refreshed"));
+    }
     if let Some(count) = step.get("city_states") {
         lines.extend([
             format!("GameConfiguration.SetValue('CITY_STATE_COUNT', {count})"),
@@ -512,6 +945,9 @@ pub fn build_setup_code(step: &Value) -> String {
     ]);
     lines.join("\n")
 }
+fn map_readback_code(file: &str, phase: &str) -> String {
+    format!("do local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')\nprint('JAC_MAP_READBACK phase={phase} type='..type(actualMap)..' value='..tostring(actualMap))\nassert(type(actualMap)=='string' and actualMap=={}, 'configured MAP_SCRIPT differs after {phase}') end",lua_string(file))
+}
 pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
     enable_mods_code_with_scope(ids, disabled, false)
 }
@@ -520,7 +956,32 @@ pub fn enable_mods_code_with_scope(
     disabled: &[String],
     exclusive_user_mods: bool,
 ) -> String {
+    let disabled = isolated_disabled_mods(ids, disabled);
     format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal enableIDs = {{{}}}\nlocal disableIDs = {{{}}}\nlocal exclusiveUserMods = {}\n{}",ids.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),disabled.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),exclusive_user_mods,ENABLE_MODS_BODY)
+}
+
+// A diagnostic that replaces production eligibility must never leak from the
+// preceding game. Enforce this at the shared selection boundary, so generated
+// and handwritten scenarios have the same isolation without snapshot edits.
+pub const STATIC_PERSONA_GATE_ID: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
+pub const ENEMY_PERSONA_GATE_ID: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
+pub const TRAIT_GRANT_PROBE_ID: &str = "2b20f0d9-64cd-42b8-9841-74067419b81e";
+pub const PROPERTY_OBSERVER_MOD_ID: &str = "d8532710-f853-4c53-8853-271000000001";
+pub fn isolated_disabled_mods(ids: &[String], disabled: &[String]) -> Vec<String> {
+    let mut result = disabled.to_vec();
+    for gate in [
+        STATIC_PERSONA_GATE_ID,
+        ENEMY_PERSONA_GATE_ID,
+        TRAIT_GRANT_PROBE_ID,
+        PROPERTY_OBSERVER_MOD_ID,
+    ] {
+        if !ids.iter().any(|id| id.eq_ignore_ascii_case(gate))
+            && !result.iter().any(|id| id.eq_ignore_ascii_case(gate))
+        {
+            result.push(gate.to_owned());
+        }
+    }
+    result
 }
 const ENABLE_MODS_BODY: &str = r###"local keep, disabled = {}, {}
 for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end
@@ -691,3 +1152,186 @@ if not ok then
   error(failure)
 end
 return table.concat(disabled, ', ')"###;
+
+#[cfg(test)]
+mod native_trace_tests {
+    use super::*;
+    #[test]
+    fn native_trace_steps_are_bounded_and_paired() {
+        let start = json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":300});
+        let stop = json!({"action":"stop_native_governor_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"trace contract","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![stop.clone()])).is_err());
+        assert!(
+            validate_scenario(&scenario(vec![start.clone(), start.clone(), stop.clone()])).is_err()
+        );
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"restart_game"}),
+            stop.clone()
+        ]))
+        .is_err());
+        for bad in [0, 301] {
+            let mut step = start.clone();
+            step["max_seconds"] = json!(bad);
+            assert!(validate_scenario(&scenario(vec![step, stop.clone()])).is_err());
+        }
+        let mut property = start.clone();
+        property["mode"] = json!("property");
+        assert!(validate_scenario(&scenario(vec![property.clone(), stop.clone()])).is_ok());
+        let mut lifecycle = start.clone();
+        lifecycle["mode"] = json!("lifecycle");
+        lifecycle["max_seconds"] = json!(20);
+        assert!(validate_scenario(&scenario(vec![lifecycle.clone(), stop.clone()])).is_ok());
+        lifecycle["max_seconds"] = json!(21);
+        assert!(validate_scenario(&scenario(vec![lifecycle, stop.clone()])).is_err());
+        property["mode"] = json!("unknown");
+        assert!(validate_scenario(&scenario(vec![property, stop.clone()])).is_err());
+        let mut bad = start;
+        bad["name"] = json!("../outside");
+        assert!(validate_scenario(&scenario(vec![bad, stop])).is_err());
+        let again = json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":1});
+        assert!(validate_scenario(&scenario(vec![
+            json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":1}),
+            json!({"action":"stop_native_governor_trace"}), again,
+            json!({"action":"stop_native_governor_trace"})
+        ])).is_err());
+    }
+
+    #[test]
+    fn native_bridge_is_separate_bounded_and_stopped_before_game_lifecycle_changes() {
+        let start =
+            json!({"action":"start_native_can_ever_trace","name":"can-ever","max_seconds":300});
+        let stop = json!({"action":"stop_native_can_ever_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"bridge contract","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![stop.clone()])).is_err());
+        for bad in [0, 301] {
+            let mut step = start.clone();
+            step["max_seconds"] = json!(bad);
+            assert!(validate_scenario(&scenario(vec![step, stop.clone()])).is_err());
+        }
+        let mut extra = start.clone();
+        extra["mode"] = json!("property");
+        assert!(validate_scenario(&scenario(vec![extra, stop.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"end_turn","turns":1,"timeout":600}),
+            stop.clone()
+        ]))
+        .is_ok());
+        for lifecycle in ["restart_game", "exit_to_menu", "load"] {
+            assert!(validate_scenario(&scenario(vec![
+                start.clone(),
+                json!({"action":lifecycle}),
+                stop.clone()
+            ]))
+            .is_err());
+        }
+        assert!(validate_scenario(&scenario(vec![
+            start,
+            json!({"action":"start_native_governor_trace","name":"conflict","max_seconds":20,"mode":"lifecycle"}),
+            stop
+        ])).is_err());
+    }
+
+    #[test]
+    fn promotion_call_observer_is_explicit_bounded_and_cannot_mix_stops() {
+        let start = json!({"action":"start_native_promotion_call_trace","name":"promote","max_seconds":120});
+        let stop = json!({"action":"stop_native_promotion_call_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"promotion call","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"end_turn","turns":1,"timeout":600}),
+            stop.clone()
+        ]))
+        .is_ok());
+        for wrong in [
+            "stop_native_can_ever_trace",
+            "stop_native_property_trace",
+            "stop_native_joined_admission",
+        ] {
+            assert!(
+                validate_scenario(&scenario(vec![start.clone(), json!({"action":wrong})])).is_err()
+            );
+        }
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        for bad in [0, 301] {
+            let mut changed = start.clone();
+            changed["max_seconds"] = json!(bad);
+            assert!(validate_scenario(&scenario(vec![changed, stop.clone()])).is_err());
+        }
+        let mut scope = start.clone();
+        scope["scope"] = json!("all_promotions");
+        assert!(validate_scenario(&scenario(vec![scope, stop.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![
+            start,
+            json!({"action":"load","name":"other"}),
+            stop
+        ]))
+        .is_err());
+    }
+
+    #[test]
+    fn property_trace_requires_its_own_stop_and_excludes_save_turn_and_load() {
+        let start =
+            json!({"action":"start_native_property_trace","name":"values","max_seconds":120});
+        let stop = json!({"action":"stop_native_property_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"property contract","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(),
+            json!({"action":"ui_lua","state_name":"InGame","code":"return Game:GetProperty('JAC_TEST853_VALUE')"}),
+            stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"stop_native_can_ever_trace"})
+        ]))
+        .is_err());
+        for action in [
+            "save",
+            "load",
+            "end_turn",
+            "autoplay",
+            "restart_game",
+            "exit_to_menu",
+        ] {
+            assert!(
+                validate_scenario(&scenario(vec![
+                    start.clone(),
+                    json!({"action":action}),
+                    stop.clone()
+                ]))
+                .is_err(),
+                "{action}"
+            );
+        }
+        for duration in [0, 301] {
+            let mut bad = start.clone();
+            bad["max_seconds"] = json!(duration);
+            assert!(validate_scenario(&scenario(vec![bad, stop.clone()])).is_err());
+        }
+        let mut scoped = start.clone();
+        scoped["scope"] = json!("numeric_test_keys_853271_853272");
+        assert!(validate_scenario(&scenario(vec![scoped.clone(), stop.clone()])).is_ok());
+        for value in [
+            json!("numeric_test_keys_853271"),
+            json!("all"),
+            json!(853271),
+            json!(null),
+        ] {
+            let mut bad = scoped.clone();
+            bad["scope"] = value;
+            assert!(validate_scenario(&scenario(vec![bad, stop.clone()])).is_err());
+        }
+        scoped["action"] = json!("start_native_can_ever_trace");
+        assert!(validate_scenario(&scenario(vec![
+            scoped,
+            json!({"action":"stop_native_can_ever_trace"})
+        ]))
+        .is_err());
+    }
+}

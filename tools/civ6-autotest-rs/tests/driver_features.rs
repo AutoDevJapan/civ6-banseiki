@@ -1,9 +1,16 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error};
+use civ6_autotest_rs::{
+    checkpoint, judge,
+    runner::{AutoplayOptions, LOADSCREEN_READY},
+    scenario, Error, ErrorKind,
+};
 use serde_json::json;
 use std::{
     collections::VecDeque,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use support_driver::{FakeBackend, Harness, ManualClock};
@@ -14,7 +21,7 @@ fn turn_backend() -> FakeBackend {
         if code.contains("return Game.GetCurrentGameTurn() ==") {
             return Ok("true".into());
         }
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             *turn.lock().unwrap() += 1;
             return Ok("true".into());
         }
@@ -26,18 +33,88 @@ fn turn_backend() -> FakeBackend {
 }
 
 #[test]
+fn test_mod_selection_waits_for_rebuild_without_replaying_an_unknown_mutation() {
+    for (deadline, succeeds) in [(20.0, true), (4.0, false)] {
+        let fake = FakeBackend::new();
+        let timeouts = fake.timeouts.clone();
+        let fake = fake.lua(move |state, code| {
+            assert_eq!(state, "FrontEnd");
+            assert!(code.contains("GameConfiguration.UpdateEnabledMods()"));
+            // The engine acknowledges a database rebuild six seconds later.
+            if *timeouts.lock().unwrap().last().unwrap() < 6.0 {
+                Err(Error::unknown("selection may have changed before timeout"))
+            } else {
+                Ok("".into())
+            }
+        });
+        let mut h = Harness::new(json!({}), fake);
+        let result = h.runner.run_step(&json!({
+            "action":"enable_mods", "ids":["base"], "timeout":deadline
+        }));
+        if succeeds {
+            assert_eq!(result.unwrap(), "enabled/verified base; disabled none");
+        } else {
+            assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
+        }
+        assert_eq!(h.calls().len(), 1, "never resend an uncertain selection");
+        assert_eq!(*h.timeouts.lock().unwrap(), [deadline]);
+    }
+}
+
+#[test]
+fn test_lua_timeout_is_explicit_bounded_and_defaults_to_the_step_deadline() {
+    let step = json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true","lua_timeout":30});
+    scenario::validate_scenario(&json!({"name":"slow native mutation","steps":[step]})).unwrap();
+    for value in [
+        json!(0),
+        json!(-1),
+        json!(true),
+        json!("30"),
+        json!(null),
+        json!(601),
+        json!(1e300),
+    ] {
+        let invalid = json!({"name":"invalid wait","steps":[{"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true","lua_timeout":value}]});
+        let err = scenario::validate_scenario(&invalid).unwrap_err();
+        assert!(err.message.contains("lua_timeout"), "{err}");
+    }
+    for (lua_timeout, step_timeout, expected) in [
+        (None, None, 120.0),
+        (None, Some(2.0), 2.0),
+        (None, Some(90.0), 90.0),
+        (Some(30.0), None, 30.0),
+        (Some(30.0), Some(17.0), 17.0),
+        (Some(0.25), None, 0.25),
+        (Some(600.0), None, 120.0),
+    ] {
+        let mut step =
+            json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true"});
+        if let Some(value) = lua_timeout {
+            step["lua_timeout"] = json!(value);
+        }
+        if let Some(value) = step_timeout {
+            step["timeout"] = json!(value);
+        }
+        let mut h = Harness::new(json!({}), FakeBackend::new());
+        h.runner.run_step(&step).unwrap();
+        assert_eq!(h.calls(), [("GameCore_Tuner".into(), "return true".into())]);
+        assert_eq!(*h.timeouts.lock().unwrap(), [expected]);
+    }
+}
+
+#[test]
 fn test_shortened_turns_require_explicit_test_mode() {
     let mut h = Harness::new(json!({}), turn_backend());
     let step = json!({"action":"end_turn","turns":10,"test_turns":1});
     h.runner.run_step(&step).unwrap();
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         10
     );
     h.runner.test_mode = true;
     h.runner.run_step(&step).unwrap();
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         11
     );
 }
@@ -69,7 +146,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         "human turn 1->2; human turn 2->3"
     );
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         2
     );
     assert_eq!(
@@ -77,7 +154,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         "human turn 3->4"
     );
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         3
     );
 
@@ -86,7 +163,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
     let turn = Arc::new(Mutex::new(1));
     let game_turn = turn.clone();
     let fake = FakeBackend::new().lua(move |_, code| {
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             *game_turn.lock().unwrap() += 1;
             action_clock.advance(1.0);
         }
@@ -111,7 +188,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
     assert_eq!(notebook_budgets, [5.0, 4.5]);
 
     let fake = FakeBackend::new().lua(move |_, code| {
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             return Err(Error::scenario("deadline"));
         }
         Ok("1".into())
@@ -123,7 +200,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         .unwrap_err();
     assert!(err.to_string().contains("deadline"));
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         1
     );
 }
@@ -137,6 +214,231 @@ fn test_end_turn_rejects_invalid_counts() {
             assert!(err.to_string().contains(key), "{err}");
         }
     }
+}
+
+#[test]
+fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
+    let observations = Arc::new(Mutex::new(0_usize));
+    let seen = observations.clone();
+    let turn = Arc::new(Mutex::new(1));
+    let backend = FakeBackend::new().lua(move |_, code| {
+        if code == "return Game.GetCurrentGameTurn()" {
+            return Ok(turn.lock().unwrap().to_string());
+        }
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
+            *turn.lock().unwrap() = 2;
+        }
+        if code.starts_with("return Game.GetCurrentGameTurn() ==") {
+            let mut seen = seen.lock().unwrap();
+            let (active, busy, processing, player) = [(true, false, false, 1000), (false, true, false, 0), (true, true, false, 0), (false, false, false, 0), (true, false, true, 0), (true, false, false, 0)]
+                .get(*seen)
+                .copied()
+                .unwrap();
+            *seen += 1;
+            let lua = mlua::Lua::new();
+            lua.load(format!(
+                "PlayerTypes={{OBSERVER=1000}}\nGame={{GetCurrentGameTurn=function() return {} end,GetLocalPlayer=function() return {player} end}}\nPlayers={{[0]={{IsTurnActive=function() return {active} end}},[1000]={{IsTurnActive=function() return {active} end}}}}\nUI={{IsGameCoreBusy=function() return {busy} end,IsProcessingMessages=function() return {processing} end}}",
+                *turn.lock().unwrap()
+            ))
+            .exec()
+            .unwrap();
+            return Ok(lua.load(code).eval::<bool>().unwrap().to_string());
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), backend);
+    assert_eq!(
+        h.runner.run_step(&json!({"action":"end_turn"})).unwrap(),
+        "human turn 1->2"
+    );
+    assert_eq!(*observations.lock().unwrap(), 6);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
+        1
+    );
+}
+
+#[test]
+fn test_test_mode_preserves_normal_end_turn_when_production_is_blocked() {
+    for test_mode in [false, true] {
+        let state = Arc::new(Mutex::new((1_i64, Vec::<String>::new())));
+        let observed = state.clone();
+        let backend = FakeBackend::new().lua(move |_, code| {
+            if code == "return Game.GetCurrentGameTurn()" {
+                return Ok(observed.lock().unwrap().0.to_string());
+            }
+            if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN")
+                || code.starts_with("return Game.GetCurrentGameTurn() ==")
+            {
+                let lua = mlua::Lua::new();
+                lua.load(
+                    "PlayerTypes={OBSERVER=1000}\nGameConfiguration={IsAnyMultiplayer=function() return false end}\nGame={GetCurrentGameTurn=function() return TURN end,GetLocalPlayer=function() return 0 end}\nPlayers={[0]={IsTurnActive=function() return true end}}\nUI={IsGameCoreBusy=function() return false end,IsProcessingMessages=function() return false end,CanEndTurn=function() return false end}\nNotificationManager={GetFirstEndTurnBlocking=function() return 7 end}\nActionTypes={ACTION_ENDTURN=1}\nprint=function() end",
+                )
+                .exec()
+                .unwrap();
+                lua.globals().set("TURN", observed.lock().unwrap().0).unwrap();
+                let shared = observed.clone();
+                let request = lua
+                    .create_function(move |_, (_, parameters): (i64, Option<mlua::Table>)| {
+                        let reason = parameters
+                            .map(|p| p.get::<String>("REASON").unwrap())
+                            .unwrap_or_default();
+                        let mut state = shared.lock().unwrap();
+                        state.1.push(reason.clone());
+                        // A production blocker rejects ordinary End Turn.
+                        if reason == "UserForced" {
+                            state.0 += 1;
+                        }
+                        Ok(())
+                    })
+                    .unwrap();
+                lua.globals()
+                    .get::<mlua::Table>("UI")
+                    .unwrap()
+                    .set("RequestAction", request)
+                    .unwrap();
+                return Ok(lua.load(code).eval::<bool>().unwrap().to_string());
+            }
+            Ok("true".into())
+        });
+        let mut h = Harness::new(json!({}), backend);
+        h.runner.test_mode = test_mode;
+        let result = h.runner.run_step(&json!({"action":"end_turn","timeout":3}));
+        let state = state.lock().unwrap();
+        assert!(result.unwrap_err().to_string().contains("Timed out"));
+        assert_eq!(*state, (1, vec![String::new()]));
+    }
+}
+
+#[test]
+fn test_live_lease_stops_inside_a_multi_turn_step_before_another_operation() {
+    let clock = Arc::new(ManualClock::default());
+    let operation_clock = clock.clone();
+    let mut backend = turn_backend();
+    let mut normal = backend.on_lua;
+    backend.on_lua = Box::new(move |state, code| {
+        let result = normal(state, code);
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
+            operation_clock.advance(2.0);
+        }
+        result
+    });
+    let lease_clock = clock.clone();
+    backend.on_lease = Box::new(move || {
+        let now = lease_clock.at();
+        civ6_autotest_rs::live_lease::record_budget(
+            &json!({"chain_pid":7,"live_chain":true,"acquired_at":0,"competitor_since":0}),
+            7,
+            1799.0 + now,
+        )
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.clock = clock;
+    let error = h
+        .runner
+        .run_step(&json!({"action":"end_turn","turns":5,"timeout":3000}))
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
+        1
+    );
+    assert_eq!(*h.timeouts.lock().unwrap().last().unwrap(), 1.0);
+}
+
+#[test]
+fn test_live_lease_is_not_retried_as_a_tuner_timeout() {
+    let mut backend = FakeBackend::new();
+    backend.on_lease = Box::new(|| Err(Error::new(ErrorKind::LiveLease, "yield")));
+    let mut h = Harness::new(json!({}), backend);
+    assert_eq!(
+        h.runner.states(20.0).unwrap_err().kind,
+        ErrorKind::LiveLease
+    );
+    assert!(h.calls().is_empty());
+    assert_eq!(
+        h.runner.lua("InGame", "mutate()", 20.0).unwrap_err().kind,
+        ErrorKind::LiveLease
+    );
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn test_live_lease_writes_an_unpassed_result_with_requeue_exit_code() {
+    let mut backend = FakeBackend::new();
+    backend.on_lease = Box::new(|| Err(Error::new(ErrorKind::LiveLease, "CIV6_LEASE_YIELD")));
+    let mut h = Harness::new(
+        json!({"name":"lease boundary","steps":[{"action":"ui_lua","state_name":"InGame","code":"mutate()"}]}),
+        backend,
+    );
+    h.runner.auto_restart = false;
+    h.runner.output = h.root.path().join("lease-run");
+    assert_eq!(h.runner.run().unwrap(), 75);
+    let result: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(h.runner.output.join("result.json")).unwrap())
+            .unwrap();
+    assert_eq!(result["passed"], false);
+    assert_eq!(result["completed_steps"], 0);
+    assert_eq!(result["failure"], "1/1 ui_lua: CIV6_LEASE_YIELD");
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn test_waiter_appearing_during_a_multi_turn_step_is_seen_before_its_end() {
+    let root = tempfile::tempdir().unwrap();
+    let lock = root.path().join("civ6.lock");
+    std::fs::write(
+        &lock,
+        json!({"chain_pid":7,"live_chain":true,"acquired_at":1000}).to_string(),
+    )
+    .unwrap();
+    let queue = root.path().join("queue");
+    std::fs::create_dir(&queue).unwrap();
+    let clock = Arc::new(ManualClock::default());
+    let action_clock = clock.clone();
+    let mut backend = turn_backend();
+    let mut normal = backend.on_lua;
+    let mut actions = 0;
+    backend.on_lua = Box::new(move |state, code| {
+        let result = normal(state, code);
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
+            actions += 1;
+            if actions == 1 {
+                action_clock.advance(1.0);
+                std::fs::write(
+                    queue.join("new-waiter.json"),
+                    json!({"chain_pid":8,"live_chain":true,"since":1001}).to_string(),
+                )
+                .unwrap();
+            } else {
+                action_clock.advance(600.0);
+            }
+        }
+        result
+    });
+    let lease_clock = clock.clone();
+    let read_lock = lock.clone();
+    backend.on_lease = Box::new(move || {
+        civ6_autotest_rs::live_lease::directory_budget(
+            &read_lock,
+            7,
+            1000.0 + lease_clock.at(),
+            |_| Ok(true),
+        )
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.clock = clock;
+    let error = h
+        .runner
+        .run_step(&json!({"action":"end_turn","turns":5,"timeout":3000}))
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
+        4
+    );
+    let record: serde_json::Value = serde_json::from_slice(&std::fs::read(lock).unwrap()).unwrap();
+    assert!(record.get("competitor_since").is_none());
 }
 
 #[test]
@@ -249,6 +551,343 @@ fn test_output_scoped_save_name_and_exact_name() {
     assert!(a.calls().is_empty());
 }
 
+const CHECKPOINT: &str = "JAC-Enemy-Neutralization";
+
+fn checkpoint_step(action: &str) -> serde_json::Value {
+    json!({"action":action,"name":CHECKPOINT,"exact_name":true,"checkpoint":true,"timeout":20})
+}
+
+fn checkpoint_backend(saves: PathBuf, logs: PathBuf, fail_save: bool) -> FakeBackend {
+    FakeBackend::new().lua(move |_, code| {
+        if code.contains("Network.SaveGame") {
+            assert!(code.contains("Events.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)"));
+            if fail_save {
+                return Err(Error::lua("native save failed"));
+            }
+            let name = code
+                .split("Name=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap();
+            fs::write(saves.join(format!("{name}.Civ6Save")), b"native save").unwrap();
+        }
+        if code.contains("Network.LoadGame") {
+            let mut file = OpenOptions::new()
+                .append(true)
+                .open(logs.join("Lua.log"))
+                .unwrap();
+            writeln!(file, "{LOADSCREEN_READY}").unwrap();
+        }
+        Ok("true".into())
+    })
+}
+
+fn install_checkpoint_backend(h: &mut Harness, fail_save: bool) {
+    let fake = checkpoint_backend(h.runner.saves.clone(), h.runner.logs.clone(), fail_save);
+    h.calls = fake.calls.clone();
+    h.runner.backend = Box::new(fake);
+}
+
+fn prepare_checkpoint_load(h: &mut Harness) {
+    fs::write(h.runner.logs.join("Lua.log"), b"").unwrap();
+    h.runner.baseline = Some(judge::snapshot_logs(&h.runner.logs).unwrap());
+}
+
+#[test]
+fn hash_pinned_resume_sends_load_once_and_keeps_a_durable_consumption_receipt() {
+    use sha2::{Digest, Sha256};
+    let bytes = b"original reserved save";
+    let sha = format!("{:x}", Sha256::digest(bytes));
+    let step = json!({"action":"load","name":"reserved","exact_name":true,"save_sha256":sha,"resume_once":true});
+    scenario::validate_scenario(&json!({"name":"pinned resume","steps":[step]})).unwrap();
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    prepare_checkpoint_load(&mut h);
+    let file = h.runner.save_path("reserved");
+    fs::write(&file, b"different save").unwrap();
+    assert!(h
+        .runner
+        .run_step(&step)
+        .unwrap_err()
+        .to_string()
+        .contains("mismatch"));
+    assert_eq!(h.count_code("Network.LoadGame"), 0);
+    fs::write(&file, bytes).unwrap();
+    h.runner.run_step(&step).unwrap();
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    let receipt = h.runner.saves.join(format!("resume-once-{sha}.json"));
+    let original = fs::read(&receipt).unwrap();
+    assert!(h
+        .runner
+        .run_step(&step)
+        .unwrap_err()
+        .to_string()
+        .contains("one-shot resume"));
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    assert_eq!(fs::read(receipt).unwrap(), original);
+}
+
+#[test]
+fn invalid_resume_hashes_and_unpinned_claims_are_rejected() {
+    for step in [
+        json!({"action":"load","name":"x","save_sha256":null}),
+        json!({"action":"load","name":"x","save_sha256":"../path"}),
+        json!({"action":"load","name":"x","resume_once":true}),
+        json!({"action":"save","name":"x","save_sha256":"0".repeat(64)}),
+    ] {
+        assert!(scenario::validate_scenario(&json!({"name":"bad","steps":[step]})).is_err());
+    }
+}
+
+#[test]
+fn unknown_load_keeps_resume_claim_and_pins_the_save_until_error_return() {
+    use sha2::{Digest, Sha256};
+    let bytes = b"reserved save before unknown load";
+    let sha = format!("{:x}", Sha256::digest(bytes));
+    let step = json!({"action":"load","name":"reserved","exact_name":true,
+        "timeout":2,"save_sha256":sha,"resume_once":true});
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    prepare_checkpoint_load(&mut h);
+    let file = h.runner.save_path("reserved");
+    fs::write(&file, bytes).unwrap();
+    let mut fake = checkpoint_backend(h.runner.saves.clone(), h.runner.logs.clone(), false);
+    let mut normal = fake.on_lua;
+    let pinned = file.clone();
+    let receipt = h.runner.saves.join(format!("resume-once-{sha}.json"));
+    let claim = receipt.clone();
+    let after_load = Arc::new(Mutex::new(false));
+    let observed = after_load.clone();
+    let mut sent = false;
+    let assert_pin = move || {
+        assert_eq!(fs::read(&pinned).unwrap(), bytes);
+        #[cfg(windows)]
+        {
+            assert!(OpenOptions::new().write(true).open(&pinned).is_err());
+            assert!(fs::rename(&pinned, pinned.with_extension("replacement")).is_err());
+        }
+    };
+    fake.on_lua = Box::new(move |state, code| {
+        if code.contains("Network.LoadGame") {
+            assert_pin();
+            let proof: serde_json::Value =
+                serde_json::from_slice(&fs::read(&claim).unwrap()).unwrap();
+            assert_eq!(
+                proof["save"], "reserved",
+                "claim must precede the first send"
+            );
+            // The engine completes loading even though the response is lost.
+            normal(state, code)?;
+            sent = true;
+            return Err(Error::unknown("load may have started"));
+        }
+        if sent && state == "InGame" {
+            assert_pin();
+            *observed.lock().unwrap() = true;
+            return Err(Error::lua("injected post-load validation failure"));
+        }
+        normal(state, code)
+    });
+    h.calls = fake.calls.clone();
+    h.runner.backend = Box::new(fake);
+    assert!(h.runner.run_step(&step).is_err());
+    assert!(
+        *after_load.lock().unwrap(),
+        "must check the pin after LoadGame returned"
+    );
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    let recorded = fs::read(&receipt).unwrap();
+    let mut next = Harness::new(json!({}), FakeBackend::new());
+    next.runner.saves = h.runner.saves.clone();
+    install_checkpoint_backend(&mut next, false);
+    prepare_checkpoint_load(&mut next);
+    assert!(next
+        .runner
+        .run_step(&step)
+        .unwrap_err()
+        .to_string()
+        .contains("one-shot resume"));
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    assert_eq!(next.count_code("Network.LoadGame"), 0);
+    assert_eq!(fs::read(receipt).unwrap(), recorded);
+    // The pin is released after the failed call, but the receipt is retained.
+    assert!(OpenOptions::new().write(true).open(&file).is_ok());
+    assert_eq!(fs::read(&file).unwrap(), bytes);
+}
+
+fn saved_name(result: &str) -> String {
+    Path::new(result)
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned()
+}
+
+#[test]
+fn checkpoint_resume_across_outputs_keeps_each_native_save() {
+    let mut first = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut first, false);
+    let saves = first.runner.saves.clone();
+    let a = saved_name(&first.runner.run_step(&checkpoint_step("save")).unwrap());
+    assert_eq!(checkpoint::resolve(&saves, CHECKPOINT).unwrap(), a);
+    assert_eq!(first.count_code("Network.SaveGame"), 1);
+    assert_eq!(first.count_code("JAC_AUTOTEST_SAVE_DONE == true"), 1);
+
+    let mut second = Harness::new(json!({}), FakeBackend::new());
+    assert_ne!(first.runner.output, second.runner.output);
+    second.runner.saves = saves.clone();
+    install_checkpoint_backend(&mut second, false);
+    prepare_checkpoint_load(&mut second);
+    second.runner.run_step(&checkpoint_step("load")).unwrap();
+    assert_eq!(second.count_code("Network.LoadGame"), 1);
+    assert!(second
+        .calls()
+        .iter()
+        .any(|(_, code)| code.contains(&format!("Network.LoadGame({{Name=\"{a}\""))));
+    let b = saved_name(&second.runner.run_step(&checkpoint_step("save")).unwrap());
+    assert_ne!(a, b);
+    assert_eq!(checkpoint::resolve(&saves, CHECKPOINT).unwrap(), b);
+    assert_eq!(
+        fs::read(saves.join(format!("{a}.Civ6Save"))).unwrap(),
+        b"native save"
+    );
+    assert_eq!(
+        fs::read(saves.join(format!("{b}.Civ6Save"))).unwrap(),
+        b"native save"
+    );
+
+    let mut third = Harness::new(json!({}), FakeBackend::new());
+    third.runner.saves = saves;
+    install_checkpoint_backend(&mut third, false);
+    prepare_checkpoint_load(&mut third);
+    third.runner.run_step(&checkpoint_step("load")).unwrap();
+    assert!(third
+        .calls()
+        .iter()
+        .any(|(_, code)| code.contains(&format!("Network.LoadGame({{Name=\"{b}\""))));
+}
+
+#[test]
+fn checkpoint_two_saves_in_one_session_use_distinct_physical_names() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    let first = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    let second = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    assert_ne!(first, second);
+    assert!(h.runner.save_path(&first).is_file());
+    assert!(h.runner.save_path(&second).is_file());
+    assert_eq!(
+        checkpoint::resolve(&h.runner.saves, CHECKPOINT).unwrap(),
+        second
+    );
+    assert_eq!(h.count_code("Network.SaveGame"), 2);
+}
+
+#[test]
+fn checkpoint_failed_native_save_does_not_advance_pointer() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    let first = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    install_checkpoint_backend(&mut h, true);
+    assert!(h
+        .runner
+        .run_step(&checkpoint_step("save"))
+        .unwrap_err()
+        .to_string()
+        .contains("native save failed"));
+    assert_eq!(
+        checkpoint::resolve(&h.runner.saves, CHECKPOINT).unwrap(),
+        first
+    );
+    assert!(h.runner.save_path(&first).is_file());
+}
+
+#[test]
+fn checkpoint_empty_save_after_savecomplete_does_not_advance_pointer() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    let first = saved_name(&h.runner.run_step(&checkpoint_step("save")).unwrap());
+    let saves = h.runner.saves.clone();
+    let fake = FakeBackend::new().lua(move |_, code| {
+        if code.contains("Network.SaveGame") {
+            let name = code
+                .split("Name=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap();
+            fs::write(saves.join(format!("{name}.Civ6Save")), b"").unwrap();
+        }
+        Ok("true".into())
+    });
+    h.calls = fake.calls.clone();
+    h.runner.backend = Box::new(fake);
+    let error = h.runner.run_step(&checkpoint_step("save")).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("SaveComplete fired but save not found"));
+    assert_eq!(h.count_code("Network.SaveGame"), 1);
+    assert_eq!(h.count_code("JAC_AUTOTEST_SAVE_DONE == true"), 1);
+    assert_eq!(
+        checkpoint::resolve(&h.runner.saves, CHECKPOINT).unwrap(),
+        first
+    );
+}
+
+#[test]
+fn checkpoint_legacy_seed_loads_and_invalid_manifest_never_falls_back() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    fs::write(h.runner.save_path(CHECKPOINT), b"actual 55 seed").unwrap();
+    install_checkpoint_backend(&mut h, false);
+    prepare_checkpoint_load(&mut h);
+    h.runner.run_step(&checkpoint_step("load")).unwrap();
+    assert!(h
+        .calls()
+        .iter()
+        .any(|(_, code)| code.contains(&format!("Network.LoadGame({{Name=\"{CHECKPOINT}\""))));
+
+    let manifest = checkpoint::manifest_path(&h.runner.saves, CHECKPOINT).unwrap();
+    fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    let cases = [
+        ("not json".to_owned(), "Invalid checkpoint manifest"),
+        (
+            format!(r#"{{"version":2,"logical":"{CHECKPOINT}","physical":"{CHECKPOINT}"}}"#),
+            "version",
+        ),
+        (
+            format!(r#"{{"version":1,"logical":"{CHECKPOINT}","physical":"../outside"}}"#),
+            "basename",
+        ),
+        (
+            format!(r#"{{"version":1,"logical":"{CHECKPOINT}","physical":"missing"}}"#),
+            "missing",
+        ),
+        (
+            format!(r#"{{"version":1,"logical":"{CHECKPOINT}","physical":"empty"}}"#),
+            "empty",
+        ),
+    ];
+    fs::write(h.runner.save_path("empty"), b"").unwrap();
+    for (contents, expected) in cases {
+        fs::write(&manifest, contents).unwrap();
+        let before = h.count_code("Network.LoadGame");
+        let error = h.runner.run_step(&checkpoint_step("load")).unwrap_err();
+        assert!(error.to_string().contains(expected), "{error}");
+        assert_eq!(h.count_code("Network.LoadGame"), before);
+    }
+    fs::remove_file(&manifest).unwrap();
+    fs::write(h.runner.save_path(CHECKPOINT), b"").unwrap();
+    assert!(h
+        .runner
+        .run_step(&checkpoint_step("load"))
+        .unwrap_err()
+        .to_string()
+        .contains("empty"));
+}
+
 #[test]
 fn test_save_dismisses_blocking_advisor_before_saving() {
     let target = Arc::new(Mutex::new(None::<std::path::PathBuf>));
@@ -310,6 +949,20 @@ fn test_flag_validation() {
         .unwrap_err()
         .to_string()
         .contains("exact_name"));
+    for action in ["save", "load"] {
+        for checkpoint in [json!(1), json!("true")] {
+            data = json!({"name":"flag","steps":[{"action":action,"name":"x","exact_name":true,"checkpoint":checkpoint}]});
+            assert!(scenario::validate_scenario(&data)
+                .unwrap_err()
+                .to_string()
+                .contains("checkpoint"));
+        }
+        data = json!({"name":"flag","steps":[{"action":action,"name":"x","checkpoint":true}]});
+        assert!(scenario::validate_scenario(&data)
+            .unwrap_err()
+            .to_string()
+            .contains("checkpoint requires exact_name"));
+    }
 }
 
 #[test]

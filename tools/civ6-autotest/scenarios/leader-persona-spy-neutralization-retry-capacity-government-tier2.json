@@ -1,0 +1,11 @@
+{
+  "name": "Read whether the Tier 2 Government change window remains open",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local g=b.ReadCapacityGovernment('Tier2'); local p=b.CaptiveCapacityPlan(); local a=Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT'); local d=b.EnemyRetryDiagnosis(); assert(d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and d.mission.turn==23 and d.outcome=='CAPTURED' and d.occupied==1 and d.captive.captor==1 and d.captive.nameIndex==-1,'original captive changed'); return 'plan='..p.stage..' government='..g.stage..' current='..g.currentType..' civicThisTurn='..tostring(g.civicCompletedThisTurn)..' sourceTurn='..tostring(a and a.turn)..' now='..Game.GetCurrentGameTurn()"},
+    {"action":"exit_to_menu"}
+  ]
+}

@@ -6,7 +6,7 @@
 
 | パス | 位置づけ |
 |---|---|
-| [`spec/data/banseiki-pool.json`](spec/data/banseiki-pool.json) | 万世紀プールの初期300人の採用済み人物台帳（SSOT 4.7） |
+| [`spec/data/banseiki-pool.json`](spec/data/banseiki-pool.json) | 万世紀プールの初期300人の採用済み人物台帳（SSOT 4.8） |
 | [`spec/banseiki-pool-data.md`](spec/banseiki-pool-data.md) | 人物データの項目とRust検査の使い方 |
 | [`spec/ssot/`](spec/ssot/) | **唯一の仕様正本（SSOT）**。章・節ごとのファイルに分割している。本文中の「本書」はこのディレクトリ全体を指す |
 | [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
@@ -57,6 +57,14 @@
 | [`poc/hotseat-log-bridge.md`](poc/hotseat-log-bridge.md) | PR100の検証専用MODによるLua.log通信、元21手順と2回の保存・再読込の実機結果 |
 | [`poc/multiplayer.md`](poc/multiplayer.md) | 共有ToDo9の完了済みホットシート3件、未実証のLAN受入、他PoCの照合対象と分担 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
+| [`poc/leader-persona.md`](poc/leader-persona.md) | 22人の性格・史料、進化用称号と人物別の功績、専攻・分岐を永久固定するツリー全表と専用画面、公式APIの根拠、実機用シナリオ |
+| [`poc/native-slots-diagnostic.md`](poc/native-slots-diagnostic.md) | PR86の匿名本体総督枠と支払い候補を分離したテストMOD、Rust/Lua検査結果、実機で未確認の条件 |
+| [`poc/pr86-native-admission.md`](poc/pr86-native-admission.md) | PR86の加入人物と本体任命資格の静的解析、実機拒否、独立Rust bridgeの元判定を保つ試作と次の実機順序 |
+| [`poc/pr86-saved-price.md`](poc/pr86-saved-price.md) | PR86の加入時価格契約、価格更新をまたぐ保存、称号予約・資格・UIの生成と回帰検査、親で継続する受入範囲 |
+| [`poc/pr86-native-runtime-probe.md`](poc/pr86-native-runtime-probe.md) | PR86の本体資格関数を変更せずに呼出し元・引数・戻り値を観測するRust debugger、live_chain接続、専用子プロセスでの検査と実機未確認の条件 |
+| [`poc/pr86-boundary-diagnostic.md`](poc/pr86-boundary-diagnostic.md) | PR86の本体中和・未配置回復・都市喪失を観測するテスト専用MOD、独立シナリオと未確定の敵スパイ操作 |
+| [`poc/pr86-boundary-progress.md`](poc/pr86-boundary-progress.md) | 境界診断を実装する担当の検査結果と、実機未観測の項目 |
+| [`poc/pr86-enemy-neutralization.md`](poc/pr86-enemy-neutralization.md) | 人間の本体スパイでAIの正式加入人物Governorを攻撃する、保存再開可能な中和・回復診断と未実機条件 |
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
 | [`poc/autotest-driver-extensions.md`](poc/autotest-driver-extensions.md) | 自動検証ドライバーの設定・セーブ・滅亡・研究計測の根拠と実機確認項目 |
 | [`poc/resources.md`](poc/resources.md) | 資源の出現（SSOT 3.2）。戦国ツリー下の技術ゲート、後発地点の Lua API とデータ、独自資源（金・漆）、実機確認項目 |
@@ -137,6 +145,10 @@ ID が分かっているときは検索が速い。
 ```bash
 grep -rn '^| CYP-N |' documents/spec/ssot/
 ```
+
+## 起動・ロード境界の調査
+
+- [通常起動とロード前閉鎖のPE一次資料、Rust候補照合と不足条件](poc/todo880-bootstrap-primary.md)
 
 ## 現在の状態（2026-09-28 時点）
 

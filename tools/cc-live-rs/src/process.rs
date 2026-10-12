@@ -17,6 +17,7 @@ pub struct Call {
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
     pub timeout: Option<f64>,
+    pub deadline: Option<f64>,
     pub merge_stderr: bool,
     pub creationflags: u32,
     pub kill_tree: bool,
@@ -214,6 +215,7 @@ impl Call {
             args,
             env: BTreeMap::new(),
             timeout: None,
+            deadline: None,
             merge_stderr: false,
             creationflags: CREATE_NO_WINDOW,
             kill_tree: false,
@@ -257,7 +259,7 @@ pub struct Output {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcessIdentity {
     pub image: String,
-    pub created_filetime: u64,
+    pub created_filetime: Option<u64>,
 }
 
 /// One pinned handle supplies image, creation time and signalled exit state.
@@ -312,7 +314,11 @@ pub fn native_process_identity(pid: u32) -> std::io::Result<Option<ProcessIdenti
     let mut user = created;
     if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
     {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        if !alive()? {
+            return Ok(None);
+        }
+        return Err(error);
     }
     let mut path = vec![0u16; 32768];
     let mut length = path.len() as u32;
@@ -341,12 +347,13 @@ pub fn native_process_identity(pid: u32) -> std::io::Result<Option<ProcessIdenti
     }
     Ok(Some(ProcessIdentity {
         image,
-        created_filetime: (u64::from(created.dwHighDateTime) << 32)
-            | u64::from(created.dwLowDateTime),
+        created_filetime: Some(
+            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime),
+        ),
     }))
 }
 
-/// If SYNCHRONIZE is unavailable, use the original bounded tasklist/creation
+/// If SYNCHRONIZE is unavailable, use the original snapshot/creation
 /// proof instead. An access failure itself never means the waiter is absent.
 #[cfg(any(windows, test))]
 fn native_identity_or_fallback(
@@ -358,12 +365,69 @@ fn native_identity_or_fallback(
     }
 }
 
+#[cfg(any(windows, test))]
+fn denied_snapshot_identity(
+    pid: u32,
+    snapshot: Result<Option<ProcessIdentity>, String>,
+) -> Result<Option<ProcessIdentity>, String> {
+    match snapshot? {
+        Some(identity) => Ok(Some(identity)),
+        None => Err(format!(
+            "inspect Civ6 queue process {pid}: native query access denied; no snapshot identity; exit state unknown"
+        )),
+    }
+}
+
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
 pub trait Runner {
     fn run(&mut self, call: Call) -> Result<Output, String>;
-    /// None means this runner uses the injectable command-based fallback.
-    fn process_identity(&mut self, _pid: u32) -> Option<Result<Option<ProcessIdentity>, String>> {
-        None
+    fn terminate_game(
+        &mut self,
+        _pid: u32,
+        _image: &str,
+        _created: u64,
+        _deadline: f64,
+    ) -> Result<Output, String> {
+        Err("pinned game termination unavailable".into())
+    }
+    /// The command fallback keeps non-Windows runners and fixtures injectable.
+    /// Windows uses one pinned handle, without spawning tasklist per waiter.
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        timeout: f64,
+    ) -> Result<Option<ProcessIdentity>, String> {
+        let out = self.run(
+            Call::new(crate::args(&[
+                "tasklist",
+                "/FI",
+                &format!("PID eq {pid}"),
+                "/FO",
+                "CSV",
+                "/NH",
+            ]))
+            .timeout(timeout),
+        )?;
+        if out.code != 0 {
+            return Err(format!(
+                "Could not inspect the Civ6 lock holder: {}",
+                crate::tail(&out.stderr, 300)
+            ));
+        }
+        Ok(out.stdout.lines().find_map(|line| {
+            let (image, fields) = line.strip_prefix('"')?.split_once("\",")?;
+            let listed = fields
+                .split(',')
+                .next()?
+                .trim()
+                .trim_matches('"')
+                .parse::<u32>()
+                .ok()?;
+            (listed == pid).then(|| ProcessIdentity {
+                image: image.into(),
+                created_filetime: None,
+            })
+        }))
     }
     fn now(&mut self) -> f64;
     fn monotonic(&mut self) -> f64 {
@@ -383,6 +447,309 @@ pub trait Runner {
     }
 }
 pub struct RealRunner;
+
+#[cfg(windows)]
+fn process_open_failure(
+    pid: u32,
+    error: std::io::Error,
+) -> Result<Option<ProcessIdentity>, String> {
+    match error.raw_os_error() {
+        Some(87) => Ok(None),
+        // A stale PID can now belong to a protected process. Snapshot lookup
+        // preserves the old image rejection without a tasklist subprocess.
+        _ => match native_identity_or_fallback(Err(error)) {
+            None => denied_snapshot_identity(pid, snapshot_process_identity(pid)),
+            Some(result) => {
+                result.map_err(|error| format!("inspect Civ6 queue process {pid}: {error}"))
+            }
+        },
+    }
+}
+
+#[cfg(windows)]
+fn snapshot_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+        System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            TH32CS_SNAPPROCESS,
+        },
+    };
+    struct Snapshot(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Snapshot {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(format!(
+            "inspect Civ6 queue process snapshot: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let snapshot = Snapshot(raw);
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut found = unsafe { Process32FirstW(snapshot.0, &mut entry) };
+    loop {
+        if found == 0 {
+            let error = std::io::Error::last_os_error();
+            return if error.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                Ok(None)
+            } else {
+                Err(format!("inspect Civ6 queue process snapshot: {error}"))
+            };
+        }
+        if entry.th32ProcessID == pid {
+            let end = entry
+                .szExeFile
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(entry.szExeFile.len());
+            let image = String::from_utf16(&entry.szExeFile[..end]).map_err(|e| e.to_string())?;
+            // Snapshot proves the image only. A matching chain still needs the
+            // original creation-time check; denied access never grants a lease.
+            return Ok(Some(ProcessIdentity {
+                image,
+                created_filetime: None,
+            }));
+        }
+        found = unsafe { Process32NextW(snapshot.0, &mut entry) };
+    }
+}
+
+#[cfg(windows)]
+fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
+    match native_process_identity(pid) {
+        Ok(identity) => Ok(identity),
+        Err(error) => {
+            let os_error = error.raw_os_error();
+            let result = process_open_failure(pid, error);
+            // A name-only fallback cannot prove a game generation. Retain the
+            // original native query failure without exposing executable paths.
+            eprintln!(
+                "process_identity_diagnostic={}",
+                serde_json::json!({
+                    "pid":pid,"native_query_os_error":os_error,"exited":null,
+                    "game_image_approved":result.as_ref().ok().and_then(|v|v.as_ref()).map(|v|crate::chain::CIV_EXECUTABLES.iter().any(|image|v.image.eq_ignore_ascii_case(image))),
+                    "created_filetime":result.as_ref().ok().and_then(|v|v.as_ref()).and_then(|v|v.created_filetime),
+                    "inspection_error":result.as_ref().err()
+                })
+            );
+            result
+        }
+    }
+}
+#[cfg(windows)]
+fn terminate_pinned_game(
+    pid: u32,
+    expected_image: &str,
+    expected_created: u64,
+    deadline: f64,
+    clock: &mut impl FnMut() -> f64,
+) -> Result<Output, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
+            WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            PROCESS_TERMINATE,
+        },
+    };
+    let check_deadline = |clock: &mut dyn FnMut() -> f64| {
+        if clock() < deadline {
+            Ok(())
+        } else {
+            Err("Civ6 termination deadline exhausted".to_owned())
+        }
+    };
+    check_deadline(clock)?;
+    struct Handle(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        return Err(format!(
+            "open pinned game {pid}: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let handle = Handle(raw);
+    let mut path = vec![0u16; 32768];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let path = String::from_utf16(&path[..length as usize]).map_err(|e| e.to_string())?;
+    let image = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("pinned game image unavailable")?;
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
+    {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    let actual_created =
+        (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
+    if !image.eq_ignore_ascii_case(expected_image) || actual_created != expected_created {
+        return Err("pinned game identity changed; termination refused".into());
+    }
+    check_deadline(clock)?;
+    match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_OBJECT_0 => return Ok(Output::default()),
+        WAIT_TIMEOUT => {}
+        _ => return Err(std::io::Error::last_os_error().to_string()),
+    }
+    // Identity and termination share this same retained HANDLE. PID reuse after
+    // a prior observation can only open a different creation time and reject.
+    check_deadline(clock)?;
+    if unsafe { TerminateProcess(handle.0, 1) } == 0 {
+        let error = std::io::Error::last_os_error();
+        if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
+            return Err(error.to_string());
+        }
+    }
+    Ok(Output::default())
+}
+
+#[cfg(all(test, windows))]
+mod native_identity_tests {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+
+    #[test]
+    fn real_runner_does_not_start_even_a_fast_child_after_absolute_deadline() {
+        let mut call = Call::new(crate::args(&["cmd.exe", "/d", "/c", "exit 0"]))
+            .timeout(10.0)
+            .managed();
+        call.deadline = Some(RealRunner.monotonic() - 1.0);
+        assert_eq!(RealRunner.run(call).unwrap_err(), "command timed out");
+    }
+
+    #[test]
+    fn pinned_termination_rejects_changed_creation_and_expired_deadline_before_owned_child_exit() {
+        struct OwnedChild(std::process::Child);
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        let mut owned = OwnedChild(
+            Command::new("cmd.exe")
+                .args(["/d", "/q", "/c", "set /p cc_termination_fixture=waiting"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap(),
+        );
+        let child = &mut owned.0;
+        let identity = windows_process_identity(child.id()).unwrap().unwrap();
+        let created = identity.created_filetime.unwrap();
+        assert!(
+            terminate_pinned_game(child.id(), "cmd.exe", created + 1, 10.0, &mut || 0.0).is_err()
+        );
+        assert!(child.try_wait().unwrap().is_none());
+        let mut checks = 0;
+        assert!(
+            terminate_pinned_game(child.id(), "cmd.exe", created, 1.0, &mut || {
+                checks += 1;
+                if checks == 1 {
+                    0.0
+                } else {
+                    2.0
+                }
+            })
+            .is_err()
+        );
+        assert!(child.try_wait().unwrap().is_none());
+        terminate_pinned_game(child.id(), "cmd.exe", created, 10.0, &mut || 0.0).unwrap();
+        assert!(!child.wait().unwrap().success());
+    }
+
+    #[test]
+    fn current_process_identity_uses_one_handle_and_no_commands() {
+        let identity = RealRunner
+            .process_identity(std::process::id(), 2.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            identity.image,
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(
+            identity.created_filetime,
+            crate::chain::process_created_filetime(std::process::id()).unwrap()
+        );
+        assert!(identity.created_filetime.unwrap() > 0);
+    }
+
+    #[test]
+    fn denied_process_query_uses_image_snapshot_without_granting_creation_identity() {
+        let identity =
+            process_open_failure(std::process::id(), std::io::Error::from_raw_os_error(5))
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            identity.image,
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(identity.created_filetime, None);
+        assert_eq!(
+            process_open_failure(u32::MAX, std::io::Error::from_raw_os_error(87)).unwrap(),
+            None
+        );
+        assert!(
+            process_open_failure(std::process::id(), std::io::Error::from_raw_os_error(6))
+                .unwrap_err()
+                .contains("queue process")
+        );
+    }
+
+    #[test]
+    fn exited_owned_process_and_invalid_pid_are_not_live_waiters() {
+        let mut child = Command::new("cmd.exe")
+            .args(["/c", "exit", "0"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+        assert_eq!(windows_process_identity(child.id()).unwrap(), None);
+        assert_eq!(windows_process_identity(u32::MAX).unwrap(), None);
+    }
+}
 
 pub fn install_interrupt_handler() {
     #[cfg(windows)]
@@ -429,22 +796,43 @@ fn interrupted() -> Result<(), String> {
 }
 
 impl Runner for RealRunner {
-    fn process_identity(&mut self, pid: u32) -> Option<Result<Option<ProcessIdentity>, String>> {
-        #[cfg(windows)]
-        {
-            if let Err(error) = interrupted() {
-                return Some(Err(error));
-            }
-            native_identity_or_fallback(native_process_identity(pid))
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = pid;
-            None
-        }
+    #[cfg(windows)]
+    fn terminate_game(
+        &mut self,
+        pid: u32,
+        image: &str,
+        created: u64,
+        deadline: f64,
+    ) -> Result<Output, String> {
+        terminate_pinned_game(pid, image, created, deadline, &mut || self.monotonic())
+    }
+    #[cfg(windows)]
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        _timeout: f64,
+    ) -> Result<Option<ProcessIdentity>, String> {
+        interrupted()?;
+        windows_process_identity(pid)
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;
+        // Preparation and spawn consume the same budget as waiting. Never
+        // reset a relative timeout after creating the child/readers.
+        let started = self.monotonic();
+        let deadline = match (call.deadline, call.timeout) {
+            (Some(deadline), Some(timeout)) => Some(deadline.min(started + timeout)),
+            (Some(deadline), None) => Some(deadline),
+            (None, Some(timeout)) => Some(started + timeout),
+            (None, None) => None,
+        };
+        let before_spawn = |runner: &mut Self| {
+            if deadline.is_some_and(|deadline| runner.monotonic() >= deadline) {
+                Err("command timed out".to_owned())
+            } else {
+                Ok(())
+            }
+        };
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
         cmd.args(&call.args[1..])
             .envs(&call.env)
@@ -460,6 +848,7 @@ impl Runner for RealRunner {
             let (mut source, sink) = std::io::pipe().map_err(|e| e.to_string())?;
             cmd.stdout(Stdio::from(sink.try_clone().map_err(|e| e.to_string())?))
                 .stderr(Stdio::from(sink));
+            before_spawn(self)?;
             let (mut child, mut tree) =
                 crate::process_tree::Tree::spawn(&mut cmd, call.creationflags, call.kill_tree)?;
             drop(cmd);
@@ -467,7 +856,7 @@ impl Runner for RealRunner {
                 let mut b = Vec::new();
                 source.read_to_end(&mut b).map(|_| b)
             });
-            let status = wait(&mut child, &mut tree, call.timeout, call.lease.as_ref());
+            let status = wait(&mut child, &mut tree, deadline, call.lease.as_ref());
             if let (false, Err(error)) = (call.kill_tree, &status) {
                 return Err(error.clone());
             }
@@ -484,6 +873,7 @@ impl Runner for RealRunner {
             });
         }
         cmd.stderr(Stdio::piped());
+        before_spawn(self)?;
         let (mut child, mut tree) =
             crate::process_tree::Tree::spawn(&mut cmd, call.creationflags, call.kill_tree)?;
         let mut stdout = child.stdout.take().unwrap();
@@ -496,7 +886,7 @@ impl Runner for RealRunner {
             let mut b = Vec::new();
             stderr.read_to_end(&mut b).map(|_| b)
         });
-        let status = wait(&mut child, &mut tree, call.timeout, call.lease.as_ref());
+        let status = wait(&mut child, &mut tree, deadline, call.lease.as_ref());
         if let (false, Err(error)) = (call.kill_tree, &status) {
             return Err(error.clone());
         }
@@ -554,12 +944,17 @@ fn decode(b: &[u8]) -> String {
 fn wait(
     child: &mut std::process::Child,
     tree: &mut crate::process_tree::Tree,
-    timeout: Option<f64>,
+    deadline: Option<f64>,
     lease: Option<&LeaseLimit>,
 ) -> Result<i32, String> {
-    let start = Instant::now();
-    let mut next_probe = start;
+    let mut next_probe = Instant::now();
     loop {
+        if deadline.is_some_and(|deadline| RealRunner.monotonic() >= deadline) {
+            tree.stop(child)?;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("command timed out".into());
+        }
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
             tree.stop(child)?;
             return Ok(s.code().unwrap_or(1));
@@ -593,7 +988,7 @@ fn wait(
         }
         if lease_error.is_some()
             || interrupted().is_err()
-            || timeout.is_some_and(|t| start.elapsed().as_secs_f64() >= t)
+            || deadline.is_some_and(|deadline| RealRunner.monotonic() >= deadline)
         {
             tree.stop(child)?;
             let _ = child.kill();
@@ -613,7 +1008,7 @@ fn wait(
 }
 
 #[cfg(test)]
-mod native_identity_tests {
+mod native_termination_tests {
     use super::*;
     #[test]
     fn native_waiter_access_denial_requires_the_existing_proof_not_a_dead_result() {
@@ -621,7 +1016,7 @@ mod native_identity_tests {
         assert_eq!(native_identity_or_fallback(Ok(None)), Some(Ok(None)));
         let identity = ProcessIdentity {
             image: "live_chain.exe".into(),
-            created_filetime: 41,
+            created_filetime: Some(41),
         };
         assert_eq!(
             native_identity_or_fallback(Ok(Some(identity.clone()))),
@@ -634,5 +1029,23 @@ mod native_identity_tests {
                     .is_err()
             );
         }
+    }
+    #[test]
+    fn native_denied_query_without_snapshot_identity_does_not_mean_exited() {
+        assert!(denied_snapshot_identity(12, Ok(None))
+            .unwrap_err()
+            .contains("exit state unknown"));
+        let identity = ProcessIdentity {
+            image: "CivilizationVI.exe".into(),
+            created_filetime: None,
+        };
+        assert_eq!(
+            denied_snapshot_identity(12, Ok(Some(identity.clone()))).unwrap(),
+            Some(identity)
+        );
+        assert_eq!(
+            denied_snapshot_identity(12, Err("snapshot unavailable".into())).unwrap_err(),
+            "snapshot unavailable"
+        );
     }
 }

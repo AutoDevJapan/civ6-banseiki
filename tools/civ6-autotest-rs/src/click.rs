@@ -48,13 +48,14 @@ pub fn matches_executable(name: &str, requested: &BTreeSet<String>) -> bool {
 }
 
 pub fn require_single_with<B: InputBackend>(backend: &mut B) -> Result<()> {
-    match backend.process_ids(&civ_names())?.len() {
+    let ids = backend.process_ids(&civ_names())?;
+    match ids.len() {
         0 => Err(Error::input(
             "FireTuner に接続できません（Civ6 が起動していない可能性）",
         )),
         1 => Ok(()),
         n => Err(Error::input(format!(
-            "Multiple Civ VI processes found ({n}); driver requires one local game"
+            "Multiple Civ VI processes found ({n}); driver requires one local game; candidate_pids={ids:?}"
         ))),
     }
 }
@@ -197,6 +198,60 @@ mod win {
     use super::*;
     use std::{mem::size_of, sync::Once};
     type Handle = isize;
+    #[derive(Default)]
+    #[repr(C)]
+    struct FileTime {
+        low: u32,
+        high: u32,
+    }
+
+    #[derive(Clone, Debug, serde::Serialize)]
+    struct ProcessCandidate {
+        pid: u32,
+        snapshot_image: String,
+        // A reused PID can belong to an unrelated app. Keep its name private.
+        #[serde(skip_serializing)]
+        image: Option<String>,
+        image_matches_snapshot: Option<bool>,
+        created_filetime: Option<u64>,
+        exited: Option<bool>,
+        absent: bool,
+        wait_result: Option<u32>,
+        inspection_error: Option<String>,
+    }
+    impl ProcessCandidate {
+        fn new(pid: u32, snapshot_image: String) -> Self {
+            Self {
+                pid,
+                snapshot_image,
+                image: None,
+                image_matches_snapshot: None,
+                created_filetime: None,
+                exited: None,
+                absent: false,
+                wait_result: None,
+                inspection_error: None,
+            }
+        }
+        fn error(&mut self, operation: &str) {
+            self.inspection_error = Some(format!(
+                "{operation} os_error={:?}",
+                std::io::Error::last_os_error().raw_os_error()
+            ));
+        }
+        fn observe_exit(&mut self, handle: Handle) {
+            let wait = unsafe { WaitForSingleObject(handle, 0) };
+            self.wait_result = Some(wait);
+            self.exited = match wait {
+                0 => Some(true),
+                258 => Some(false),
+                _ => {
+                    self.error("WaitForSingleObject");
+                    None
+                }
+            };
+        }
+    }
     #[repr(C)]
     struct Rect {
         l: i32,
@@ -243,6 +298,14 @@ mod win {
         fn GetLastError() -> u32;
         fn CloseHandle(h: Handle) -> i32;
         fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
+        fn WaitForSingleObject(h: Handle, milliseconds: u32) -> u32;
+        fn GetProcessTimes(
+            h: Handle,
+            created: *mut FileTime,
+            exited: *mut FileTime,
+            kernel: *mut FileTime,
+            user: *mut FileTime,
+        ) -> i32;
         fn QueryFullProcessImageNameW(
             h: Handle,
             flags: u32,
@@ -325,41 +388,143 @@ mod win {
         (*(param as *mut Vec<(isize, String)>)).push((h, from_wide(&buf)));
         1
     }
+    fn snapshot_candidates(names: &BTreeSet<String>) -> Result<Vec<(u32, String)>> {
+        let h = unsafe { CreateToolhelp32Snapshot(2, 0) };
+        if h == 0 || h == -1 {
+            return Err(Error::input("Could not enumerate Civ VI processes"));
+        }
+        let snapshot = Owned(h);
+        let mut e = Entry {
+            size: size_of::<Entry>() as u32,
+            usage: 0,
+            pid: 0,
+            heap: 0,
+            module: 0,
+            threads: 0,
+            parent: 0,
+            priority: 0,
+            flags: 0,
+            name: [0; 260],
+        };
+        if unsafe { Process32FirstW(snapshot.0, &mut e) } == 0 {
+            return Err(Error::input("Could not read Civ VI process list"));
+        }
+        let mut found = Vec::new();
+        loop {
+            let name = from_wide(&e.name);
+            if matches_executable(&name, names) {
+                found.push((e.pid, name));
+            }
+            if unsafe { Process32NextW(snapshot.0, &mut e) } == 0 {
+                if unsafe { GetLastError() } != 18 {
+                    return Err(Error::input("Civ VI process list became unavailable"));
+                }
+                break;
+            }
+        }
+        Ok(found)
+    }
+    fn inspect_candidate(pid: u32, snapshot_image: String) -> ProcessCandidate {
+        let mut row = ProcessCandidate::new(pid, snapshot_image);
+        // Image, creation time and both exit checks use this one HANDLE.
+        let handle = unsafe { OpenProcess(0x1000 | 0x0010_0000, 0, pid) };
+        if handle == 0 {
+            let error = std::io::Error::last_os_error();
+            row.absent = error.raw_os_error() == Some(87);
+            row.inspection_error = Some(format!("OpenProcess os_error={:?}", error.raw_os_error()));
+            return row;
+        }
+        let handle = Owned(handle);
+        row.observe_exit(handle.0);
+        if row.exited.is_none() {
+            return row;
+        }
+        let (mut created, mut exited, mut kernel, mut user) = (
+            FileTime::default(),
+            FileTime::default(),
+            FileTime::default(),
+            FileTime::default(),
+        );
+        if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) }
+            == 0
+        {
+            row.error("GetProcessTimes");
+        } else {
+            row.created_filetime = Some((u64::from(created.high) << 32) | u64::from(created.low));
+        }
+        match image_path(handle.0) {
+            Ok(path) => {
+                // The inspected path is never included in diagnostics.
+                row.image = path.rsplit(['\\', '/']).next().map(str::to_owned);
+                row.image_matches_snapshot = row
+                    .image
+                    .as_ref()
+                    .map(|image| image.eq_ignore_ascii_case(&row.snapshot_image));
+            }
+            Err(_) => row.error("QueryFullProcessImageNameW"),
+        }
+        row.observe_exit(handle.0);
+        row
+    }
+    fn select_candidates(
+        rows: &[ProcessCandidate],
+        names: &BTreeSet<String>,
+    ) -> Result<BTreeSet<u32>> {
+        let mut found = BTreeSet::new();
+        let mut failures = Vec::new();
+        for row in rows {
+            if row.exited == Some(true) || row.absent {
+                continue;
+            }
+            let reason = if row.exited != Some(false) {
+                Some("exit signal unavailable")
+            } else if row.inspection_error.is_some() {
+                Some("identity query failed while handle was not signaled")
+            } else if row.created_filetime.is_none_or(|created| created == 0) {
+                Some("creation FILETIME missing or zero")
+            } else if row.image.as_ref().is_none_or(|image| {
+                !matches_executable(image, names)
+                    || !image.eq_ignore_ascii_case(&row.snapshot_image)
+            }) {
+                Some("snapshot and retained handle image differ or image is unapproved")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                failures.push(serde_json::json!({"pid":row.pid,"reason":reason}));
+            } else {
+                found.insert(row.pid);
+            }
+        }
+        let diagnostics =
+            serde_json::json!({"candidates":rows,"validation_errors":failures}).to_string();
+        if !failures.is_empty() {
+            return Err(Error::input(format!(
+                "Cannot verify process candidates; process_candidates={diagnostics}"
+            )));
+        }
+        if found.len() > 1
+            || rows
+                .iter()
+                .any(|row| row.exited == Some(true) || row.absent)
+        {
+            eprintln!("process_candidates={diagnostics}");
+        }
+        Ok(found)
+    }
+    fn process_ids_from_snapshot(
+        candidates: Vec<(u32, String)>,
+        names: &BTreeSet<String>,
+    ) -> Result<BTreeSet<u32>> {
+        let rows: Vec<_> = candidates
+            .into_iter()
+            .map(|(pid, name)| inspect_candidate(pid, name))
+            .collect();
+        select_candidates(&rows, names)
+    }
     impl InputBackend for WindowsBackend {
         fn process_ids(&mut self, names: &BTreeSet<String>) -> Result<BTreeSet<u32>> {
-            let h = unsafe { CreateToolhelp32Snapshot(2, 0) };
-            if h == 0 || h == -1 {
-                return Err(Error::input("Could not enumerate Civ VI processes"));
-            }
-            let snapshot = Owned(h);
-            let mut e = Entry {
-                size: size_of::<Entry>() as u32,
-                usage: 0,
-                pid: 0,
-                heap: 0,
-                module: 0,
-                threads: 0,
-                parent: 0,
-                priority: 0,
-                flags: 0,
-                name: [0; 260],
-            };
-            if unsafe { Process32FirstW(snapshot.0, &mut e) } == 0 {
-                return Err(Error::input("Could not read Civ VI process list"));
-            }
-            let mut found = BTreeSet::new();
-            loop {
-                if matches_executable(&from_wide(&e.name), names) {
-                    found.insert(e.pid);
-                }
-                if unsafe { Process32NextW(snapshot.0, &mut e) } == 0 {
-                    if unsafe { GetLastError() } != 18 {
-                        return Err(Error::input("Civ VI process list became unavailable"));
-                    }
-                    break;
-                }
-            }
-            Ok(found)
+            process_ids_from_snapshot(snapshot_candidates(names)?, names)
         }
         fn windows(&mut self) -> Result<Vec<(isize, String)>> {
             let mut out = Vec::new();
@@ -450,10 +615,190 @@ mod win {
         press_key_with(&mut WindowsBackend::new(), vk, end, KeyDelivery::Window)
     }
     pub fn request_civ_window_close() -> Result<()> {
-        request_civ_window_close_with(&mut WindowsBackend::new())
+        let mut lease = crate::startup::RecoveryLease::acquire()?;
+        let game = crate::restart::single_civ_process(0.0)?
+            .ok_or_else(|| Error::input("owned Civ6 process is absent"))?;
+        crate::startup::request_owned_close(&mut lease, game.into())
     }
     pub fn require_single_civ_process() -> Result<()> {
         require_single_with(&mut WindowsBackend::new())
+    }
+    #[cfg(test)]
+    mod snapshot_exit_tests {
+        use super::*;
+        use std::{
+            io::Write,
+            os::windows::{io::AsRawHandle, process::CommandExt},
+            process::{Child, Command, Stdio},
+        };
+        use windows_sys::Win32::{
+            Foundation::WAIT_OBJECT_0, System::Threading::WaitForSingleObject,
+        };
+
+        struct OwnedChild(Child);
+        impl OwnedChild {
+            fn new() -> Self {
+                Self(
+                    Command::new("cmd.exe")
+                        .args([
+                            "/d",
+                            "/q",
+                            "/c",
+                            "set /p CC_SNAPSHOT_TEST=waiting & exit /b 259",
+                        ])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .creation_flags(0x0800_0000)
+                        .spawn()
+                        .unwrap(),
+                )
+            }
+            fn finish(&mut self) {
+                self.0.stdin.take().unwrap().write_all(b"exit\r\n").unwrap();
+                assert_eq!(
+                    unsafe { WaitForSingleObject(self.0.as_raw_handle(), 5_000) },
+                    WAIT_OBJECT_0,
+                    "only the owned child must exit within the test bound"
+                );
+                assert_eq!(self.0.wait().unwrap().code(), Some(259));
+            }
+        }
+        impl Drop for OwnedChild {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        fn owned_snapshot(pid: u32, names: &BTreeSet<String>) -> Vec<(u32, String)> {
+            let candidates: Vec<_> = snapshot_candidates(names)
+                .unwrap()
+                .into_iter()
+                .filter(|(candidate, _)| *candidate == pid)
+                .collect();
+            assert_eq!(
+                candidates.len(),
+                1,
+                "live child must be in the actual OS snapshot"
+            );
+            candidates
+        }
+
+        #[test]
+        fn snapshot_exited_child_with_retained_handle_is_not_a_live_candidate() {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            let mut child = OwnedChild::new();
+            let pid = child.0.id();
+            let candidates = owned_snapshot(pid, &names);
+            assert_eq!(
+                process_ids_from_snapshot(candidates.clone(), &names).unwrap(),
+                BTreeSet::from([pid])
+            );
+            child.finish();
+            let listed_after_exit = snapshot_candidates(&names)
+                .unwrap()
+                .iter()
+                .any(|(id, _)| *id == pid);
+            eprintln!("snapshot_exit_observation pid={pid} exit_code=259 retained_handle=true fresh_snapshot_contains_pid={listed_after_exit}");
+            // The frozen snapshot definitely contains the child. Its strong
+            // Child handle remains open, and exit 259 is not STILL_ACTIVE.
+            assert!(process_ids_from_snapshot(candidates, &names)
+                .unwrap()
+                .is_empty());
+        }
+
+        #[test]
+        fn snapshot_child_disappearing_before_inspection_is_not_a_live_candidate() {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            let mut child = OwnedChild::new();
+            let pid = child.0.id();
+            let candidates = owned_snapshot(pid, &names);
+            child.finish();
+            drop(child);
+            assert!(process_ids_from_snapshot(candidates, &names)
+                .unwrap()
+                .is_empty());
+        }
+
+        fn live_candidate(pid: u32) -> ProcessCandidate {
+            let mut row = ProcessCandidate::new(pid, "cmd.exe".into());
+            row.image = Some("cmd.exe".into());
+            row.created_filetime = Some(41);
+            row.exited = Some(false);
+            row.wait_result = Some(258);
+            row
+        }
+
+        #[test]
+        fn snapshot_two_live_owned_children_remain_two_candidates() {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            let mut first = OwnedChild::new();
+            let mut second = OwnedChild::new();
+            let expected = BTreeSet::from([first.0.id(), second.0.id()]);
+            let candidates: Vec<_> = snapshot_candidates(&names)
+                .unwrap()
+                .into_iter()
+                .filter(|(pid, _)| expected.contains(pid))
+                .collect();
+            assert_eq!(candidates.len(), 2);
+            assert_eq!(
+                process_ids_from_snapshot(candidates, &names).unwrap(),
+                expected
+            );
+            first.finish();
+            second.finish();
+        }
+
+        #[test]
+        fn snapshot_unknown_denied_reused_or_missing_creation_never_becomes_absent() {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            for case in [
+                "denied",
+                "wait-error",
+                "missing-time",
+                "zero-time",
+                "reused",
+                "wrong-image",
+            ] {
+                let mut row = live_candidate(12);
+                match case {
+                    "denied" => {
+                        row.exited = None;
+                        row.created_filetime = None;
+                        row.inspection_error = Some("OpenProcess os_error=Some(5)".into());
+                    }
+                    "wait-error" => {
+                        row.exited = None;
+                        row.wait_result = Some(u32::MAX);
+                        row.inspection_error = Some("WaitForSingleObject os_error=Some(6)".into());
+                    }
+                    "missing-time" => row.created_filetime = None,
+                    "zero-time" => row.created_filetime = Some(0),
+                    "reused" => row.snapshot_image = "another.exe".into(),
+                    "wrong-image" => row.image = Some("another.exe".into()),
+                    _ => unreachable!(),
+                }
+                let error = select_candidates(&[live_candidate(11), row], &names).unwrap_err();
+                assert!(error.message.contains("process_candidates="), "{case}");
+                assert!(error.message.contains("\"pid\":12"), "{case}");
+                assert!(error.message.contains("\"created_filetime\":"), "{case}");
+                assert!(error.message.contains("\"exited\":"), "{case}");
+            }
+            assert_eq!(
+                select_candidates(&[live_candidate(11), live_candidate(12)], &names).unwrap(),
+                BTreeSet::from([11, 12])
+            );
+            let mut exited = live_candidate(12);
+            exited.exited = Some(true);
+            exited.wait_result = Some(0);
+            // Once the same HANDLE is signaled, failed metadata is diagnostic.
+            exited.inspection_error = Some("QueryFullProcessImageNameW os_error=Some(5)".into());
+            assert_eq!(
+                select_candidates(&[live_candidate(11), exited], &names).unwrap(),
+                BTreeSet::from([11])
+            );
+        }
     }
 }
 #[cfg(windows)]

@@ -1,0 +1,644 @@
+# 通常起動・ロード前閉鎖のPE調査（880）
+
+通常接続は未実装である。この有限成果は、Steam配布PEから起動候補と破棄候補を再現できるRust解析器と、未確定の接続条件である。実hook・reload・通常userpathの実測はすべて0回。ゲーム起動、DLL配置、ゲームファイル変更、プロセスメモリ操作は行っていない。324のnative/runtime/composite/paid/eventsは変更していない。
+
+## 対象と再現
+
+`G = C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI`。
+
+| 一次資料 | SHA-256 / 版 |
+|---|---|
+| `G/Base/Binaries/Win64Steam/CivilizationVI.exe` | `e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63`、ImageBase `0x140000000` |
+| `G/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` | `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`、ImageBase `0x180000000` |
+| 324の参照作業フォルダ | `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/agent-todo-324-a39639587c09`、`50f9c14565da5d7ef8a1ff2f0406cd7c8b1c426b` |
+| 本workerの開始点 | `4cd8026e0db2f7f2c422dca0206b9ae2261a359c` |
+
+以下のRVAは上記EXEまたはDLLだけに対応する。DX12のEXEには適用しない。LLVMが付ける「直前のexport名+変位」は対象関数の名前ではない。本書ではexport以外の関数をRVAで記述する。
+
+```powershell
+$env:CARGO_TARGET_DIR='D:/CC/Work/todo880/bootstrap-target'
+& D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --manifest-path tools/Cargo.toml -p civ6-pe-rs
+$g="C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI"
+$exe="$g/Base/Binaries/Win64Steam/CivilizationVI.exe"
+$core="$g/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll"
+$pe='D:/CC/Work/todo880/bootstrap-target/debug/civ6-pe.exe'
+& $pe --bootstrap-audit $exe $core
+& $pe --bootstrap $exe DllCreateGameContext
+& $pe --bootstrap $exe DllDestroyGameContext
+& $pe --bootstrap $exe lua_close
+& $pe --bootstrap $exe 0xf7110
+llvm-readobj --coff-imports --coff-exports --coff-tls-directory $core
+llvm-objdump -d --x86-asm-syntax=intel --start-address=0x1400f8510 --stop-address=0x1400f868d $exe
+llvm-objdump -d --x86-asm-syntax=intel --start-address=0x14024b450 --stop-address=0x14024b5f9 $exe
+llvm-objdump -d --x86-asm-syntax=intel --start-address=0x1400f7110 --stop-address=0x1400f7168 $exe
+llvm-objdump -d --x86-asm-syntax=intel --start-address=0x1400f7830 --stop-address=0x1400f78d4 $exe
+llvm-objdump -d --x86-asm-syntax=intel --start-address=0x1400f8e30 --stop-address=0x1400f8eb3 $exe
+```
+
+`--bootstrap`は文字列、import名の部分一致、またはRVAから参照を探す。RIP相対mov/lea、間接call/jump、絶対VA、E8/E9を出す。**バイト走査は命令境界を証明しない**。`.pdata`は関数の断片を含む。採用した位置はLLVMでも照合した。
+
+`--bootstrap-audit`は両ファイルのSHA、分岐先、命令バイトを再検査する。成功は静的資料の一致だけを意味する。出力は常に `execution_ready=false`。入力を実行可能moduleとしてロードしたり、WinAPIの成功を模擬したりしない。
+
+## 起動側で確定した呼出し順
+
+| EXE RVA | 一次資料の命令と意味 |
+|---|---|
+| `0x24B523` → `0x0F8E30` | 既存Contextの破棄処理を呼ぶ |
+| `0x24B52D` → `0x0F8510` | RCXは変換済みパス。DLL読込処理を呼ぶ |
+| `0x0F8572` → `0x989970` | `LoadLibraryW`へのthunkを呼ぶ。RCXはUTF-16ファイル名、戻り値RAXはHMODULE |
+| `0x989970` | `48 FF 25 D1 CF 60 00`、IAT `0xF96948` の `KERNEL32!LoadLibraryW`へjump |
+| **`0x0F8577`** | `48 89 05 5A DB 1D 02`、戻ったRAXを `0x22D60D8` に保存。**選んだbootstrap挿入候補** |
+| `0x0F8583` / `0x0F858D` | RDXに文字列 `DllCreateGameContext`、RCXにHMODULEを置き `GetProcAddress` thunk `0x9898F0`を呼ぶ |
+| `0x0F8592` | factoryポインターを `0x22D64E8`へ保存 |
+| `0x0F85BC` / `0x0F85C3` / `0x0F85C8` | `DllDestroyGameContext`を同じmoduleから解決し `0x22D6548`へ保存 |
+| `0x24B545` → `0x0F8430` | loaderが成功して戻った後、Contextを取得する |
+| `0x0F8451` / `0x0F845D` | factoryをRCXへ読み `call rcx`。既存Context `0x22D60C0`があればこのcallを通らない |
+| `0x24B5C2` | Contextの仮想表 `+0x60`を呼ぶ。RCX=Context、RDX=別インターフェース |
+| `0x24B5D5` → `0x0F7830` | RCX=保持側オブジェクト、RDX=Contextを渡して保持先を切り替える |
+
+GameCore側のexport `DllCreateGameContext` はRVA `0x752D50`から `0x58FC60`へjumpする。calleeは入力レジスターを引数として使わず、内部heapから16 byteを確保して `0x58FB40`を呼び、ContextポインターをRAXで返す。Contextは `+0` に仮想表 `0xA101E8`、`+8` に `0x7503E0`で構築するオブジェクトを保持する。これはこの配布版の静的ABI観察であり、公開C++ヘッダーの契約ではない。
+
+`0x0F8577`は、上記の同一スレッドのfactory生成より前で、GameCoreのLoadLibraryが戻った位置である。従って単なる「EXEがLoadLibraryをimportする」より具体的な入口になった。ただし**最初のGameplay Lua初期化より必ず前とはまだ言えない**。GameCoreのPE entrypointは `0x9B0B58`、TLS directoryは `0xAC0DA8`、callback配列 `0x9BACE0`の先頭は0だった。CRT初期化の全関数・生成threadの順序は未追跡である。別スレッドの生成や初期化を、export呼出し順だけから否定しない。
+
+## 破棄側で確定したことと残る穴
+
+EXEの次の4か所では、条件付きの `0x0F7110`呼出しの直後に `0x0F8E30`を呼ぶ。
+
+| 保持解除call | Context破棄call |
+|---|---|
+| `0x245CEA` | `0x245CEF` |
+| `0x24B51E` | `0x24B523` |
+| `0x24CAB6` | `0x24CABB` |
+| `0x24D1D2` | `0x24D1D7` |
+
+`0x0F7110`のRCXは、`+0x450`にContextを保持するEXE側オブジェクト。`0x0F7123`で `0x159390`を呼び、`0x0F7139`でContextの仮想表 `+0x1A0`をEDX=0で呼ぶ。保持先を0にした後、`0x0F715E`で仮想表 `+8`へ末尾jumpする。戻り値の意味は確定していない。
+
+**この4か所を4種類のユーザー操作に対応付けてはならない。** 別処理 `0x0F7830`にも古いContextに対する同じ処理があり、`0x0F7867`で仮想表 `+0x1A0`、`0x0F7887`で `+8`を呼ぶ。従って `0x0F7110`一か所だけを共通境界とする根拠は足りない。
+
+Contextの固定仮想表 `0xA101E8`を読むと `+8`は `0x8972D0`（`ret 0`）、`+0x1A0`は `0x58FF70`（DLをECXにして `0x07BBF0`へjump）だった。つまり、上記の保持解除をLua破棄そのものと呼ぶのも誤りである。`0x159390`の推移、旧Luaが実際に消える順序、全利用経路の合流を確定する必要がある。
+
+`0x0F8E30`は先に `0x29C2A0`を呼ぶ。このcalleeにも仮想destructor呼出しがある。その後 `0x0F8E60`が `DllDestroyGameContext`を呼ぶ（RCX=`0x22D60C0`のContext）。GameCore export `0x752D60` → `0x58FD10`はContext内 `+8` のオブジェクトへ仮想 `+0x10`とdestructorを呼び、Contextを解放する。**exportに閉鎖を置くだけで旧Luaより前になることは未証明**。
+
+別に、EXEのHavok import `?lua_close@@YAXPEAUlua_State@@@Z`をIAT `0xF962F0`まで確定した。thunk `0xDBD83C`へのcallは `0x971B11`と `0x971CB7`。どちらもRCXへ保持オブジェクト `+0x10`のLua stateを渡す。直前には保持オブジェクト `+0x60`のcallbackを `+0x58`を引数として呼ぶ経路がある。これはUIを含むLua所有者の破棄点であり、Gameplay世代との一致をまだ確認していない。GameCoreは直接の `lua_close` importを持たない。
+
+公式 `Base/Assets/UI/FrontEnd/LoadGameMenu.lua:96–112` は `LeaveGame` → `LoadGame`と旧Lua破棄の注記を持つ。一方、同ファイル `:424–440` のQuickLoadは `LoadGame`を直接呼ぶ。`MainMenu.lua:71–72,143–146`はContinue系でもLeave→Loadを使う。よってLeaveGameのLua登録関数一か所を覆うだけでは足りない。EXE内のLua登録も `LeaveGame` → `0x26C100`、`LoadGame` → `0x26C150`まで追えたが、それらから世代破棄までの全経路は未確定。
+
+## 選んだ方式と採らない候補
+
+実装に向けて調べる候補は **live_chainが所有する起動からresident bootstrapを導入し、EXEのGameCore loaderが戻る位置で同期して324 runtimeを設置する方式**の1つに絞る。挿入候補は `0x0F8577`。単一経路での候補であり、全ロード経路に共通か、最初のGameplay Luaより前かは未確認。通常のSteamクリックへ自動接続できたという意味ではない。
+
+| 候補 | 一次資料に基づく判断 |
+|---|---|
+| `CREATE_SUSPENDED`だけでremote LoadLibrary | 主threadだけが停止する。loader初期化完了やDLLロード完了は保証しない。これだけではGameCore待ちと設置順を解決しない |
+| `DEBUG_ONLY_THIS_PROCESS`のDLL-load event中に設置 | debug event中は対象の全threadが停止する。remote thread終了待ちは進行しない。イベントを継続する前の同期installとして使わない |
+| `LdrDllNotification`内でruntimeを呼ぶ | 他モジュールの関数を呼べない。runtimeはmodule pin、heap、mutexなどを使うため不適合。通知からworkerへ渡すだけではGameplayより先の保証がない |
+| `DllMain`、一般sideload/config変更 | loader lock下の設置やworker待機にはdeadlockの問題がある。配置・ユーザー通常経路も未検証。本workerは配置しない |
+| **EXE loaderの復帰直後** | **調査候補として選択**。単一経路でGameCoreロード完了→export取得→factory呼出しの同一thread上の順序がある。全ロード共通・初回Gameplay前・resident導入は未証明 |
+
+Microsoft一次資料：[Process Creation Flags](https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags)、[Debugging Events](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-events)、[LdrDllNotification](https://learn.microsoft.com/en-us/windows/win32/devnotes/ldrdllnotification)、[DLL Best Practices](https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices)。これらはWindowsの制約であり、Civ6のthread順序を証明するものではない。
+
+初回起動の制御候補はdebug creationでEXE側の境界を捕捉する方法だが、eventの処理中にinstallの完了を待たない。loaderから戻ったthreadを安全な継続点に保持し、debug eventをpumpしてresident設置を完了してからfactoryへ戻す実装には、例外・thread順序の実証が要る。ABI未確定のコード移植やメモリ書換えを先に追加しない。
+
+## 324 runtimeへの接続で不足する最小条件
+
+1. **初回接続**：`0x0F8577`へ到達する前にresidentを導入し、loader lockを持たずに `BridgeRuntimeInstall`（実在名。`RustBridgeRuntimeInstall`ではない）を呼べる所有起動経路。PID・作成FILETIME・同一DLL hashは既存controllerの契約を引き継ぐ。現在のdriverは `steam://launch/289070/option2`経由で、作成前のthreadを所有していない。
+2. **世代境界**：Load/Continue/QuickLoad/LeaveGameの全経路を、旧Gameplay Luaと本体オブジェクトが生きている時点で閉鎖する共通native処理へ対応付ける。上記2か所の保持変更と、Lua破棄callbackの関係が最小の未確定部分。引数レジスターの観察と所有threadの証拠が必要。
+3. **再武装と公開の区別**：324の `BridgeRuntimeClose` はproductを非活性化してSTATEを消す。`reset_owner` は活性session以外を拒否する。`BridgeRuntimeRebuild` は再度closeしてからactivateするため、**新Gameplay COMMITの後にRebuildを呼ぶと、そのCOMMITを消す**。既存APIのままなら、破棄完了後かつ新Gameplay RESETより前にRebuildで再武装し、許可の公開は既存単一CASのCOMMIT成功に任せる必要がある。この「新Lua前」のnative境界も未確定。324側を本workerで書き換えない。
+
+観測の秒数は設置後の有限trace用であり、製品leaseの寿命ではない。residentはゲーム終了まで残す。同期pipeline、paid receipt、公式AI支払の問題は別の未完了条件である。
+
+## 次に必要な実機receiptは1件
+
+親の予約と統合後、**所有する1ゲームプロセスの起動から各ロード経路までを記録する、通しの順序receipt**を取る。記録にはPID/FILETIME、EXE/GameCore/bridge hash、thread IDと連番、loader-return、install完了、最初のGameplay RESET/COMMIT、旧世代close、対象旧Lua破棄、新Lua RESET、COMMIT公開を含める。Load/Continue/QuickLoad/LeaveGameを操作名と呼出しスタックで対応付け、古い世代の許可が新世代へ残らないことを確認する。未知のhardware breakpointを再利用しない。これは本workerで実行する予約ではなく、親が次に集める1件の受入証拠である。
+
+現時点のRust成果は解析・候補照合まで。resident activation、実hook、runtimeの自動接続は未実装。これを通常起動の完成や実機合格に数えない。
+
+## この有限成果の検査
+
+共有 `D:/CC/Tools/codex-jobs/cargo_gate.exe` と専用targetで `cargo test --locked --offline --manifest-path tools/Cargo.toml -p civ6-pe-rs` を実行し4件成功。実配布PEに対するauditも成功し、EXEとDLLを逆に渡す試験はSHA不一致で終了コード1になった。Rustの形式検査と差分の空白検査を実施。Luaや324のruntimeは編集しておらず、全workspace・Lua全件の検査は今回実行していない。
+
+Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その後の走査末尾6 byte対応と表示修正は再ビルド・4テスト・実PE照合を通した。Clippyの重複再検査は共有枠待ちで終了し、最終差分に対するClippy成功とは数えない。
+
+別モデル `gpt-6-luna` の読み取り専用レビューはMustなし。「選択」を実装確定と誤読される点のSuggestionを反映した。実機懸念は上記の不足条件として残す。
+
+## 追加のcapture-only候補
+
+### cold Menuからのcommon-driver接続
+
+14の原コピー `D:/CC/Work/todo880/bootstrap-preflight-14-artifacts/ruleset-before-world.jsonl` と13ファイルのhash manifestを再照合した。正常6MOD→restart→singleplayer22/HUGE・RULESET_JAC_BANSEIKIのconfigureだけでは、PID45176/FILETIME134358034705706507のinitial_core_baseはnull、Contextは1151404128だった。WorldStart/Load/Install0の結果であり、configureでXP2が用意できるとは扱わない。352のXP2型必須Prepareはこのcold経路に不適合だった。
+
+Prepare v2（72byte、version0x08800002）は、Base-menu Contextを確認してEXE3入口を準備する。target XP2未ロード、Base DLLの固定SHA・factory58DD30・table79E020とEXE globalを照合する。Base自体はPINしない。成功0/READYはpreparedであってruntime-installedではなく、この時のtrace Core/runtime addressは0。world load中のF8510全体の戻りで、target XP2・factory・globalContext0とcaller24B52Dを検証し、その同threadがF24B545でfactoryを呼ぶ前に実Mode6 Installを行う。DllMainでInstallしない。
+
+`civ6-startup-diagnostics bootstrap --request ABSOLUTE.json` を追加し、branchから通常buildされる同helperを使う。内部は既存 `civ6-native-bridge/bridge_controller.rs` を共有し、追加 `bootstrap_controller.rs` が `remote_call`、remote allocation/read/write、module列挙、PID/FILETIME handle、lease、OwnedJobを利用する。CreateRemoteThreadの別実装はない。共通chainは元pathか固定SHAのAMD pathのみ。requestはschema `todo880-bootstrap-controller-v2`、pid、created_filetime、max_seconds1..300、runtime_dll/runtime_sha256、bootstrap_dll/bootstrap_sha256、outputの9項目で、両DLLの絶対pathとSHAを省略できない。ファイルを保持して書込・削除を拒否し、sourceのexport RVAを使う。
+
+Prepare非zero・remote応答不明・controller内部失敗は、既存OwnedJobで元のgame終了を確認してから失敗を返す。Prepare再送0。正常stopは新export `RustBridgeBootstrapStopObservation` を1回呼び、bootstrap記録と既存Mode6観測だけを停止する。code/Core/relayは常駐のまま。header72＋104×128を2回一致・全seq commitで読み、dropped/unknown/未Installは成功にしない。native CompositeTraceも2回一致とpublic header版・dropped/in-flight・行commitを検査し、両raw binとJSONをcreate_newで保全する。フレーム整合は製品受入ではなく、既存public ledger/Mode6の意味検査を置換しない。
+
+runnerには `start_native_bootstrap` / `stop_native_bootstrap` を明示追加した。既存native bridge Sessionのpipe・固定process・終了/回収処理を共用し、fresh restartより後、最初のWorldStart/Loadより前、同processで1回だけ開始する。他native modeと共有しない。通常bridgeのlifecycle拒否は変更せず、この別sessionだけが同一PID/FILETIMEのload前後を確認する。待機中も既存remainingからcontroller/gameの生存を検査する。最後はstopを必須とし、失敗時にもcleanupへ入る。
+
+最小sceneはoffline `civ6-bootstrap-scene PREFIX.json RUNTIME.dll SHA256 BOOTSTRAP.dll SHA256 PHYSICAL_SAVE_NAME` で生成する。14のようなenable_mods/restart/configure prefixを保ち、start-bootstrap→同じ物理saveをload→Gameplay読取→Exit→同save再load→Gameplay読取→stopを追加してvalidateする。DLLのSHAは計算済みの明示入力を要求し、古いruntime DLLや暗黙pathへ戻らない。親のheap初期化修正後のbase DLLを指定する。generatorもcontrollerもworkerから実Gameへは実行していない。
+
+### 実機09からのresident接続candidate
+
+09（actual `d6c`、observer `3563d7e3…0fd24b`）の13原ファイルを `D:/CC/Work/todo880/context-binding-09-hashes.json` と照合した。旧／incomingは実vtable Core+0xA101E8・仮想関数に一致し、Coreはbase6113984512・size12976128・disk SHA一致。Releaseの旧object1176373344はEXE caller0x24D1D2、最初のSetContextは0x169982、新ContextのSetContextは0x24B5D5、null Releaseは0x24B51Eだった。09でも同値4回はNoopである。後続DLL-loadのearly snapshot不明を解消済みとはしない。
+
+EXE0xF4990を読むとsingletonのglobalは0x22D6070で、保持slotはそのobject+0x450。0x169973がContext取得を呼び、その戻り値を0x169982でSetContextへ渡す。0x24D1D2のReleaseが戻ると直後0x24D1D7が破棄経路0xF8E30を呼ぶ。新SetContext0x24B5D5の前にもfactoryと仮想+0x60のcallがあるため、初回InstallをSetContextまで遅らせない。cold MenuではXP2自体が未ロードなので、準備とInstallも分離する。
+
+新crate `tools/civ6-bootstrap-rs` はWindows x64 DLLとして、MainMenuで明示的に準備するresident candidateを実装する。324 native/runtime/compositeファイルは編集しない。実export `BridgeRuntimeInstall/Close/Rebuild` を既にロード済みのsource DLLから解決する。通常public ledger・既存原子publicationを利用し、私的Lua flagやLua呼出しは追加しない。
+
+準備は現在PID/FILETIME、固定EXE/Core path+SHA、Base-menuの期待Context表とtarget XP2未ロード、runtime DLLの保持file SHAとexportの実行module範囲を確認し、保存するAPI addressの属するruntime moduleも呼出し前にPINする。Prepare中はMode6を呼ばない。EXEのF7110/F7830/F8510の先頭と直前5byteのCC paddingを固定byte照合し、近傍relayと元命令continuationを準備して2byte CASで3入口を公開する。bootstrap/Core/runtimeとrelayはprocess終了まで保持し、毎回のfree/unpinはない。continuationは既知の `push rbx`、`mov [rsp+8],rbx`、loaderの `sub rsp,0x248` を1回実行して残りの原関数へ戻る。Windows unwind情報と原C++呼出しのsystem-unwind ABIを付け、RCX/RDX・RAX戻り値・非volatile register・LastErrorを維持する。
+
+接続は単一phaseで管理する。Openの非null旧CoreContextに対して、原Releaseより前にCloseを成功させClosingへ移り、原Releaseが戻った後にだけClosedとする。Closedから、同じtransition thread・singleton・Core表・EXE globalに一致し、caller0x24B5D5、旧slot0、新Context非nullのSetContext入口でRebuildを呼ぶ。その後は原SetContextを1回実行し、ownerの自然RESET/COMMITによる再公開を待つ。allocatorによる旧address再利用は世代判定に使わない。同値SetContextはAPI呼出し0。旧slot非nullから直接異なるContextへ交換する未実証経路は先にCloseし、同じcallの途中へ推測でRebuildを入れず閉鎖を維持する。
+
+ABI不一致やClose不成立のままnative破棄を継続しないため、callbackのcritical失敗はabortとなる。これは正常終了ではなく、親のowned process回収対象である。Prepareの非zero終了（部分公開を含む）も親が所有gameを終了・回収し、同PIDへ再試行しない。入口を外した後にgatewayを解放する契約は追加しない。
+
+親の呼出し契約：既存live_chainとcontrollerのPID/FILETIME/lease/同source所有を検証したfresh MainMenuで、runtime DLLとこのDLLを専用path+SHAでロードする。runtimeのInstallは先に別途呼ばず、`RustBridgeBootstrapPrepare(*const Prepare)->u32` を1回呼ぶ。Prepareは72byte、align8、version0x08800002@0、size@4、pid@8、observation_seconds@12、FILETIME@16、bridge HMODULE@24、bridge SHAの32生byte@32、expected Base-menu Context@64。結果0はcold準備完了であり、XP2 Install完了でも製品受入でもない。
+
+`BOOTSTRAP_TRACE_POINTER` は固定traceへのpointerを持つdata export（8byteを読む）。headerは9個のu64（version2、capacity128、pid、FILETIME、Core base、runtime trace address、runtime trace size、予約数、dropped）、以後128行。行は13個のu64：commit sequence（最後にRelease store）、kind、tid、receiver、old、incoming、caller、generation、API status、native calibration next/in-flight、property next/in-flight。native countersはpublic CompositeTraceのJACA v4/JACP v3のみを読み、不一致・未読はu64::MAX。counter採取はpublication fenceではない。kind11=3入口のcold準備完了、kind12=Base-menu確認、kind13=target loader/factory照合、kind15=未Install中のmenu通過、kind0/1=Install前後、2/3=Close前後、4=Release原関数前、5=Noop、6/7=Rebuild前後、8=Set原関数前、9/10=原関数return（return行callerはVA、未対応generationはu64::MAX）。droppedや未commit行を合格に数えない。
+
+残る1件の必須受入は、親の同一owned PIDでfresh MainMenu準備→最初のworld開始→Exit→同じ保存再Load→Gameplay確認を行い、Installが最初のAI/自然RESETより前、Closeが旧native owner破棄より前、Rebuildが新ownerのRESET/COMMITより前であり、PIN下でも通常world再初期化が成功することを既存Mode6 traceと通常public ledgerで照合すること。Noopの再構築0と旧世代の許可拒否も同じ1件で確認する。workerの実Game実行0、Mode6成功を模擬した検査0。所有OS子の実code patchは3入口の原命令・原関数1回、入口のrestore（到達不能prefix/relayは終了まで保持）、原関数からの実unwindとunwind情報、回収を検査するもので製品成功ではない。
+
+
+cold前提の一次証拠は `order-phase-03-artifacts/initial-load-and-leave.jsonl` の先頭：XP2 baseはnull、Context1107953760。seq125で初回loader戻り、129でXP2 factory、133でfactory戻りを採取している。元phase run全体は失敗のまま保全する。固定Base DLL SHAは `d7ed520e1334947fc7b3be50b00c78eea55e69eb079583f24d87742e90f2a5c3`、export58DD30→42D990→constructor42D870、仮想表79E020。Prepare v2はこれをmenu型として照合するが、Base moduleをPINせず自然unloadを妨げない。XP2が既にロード済みのwarm経路は拒否する。規則セットconfigureだけでXP2になるという仮説は採用しない。
+
+追加loader入口F8510はprefix5CCを持ち、先頭7byteはstack確保のみ。全体の戻り後はLoadLibrary/GetProcAddressも戻っておりloader lock内へruntimeを入れない。成功AL、caller24B52D、EXE module handle22D60D8、factory22D64E8=XP2+752D50、factory先頭5byte、globalContext22D60C0=0、target path/SHAを照合して初めて実Installする。同callerは戻り後24B545でfactory取得へ進む。GetterF8430は直前CCが4byteだけなので、5byte paddingを必要とするhotpatch先には選ばない。未InstallのPreparedではmenu Release/Setを原関数へ通し、XP2型検査やCloseを誤適用しない。traceのCore base／runtime trace addressはtarget loaderまでは0が正しい。新controllerはprepared readinessとruntime-installedを区別する。
+
+ビルドは共通gate経由 `build --locked --offline --manifest-path tools/Cargo.toml -p civ6-bootstrap-rs`。出力は専用targetの `debug/civ6_bootstrap_rs.dll`。`CARGO_INCREMENTAL=0`、`CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0` を使う。ゲーム・共有DLLへこのworkerが配置することはない。
+
+### 実機08：保持slotとGameCoreの接続を絞る
+
+実機08（actual `82cfdf9e`、observer `ae8adb06…195f5`）は同PID79976・FILETIME134357969370420525で9/9手順・6判定が成功した。`D:/CC/Work/todo880/order-reload-08-artifacts` の13ファイルを `order-reload-08-hashes.json` と再照合した。context_releaseは2回、context_replaceは6回、Lua closeの2点は0回。stop時の115threadはDR一致、不一致・不明・pending0、復元・回収済みである。
+
+生記録を分けると、TID35064、保持側RCX448805568（slotはその+0x450）で次の順序となる。
+
+| sequence / 開始後ms | 実観測 |
+|---|---|
+| 122 / 15932 | replace入口：slot0、incoming120916064。開始時EXE global Contextも120916064 |
+| 126 / 16385 | release入口：slot120916064 |
+| 129 / 16388 | base6316163072のunload。これは開始時に同定したGameCore baseと一致する |
+| 131 / 16389 | release入口：slot0 |
+| 134〜136 / 16389〜16391 | 同baseへload→unload→load。後続loadのmodule名は旧rawにないので、同addressだけで同一DLLとしない |
+| 138 / 16395 | replace入口：slot0、incoming1368721504 |
+| 142,146,150,154 | replace入口：slotとincomingが共に1368721504。PE0xF7847/0xF784Aは同値なら0xF78C9へ分岐し、置換本体を通らない |
+
+8件のoriginal instruction完了は各1回。ただし入口の第一命令完了はcallee全体の完了やobject破棄ではない。Releaseという候補名も参照数減算や破棄の実証ではない。Core仮想+8の固定実装はretである。
+
+GameCore factoryのconstructor0x58FB40を再読し、0x58FB46/0x58FB55で仮想表0xA101E8をobject+0へ、0x58FB96で別objectを+8へ保存する命令を確認した。仮想表+8はCore0x8972D0、+0x1A0はCore0x58FF70。08にはその実vtableがないため、旧／新pointerをこのfactory型と断定しない。仮想表前のwordから有効なRTTI locatorは得られず、C++型名も付けない。
+
+追加するRust `order_context.rs` は既存F7110/F7830ヒット中だけ、保持側vtable、旧／新objectのvtable・+8・仮想+8/+0x1A0、現在GameCoreのpath/base/size/disk SHA、EXE global Contextを読む。固定GameCoreの表・2関数が全て一致した場合だけ `matches_static_gamecore_context` を立てるが、world identityや破棄済みを意味しない。読取不能は診断のunknownとして残し、新たなメモリ書込やguard緩和はしない。
+
+[Windows x64 ABI](https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170)に従う入口の[RSP]を採り、EXE内の直前E8の5byteと相対targetを照合する。これは直接caller1段でありstack walkではない。F7110の既知caller245CEA/24B51E/24CAB6/24D1D2、F7830の24B5D5等と結ぶためのrawで、未知callerも成功した既知経路へ読み替えない。module load時には現在のmodule snapshotを記録し、unload時には保持した直前identityを記録する。OSの[unload通知](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-unload_dll_debug_info)のbaseだけから名前を推測しない。
+
+次の1ケースは既存 `order-fixed-load-reload.json` の9手順をそのまま使い、typed読取付きhelperだけ更新する。判定は(1)旧／新が固定CoreContext表に一致するか、(2)旧globalとの一致と直接caller、(3)同値no-opと実交換の区別、(4)Core unload/load identity、(5)stop DRと原命令完了。UI等の別型なら接続候補から除外する。同値pointer・同baseを世代には使わない。
+
+実接続候補はresident bootstrapのまま、Installを最初のAI/Gameplay初期化前、Closeを型とcallerが確定した旧world交換経路の本体前、Rebuildを旧world終了後かつ新worldの自然RESET/COMMIT前へ置く。F7110入口は0x159390より前、F7830入口は不一致時の解除本体より前という静的候補だが、Exit時に既にPlayerGovernorsが破棄されていれば遅い。その場合はCore側Init/Reset等の実world境界へ移す。InstallのF8577候補はfactoryより前だが最初のAIより前との実証は別に必要である。
+
+324 ABIはconfig40byte/version0x03240001/mode6、Close/Rebuildは自然owner RESET/COMMITで再公開する。親main-integrationの `tools/civ6-native-bridge-rs/src/windows/runtime.rs:525` でもGameCoreのPINを確認した。Close（:636）は許可を閉じowner状態を消して世代を進め、Rebuild（:652）は再Close後にproduct_activateする。Rebuildには新base引数もgatewayの付替えもない。従って現Mode6の最小接続は「固定Core imageをresident保持→旧world破棄より前にClose→同image上の新world初期化前にRebuild→自然RESET/COMMIT」の1案であり、「unloadした新baseへ現在のRebuildを呼ぶ」は未実装である。
+
+08のCore base unloadとresident PINによる寿命変更の整合は未実測。PINを外すだけでは実行中gatewayの復帰先を解放し得るため、このworkerで変更しない。新baseを許す必要が実証された場合だけ、324担当の回収・再配置契約が必要になる。次のtyped 9手順でCoreContext/callerを限定し、Closeが旧PlayerGovernorsより前という残条件を満たしてから、親のMode6導入1件へ進む。Install/Close/Rebuildの自動呼出し・製品成功はこのcapture-only差分には含めない。
+
+### 実機07後の4候補再点検とstop時の記録
+
+親の実機07（actual `d21`、observer source `d8591f10…1fb0`）は7/7手順と6判定が成功した。Binkの6語通知はfirst-chanceでDBG_CONTINUEとなり、second-chanceは0。原コピー `D:/CC/Work/todo880/order-fixed-07-artifacts` の13ファイルを `order-fixed-07-hashes.json` と再照合した。ただしloadの4候補は全hit0で、製品Close/Rebuild境界は未証明である。
+
+固定SHAのEXEとGameCoreをLLVMで再読した。候補は次の範囲に限られる。
+
+| 候補（全てEXE RVA） | 確認できた対象 | 証明できないこと |
+|---|---|---|
+| `0xF7110` / `0xF7830` | EXEの保持オブジェクト+0x450からContextの仮想+0x1A0・+8を呼ぶ。GameCore factoryの固定仮想表0xA101E8では、それぞれCore0x58FF70→0x07BBF0とCore0x8972D0（ret） | Gameplay Luaや324 runtimeが参照するnative objectの破棄そのもの |
+| `0x971B11` / `0x971CB7` | EXEの所有者+0x10をRCXとしてthunk0xDBD83C→Havok `lua_close` IAT0xF962F0へ渡す | RCXがGameplay stateであること。UIを含むEXE側Lua経路との区別 |
+
+GameCoreの直接importに `lua_close` / `lua_newstate` はない。これは間接呼出しの不在を意味しない。EXE0xF8E30→CoreのDllDestroyGameContext（0x58FD10）には内部オブジェクトの仮想+0x10とdestructorがあるが、その前のEXE0x29C2A0にも破棄callがある。現4候補を「Gameplay破棄4点」と呼ばず、export閉鎖を旧Luaより前と確定しない。再点検の命令・仮想表は `bootstrap-live07-pe-recheck.txt` / `.json` に記録した。
+
+07のrawは命名通知threadのDR一致を示すが、stop直前の保持済み116thread全体は記録していなかった。そこで既存cleanupのfreeze直後、TF解除・DR復元の前に `pre_restore_registers` を1行追加する。保持済みhandleごとに所有PID/TID、wait、exit、held、現在DR0〜3/6/7、期待site、世代、pendingを記録する。既存の比較条件は変更せず、不一致・終了済み・読取不明・pendingを分ける。記録I/O失敗でも復元を先に完了させ、出力失敗を結果へ残す。read-only記録は再armせず、ゲームへの新しい書込を追加しない。
+
+この採取は[GetThreadContextの停止thread条件](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadcontext)に従う。freeze失敗時はDR一致を判定しない。全件一致もstopの瞬間だけの証拠で、期間中の一時的消失・既に退出したthread・未処理CREATEイベントを覆わない。`coverage_over_interval=unknown` と `zero_hits_proves_unreached=false` を常に保持する。既存解析器はこの診断行を命令完了として数えない。
+
+所有OS子の既存lifecycle検査を共用し、停止した所有threadのDRを実際に0へ消去する否定ケースを追加した。実読取で不一致1件を検出し、採取後も0のまま（再armなし）、既存cleanupで原DRへ復元・子回収する。これは故障注入であり、Civ6のDR消失原因を再現したとの主張ではない。
+
+次の1シナリオは `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-reload.json` の9手順に絞る。07と同じrestart→保存load→Gameplay読取→load固定observer開始→退出前読取→LeaveGameに続け、同じ物理保存を再Load→Gameplay読取→stopを行う。元7手順のfixtureは変更しない。EXE0x24B51E/0x24B523→loader→factory→0x24B5D5の置換という静的順序は、Exit後に保持したContextを次Loadで交換する仮説と整合する。ただしその経路を実操作へ同定したわけではない。2回目のrestart・phase切替・新site・installは追加せず、既存同一PID/FILETIME・lease照合と上限300秒を維持する。native observer中の同process loadは親の既存capture-only入口で実行し、製品runtimeの拒否条件を迂回しない。
+
+DR不一致ならstop時の観測装置の欠測を実証したものとして保持し、自動再armやhit0からの未到達判定をしない。全一致かつhit0でも「未到達確定」とせず、この4点の再試行を繰り返さずCore側native ownerのworld load開始/終了への静的call連鎖同定へ戻る。Lua VMがprocess-lifetimeである可能性を残し、VM破棄をClose/Rebuild境界と決めつけない。hitが得られた場合だけ、そのRCX・時系列を324の旧native objectと照合する。通常Install/Close/Rebuildの製品接続は引き続き未達である。
+
+### 実機04のdumpで確認した6語通知
+
+追加一次証拠 `D:/CC/Work/todo880/order-fixed-04-windows-events.json` のApplication1000/1001はPID53272・開始FILETIME `0x1DD55D24B88AD90` と同runへ一致する。原dump `C:/Users/makhmeto/AppData/Local/CrashDumps/CivilizationVI.exe.53272.dmp` は85,471,399byte、SHA-256 `8588bdc1fc4146dea482e3a1340bc4c026913b8f524defb3d60302f78430b1a4`。SDK minidumpapiset.hのExceptionStream/ModuleList/MemoryList定義に従い読み取り、前後SHA不変を確認した。ExceptionStreamはTID29092、code0x406d1388、flags0x80、KernelBase+0xC41CA、NumberParameters=6である。
+
+ExceptionInformationは `[0x1000,0x7ffae1e09b28,0x71a4,0,0x7ffae1e204a0,0x7ffae1df5bfc]`。先頭3語のtype・名前pointer・対象TID29092・payload flags0は正規THREADNAME_INFOに一致する。名前pointerはdump内のBink module+0x49B28に属するが、そのページはdumpに含まれない。同timestamp・SizeOfImageの実ファイル `Base/Binaries/Win64Steam/bink2w64.dll`（SHA-256 `8c72bcb0a08f722a15afca6b0e3395e278b10e0b318b696182d5625a4375ee93`）の同RVAは `Bink IO\0` である。文字列は実ファイル由来であり、dumpからの復元と偽らない。
+
+同BinkのRVA0x35AE0は24byteの構造体をstackへ作る。0x35B98はR8D=6、0x35BA4はRaiseExceptionを呼ぶ。先頭24byteに対し48byteを引数として渡す実装で、後半3語は構造体外の値である。これにより旧3語限定候補a27fffeeがこの実通知を拒否することが判明した。新候補は3語または確認済み6語だけを認識し、後半3語を未解釈のrawとして保持する。先頭field・終端付き名前の実メモリ読取・所有thread・pending条件は変更しない。4/5語などを名前通知として推測しない。
+
+所有Rust子は3語・6語の両方で、旧first-chance透過→second-chanceと、修正first-chance継続→second-chanceなしを比較する。6語fixtureは配列全体を初期化し、実Binkの構造体外読み込みをテスト側で再現しない。04のownedゲームが命名例外でAPPCRASHしたことは確定したが、2プロセス目の正体は未確定、4load site hit0は境界不在の証明ではない。dump解析結果は `D:/CC/Work/todo880/bootstrap-live04-minidump-proof.json` に記録する。
+
+固定load実機04は5/7手順まで成功し、LeaveGame中に2プロセス検出で失敗した。原本は `D:/CC/Work/todo880/order-fixed-04-artifacts`。sequence120/121は同TID29092、code `0x406D1388` のfirst/second chanceで、旧observerは両方を透過した。4つのload siteはhit0、observerの復元・detach・回収は成功している。当初のobserver rawにはExceptionInformationがなく、payloadは未確定だった。追加dumpによる命名例外のAPPCRASH確認は上記のとおり。2プロセス目の正体と破棄境界は引き続き未確定である。
+
+Microsoftの[thread名通知](https://learn.microsoft.com/en-us/visualstudio/debugger/tips-for-debugging-threads?view=vs-2022)はpack8のTHREADNAME_INFOをRaiseExceptionへ渡す。固定EXE SHA `e7450823…d63` をLLVMで読むとRVA `0x98BF30`、`0xC896E0`、`0xF63060`にtype0x1000・名前pointer・thread ID・flags0を組み立て、3 ULONG_PTRで同コードをRaiseException IAT `0xF96788`へ送る命令がある。DWORD typeの上位は構造体paddingなので0を要求しない。これはゲームPEに実在する通知経路の証拠であり、04の例外callsiteの同定ではない。
+
+observerは3引数のWin64形式または上記の6引数形式の先頭3語、type0x1000、payload flags0、256byte以内に終端する読み取り可能な名前、送信元と対象の保持済み同所有process/thread・生存を照合した場合だけDBG_CONTINUEとする。対象IDのDWORD -1は送信threadを表す。未知・不正なpayloadは透過し、TIDから不明handleを再取得しない。ExceptionFlagsは0またはSDK winnt.hの `EXCEPTION_SOFTWARE_ORIGINATE=0x80` のみ許す。実OS子ではRaiseExceptionへflags0を渡しても受信レコードに0x80が付いた。[EXCEPTION_RECORD](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-exception_record)が区別する非継続bit等は許可しない。同じthreadにpending命令がある場合は完了を作らず停止し、別threadのpendingは変更しない。
+
+例外のraw記録にExceptionFlags、NumberParameters、ExceptionInformation（最大15語）、名前のbyte列と対象TID、拒否理由を追加した。継続statusを記録I/Oより前に決定し、通知受理後にdisk書込が失敗しても、そのstatusを既存cleanupへ明示して維持する。`order_capture_thread_name_real_second_chance_and_fixed_continue` は既存所有Rust子に同じRaiseExceptionを実行させ、旧first-chance透過→second-chanceを観測後に救済する対照と、修正first-chance継続を比較する。不正payload・pending台帳の検査は実イベントの否定用変形で、ゲームがその値を送った証拠にはしない。
+
+実機03（`D:/CC/Work/todo880/order-phase-03-artifacts`、actual `e5d0f16a`、observer digest `4042d7d53608461316402809f0325b75bdd13a4bb69829fbe8e948c7d0b69171`）は、保存loadとGameplay読取まで成功した後、phase切替で失敗した。TID41456はPID65240の生存handle（wait258、exit259）でheld=true、generation0、pending0だがDR0〜3/6/7が全0だった。終了thread仮説ではこの値を説明できない。結果はerror、復元・detach・子回収は成功として別に保持し、phase問題の解決やrun成功へ読み替えない。
+
+次の有限観測は `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-leave.json` を使う。7手順はrestart→同じ保存load→Gameplay読取→load固定のobserver開始→退出前の読取印→LeaveGame→stop。phase切替は0回、install/Join/支払い/保存の再送は0回。専用DLLは旧記録のc11255eb…c775を明示し、共有DLLを置換しない。親の既存runner/helperで実行でき、bootstrap workerは予約しない。
+
+load4siteの実hitとcompletion、RCXの旧context/Lua候補、TID・sequenceを退出操作の時間帯へ対応付ける。正常cleanupでもhit0を境界証明にしない。固定phaseでは観測外threadのDR保持全数を証明できないため、無hit・一部hitを「該当callなし」と断定しない。取得できた順序はLeaveGameの当該世代だけの証拠で、初回startup、Load/Continue/Quickload共通境界やGameplay Lua同定を証明しない。退出siteを得た場合だけresident Close候補を絞り、Rebuildは旧破棄後・新RESET前、許可公開は自然COMMITとする。loader/factory側の常時接続は別の未達条件として維持する。
+
+`order_capture_fixed_thread_lifecycle_retains_debug_registers` は既存の所有Rust子と本番thread登録を使い、CREATE_THREAD直後のreadback、新規threadの実関数入口、停止したidle時のDRを記録する。phase変更・レジスタ改変注入・EXIT遅延注入はしない。これはCiv6を模擬成功させる検査ではなく、Windowsによる一律初期化リセット仮説を限定的に比較する検査である。
+
+公式[CREATE_THREAD_DEBUG_INFO](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-create_thread_debug_info)は開始addressが近似であり得ることを記す。[SetThreadContext](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setthreadcontext)はOS管理bitの補正を記すが、後続初期化によるDR0〜3の一律消去を保証していない。全0を自分の設定とみなす比較緩和や自動再armは追加しない。
+
+`civ6-order-observer`をfeature `bootstrap-order`の明示指定時だけビルドする。実装は `tools/civ6-pe-rs/src/order_capture.rs`、`order_windows.rs`、`bin/civ6-order-observer.rs`。既存native-probe側はCargoのfeature/bin/dependency宣言とmodule入口だけを追加し、同じソースのDebugger、attach識別、thread HANDLE、CleanupGateを再利用する。既存governor/propertyの実機hardware禁止を解除していない。324 runtimeは変更していない。旧probe一式のcloneは0。
+
+```powershell
+$env:CARGO_TARGET_DIR='D:/CC/Work/todo880/bootstrap-target'
+& D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-probe-rs --features bootstrap-order --bin civ6-order-observer
+& D:/CC/Work/todo880/bootstrap-target/debug/civ6-order-observer.exe snapshot $exe
+```
+
+snapshotはPEをファイルとして読むだけ。SHA・opcode・実行sectionを確認し、ソースファイル一覧と各SHA、コンパイル時source digest、生成時checkout HEADをJSONに出す。コンパイル後にソースが変わっていれば拒否する。`live_runs=0`、未観測counterはnull、共通境界とGameplay同定はunknown。checkout HEADとcompiled source digestを分け、未コミット編集をHEADだけで同一と扱わない。
+
+`order-capture-contract` の既定Cargo検査3件は所有tempだけを使う。不正byte列を既存`disk_sites`と実CLIのsnapshot/summaryへ渡す拒否検査、manifestの構造検査、無効manifest・引数・未存在入力のCLI拒否を実行する。Civ6未導入時にreturn成功やignoreへ逃がす分岐はない。実物EXE/GameCoreの肯定照合は上記の明示 `snapshot <Steam EXE>`／`summary <Steam EXE>` が担い、Cargo件数へ加算しない。未導入・SHA不一致・source不一致はこの明示実行の失敗である。
+
+実PCではsnapshotの終了0、8 sites、`checkout_sources_match_binary=true`、`gamecore_identity_verified=true`、`live_runs=0`、各siteの未観測counter=nullを確認し、JSONと実行EXEのSHAを別receiptへ保存する。既存 `D:/CC/Work/todo880/bootstrap-phase-8ac3b847-snapshot.json` と `bootstrap-phase-8ac3b847-results.json` はその候補の実物照合として保持し、新CI候補の合格へ読み替えない。snapshotは起動・attachを行わない。
+
+| phase | slot 0 | slot 1 | slot 2 | slot 3 |
+|---|---|---|---|---|
+| `front` | loader復帰 `0xF8577` | factory call `0xF845D` | factory復帰 `0xF845F` | lua_newstate復帰 `0x972BBD` |
+| `load` | 保持解除 `0xF7110` | 保持変更 `0xF7830` | Lua close call `0x971B11` | Lua close call `0x971CB7` |
+
+新しいLua生成位置の根拠は、EXEの `lua_newstate` import IAT `0xF962B8` → thunk `0xDBD848`、直接call `0x972BB8`の `E8 8B AC 44 00`、復帰 `0x972BBD`の `44 8B C6`。RAXは返されたLua state、RBXは次の `0x972BC0`でstateを `+0x10`へ格納する所有オブジェクト。UI Luaを含むためGameplayだと断定しない。初期画面ですでにGameCoreロード済みでもfuture factory/newstateは捕捉できるが、attach以前の初回factoryはunknownのまま残す。
+
+### 親から渡すmanifestと実行契約
+
+`validate <request.json>`は構造だけを検査し、プロセス・lock・ゲームを開かない。`parent <request.json>`は現在のlive_chain子孫である親からのみ起動する。controllerのPID/FILETIME欄は親stub自身の値で埋め直し、出力と同じ場所へ新規 `*.request.json`を保存する。直接 `observe` を起動する場合は実際のOS親controllerの値を渡す。
+
+必須キーは `schema`=`todo880-order-v1`、`pid`、`created_filetime`、`chain_pid`、`chain_created_filetime`、`controller_pid`、`controller_created_filetime`、`source_dll`、`source_dll_sha256`、`output`、`max_seconds`、`max_hits`、`front_prefix`、`load_prefix`、`phase`。未知のキーを拒否する。PID/FILETIMEは正の整数、各prefixは1–4、秒数1–300、hit数1–256。source DLLは絶対パスと64桁SHAを照合して書換え・削除を防ぐ読み取りハンドルを保持する。DLLをロードもinstallもしない。
+
+親は標準入力pipeを開いたまま保持する。stdoutの `ready=true`後に対象操作を開始する。`phase load\n` / `phase front\n`を送った場合、`phase_ready`を受け取ってから次の操作へ進む。最大8回。切替はpending instructionがなく、全追跡threadを停止している時だけ行い、切替の欠測期間を `phase_gap`に記録する。上限は固定集合のprefix選択であり、任意address・opcodeは受け付けない。`stop\n`またはEOFは復元を要求する。現在のcatalog予約とは同時実行しない。このworkerはobserve/parentを実行していない。
+
+`order_identity`にPID/FILETIME、source DLL SHA、EXE base、初期Context値とGameCore baseを出す。`instruction_before`は元のRAX/RBX/RCX/RDX/R8/R9/RSP/RIP、thread ID、pointer candidate、単調増加sequence/capture_seqを記録する。保持オブジェクトの `+0x450`を読むが、owner IDやGameplay stateと断定しない。attach時のロード済みmodule列挙は `module_attach_snapshot`、ready後の実ロード/アンロードは別のeventとして記録する。
+
+### 元命令と例外の扱い
+
+breakpointはDR0–3だけに設定する。固定SHAと命令窓に加え、対象pageがMEM_IMAGE・同じEXEのAllocationBase・実行可能・非GUARDであることを照合する。`WriteProcessMemory`、注入、RIP飛越、NOP化、元命令のemulationは行わない。
+
+最初の停止は例外address=RIP=設定DR、DR7の実行breakpoint設定、対応DR6 B-bitを要求する。不明thread、先行breakpoint、TF、DRの不一致は拒否する。欠落DR6を推測でowned扱いしない。既存probeがDR6欠落を許容する経路は、この新しい実機未検証候補には適用しない。
+
+そのthreadへRFとTFを設定し、元命令をCPUに実行させる。次のfirst-chance single-stepでDR6.BSと静的な次のRIPを照合できた時だけ `original_instruction_executions=1`を出す。factory callの次RIPは固定GameCoreのexport `base+0x752D50`。Lua close callの次RIPはEXEのthunk `base+0xDBD83C`。**この1はcall命令1回を意味し、calleeの完了ではない。** factoryのcallee完了は別のfactory-return siteで観測する。Lua close完了はこの8点では証明しない。
+
+無関係な例外は `DBG_EXCEPTION_NOT_HANDLED`。ownedか曖昧な例外は正常detachへ進まず、既存critical cleanupに従って所有ゲームの終了を親へ要求する。正常終了では全追跡threadのDRを保存値へ戻し、照合してからdetachし、追加した停止回数を戻す。pending TFも除去する。observerのreader threadはjoinし、親stubはChild終了と復元済み `order_stop`の両方を確認する。復元済み記録のない子の終了では、保持中の同じゲームHANDLEの終了確認まで回収を続ける。ゲーム終了を確認できない失敗は成功receiptにせず、ハンドルを保持して通知する。観測に失敗しても復元とdetachを確認できた場合は、失敗を返してゲームを残せる。
+
+この順序は [Microsoft Debugging Events](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-events)、[SetThreadContext](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setthreadcontext)、[ContinueDebugEvent](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-continuedebugevent) の停止・継続契約に基づく。TF/RFの実配送と全thread復元は実機未検証。実測なしで将来の例外配送成功を宣言しない。
+
+Microsoftの [x86 Flags](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x86-architecture#x86-flags) はTFによる1命令後のSTATUS_SINGLE_STEPを説明し、[x64 Architecture](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture) はx86由来のflagsを示す。ただしWindowsが本対象のCONTEXTでTF/DR6をどう配送するかは未実測。固定条件に合わなければ拒否し、欠落bitを推測で補って反復しない。命令完了はDR6の原因bitがBSのみであることを要求し、混在を消費しない。phase切替では停止後の保留debug eventを旧phaseで処理してから再武装する。
+
+### 親が取る3種類の順序receipt候補
+
+1. 既知の初期画面でfrontを準備してから新規/Continueへ進む。初期module/context値、最初に捕捉したfactory、Lua生成を照合する。すでに完了していたloader/factoryは欠測。
+2. 既知のゲーム中状態でloadの準備完了後にLoad/QuickLoadを行う。保持変更と各Lua closeのthread・pointer・sequenceを記録する。
+3. 同じ所有セッションでLeaveGameを行い、必要なら初期画面でfrontへ戻して次のfactoryを取る。全操作の合流点・Gameplay同定は実データから判定し、phase外の呼出しを0件とはみなさない。
+
+これらは親の予約内で行う候補であり、workerによる起動・予約追加は0。product installやCOMMIT公開の受入とは別である。
+
+構造確認専用のmanifestは `tools/civ6-pe-rs/tests/fixtures/order-request-no-live.json`。PID・FILETIME・DLL SHAは明示的なテスト値であり、`validate`以外に渡さない。実機identityの成功を模擬する用途ではない。
+
+追加候補の別モデルレビューでは、親自身のchain確認、子の異常終了時の回収、DR6混在原因、phase切替時の旧イベント競合を修正した。最後の読み取り専用再レビューはMustなし。既存critical cleanupはstdout通知を持つため、「通知がない」という初回指摘は撤回された。実機のthread/例外配送は未検証のままである。
+
+追加候補の最終検査：共有cargo_gate・専用targetで `cargo test --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-probe-rs --features bootstrap-order --lib --test order-capture-contract order_capture` を実行し、純粋な否定テスト4件と実CLI/ディスク照合3件が成功。生成済みの同じlib test実行ファイルで `windows::tests::live_hardware_modes_are_rejected_before_attach_or_process_access --exact` も1件成功した。合計8件。いずれもゲーム起動・debug attachは0。request fixtureはvalidateだけに渡し、`manifest_valid=true, process_identity_verified=false`を確認した。形式・差分検査も成功。capture追加差分のClippyおよびworkspace全件は未実行。
+
+commit後の成果物は `D:/CC/Work/todo880/order-observer-snapshot.json`（全8sites、source一覧、生成時HEAD）、`D:/CC/Work/todo880/order-observer-summary.json`（短い同一性結果）、`D:/CC/Work/todo880/order-observer-manifest-validation.json`（構造確認）。いずれもRust CLIの出力をそのまま保存し、runtime counterを作らない。親stubの実際の起動・子回収・例外配送の検証は親の実機receiptに残る。
+
+## review19749944の終了プロトコル修正
+
+`order_protocol.rs`にChildGuardを追加し、入力・出力失敗、panic、通常STOPを同じ終了トランザクションへ集約した。STOPは一度だけ送り、復元済みreceiptとChild終了を待つ。最初の終了要求から絶対20秒を超えて期限を作り直さない。ready待ちは起動8秒、ready失敗の回収も起動から20秒以内。通常capture時間はmanifestの上限内であり、終了要求後の20秒とは分ける。復元が確認できない場合だけ同じ保持HANDLEによる対象終了へ進む。閉鎖要求のackも一度だけ送る。期限時に回収できなければ `cleanup_confirmed=false` を返し、成功とは表示しない。
+
+親のstdoutはすべて `io::Result` で受け、BrokenPipeをpanicにしない。panicが起きてもcatchとRAIIが同じ期限・同じChildハンドルでSTOP／復元／回収を行う。stdout読取threadは廃止し、OS pipeを有界で読む。入力readerは終了時にjoinする。
+
+debug exceptionの所有判定・継続状態保存を最初のログ書込より前に行う。ディスクへの書込が失敗してもowned例外はDBG_CONTINUEを保つ。復元済み `order_stop` はtraceへの書込失敗と独立して親pipeへ送る。証拠の保存失敗は明示し、復元失敗と同一視しない。
+
+失敗テストは自分が起動したRust helperを使う。unknown/空行/reader InvalidData/実OS BrokenPipe/panicは同じChildGuardでSTOPと資源削除・waitを検査する。helperの復元は `helper_resource_restored`、Civ6の復元は `native_debug_restored=false`として区別する。実hardware例外とOSファイル書込拒否の検査も、既存probeの自生成Rust helperだけを使う。固定Civ6 identityを偽装して通さない。ゲーム本体・保存ファイル・DLLは変更しない。console lease generation・Civ6 parent cleanup・native orderは実機成功前のfalse/unknownを維持する。
+
+review19749944の対象検査は13件成功（lib 10件＋実CLI 3件）。helper用subprocess入口1件は直接実行対象から除外し、各親テストから実際に起動した。unknown/empty/reader/BrokenPipe/panicの5ケースはSTOP1回・資源復元・子回収を確認し、強制終了0。実hardware例外の書込失敗ではDBG_CONTINUEとDR復元後、同じRust子を明示終了・waitした。6件の実測行は `D:/CC/Work/todo880/review19749944-owned-helper-receipts.json`。残存helperは0。Civ6の実機復元・lease世代は未検証。
+
+Clippyは実行したが、依存先native-admissionの`question_mark`2件、既存probeの`unnecessary_lazy_evaluations`/`too_many_arguments`/`single_match`/`collapsible_match`/`collapsible_if`計6件で未通過。今回追加部の2件は修正した。元probeのunion読取を含むため、自動提案の`then_some`置換は行っていない。既存native領域はこのworkerの書込対象外であり、Clippy全通過とは報告しない。親による修正版レビューは未受領。
+
+## EDEの許可境界と回収責任
+
+旧`done`と`attach_attempted`の組合せを廃止した。所有状態は `Ungranted / Granted / Attached / Restored / TargetExited`、実行状態は `Active / Finishing / CriticalRecovery / Reaped`で表す。20秒の終了APIが切れた場合の戻り値は`CriticalRecovery`であり、終了成功のreceiptを取得できない。ChildGuardが元のChild・pipe・対象HANDLEを持ち続け、明示回収またはRAIIでOS終了確認まで保持する。新規ポーリングdaemonは作らない。既存native critical cleanupの有界試行の後も未終了なら、OSの終了event待ちで同じ所有stackを残す。wait失敗もハンドルを解放する理由にせず、回収状態を保持する。
+
+attachは次の順序に固定する：子がSHA/opcode等の読取検査を終える → `attach_ready`を送る → 親が保留入力と出力エラーを処理する → まだActive/Ungrantedの場合だけleaseと元HANDLEのidentityを再照合 → 親がGrantedへ遷移してtoken付きGOを送る → 子が正しいGOとPID/FILETIMEを再確認 → `Debugger::attach`。tokenは親のPID/FILETIME・対象identity・source hashに結び付け、readyにはchain/controller/対象のPID/FILETIMEとobserver PIDを含む。GO送信結果が曖昧な場合はGrantedの回収責任を保持する。GO前のキャンセル、入力不正、readinessの遅延、同一性拒否では対象終了APIを呼ばず、子だけSTOP／終了／waitする。
+
+終了責任を検査するhelperもGO前には資源を作らない。GO前拒否とGO後復元を別々に実測し、部分的な終了失敗では20秒APIを期限切れにした後も、2つの自生成OS子が生存したまま保持されることを確認する。明示回収後にのみtarget/observerをwaitする。この検査の対象はRust helperでありCiv6ではない。
+
+ログ失敗の検査は本番と同じ`classify_then_record`を呼ぶ。実hardware eventを旧handle_eventで先に分類してから別のwrite関数だけを検査する形をやめ、共通関数が所有とDBGSTATUSを確定した後にOS書込拒否を発生させる。write側はDBG_CONTINUEが先に保存済みであることを検査するため、順序を逆にすると失敗する。固定Civ6 identityは偽装しない。
+
+追加費用、APIキー呼出し、新しい外部保管先、実機Civ6起動は0を維持する。
+
+EDE修正の先行対象検査は18件成功（lib 15件＋実CLI 3件）。GO前4ケースはpermit=false・対象終了要求0、GO後の入力／実OS BrokenPipeはrestore→reap成功。部分終了失敗では20秒API後も対象helperとobserver helperの両方が生存していることを確認し、明示回収で両方を終了・waitした。共通classify_then_recordの実hardware例外＋OS書込拒否検査も成功。結果行は `D:/CC/Work/todo880/ede-owned-os-receipts.json`、残存helper0。
+
+最後に追加した遅延ready拒否テストを含む再検査は `D:/CC/Work/todo880/ede-final-tests.log`／`.exit`。Clippyの通常実行（`--no-deps`、`-D warnings`なし）は終了0で、今回の書式指摘1件は修正済み。既存probeの6警告は書込範囲外として残し、警告ゼロとは報告しない。親の同一レビューセッションでの受入はまだ未確認。
+
+## GOとSTOPの同時受信・GO後の拒否
+
+本番とOS helperは同じbuffer付き`commands`読取と`Admission`を使う。GO＋STOPを1回のpipe writeで送った場合は、同じbatch全体を評価してattach前キャンセルとする。GO後のlease/identity再照合で失敗しても、`Admission`が対象PID/FILETIME・chain/controller identity・source hash・tokenを含む`NEVER_ATTACHED` terminalを送る。親は完全一致した通知だけを受理し、GrantedからNeverAttachedへ移して子だけ回収する。
+
+二段目の`ATTACH_ENTER`／`ENTER_ACK`を追加した。親がENTERを受信して所有状態をAttachedへ進める前に、子はnative APIを呼べない。親がSTOP中ならACKを出さず、Grantedは対象未変更として子だけ回収できる。子がENTERを送った後はNEVER_ATTACHEDを出さず、正しいACK後にnative-call-attempted状態を先に確定してDebuggerへ渡す。ACKとSTOPが同時なら、許可済みattach後の即時STOPとして復元する。ENTER後の失敗を「未attach」と偽って責任解除しない。
+
+`go-stop-tests.log`／`.exit`には、実OS子と本番と同じ一括読取経路によるGO＋STOP、GO後再照合拒否、ENTER後の偽NEVER_ATTACHED拒否を含む対象テストを保存する。Civ6実機観測は0、追加費用0。親レビュー前の成功宣言はしない。
+
+## 統合時点の照合と順序ログ解析
+
+新主担当の再開時に、writerの`c2d6700e`とbootstrap-integrationの`be17406a`で観測器一式の差分0を確認した。レビューセッション`01a10e39-1740-7d62-b952-4ffd4ab569dd`の最後の判定は、この差分のMust/Suggestion/Nit各0。親の `bootstrap-final-be17-focused.log`／`.exit` は対象22件成功（helper subprocess入口を直接実行する1件は除外）。`323613a3/main-integration`にはまだ観測器一式がないため、公開履歴の統合とbootstrap成果の統合を区別する。
+
+次段階として `civ6-order-observer analyze <capture.jsonl>` を追加した。ゲームやDLLに接続せず、取得済みJSONLを読む。source/PE hash、所有PID/FILETIME、連続sequence、時間、phaseと承認prefix、before/completedの対、元命令の到達先、最終counter・復元結果を照合する。factory call/returnは同じphase区間・thread・RSPで対応付け、phase切替を越えて結び付けない。静的snapshot、途中で切れたログ、古いPIDの終了通知、実行回数の自己申告は合格にしない。旧版identityにphase/prefix記録がない場合は明示エラーとなり、推測で補わない。
+
+このコマンドの終了0は**渡されたログ内部の整合性**だけを意味する。実機receiptの出所を認証するものではなく、mock JSONを実測に昇格させない。`runtime_activation_allowed=false`、`common_load_boundary_proven=false`を維持し、Gameplay Luaの同定・全ロード共通境界・runtime設置の不足を出す。テストの手書きJSONも構造検査fixtureとしてのみ扱う。
+
+親が常時接続へ進める順序は、初回Gameplayより前のInstall、旧オブジェクト破棄より前のClose、破棄後かつ新RESETより前のRebuild、その後の既存COMMIT CASによる許可公開である。解析結果から世代境界が実測できた箇所を絞り込み、324 runtimeへの本接続は親側で行う。ここではexport呼出し・自動install・実機操作を追加していない。
+
+### 再読込のRebuildを既存loader復帰へ移す修正
+
+再読込時の旧実装は、保持先の切替`24B5D5`でRebuildを呼んでいた。この位置は、既存の固定EXE経路ではContext取得`24B545`と仮想+60の呼出し`24B5C2`より後である。これらの内部から自然RESET/COMMITが出る場合、後からのRebuildが新状態を消す。この早期更新の実機発生は未実証だが、既存APIの再閉鎖と再武装という契約に対して遅い接続位置を使わない。
+
+修正では追加のフックを作らず、既存loaderの正常復帰`24B52D`で、ClosedのときだけRebuildを一度呼ぶ。Closedで対象外のcallerが来たときは、残留するXP2 moduleをそのloaderの同一性に使わず、状態を維持して通常処理へ戻す。Preparedでの初回caller検査は厳格なまま保つ。対象callerであることを確認した後、固定Coreのpath/SHA、module baseとfactory export、Context globalの0、保持オブジェクトが非nullかつ+450の保持先が0であること、Closeと現在のスレッドIDが同じ非0であることを確認する。成功後はOpenへ進むため、SetContextで二度目のRebuildを呼ばない。Closedのまま非nullの新ContextをSetContextへ渡す経路は拒否する。loaderのALが0ならClosedを維持し、API失敗もClosedのまま担当controllerの異常回収へ伝える。初回Preparedの設置経路とtraceの形式は保持する。Rebuildのkind6/7はcaller=`24B52D`、receiver=その時のholder、old/incoming=0を記録する。旧`24B5D5`の記録を新版の成功と読み替えない。
+
+この変更は既存runtimeのプロパティ許可の閉鎖と再開だけを扱う。保持先のreleaseはbyte書込であり、Closedという状態名は世界破棄やAI全処理の終了receiptを意味しない。EXEの正常経路で`24B523`→Context破棄呼出しがloaderより前にあることと、すべての非同期処理が排出されたことは別である。AI producerは親へ統合されておらず、この修正からAIの寿命や初回排出の成功を導かない。
+
+先行5件の純Rust検査は、Rebuildで旧状態を消した後にfactory相当の新状態を作り、二度目の呼出しでその新状態を消さないことを確認した。loaderの下位8bitが0の2回の失敗後だけ一度再開する経路、不正なcaller/thread/Core/Context/保持先の拒否、API失敗時の閉鎖保持、初回メニューと閉鎖途中の拒否も確認した。追審のMustを修正し、共通のcaller判定へ対象外loaderを通す6件目の検査を追加した。この最終追加分の実行結果は先行5件と区別して記録する。これらは共通の再開判断と注入したRust関数の検査で、Civ6のnative API成功や実行順を偽装するものではない。実機枠4/4・残り0を維持し、この修正版の実機受入は未実施である。
+
+最終版は関連6件成功・14件選択対象外、全対象Clippyの警告0、release終了0である。結果は`D:/CC/Work/todo880/post180-bootstrap-reload-fixed-{focused,clippy,build}-20261009.*`へ保全した。Sonnetの同セッション追審はMust0で、Window側の判定の呼出し順は読取による確認、共通判定は純Rust検査という範囲も記録している。trace DTO、Prepare ABI、初回設置、nativeの支払いAPIは変更していない。専用の新trace種別という提案は採用せず、境界拒否は既存のエラー処理と所有controllerの異常回収へ伝える。この検証を修正版の実機成功やAIの寿命証明に読み替えない。
+
+### 親runnerへ接続する契約
+
+親の `native_trace::Session` は最初の非ready行を拒否し、旧probe形式を検査するため、observer parentの前置通知をそのまま渡せない。親側でstart/phase/stopの小さいadapterを追加する。既存trace/bridge/runtimeと同時起動しない。
+
+- 起動: `civ6-order-observer.exe parent <absolute input.json>`。CREATE_NO_WINDOW、stdin/stdoutをpipeにし、stderrも排出する。live_chainから継承した `CIV6_LIVE_CHAIN_PID` と `CIV6_LIVE_LOCK_PATH` を維持する。
+- 入力: schema=`todo880-order-v1`、pid/created_filetime、chain_pid/chain_created_filetime、controller_pid/controller_created_filetime、source_dll/source_dll_sha256、output、max_seconds(1..300)、max_hits(1..256)、front_prefix/load_prefix(1..4)、phase(front/load)の15フィールド。ゲームのFILETIMEは既存pin済みhandleから取得する。chainも同一leaseの実値を使う。controllerはrunner自身の実値でよく、parent CLIが自身へ再束縛する。DLLは同sourceビルドの絶対パスと実SHAで、installを要求しない。
+- 入力を `order.input.json`、outputを `order.jsonl` にすれば、parent生成の `order.request.json` と衝突しない。既存outputを使い回さず、1実行1組にする。
+- `attach_ready` / `ATTACH_ENTER` は前置通知。GO/ENTER_ACKはparent内部で処理し、外側runnerから送らない。`{"ready":true,"pid":1234,"phase":"front","capture_only":true}` が初期ready（PIDは説明例）。stdinを開いたまま保持する。
+- `phase load\n` または `phase front\n` を送り、同PIDの `{"phase_ready":"load","pid":1234}` を待ってから操作する。phase切替は最大8回。
+- stopは `stop\n` を1回送り、同game PID/FILETIMEの `order_parent_receipt` を読む。正常観測終了は child_reaped=true、cleanup_confirmed=true、restored=true、child_exit_code=0、error=null。その後parent自体の終了0をwait/reapし、readerを回収する。復元の個別証拠は先行する同identityの `order_stop`。
+- never_attached=trueは未接続での回収であり復元成功にしない。critical_recovery_retainedは回収責任継続。20秒経過だけでparentをkill/dropしない。標準出力断を成功扱いしない。native_order_observedとconsole_lease_generation_verifiedは実測受入前false。
+
+親は既存ビルド対象の `civ6-startup-diagnostics.exe` に `order-parent <input.json>` と `observe <request.json>` を追加する。autotestのnative-probe依存でbootstrap-orderを有効にし、parentはJSON Valueを `windows::order_capture::parent`、observeは `Request::parse` の結果を `windows::order_capture::observe` へ渡す。parentの関数引数はRequestではなくValue。同一EXEを `observe <generated request.json>` で起動するため、子側の入口名を変えない。GO/ACKをadapterで再実装しない。
+
+この方法ならlive_chainの `driver::prepare` が必ずビルドするdiagnosticsを再利用でき、live toolingへの追加build処理は不要。compiler-artifactのmanifest_path、target.name、executableの既存確認を維持する。worker検査用の別名 `civ6-order-observer` は引き続き共有cargo_gate経由でbuildできる。
+
+```text
+D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manifest-path <worktree>/tools/Cargo.toml --target-dir <dedicated target> -p civ6-native-probe-rs --features bootstrap-order --bin civ6-order-observer
+<worktree>/tools/target/release/civ6-startup-diagnostics.exe order-parent <absolute order.input.json>
+```
+
+実行器はdiagnosticsのSHA、wrapper・runner・scenarioを含むソースの識別値とcheckoutパスをdriver.jsonへ保存する。候補コミットは親の別検証記録へ残し、観測記録だけでGit候補を認証したとは扱わない。helper本体は同一性確認より前から子の回収まで読取り専用で保持し、途中の差し替えを防ぐ。Steamフォルダへの配置や共有DLLの置換は不要。
+次の1実機は、同じowned lease下でfront ready後に初回factory/Lua初期化を取り、load phase_ready後に旧context/Lua破棄を取る。既にfactoryが通過した状態なら初回未観測と記録する。4slotの非選択phaseは欠測であり呼出し0としない。初期receipt前に解析器や自動Installを追加しない。
+
+### 固定AMD版chainからの観測
+
+観測器のchain許可対象は標準 `D:/CC/Tools/civ6-live/live_chain.exe` と、追加の固定 `D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe`（SHA-256 `267ee55fdbe47e507bbefcbb8154780bb2a4070412802f923e0762764d7dc82b`）だけとする。AMD版は開始時に読み取りhandleで書換え・削除を防いでhashを検査し、親／子それぞれが回収完了まで保持する。PID/FILETIME、生存、標準lock、30分lease、祖先関係と継承PIDの検査は維持する。共有lock検査は期待imageを受け取る内部関数へ分け、既存probe呼出しには従来imageだけを渡す。任意pathをrequestに追加せず、548の別コピーも拒否する。固定AMD版のdisk hash検査は起動・実機観測ではない。
+
+### 324 ABIの後続接続条件
+
+`D:/CC/Work/todo324/runtime-bootstrap-abi.json`（source `7d6a1628`、2026-10-06 09:43:37）を参照する。Install configは40byte・align8・version `0x03240001`・mode6、入力trace address/sizeは0。Closeは旧native object/Lua破棄前、Rebuildは破棄後かつ新RESET前。COMMIT後Rebuildは状態を消すので行わない。未接続のABIラッパーは今回追加せず、最初の実機順序receiptから親のnative境界実装を進める。
+
+### 2026-10-07: 命名通知の修正と同一プロセス再読込
+
+実機04の所有ゲームは、Windowsの障害記録と同じPID・起動時刻のダンプにより、`0x406d1388`の命名通知で停止したと確認した。Binkの引数6語は、Win64の通知先頭24byteと余分な3語からなる。余分な値を意味付けせず、型・所有スレッド・終端付きの名前を照合した通知だけを処理する。ダンプに名前のメモリページはなく、「Bink IO」は一致するインストール済みDLLからの読取りである。原ダンプの文字列として扱わない。
+
+修正後の実機07は固定ソース`d21cff32`で7手順・6判定が成功した。保存の読込後にload側の4観測点を設け、メニュー退出後に復元・回収した。命名通知はfirst chanceで処理し、同じ例外の再通知は0。4候補のhitは0であり、破棄境界の証明にはしなかった。
+
+実機08は`82cfdf9e`で9手順・6判定が成功した。同じobserverと所有PID・起動時刻を保ち、メニュー退出後に同じ保存を再読込した。次の読込中に`context_release`2回と`context_replace`6回を同じスレッドで記録した。Lua破棄の2候補は0回。復元前の115保持スレッドは全て期待DRと一致し、不一致・不明・保留命令は0だった。復元・子回収・ゲーム終了も確認した。この終了時の照合だけで全観測期間の連続性を保証しない。
+
+根拠は`D:/CC/Work/todo880/order-fixed-07-proof.json`と`order-reload-08-proof.json`、それぞれの`*-artifacts`と全ファイルのSHA照合表。保持slotの旧値から新値への変化は観測したが、Release呼出しが実際の最終参照解放か、そのslotがGameplay/worldそのものかは未確認である。次は実呼出し元とオブジェクトの一次コードへ結び付ける。自動Install、世代Rebuild、AI自身の支払い、製品の同一プロセス読込の合格へ拡張しない。
+
+### 外側4182B0の入口・RETと自然な終了を同じ窓で観測する
+
+共有ToDo2193の一次調査とCHAININFOを受け、既存のcapture-only観測器へ`native-outer`を追加する。4slotはCoreの4182B0（40 53）、41885F（C3）、418419（C3）とEXEのF7110（40 53）。中間fragment418427を入口にしない。4182B0から418860までの固定PEを全範囲で読み、42本の直接分岐は範囲内、正常RETは418419と41885Fの2本と照合した。418403の呼出し後は418410から早いepilogueへ進むため、後半のRETだけでは全正常復帰を観測できない。これは固定ソースの直接経路であり、間接callee、SEH退出や全発行者の寿命を証明しない。
+
+同じ15fieldのrequestでphase=`native-outer`を指定するか、既存Sessionへ`phase native-outer`を送る。通常のシナリオ操作も同じ名前を受け付ける。初期attach時にCoreがロード済みであることが必要で、Coreのbaseが変化した後はこのprofileへ切り替えられない。別phase中に旧Coreがunloadされ、同じbase・path・SHAで戻っても再利用を拒否する。native観測中のCore unloadは異常として復元・回収へ進む。任意のアドレス入力、native関数の省略、未知フラグへの書込み、runtimeやAI候補e273の有効化は加えない。
+
+Lunaの固定8cレビューはMust1を指摘した。接続前に取得したCoreのbaseは、GO待ちの間に変化できる。そこでnative観測点の設定前に、所有debug eventでプロセスが停止した状態の現在のCore・base・path/SHA・全4命令を照合する。attachの最初のthread設定を含め、thread作成eventとDLL snapshotで照合し、不在や不一致ならdebug registerを書く前に拒否する。phase切替も、既存の全thread停止とpending event排出が成立した後にもう一度照合し、停止前の確認だけで設定を許可しない。これは実装した再照合であり、実ゲームのGO待ち中reload検査は未実施である。
+
+EXEとCoreのRVAを混ぜず、各々の固定SHA・命令bytes・実行可能なimage pageを照合する。RET直前にRSP上の戻り先を読み、その一命令を実行した後のRIPと、解析時のRSP+8を照合する。原関数の復帰先へ勝手に分岐させず、既存のTF観測・例外転送・debug register復元・所有子回収を使う。snapshotもCoreの追加3命令を静的照合する。
+
+解析は同じarmed window・TID・スレッドの実追跡世代・RSP・戻り先で入口と各RETを対応させ、受け手候補のRCX、生のRDX、どちらのRETを通ったかを記録する。スレッドの追跡世代は所有debug eventごとの保持handleに採番し、同じTIDを後で使う別スレッドのRETを混ぜない。Context解放の時点で同じ窓の未復帰入口があれば記録し、別スレッド、戻り先の不一致、観測phaseの空白、片側欠落を成功へ補わない。古い8siteの記録は従来の範囲で解析し、新記録は11siteの終端目録を要求する。
+
+このprofileは外側4182B0の具体的な観測である。63E160の自然な終了、35800・35F70・36180・383E0・39650・39920、保留発行の公開と同じsetのWaitは同時には観測しない。解析結果の全発行者網羅・同set Wait・native全排出・runtime有効化は必ずfalseを維持する。観測0件、局所的な復帰、停止時のregister一致を全排出の根拠にしない。原7条件0/7と未マージを保持し、修正版の関連検査・別モデル・実機観測は次の検証に残る。
+
+### GPU禁止中の観測を標準チェーンのCPU描画へつなぐ
+
+過去の別copyのWARP補助実行器は、旧START通知、旧チェーン実装と観測器の実行image許可条件が現在と異なる。今回の観測へ代用しない。標準`live_chain.exe`の`--software-rendering`は、通常の実共有lockを取得し、ゲームの終了を確認した後でだけAppOptionsのDeviceID=140、AllowSWRenderer=1を設定する。描画以外の設定は行単位の元bytesを維持する。実際のCPU描画は同実行のRenderer.logのMicrosoft Basic Render DriverとDeviceID8cで照合し、このオプション名だけを観測成功の根拠にしない。
+
+元設定は実行器のフォルダのsoftware-renderer-original.binへcreate_newとsyncで保存してから、同期した一時ファイルの置換で変更する。共有lockの読取handleはDELETEを許可せず、ゲーム終了後の元bytes復元・照合より前にそのlockを消せない。失敗でも元設定を保持し、次の標準実行はCPU指定なしでも同じlockを取得し、ゲーム終了後に中断分を復元してから進む。重複したDeviceID欄、保存先の失敗、所有token不一致はゲーム起動へ進めない。cleanup-onlyとの併用と、共有lockを持たない内部mainからの指定を拒否する。Windowsの元設定読取中の置換失敗も、元bytesを失わず解放後の復元を確認する検査へ加えた。
+
+実GPU・Civ6起動、標準実行器の配備とこの修正版の検査はまだ行っていない。標準の待ち列・共有lock・時間上限・他担当への30分以内の譲渡は維持する。CPU描画の追加は外側の終了契約や元7条件の達成を証明しない。
+
+### 2026-10-12：CPU描画設定を使った通常一回の外側frame観測
+
+PR143の通常一回隔離をPR86のCPU設定復旧へ統合し、既存996のHotseat実保存先保護・実queue/lockによる順番・所有reader子の回収も受領した。統合ソース142c1d6fはcc-live174成功（既存の子入口skip2）、保存helper関連14成功、Clippy成功、限定した連続AstraレビューMust0である。標準chainへ同sourceのA7007703…を配備し、配備の一時停止を解除した。旧候補の171/172/198/1840件をこのsourceへ付け替えていない。
+
+元COS1を一度読み、自然な1ターンと正式なメニュー退出を観測した。7手順・5判定が成功し、PID478272/FILETIME134362178391476325、同じTID153248/追跡thread世代89で4182B0の入口24件と正常RET24件が対応した。孤立RET、未復帰入口、解放との重なりは0。21組の復帰先はCore RVA413FEF（call413FEA、EDX=FFFFFFFF、RCX候補21）、残り3組は41A41A（call41A415、EDX=0/1/2、RCX候補1）だった。固定CoreのLLVM照合では両E8とも4182B0を呼ぶ。413FEF後の処理と41A41A後の418860へのtail-jumpは残るため、このRETをcaller全体の退出と扱わない。
+
+早期RETとContextReleaseは0hitで未観測である。24組の対応からreceiverの型・world寿命・発行停止・保留公開・同じjob setのWait・他6domainの全退出を推定しない。native全排出・runtime有効化はfalse、候補e273は無効、元7製品条件0/7のまま。register復元、114thread handleの閉鎖、reader join、親の回収が成功した。元auto4本・AppOptions・COS1のSHA一致を再照合し、各復旧recordと自分のmaintenanceを残していない。
+
+原記録16ファイル（約1.96MB）はD:/CC/Work/todo880/native-outer-captured-142c-20261012へ全SHA一致で保全し、捕捉結果・復元照合・原ハッシュ台帳を同880に保存した。新しい親や引継ぎToDoは作らず、通常の発行停止・完全な外側frameの終了契約へ戻る。
+今回のRenderer.logは原記録へ保存する前に、03:50の次担当の起動で更新された。CPU用設定の適用と元設定の復元は確認できたが、今回の実際の選択adapterは未確認として扱う。次の観測では共有枠の解放前に同じPID/作成時刻・ログの時刻へ対応したRendererを保全し、後の実行のログを流用しない。
+
+### 2026-10-12：自然なshutdownと同じmanagerのWaitを分けて観測する
+
+24組の4182B0復帰では後続callerの退出を確認できないため、既存観測器に固定4slotの`native-shutdown`を追加した。固定Core SHA324c51e9…e98cのLLVM走査で、63E160は`40 53`、4A1150は`48 89 5C 24 10`、4A1191は`E8 2A 11 4F 00`（9922C0へのcall）、4A1196は`40 88 B3 AC 38 00 00`と照合した。旧案のcall bytes`E8 2A E1 04 00`は実物と違うため採用しない。
+
+CALLのsingle-step完了はcalleeへの到達であり、Waitから戻ったという結果にしない。復帰位置4A1196で別の原命令を記録し、同じphase区間、TID、thread世代、RSPに属するentry/call/returnだけを結ぶ。固定prologueのpush RSIとsub RSP,30による38byte差をentryに対応させ、entryのRCX、call/returnのRBX、callのRCX=manager+400を照合する。不一致、別thread世代、phase切替、復帰欠落を成功へ付け替えない。world+250とmanager+410は読取結果とエラーを原記録に残すだけで、型や寿命を認定しない。
+
+Coreの途中unload、SHA/命令不一致、未復元register、親子の回収失敗は従来どおり拒否する。既存のfront/load/native-outerと旧捕捉記録の解釈を保持する。通常runtimeを有効化せず、未知のflag書込と原関数の省略を加えていない。
+
+検査は観測器105件成功（従来helper入口1件は対象外）、利用側のnative_orderとscenario_fixtures78件成功・省略0。Clippy初回のmatch記法の警告を修正し、両crateの全targetが警告0で終了した。これらは今回の有限観測機能の検査で、製品の7条件の実機成功ではない。
+
+次の有限試験は元COS1をSHA固定で読み、ターン・支払い・任務を進めず正式なメニュー退出を観測する。観測器を復元・回収してから同じプロセスで同じ保存を読み戻す8手順を準備した。4slotは保留仕事の公開、全producer、同期の外側完全frame、Context解放を網羅しない。Wait候補の対応が得られても全排出・本体有効化・製品受入の完了はfalseを維持する。準備したシナリオを実行済みとは扱わない。
+
+### 2026-10-12：枠内の描画ログ保全とmainの終了資料を統合する
+
+main79241bd7の待機順と後始末資料保全を、原880の同一HANDLE・FILETIMEによる終了確認と原996の実受付・占有に統合した。担当中というToDo表示だけでは、ビルドやレビュー中の担当にゲーム枠を予約しない。実際の待機列内の順番、待機前のready予約、30分の公平処理を維持する。mainの古い「queue離脱後もdoing担当を優先する」検査は、原996の実受付方針へ整合した。原実装のassigned優先を戻さない。
+
+新しいrenderer_evidenceは、共有lease内で原Renderer.logのbytes、SHA-256、元mtime、取得時刻と既存driver・chain資料のPID/FILETIMEをcreate_newで保存する。成功だけでなくdriverエラー・panic・通常の後始末にも接続し、証拠保存のエラーで元のdriver exitを上書きしない。世代不一致、時刻の範囲外、読取中の変化は帰属不明として残す。設定DeviceID、原bytesの保存成功だけを実adapter選択の成功にしない。ハッシュは既存のsha2を使用し、自作の暗号演算を除いた。
+
+統合時の同名テストmodule衝突は両方の検査を保持して分離し、process読取エラーの文脈を復元した。原失敗ログを残し、実行器の191件が成功（従来の専用子入口3件は対象外）、全target Clippyは警告0。固定した差分を別モデルが確認しMust0だった。新標準への配備とこの修正版の実機結果は、まだ成功として記録していない。
+
+### 2026-10-12：準備期限超過の原記録とCoreファイル保持への変更
+
+05df8417の8手順を標準chain38C8608C…で一度実行した。再起動・元COS1のSHA固定読込・ターン1の読取は成功し、4手順目の観測器開始でready期限を超えた。shutdown・Waitの命令は0hitで、メニュー退出と同一プロセス読込へ進んでいない。親の失敗は`ready deadline before GO`。原JSONLは163イベント（102本のthreadと61個のattach時DLL通知）を6.193秒で処理していた。停止時点だけのレジスタ一致を、未観測期間の全退出へ拡張しない。
+
+観測器は102本の保持handleを閉じ、レジスタを復元し、readerをjoinした。親も子を回収した。標準chainは正常なメニュー終了の照会がtimeoutした後、同じゲームを終了してSteam解放を記録した。元autosave30ファイル、AppOptions、COS1のSHAが全一致し、復旧記録とlockの残存は0。原23ファイルを所有c9e04845…へ全SHA一致で保全した。今回のRendererは原bytesと同じPID/FILETIME帰属を保存でき、Selected GPU deviceのMicrosoft Basic Render Driver、DeviceID8cを確認した。これは描画選択と復元の証拠で、shutdownの成功ではない。
+
+原コードは各threadのarmと各DLL通知でCoreの完全ファイルを再hashしていた。期限消費を避ける修正として、GO/attach前にSHAを検査し、write/deleteを拒否したFileをDebuggerへ保持させた。停止状態、実Core lookup、path/base、全4地点のlive命令、Core unload拒否と従来の復元手順を維持する。期限を延長せず、通常runtimeを有効化しない。AMDとCore双方で実OSの書込・削除拒否と解放後の書込を確かめた。実Core missingの旧検査は変更せず、実lookupの後に保持不在を拒否する順序を保った。
+
+修正版は観測器105件成功（従来子入口1件は対象外）、利用側を含む全target Clippy警告0、release3、別モデル追審Must0。修正版の実機はまだ未実行である。前の失敗を保存し、同じ未変更候補は再送しない。製品7条件0/7、全domain・保留公開・同じsetのWait・完全な外側frame退出とruntime有効化の未達を維持する。
+
+### 2026-10-12：Core保持修正の準備成功と終了時のプロセス判定
+
+1e2e063aを新しい記録名で一度実行し、観測器開始は3.444秒で成功した。実際のattach列を処理した準備通知は0.635秒で、前の固定期限超過を解消した。ターン・支払い・任務・RNGの進行は0。8手順中4手順が成功した後、正式なメニュー退出を送ったACK trueが原Lua.logへ記録され、その後の待機がゲーム2プロセスの判定で停止した。元の退出要求は再送していない。
+
+shutdownとWaitの4地点は0hitで、待機・全排出の成功へ数えない。原debug_exceptionは正常に資格を照合した初回system attach breakpointであり、任意のnative例外を握り潰した結果ではない。観測器は99本の保持handleを閉鎖し、レジスタ復元、reader join、親の子回収が成立した。標準終了処理は作成時刻を確認できず原exit1を保持して止まった。
+
+ゲームとchainの不在を確認した後、標準cleanup-onlyが原autosaveと設定を復元した。Singleの原4ファイルとCOS1はSHA一致。後続ToDo996が06:02に正規leaseを取り、Hotseatの原autoを隔離しているため、こちらはその保存先を追加操作・復旧しない。残りの原保存の照合はその枠解放後に行う。原runを所有56888c42…へSHA一致で保全した。
+
+現在のプロセス判定は名前のsnapshotに依存し、失敗記録へ候補PIDが残っていない。終了済みの保持process、列挙後の消失、本当に同時に存在した別processを、この資料だけでは区別できない。次は同じ880で有限の実OS回帰と候補の終了・作成時刻の診断を追加する。未知の候補を不在へ付け替えたり、元の退出要求を再送して結果を作り直したりしない。製品7条件0/7と未マージを維持する。
+
+### 2026-10-12：終了済み候補を生存へ数えないOS回帰と候補診断
+
+固定74feecb0で、終了前に得た実OSの一覧を、子が終了した後に検査する2ケースを追加した。保持handleが残る終了済みの子と、列挙後・検査前に終了する子は、旧コードで2件とも失敗した。この回帰は名前だけの古い一覧を生存判定に使う誤りを示す。原run2の2プロセスをこの競合だと断定する根拠にはしない。
+
+7064edf4は候補ごとに保持した同じHANDLEで終了signal、画像名、FILETIMEを照合する。signal済みか既に消失した候補だけを除外し、照会拒否・不明・作成時刻欠落は停止を維持する。実際の2つの生存processを1つへ縮めない。標準終了側も元の同一HANDLEの終了・絶対期限・driver exitと原本復元を保持する。
+
+候補PID、作成時刻、終了状態と照会エラーを記録する。PIDが別appへ再利用されていても、別app名とフルパスを記録へ出さず、画像の一致可否だけを残す。原の退出要求と旧保存を再送・書換えしていない。
+
+新しい4ケースが成功し、利用側の関連265件は省略0で成功、共有実行器193件は成功（従来の専用子入口3件は対象外）。両crateの全target Clippyも警告0。別モデルが固定差分と診断のマスクを確認しMust0だった。修正版のrelease、標準配備と原未達の実機条件は別に確認する。原7条件0/7・未マージを維持する。
+
+### 2026-10-12：原Windows記録からハードウェア観測のクラッシュを確認
+
+ffebb120と標準759A453F…で新しい記録名を一度実行した。再起動・COS1読取・ターン1読取・観測器準備の4手順が成功し、準備は0.950秒だった。メニュー退出のACK trueの後、実ゲーム607180/FILETIME134362280377956711のほかに同名176648が列挙された。後者はOpenProcessでエラー5となり、PID・照会エラーを保存して停止した。未知の候補を除外したり、退出要求を再送したりしていない。
+
+Windows Application Error 1000とWER 1001を確認したところ、06:36:09の実607180（hex943cc）はGameCore_XP2_FinalRelease.dllのRVA63E160で例外80000004によりクラッシュしていた。前の実211016（hex33848）も05:54:17に同じRVAと例外で落ちていた。このRVAは今回の最初の固定HW観測点である。監視JSONLには該当SINGLE_STEPイベントがなく、正常system attach breakpointとmodule通知、その後の復元だけが残った。候補列挙の修正だけではこのクラッシュを解消していない。
+
+同じハードウェア観測の再実行を停止した。次は所有するOS fixtureで例外配信経路を調べ、実ゲームではthreadの状態を読むだけのauditへ変更する。デバッガーへ通知しないthreadの可能性は、実測前に確定とは書かない。状態照会の一次資料は[MicrosoftのNtQueryInformationThread](https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntqueryinformationthread)と[System InformerのTHREADINFOCLASS](https://github.com/winsiderss/phnt/blob/master/ntpsapi.h)。実ゲームのthread hide設定変更・解除や、新しい機能hookを足して結果を作り直さない。
+
+原29ファイルは所有2a51c893…へ全SHA一致で保全した。標準の後始末がゲームの不在後に原本を復旧し、原auto30、AppOptions、COS1のSHAが全一致した。lockと復旧待ちの残存は0。本ジョブの実機は3回を保持し、元7条件0/7・未マージを維持する。
+
+### 2026-10-12：所有子のhidden負例と非介入のthread audit
+
+e7114ed1に、所有するテスト子だけをhiddenにするOS負例と、class17のBOOLEANを読む照会を追加した。visibleからhiddenへ変更した同じ所有threadを照会し、DRを書かずに拒否する検査が成功した。別の負例では所有hidden threadへHW点を置くと、SINGLE_STEPイベントがデバッガーへ届かず、子が80000004で終了した。初回はexit debug eventだけを待って30秒で失敗したため、同じ所有process HANDLEの終了signalとGetExitCodeProcessを照合する検査へ修正した。イベントを捏造していない。この再現は原ゲームのhidden状態の認定ではなく、同じ症状を起こすOS経路の証拠である。
+
+実ゲームのDR捕捉は初回visibleでも拒否する。途中のhidden化を初回falseだけで排除できないためであり、hidden threadを飛ばして全producerの観測を主張しない。新しいCLI audit-thread-visibilityと診断action audit_thread_visibilityは、標準lease、所有PID/FILETIMEとthread ownerを確認して状態を読む。DebugActiveProcess、DR・target memory書込、suspend、実ゲームへのhide setter、DLL注入は0。専用audit receiptにunknownと不完全なsnapshotを残し、捕捉成功やroot、新世代、再構築、全排出、有効化の許可を与えない。
+
+別モデルのMust1は、正常起動後に解放されたstartup leaseへの依存だった。診断用のread-only RecoveryLeaseを別に取得し、取得直後、PID照合後、helper完了後に保持handleで検証する形へ修正した。実SystemBackendの解放後経路の回帰を追加し、関連13件成功・省略0、追審Must0。観測器全108件成功（従来専用子入口1件は対象外）、利用側関連81件成功・省略0。両全target Clippy警告0、release3を確認した。範囲が重なる81と13は合算しない。
+
+次の実機は元COS1を読み、非介入のauditと正式メニュー退出、同じプロセスの読込を確認する。元3実機の支払い・任務・退出要求を再送しない。全7製品条件は0/7、未マージのまま維持する。
+
+### 2026-10-12：読取証明と終了処理のHANDLE共有範囲を分ける
+
+0632f609の読取監査シナリオは、最初の再起動段階で共有違反32となり、ゲーム起動・監査は0だった。SDKのRecoveryLeaseは更新される公平性フィールドを許容しながら、file IDと取得者のPID/FILETIME/tokenを保持するように変更した。短いsnapshotの間だけ書込を拒否し、開始前の取得時間も元の絶対期限から消費する。初回の属性読取だけのpinはWindowsで削除拒否にならず、OS検査が3成功2失敗となった。READ_DATAとShareRW、denyDELETEを使うc65b254dでは同じ5ケースが成功した。利用側の関連296件・省略0、Clippy・release・別モデルMust0も確認したが、標準実行器の終了処理全体が互換になった証拠ではない。
+
+c65b254dの次の受付も、ゲームを起動する前にSteam終了同期の共有違反32で停止した。起動・監査・ExitToMenuの送信は0で、原stderrを保持する。前の受付と合わせて未起動2件、本担当の実ゲーム3回を区別する。09:09の確認で元自動保存30件・COS1・AppOptionsのSHAは全一致、game・chainと復旧待ち記録の残存は0だった。旧失敗の根因を、この復元結果だけで確定しない。
+
+標準実行器のprepare-closeとouter-cleanupはhelper実行中もDELETE accessのHANDLEを保持していた。所有するOS子で旧構造を再現し、SDKと同じREAD_DATA/ShareRW/denyDELETEの読取がerror32で拒否され、成功を要求する回帰は0成功1失敗となった。修正23c10c25ではhelper中に読取専用のfile ID・取得者保護を保持し、helperと復旧が完了した後の最終解放だけDELETE HANDLEを取得する。最終取得時も同じfile IDと取得者を照合し、置換や取得者変更を解放しない。原の共有違反がこの競合だけから生じたとは、配備後の観測前に断定しない。
+
+修正初回のString型変換漏れを直し、OSの読取共存・旧拒否再現・最終読者待ち・取得者変更拒否は成功した。全件診断は197件中191成功6失敗、従来の専用子入口4件は対象外だった。復旧失敗・正常終了・panic・書込共存に関する失敗を同じ担当で修正中であり、全件成功や配備成功へ数えない。
+
+公開c65b254dのCIはUbuntuとWindowsで、操作一覧44件に対して旧期待43件のままのbootstrap統合検査が失敗した。操作数と重複なしの確認を44件へ更新し、読取監査の登録確認を追加した。対象8件が省略0で成功した。新CIの成功は未確認であり、元製品条件や本体の終了契約の証明を置き換えない。
+
+6件の診断失敗には、出力失敗を実終了失敗と混同する経路があった。cleanup-onlyの未着手拒否は、復旧記録もない場合だけ今回取得した枠を戻す。実復旧に失敗した場合、元復旧記録が残る場合、取得者・file IDが変わった場合は解放しない。公平性の更新を許し、取得者の不変と削除拒否を実OSで検査するよう旧期待も整合した。
+
+初回修正後に残ったpanicと別モデルのMust1は、正式退出の応答が失われた後の診断出力で終了確認を中断する経路だった。全ての終了診断出力を捕捉して元エラーを保持し、退出要求を再送せず実終了、同じ世代の同期、原本復旧を完了する。準備前closeも実復旧の確認結果を保持し、出力だけの失敗を理由に終了要求を再送しない。新しい失応答・出力失敗の回帰は旧版0成功1失敗を確認し、修正版ではlost/nonzero応答と出力エラー/panic、復元成功/失敗の各組合せで一度の要求と原復旧記録を検査した。最初に欠落していたSteam helper fixtureも追加し、未実行の同期を成功に数えない。
+
+固定6670c679は標準実行器全200件成功、従来の専用子入口4件は対象外、Clippy警告0、release成功、別モデルの最終Must/Suggestion/Nit0。09:24にgame・chain・lock・復旧記録の不在を確認し、旧759A453F…をSHA一致で保持して同じ標準パスへD2174ABF…を配備した。配備時に通常runtimeを有効化せず、保守停止の自己記録も解除した。新候補の実機は次に確認する。全7製品条件0/7・未マージを維持する。
+
+### 2026-10-12：非介入の同一プロセス読込と標準終了が成功
+
+公開ee61c3d4と標準D2174ABF…の実機181は9手順すべてが成功した。COS1のSHA固定読込、ターン1の読取、thread audit、正式なメニュー退出、同じ保存の同一プロセス読込、ターン1の再読取とauditを行った。支払い・ターン進行・任務・RNG操作は加えていない。generic判定5件も成功した。
+
+3つのauditは同じGame380012/FILETIME134362388793971370とchain310988/FILETIME134362384137060669に属する。退出前104本、メニュー107本、再読込後111本のthreadを照会し、それぞれhidden1本、visible103/106/110本、その他0本だった。hiddenの照会はclass17、NTSTATUS0、戻り長1、raw BOOLEAN1、前後の同thread HANDLEは未終了だった。これは各照会時点の結果で、区間全体や未来の可視性、原クラッシュ時のthread状態を認定しない。auditが使わない介入APIの0フィールドは構造上の宣言であり、他のすべての処理が何も書かなかったという実測値ではない。
+
+標準の終端はgame close=closed、Steam同期成功、original autosave復元成功、復旧記録残存false、cleanup confirmed=true。親が同じchain HANDLEを保持して終了signalとexit0を確認した。09:39の再照合で元auto30、COS1、AppOptionsのSHAが全一致し、game・chain・lock・Steam/autosave復旧記録・software backupの残存は0だった。原37ファイル589,833byteは所有6d517548…へ全SHA一致で保全した。
+
+本担当の実ゲームは元3回と今回の1回で4回、未起動の受付2件は別に保持する。前のDRクラッシュと旧保存・退出要求を上書きしない。この非介入の読込成功は、通常runtimeの自動接続、旧世界の全producer停止、同じsetのWait、同期の完全frame退出、RESET/COMMIT前の再開を証明していない。原7条件0/7・未マージのまま、固定3入口のソフト観測を同じ880で実装する。
+
+### 2026-10-12：自然なshutdownと同managerのWaitを明示要求だけで記録する
+
+新しいroot observationは、固定Coreの63E160、4A1150、9922C0の3入口だけを近傍relayと8byte CASで記録する。旧bootstrap要求を変更せず、scenarioのobservation=native_shutdownと明示controller_secondsから別のroot要求を作る。既存loaderの検証済24B52D復帰、XP2の実module、factory slot、Context global=0を確認し、factory呼出し前に設置する。Root用exportだけを呼び、製品runtimeのInstall・Close・RebuildとAI候補を有効化しない。
+
+元関数はassemblyから一度だけ呼ぶ。入口と復帰の揮発GPR、XMM0〜5、RFLAGS、LastErrorを保持し、SEH退出を正常復帰へ変換しない。原prologueを移した中継コードのRIP相対JMPは、最初のvirtual unwindで復帰先RIP0となった。stack相対JMPへ直し、元RAX・flagsを保持した状態でprologue途中・完了後・分岐直前のRIP/RSP/RBXを照合した。初回の12成功1失敗と修正後14成功を区別する。
+
+別モデルのMust2は、3入口の証拠を成功判定に使っていない点と、gateway本体の一時PUSH/POPでRSPが8byte変わる間のunwind情報不足だった。入口ごとの固定RVA、期待/実測bytes、検証とCAS成功、エラーなし、設置完了を必須にし、rollbackや未完了はunknownへ残す。この旧負例は0成功1失敗。フラグの一時stackは独立したSEH helperへ分け、PUSH後・POP前・RET、実SEHで同じ呼出しの予約が一度だけ精算される検査を追加した。
+
+入口と退出の二行を先に予約し、同じPID/FILETIME、threadの作成時刻、観測世代、親呼出しID、原caller、native入口RSPでworld→manager→Waitを対応させる。managerにはworld+250のその場の値、Waitには同じmanager+400と原caller4A1196を要求する。set二語・list ID・metadata二語は現在の呼出しの限定読取として記録する。停止後も先に受け付けた呼出しは実際の復帰/SEH精算まで保持し、欠落、容量超過、深さ超過、未復帰、読み取り失敗を完全な記録へ付け替えない。中継コード・DLL・unwind表はゲームの終了まで保持する。
+
+親の解析負例で、全行を別世代へ揃えた偽の組と、親の復帰が別threadでもWait件数へ入る問題を検出した。全ての入口/退出を先に検証し、その検証が通った親だけを対応へ使う。controllerは部分RPMの実取得bytesをcreate_newで保全する。二回のコピー一致は同値の証拠だけで、対象の寿命やnative全排出を認定しない。Sessionの終端も原二組のbytesから解析し、停止receiptとの完全一致を別に確認する。
+
+固定54bd4f86の関連3crate全1412件は成功し、従来専用子入口1件は対象外。最終差分25df7ca0はroot実OS16件成功、解析6件成功、省略0、SDK終端1件成功。これらは1412件と範囲が重なるため合算しない。全target Clippyは警告0、別モデルの両Must修正確認後の新Must/Suggestion/Nit0、DLL2本とcontroller/driver3本のrelease成功を確認した。原配置のCore/EXE SHAも一致し、生成DLLの必要exportをPEで確認した。
+
+次の8手順は元COS1のSHAを固定し、root設置→読込→正式メニュー退出→同一プロセス読込→明示停止とする。私的な支払いや任務、ターン進行を追加しない。取れる成功は固定Wait wrapperの正常復帰までで、hostの間接callee/arena join、発行停止、pending公開・取消、rePush不存在、全6domainと同期の完全frame退出、世界寿命と本体有効化はこの記録では確立しない。原7条件0/7・未マージを保持し、まだこの新観測を実機成功へ数えない。
+
+### 2026-10-12：新mainを統合して起動前の衝突を解消する
+
+9dc1cd7cの最初のroot受付は、mainが74f09309へ更新されていたため、標準の準備時mergeで停止した。driver・ゲーム・root設置・保存/退出要求はいずれも0。保持した同chain HANDLEでexit1を確認し、原auto30/COS1/AppOptionsのSHAは全一致、game・chain・lockの残存は0だった。原実ゲーム4回とは別に、未起動の受付3件として保持する。
+
+mainの都市借用シナリオと固定ログ通信を統合し、人物・root観測・保存条件を保持した。衝突した7ファイルは両側の機能と検査を残した。古いcleanup用読取専用helperは、検査済みの取得者/file ID保護と最終DELETE取得へ統合し、原本復旧失敗の解放や旧窓口への戻しを加えなかった。mainの公平性tick中の読取と部分JSONのUnavailable処理を受領し、既知の期限を保持する回帰も維持した。
+
+mainが加えたOS作成時刻の回帰は、旧mockの直接native分岐に依存していたため、現在の注入可能なnative process APIを実際に使う形へ接続した。実在する所有子による正しい作成時刻、別作成時刻、別画像、終了済み子、コマンド起動0の断言を保持する。標準実行器205件が成功し、従来の専用子入口4件は対象外だった。
+
+5関連crateの2566件は2565成功1失敗、従来の専用子入口1件は対象外。失敗は新2シナリオが共通の選択境界一覧にない合流漏れだった。hotseat saveをShared、起動済みゲームでログだけ待つholdをNoSelectionとして共通一覧へ登録し、consumerの二重加算を除いた。全211シナリオの重複、JSON、診断用MODの分離、既存root排他を維持し、修正後の関連163件が省略0で成功した。2565と163は合算せず、失敗した旧候補を全件成功とは記録しない。
+
+統合部分と一覧修正は別モデルの新Must0。標準と5関連crateの全target Clippyは警告0。変更したdriverと標準窓口のreleaseを作り、root DLL/controllerのソースと依存設定は25df7ca0から変わっていないことを照合して、元SHA固定のDLLを保持した。11:11に元D2174ABF…を保存し、正規の標準パスへ96c65f6cからの0A74FA88…を配備した。通常runtime有効化0、保守記録を解除し、修正版から元root手順へ戻る。原7条件0/7・未マージを保持する。
+
+### 2026-10-12：実shutdownの一致する一経路と、別threadの未帰属Wait
+
+82761f36と標準0A74FA88…の実機182は8手順中7手順が成功した。元COS1をSHA固定で読み、root観測を設置した同じGame273060/FILETIME134362448963781019で正式メニュー退出と再読込、ターン1の再読取まで進んだ。root stop応答は成功し、実取得25024byteの二組は同じだった。未知の記録が残ったため最終観測判定は失敗し、所有controllerが対象を終了・回収した。標準chain488536も保持した同じHANDLEでexit1を確認した。この結果を観測完了や製品受入へ数えない。
+
+同じTID333012/作成時刻134362448963781036に、world入口（caller46A7B）→manager入口（caller63E1D5）→Wait入口/正常復帰（caller4A1196）→manager正常復帰→world正常復帰のevent3..8が得られた。呼出しID3/5/7の親子、同一観測世代1、native RSPの差30h/40hが一致し、read/binding errorは0だった。manager18141844128、そのset18141845152は同じで、list IDはmanager入口2、Wait前後2、manager復帰0。set二語は前後0である。これらをpendingの公開やarena join、全producerの終了証明へ拡張しない。
+
+TID173668/作成時刻134362448991023741には、同じ固定Wait復帰先から呼出しID1/9の二組が得られたが、親ID0・world0・binding error2だった。最初のmanagerはworld終了経路と同値、後のmanagerは別値である。この数値一致だけで親呼出しを後付けしない。現collectorがmanagerをcaller63E1D5だけに絞る一方、Waitはcaller4A1196を受け付けるため、既知の別manager callerを取りこぼす可能性を同じ担当で修正する。旧182のunknown二件は成功へ変更せず保持する。
+
+独立したPE/LLVM読取では、63D43CのRCX=[RDI+250]、63D443から4A1150への直接CALL、復帰先63D448を照合した。その後は3D50B0へのCALL、TEST AL/JZ63D465、非ゼロ側の49C7C0へのCALLが続く。各calleeの役割は未確立だが、managerの正常復帰より後に処理が続く命令列の証拠である。63D443を含む例外情報は63D3F7..63D459のfragmentで、CHAININFOから63D1F0..63D210の親へ対応する。静的なunwind所有と実際の全frame退出を区別する。最近傍exportのLua名は、この関数の名前として採用しない。
+
+原21ファイル288041byteは所有34da33cb…へ全SHA一致で保全した。原auto30、COS1、AppOptionsも全SHA一致し、game・chain・lock・Steam/autosave復旧記録・software backupの残存は0。本担当の実ゲーム5回と未起動3件を保持する。次は同じ3入口の別manager呼出しを、世界に未帰属のlocal scopeとして記録し、同じTID/FILETIME・世代・呼出しID・manager+400とWaitを対応させる。局所scopeの復帰をworld全退出へ昇格させず、原7条件0/7・通常runtime無効・未マージを維持する。
+
+### 2026-10-12：第二callerの局所managerを別scopeとして観測する
+
+77095662は、新しい上位hookを加えず、既存manager入口の第二caller63D448を受け付ける。設置前に63D43Cの受け手読取から63D443のCALLと復帰後の固定命令列を照合する。第二callerはparentなし・world0とし、入力RDIから世界を後付けしない。Waitの原caller4A1196、同じmanager+400、親呼出しID、threadの作成時刻、観測世代、native RSPの40h差で現在のmanagerへ対応させる。
+
+二つのscopeを別に検証し、従来のworld正常Wait件数を局所の件数で増やさない。world経路一組は引き続き完了判定に必須で、local scopeだけの記録は合格しない。未知caller、誤ったRSP、別thread寿命、誤った世界への帰属、旧版の親なしWaitはunknownのまま残す。古い182の二件へmanager記録を補ったり、旧失敗を修正版の成功へ変換したりしない。raw版と寸法は保持する。
+
+別モデルのMust1は、未知managerの診断加算だけが絶対期限を確認しない新分岐だった。期限内には未知呼出しの情報を保持し、期限後はatomic gateを閉じて原関数だけを一度通す。停止と競合した場合も、gateで受け付けた診断の終了まで待つ。期限切れの実OS負例は旧版1成功1失敗、修正版は原関数の一度の実行・flags/LastError保持と記録不変を確認した。期限内にunknown件数が増える対照検査も維持する。
+
+固定484f21feのnative/bootstrap全239件が成功、従来専用子入口1件は対象外。利用側の終端とbootstrap関連11件も成功し、1234件はその指定の対象外だった。Clippyは3crate全targetで警告0、別モデル追審の新Must0、DLL2本とcontroller/driver3本のrelease成功を確認した。固定した新DLLのSHAはCFAC2B0B…と236CCDE3…、所有dbd6df85…に保持し、必要なroot exportを生成PEで確認した。
+
+次の8手順は新DLLのパス/SHAだけを更新し、原COS1・正式退出・同一プロセス読込・ターン読取・停止を保持する。局所managerの正常復帰より後には、63D1F0に属する後続call、条件分岐、63D4E0のword書込と63D4F4のRETが静的に存在する。それらの実行時退出や全producerの終了を、局所manager/Waitの復帰から認定しない。原7条件0/7・通常runtime無効・未マージを維持する。
+
+### 2026-10-12：世界経路一組と局所経路二組を記録し同一プロセス読込が成功
+
+e15d7f32、コード484f21feの実機183は8手順とgeneric5判定すべて成功した。Game528836/FILETIME134362474274440623で元COS1を読み、正式メニュー退出、同じプロセスでの再読込、ターン1を確認した。明示したroot停止応答も成功し、取得済み呼出しの停止、原25024byte二組の一致、記録の対応検証が通った。通常runtimeとAI候補は有効化していない。
+
+14行に7つの入口/正常復帰の組がある。world scopeはTID231096のevent5..10で、world962288336からmanager1028128816/set1028129840へ入り、Waitから戻り、managerとworldが正常復帰した。list IDはmanager入口2、Wait前後2、manager復帰0だった。local scopeはTID329740のevent1..4と、再読込後TID398952のevent11..14で、それぞれ第二caller63D448のmanagerから固定Waitへ入り正常復帰した。後者のmanager11654877216/set11654878240は別値で、どちらもworld0・親worldなしとして保持した。world正常Wait1、局所manager正常復帰2、局所Wait正常復帰2、unknown0。局所件数でworld件数を増やさない。
+
+標準の終了、Steam解放と原本復旧を確認し、保持した同じchain512564/FILETIME134362473550260971のHANDLEでexit0だった。原21ファイル298227byteを所有a4df731a…へ全SHA一致で保全した。元auto30・COS1・AppOptionsのSHAも全一致し、game・chain・lock・Steam/autosave復旧記録・software backupの残存は0だった。実ゲーム6回と未起動3件、旧182の失敗と原DRクラッシュを保持する。
+
+この成功は、受け付けた固定3入口の記録と同一プロセス読込の成功である。63D1F0の完全な外側frame、未spawn/pending/再発行、hostのarena join、全6domainと同期4A7AD0/5E2D0の退出、通常の自動接続と製品再開の権限は未達のまま。局所manager/Waitをもう一度観測するための実機を重ねず、実発行時に旧世界を帰属させる接続と全frame退出へ同じ880で進む。原7条件0/7・未マージを維持する。
+
+### 2026-10-12: opt-in native submission descriptor sampling
+
+The new `observation: native_submission` selector shares the reviewed cold bootstrap and passive gateway machinery, but uses a distinct protocol, trace layout, terminal event and receipt. It captures the original four input registers, copies the readable 16/32-byte RDX descriptor and 16-byte R9 metadata at entry, and preserves the entire 992280 wrapper including its indirect tail target. Return records reuse the entry snapshot rather than dereferencing expired input pointers. CAS rollback, original-call-once, flags, LastError, SEH and unwind remain required. The collector has a finite capacity; overflow or an unmatched/failed read remains a failed capture with its original evidence retained.
+
+The fixed direct caller pair 388871/38888E can establish observed submission-to-publication correspondence by thread creation time, epoch, list and native caller frame. It does not establish the descriptor's C++ ownership, birth generation, cancellation, reissue, native Join, World lifetime, complete domain drainage or permission to activate the normal runtime.
+
+Validation: the 11 Windows submission tests passed; the related protocol/controller/SDK selection passed 22 tests. After the final source changes, the three affected crates passed 1508 tests with one dedicated child entry excluded. Clippy for their complete targets passed. A separate-model review found one return-snapshot count/error comparison defect; the fix and negative regressions were accepted with no remaining Must. The ordinary runtime and AI candidate remain disabled. No native submission game sample has yet been taken. The original product acceptance remains 0/7 and PR86 remains unmerged.
+
+### 2026-10-12: first natural submission and embedded Governor job audit
+
+The unchanged load/menu/reload run184 observed no submission calls; its final capture failed and all original evidence remains preserved. Run185 issued one ordinary UI end-turn request, observed turn1 to2, exited to MainMenu and reloaded the original turn1 save. It passed9/10 steps. Both v2 captures were35264bytes and equal, with128 reserved rows,3292 capacity drops,57 normal submit returns and one unambiguous Governor Analyzer submit/publication correspondence. Other callers and missing publication matches remain unknown; this is not a complete capture or a native drainage certificate.
+
+The supported entry123 used Core VFT A06648, metadata A06920 and list2. Fixed-image verification identifies a64-byte job P embedded at its own input owner+D0, not the separate32-byte World control interface. A06920 is the Governor Analyzer name string. Native queue code stores the original P pointer in a separate16-byte proxy T. P+8 and P+10 are native task/set fields; they are cleared before P's virtual execution begins and cannot indicate completion or hold a private generation ticket. The owner's destructor resets the embedded base directly, independently of the job's virtual destructor. Executed receiver equality, World generation at construction, pending cancellation and full4A8530 exit remain unestablished.
+
+The new pure file-audit segment verifies complete function spans, pdata/unwind, RIP/rel32 references, adjacent-table separation and invalid RTTI without issuing a certificate. Two initial tests exposed a missing.data fixture and an incorrect demand for disk bytes at singleton B8AA68, which is in loader-zero-filled data. Address validation now uses its unique readable/writable virtual.data mapping; data strings and tables still require actual file bytes. The corrected15 tests, Clippy, release and both fixed-image CLI selectors passed. Existing legacy JSON values/arrays remain equal after projecting out the additive segment. Separate-model review found no remaining Must.
+
+Run185 original22files(2171888bytes), original30 autosave files, options and COS1 save were preserved and compared by SHA. The standard chain's held handle confirmed exit1; owned game/chain/lock/recovery records are absent. Same-job actual games8 and unlaunched attempts3 remain distinct. The original product acceptance is still0/7; ordinary runtime and AI candidate remain inactive. Public2e7552b9 passed all7 CI checks; this additional file audit has separate local validation.
+
+## 2026-10-12 観測の受付上限と完全な16件の対応
+
+公開3a68f92bはBOOK内の再判定を含み、関連67件、Clippy、限定別モデルの指摘0を確認した。原192は通常一ターンと同一プロセスの保存再読込を含む10/10、一般判定5/5、標準chain同保持HANDLEの終了0。v8の83392bytes二本は一致し、初めの16件の発行・Host実行・Core実行・各完全frame退出が対応した。未解決の記録Tと観測pendingは0、unknownは0。native pendingの数は未測定でnullであり、除外1220180回を全排出に数えない。原23files/2337266bytesをSHA一致で保全し、元auto30/COS1/AppOptionsのSHA復元を確認した。本担当の実ゲーム15回、未起動3受付を保持する。
+
+原191の容量超過と未知処理は失敗のまま保持する。原192は部分観測の成功であり、World世代、未実行Tの取消、他の仕事と同期外側の退出、通常RuntimeClose/Rebuildの権限はまだ証明していない。通常runtime/AI候補は未有効化、製品7条件0/7・PR86未マージを維持する。
+
+16件のproducer帰還先は固定Coreの4C87CDで一致した。固定画像の4C87CAは[RDXとして渡されたclosure+8]への間接CALLを行う4C8780の内部で、続けてcleanupを実行して4C87FFで帰還する。4A79B0の帰還をその外側frameの全退出へ拡張しない。原の数値資料はbounded192-primary-analysis、producer-caller-binding、proof-preservation-20261012に保持する。
+
+### pending発行経路の一次監査
+
+fb9234edは固定EXEの985BF0→E3E840→E41320/E3E3B0を追加した。10関数の全体SHAと25個のpdata/CHAIN分割、連続blockでのRDX/R8搬送、preferred ImageBaseでのT表pointerを照合する。EXEにDIR64必須を誤適用した初回失敗と私有fnのコンパイル失敗を保持し、Coreの必須条件を弱めずEXE専用読取を分けた。片側だけ存在する再配置directoryは両方向とも拒否する。
+
+最終関連5件(監査4件と既存native_flightのpending回帰1件)とClippy成功、固定実画像CLIは旧2argsとworker selectorの両方で終了0。追加前3aの実release監査と全既存値/配列をキー順序に依存しない再帰比較で一致確認し、追加keyはpending_publication_sliceだけ。限定再レビューの残Must0。queue取出しから実行・未実行T取消/破棄・全joinは未確立であり、静的監査を通常runtimeの稼働やWorldの終了証明へ使わない。
+
+## 2026-10-13 通常runtimeの借用と同期呼出しを終了する実装
+
+628eaa57では通常の5入口(CanEver、PropertyGet、CanAssignとCanPromote二caller)に、観測とは独立した世代予約を接続した。元の橋はnative仕事を追加発行・保持・延期しない。橋の最初のptr読取/ticketより前から原CALL一回、原復帰後の全読取/判定/記録までを予約し、正常/SEHで一度精算する。Closeは許可と新受付を閉じ、橋の排出を待ってから旧STATEを消す。Rebuildは既存の原Release全復帰と検証済みfactory前の境界でsessionを初期化し、gateを最後に開く。閉鎖中の呼出しは途中でRebuildしても再取得しない。
+
+この処理は橋自身の借用を終えてから原engineに仕事と破棄を所有させる契約であり、全World退出や他native仕事の取消/joinをbridgeの件数0から認証しない。各native観測で未確立とした6domainやCancelの成果は変更しない。元の7製品条件も変更しない。
+
+入口panicで原CALL前に予約を返すMustはfailed bitによる拒否と予約保持へ修正した。3入口の実wrapperを通す新回帰は旧release動作へのmutationでheld0/期待1の失敗を検出した。最初の新Owned helperはfilterがcrate名を含み0件実行だったため、その5件の成功は撤回し原ログを保持した。新helperはexact名の存在を事前照合し、子の1件実行を含む原出力を保存する。修正後のWindows6件とPromotion5件の関連は11成功、628の3crate1585成功/専用子入口1skip、Clippy成功、最後の限定別モデルはMust/Suggestion/Nit0。新runtime実機と製品条件は未達であり、通常の保存再読込で自然なClose/原Release/Rebuild/RESET-COMMITの順序を次に判定する。

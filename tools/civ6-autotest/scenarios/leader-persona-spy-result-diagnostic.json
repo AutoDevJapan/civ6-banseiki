@@ -1,0 +1,36 @@
+{
+  "name": "Read the preserved native failed neutralization result without changing it",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.ReadEnemyResultDiagnostic()"
+    },
+    {
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.ReadEnemy(); local ref=assert(Game:GetProperty('JAC_BOUNDARY_SPY'),'saved spy reference missing'); assert(s.spy.id==ref.id and s.spy.owner==ref.owner,'read changed the saved spy identity'); if s.spy.present then local unit=assert(Players[ref.owner]:GetUnits():FindID(ref.id),'claimed spy is missing'); assert(unit:GetID()==ref.id and unit:GetOwner()==ref.owner and unit:GetType()==GameInfo.Units['UNIT_SPY'].Index,'lookup resolved another native spy') else assert(s.spy.operation==nil and s.spy.endTurn==nil and s.spy.remaining==nil and s.spy.x==nil and s.spy.y==nil,'absent spy inherited another unit details') end; return 'saved spy identity checked; lookup='..tostring(s.spy.lookupID)..' saved='..tostring(ref.id)",
+      "action": "ui_lua",
+      "state_name": "InGame"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

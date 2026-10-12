@@ -1,0 +1,19 @@
+{
+  "name": "Reserve and send one generation three official travel request with both native failures preserved",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[0]; local b=ExposedMembers.JAC_PersonaBoundary; return p and p:IsTurnActive() and b and type(b.ThirdSpyReserve)=='function'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; assert(b.ThirdSpyStatus().bound and b.RetryLivingSpy()=='HOME_READY','third native spy must be explicitly bound and travel ready'); b.ThirdSpyReserve('SPY_TRAVEL'); return 'third travel reservation queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.thirdLast; if a=='ERROR_SPY_TRAVEL' then error(a) end; return a=='ACCEPTED_SPY_TRAVEL'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.ThirdSpySend('SPY_TRAVEL')"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_SPY_TRAVEL' or a=='REJECTED_SPY_TRAVEL' or a=='UNKNOWN_SPY_TRAVEL' then error(a) end; return a=='ACCEPTED_SPY_TRAVEL'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"ExposedMembers.JAC_PersonaBoundary.Queue('SAVE_TRAVEL'); return 'persist generation three accepted native travel'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SAVE_TRAVEL' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL')~=nil"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.EnemyProgress()"},
+    {"action":"exit_to_menu"}
+  ]
+}

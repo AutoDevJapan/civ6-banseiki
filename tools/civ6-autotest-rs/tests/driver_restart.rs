@@ -31,6 +31,72 @@ fn position(events: &[String], prefix: &str) -> usize {
     events.iter().position(|s| s.starts_with(prefix)).unwrap()
 }
 
+// Steam-exit fixtures model the actual quit transition, rather than consuming
+// an arbitrary number of process queries. Ownership rechecks must see the same
+// live identity until the quit operation, then absence at every later query.
+fn steam_restart_fixture(old: Option<(u32, f64)>) -> FakeBackend {
+    let live = Arc::new(Mutex::new(old));
+    let inspected = live.clone();
+    let mut fake = FakeBackend::new()
+        .owned_chain()
+        .process(move |_| Ok(*inspected.lock().unwrap()));
+    fake.on_lua = Box::new(move |_, code| {
+        if code.contains("Events.UserConfirmedClose()") {
+            *live.lock().unwrap() = None;
+        }
+        Ok("true".into())
+    });
+    fake
+}
+
+#[test]
+fn locked_steam_log_retries_before_launch_without_replaying_game_operations() {
+    let mut fake = steam_restart_fixture(None);
+    let tries = Arc::new(Mutex::new(0));
+    let observed = tries.clone();
+    fake.on_begin_steam = Box::new(move |_| {
+        let mut n = observed.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            Err(Error::new(ErrorKind::SteamLogBusy, "locked original log"))
+        } else {
+            Ok(())
+        }
+    });
+    let ready = tries.clone();
+    fake.on_launch = Box::new(move || {
+        assert_eq!(*ready.lock().unwrap(), 2);
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.launch_steam_and_wait(5.0).unwrap();
+    let events = h.events();
+    assert_eq!(*tries.lock().unwrap(), 2);
+    assert_eq!(events.iter().filter(|e| *e == "launch").count(), 1);
+    assert_eq!(h.clock.at(), 0.05);
+}
+
+#[test]
+fn persistent_log_lock_and_other_errors_stop_before_any_uri_at_original_deadline() {
+    for (kind, deadline, time) in [
+        (ErrorKind::SteamLogBusy, 10.0, 2.0),
+        (ErrorKind::SteamLogBusy, 0.1, 0.1),
+        (ErrorKind::Io, 10.0, 0.0),
+        (ErrorKind::Interrupted, 10.0, 0.0),
+        (ErrorKind::LiveLease, 10.0, 0.0),
+    ] {
+        let mut fake = steam_restart_fixture(None);
+        fake.on_begin_steam = Box::new(move |_| Err(Error::new(kind, "original failure")));
+        let mut h = Harness::new(json!({}), fake);
+        let error = h.runner.launch_steam_and_wait(deadline).unwrap_err();
+        assert!(!h.events().contains(&"launch".into()));
+        assert!((h.clock.at() - time).abs() < 0.00001);
+        if kind != ErrorKind::SteamLogBusy || deadline > 2.0 {
+            assert_eq!(error.kind, kind);
+        }
+    }
+}
+
 struct NativeFixture {
     ids: VecDeque<BTreeSet<u32>>,
     tail: BTreeSet<u32>,
@@ -50,6 +116,10 @@ impl NativeFixture {
     }
 }
 impl LifecycleBackend for NativeFixture {
+    fn check_control(&mut self) -> Result<()> {
+        // This fixture models an owned live-chain without invoking Windows.
+        Ok(())
+    }
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>> {
         Ok(self.ids.pop_front().unwrap_or_else(|| self.tail.clone()))
     }
@@ -88,7 +158,9 @@ impl LifecycleBackend for NativeFixture {
 
 #[test]
 fn test_wrong_steam_executable_stops_before_click_or_tuner() {
-    let mut fake = FakeBackend::new().process(processes(&[None, None, None], None));
+    let mut fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[None, None, None], None));
     fake.on_dx11 = Box::new(|hwnd| {
         assert_eq!(hwnd, 123);
         Err(Error::input("expected CivilizationVI.exe"))
@@ -123,7 +195,7 @@ fn test_restart_action_validation() {
 
 #[test]
 fn steam_sync_must_finish_before_relaunch_after_game_exit() {
-    let mut fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None, None], None));
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
     let sync_checks = Arc::new(Mutex::new(0));
     let checks = sync_checks.clone();
     fake.on_sync = Box::new(move |_| {
@@ -149,7 +221,7 @@ fn steam_sync_must_finish_before_relaunch_after_game_exit() {
 
 #[test]
 fn steam_sync_deadline_expiry_never_sends_a_launch() {
-    let mut fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None], None));
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
     fake.on_sync = Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Pending));
     let mut h = Harness::new(json!({}), fake);
     assert!(h.runner.restart_game(30.0).is_err());
@@ -158,11 +230,44 @@ fn steam_sync_deadline_expiry_never_sends_a_launch() {
 }
 
 #[test]
+fn ownership_loss_during_normal_exit_sync_stops_before_another_poll_or_launch() {
+    use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+    let owned = Arc::new(Mutex::new(true));
+    let control = Arc::clone(&owned);
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
+    fake.on_control_check = Box::new(move || {
+        if *control.lock().unwrap() {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::LiveLease,
+                "fixture owner changed during sync",
+            ))
+        }
+    });
+    let polls = Arc::new(Mutex::new(0));
+    let observed = Arc::clone(&polls);
+    fake.on_sync = Box::new(move |stage| {
+        assert_eq!(stage, Stage::Exit);
+        *observed.lock().unwrap() += 1;
+        *owned.lock().unwrap() = false;
+        Ok(SyncStatus::Pending)
+    });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h.runner.restart_game(120.0).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(*polls.lock().unwrap(), 1);
+    assert!(!h.events().contains(&"launch".into()));
+}
+
+#[test]
 fn an_active_steam_warning_suppresses_repeated_launch_requests() {
     let clock_holder = Arc::new(Mutex::new(None::<Arc<ManualClock>>));
     let clock = clock_holder.clone();
     let mut count = 0;
-    let mut fake = FakeBackend::new().process(processes(&[None], None));
+    let mut fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[None], None));
     fake.on_warning = Box::new(|| Ok(true));
     fake.on_window = Box::new(move |_| {
         count += 1;
@@ -185,7 +290,7 @@ fn exit_and_prelaunch_failures_send_zero_uri_requests_for_every_failure_kind() {
     use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
     for old in [None, Some((12, 100.0))] {
         for failure in ["Failed", "Conflict", "Offline"] {
-            let mut fake = FakeBackend::new().process(processes(&[old, None, None], None));
+            let mut fake = steam_restart_fixture(old);
             fake.on_sync = Box::new(move |stage| {
                 assert_eq!(
                     stage,
@@ -215,7 +320,7 @@ fn issued_request_failure_allows_warning_recovery_without_uri_replay_after_45_se
     use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
     let clock = Arc::new(ManualClock::default());
     let waits = clock.clone();
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     fake.on_sync = Box::new(|stage| {
         Ok(if stage == Stage::LaunchIssued {
             SyncStatus::Failed
@@ -243,7 +348,7 @@ fn sync_failure_during_helper_cleanup_wait_sends_no_uri() {
     use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
     let clock = Arc::new(ManualClock::default());
     let observed = clock.clone();
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     fake.on_close_orphans = Box::new(|| Ok(vec![99]));
     fake.on_sync = Box::new(move |stage| {
         assert_eq!(stage, Stage::Prelaunch);
@@ -269,7 +374,7 @@ fn late_prelaunch_pending_waits_before_the_single_uri() {
     use civ6_autotest_rs::steam_sync::SyncStatus;
     let clock = Arc::new(ManualClock::default());
     let before_launch = clock.clone();
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     let mut polls = 0;
     fake.on_sync = Box::new(move |_| {
         polls += 1;
@@ -402,8 +507,10 @@ fn repeated_unsent_probe_expiry_stops_at_original_frontend_deadline() {
 
 #[test]
 fn test_auto_restart_precedes_first_step_and_log_baseline() {
-    let mut fake = FakeBackend::new().process(processes(
+    let mut fake = FakeBackend::new().owned_chain().process(processes(
         &[
+            Some((12, 100.0)),
+            Some((12, 100.0)),
             Some((12, 100.0)),
             Some((12, 100.0)),
             None,
@@ -457,7 +564,7 @@ fn test_auto_restart_precedes_first_step_and_log_baseline() {
 
 #[test]
 fn test_no_auto_restart_skips_freshness_query() {
-    let fake = FakeBackend::new();
+    let fake = FakeBackend::new().owned_chain();
     let mut h = Harness::new(pause_scenario(), fake);
     h.runner.auto_restart = false;
     prepare_run(&mut h);
@@ -497,8 +604,10 @@ fn chain_mode_missing_mod_stops_before_any_launch_or_tuner_access() {
 
 #[test]
 fn test_still_stale_after_restart_stops_before_first_step() {
-    let mut fake = FakeBackend::new().process(processes(
+    let mut fake = FakeBackend::new().owned_chain().process(processes(
         &[
+            Some((12, 100.0)),
+            Some((12, 100.0)),
             Some((12, 100.0)),
             Some((12, 100.0)),
             None,
@@ -523,7 +632,9 @@ fn test_still_stale_after_restart_stops_before_first_step() {
 
 #[test]
 fn test_restart_action_launches_and_clicks_verified_window() {
-    let fake = FakeBackend::new().process(processes(&[None, None, None], None));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[None, None, None], None));
     let mut h = Harness::new(json!({}), fake);
     h.runner
         .run_step(&json!({"action":"restart_game"}))
@@ -538,7 +649,9 @@ fn test_restart_action_launches_and_clicks_verified_window() {
 
 #[test]
 fn test_frontend_background_does_not_count_as_ready_menu() {
-    let fake = FakeBackend::new().lua(|state, _| Ok((state == "FrontEnd").to_string()));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .lua(|state, _| Ok((state == "FrontEnd").to_string()));
     let mut h = Harness::new(json!({}), fake);
     let error = h.runner.wait_frontend_ready(2.0, false).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Scenario);
@@ -549,7 +662,7 @@ fn test_frontend_background_does_not_count_as_ready_menu() {
 fn test_frontend_waits_for_menu_animation() {
     let menu_probes = Arc::new(Mutex::new(0));
     let observed = menu_probes.clone();
-    let fake = FakeBackend::new().lua(move |state, _| {
+    let fake = FakeBackend::new().owned_chain().lua(move |state, _| {
         if state == "MainMenu" {
             let mut count = observed.lock().unwrap();
             *count += 1;
@@ -656,6 +769,7 @@ fn test_menu_probe_rechecks_after_lost_connection_message_acknowledgment() {
     let acknowledged = Arc::new(Mutex::new(0));
     let seen = acknowledged.clone();
     let fake = FakeBackend::new()
+        .owned_chain()
         .states(|| Ok(vec!["FrontEnd".into(), "MainMenu".into(), "My2K".into()]))
         .lua(move |state, code| match state {
             "FrontEnd" => Ok("true".into()),
@@ -680,7 +794,7 @@ fn test_menu_probe_rechecks_after_lost_connection_message_acknowledgment() {
 #[test]
 fn test_frontend_probe_reconnects_after_unknown_read_only_reply() {
     let mut first = true;
-    let fake = FakeBackend::new().lua(move |_, _| {
+    let fake = FakeBackend::new().owned_chain().lua(move |_, _| {
         if first {
             first = false;
             Err(Error::unknown("reply lost"))
@@ -698,7 +812,9 @@ fn test_frontend_probe_reconnects_after_unknown_read_only_reply() {
 fn test_frontend_probe_clicks_again_if_movie_still_plays() {
     let clicked = Arc::new(Mutex::new(false));
     let seen = clicked.clone();
-    let fake = FakeBackend::new().lua(move |_, _| Ok(seen.lock().unwrap().to_string()));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .lua(move |_, _| Ok(seen.lock().unwrap().to_string()));
     let mut h = Harness::new(json!({}), fake);
     // The first probe observes the movie, and the injected clock reaches the retry click.
     let events = h.events.clone();
@@ -743,7 +859,9 @@ fn test_steam_launch_waits_for_delayed_prior_session_without_replaying_uri() {
     let clock = Arc::new(ManualClock::default());
     let c = clock.clone();
     let mut windows = 0;
-    let mut fake = FakeBackend::new().process(processes(&[], None));
+    let mut fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[], None));
     fake.on_window = Box::new(move |deadline| {
         c.advance((deadline - c.at()).max(0.0));
         windows += 1;
@@ -763,7 +881,7 @@ fn test_steam_launch_waits_for_delayed_prior_session_without_replaying_uri() {
 fn test_failed_new_launch_is_not_replayed_without_a_proven_new_attempt() {
     let clock = Arc::new(ManualClock::default());
     let state = Arc::new(Mutex::new((0, false)));
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     let events = fake.events.clone();
     let cleanup_state = state.clone();
     fake.on_close_orphans = Box::new(move || {
@@ -810,7 +928,7 @@ fn test_failed_new_launch_is_not_replayed_without_a_proven_new_attempt() {
 #[test]
 fn test_helper_cleanup_exhausting_deadline_sends_no_steam_request() {
     let clock = Arc::new(ManualClock::default());
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     fake.on_close_orphans = Box::new(|| Ok(vec![99]));
     let mut h = Harness::new(json!({}), fake);
     h.runner.clock = clock.clone();
@@ -828,7 +946,7 @@ fn test_helper_cleanup_exhausting_deadline_sends_no_steam_request() {
 fn test_single_launch_request_waits_for_delayed_window_until_deadline() {
     let clock = Arc::new(ManualClock::default());
     let wait_clock = clock.clone();
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     let events = fake.events.clone();
     fake.on_close_orphans = Box::new(move || {
         events.lock().unwrap().push("cleanup".into());
@@ -858,7 +976,7 @@ fn test_single_launch_request_waits_for_delayed_window_until_deadline() {
 fn test_single_unresolved_launch_fails_at_the_supplied_deadline() {
     let clock = Arc::new(ManualClock::default());
     let wait_clock = clock.clone();
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     fake.on_window = Box::new(move |deadline| {
         wait_clock.advance(deadline - wait_clock.at());
         Err(Error::input("no window"))
@@ -882,7 +1000,7 @@ fn helper_cleanup_manual_launch_prevents_duplicate_steam_request() {
     let clock = Arc::new(ManualClock::default());
     let cleaned = Arc::new(Mutex::new(false));
     let process_cleaned = cleaned.clone();
-    let mut fake = FakeBackend::new().process(move |_| {
+    let mut fake = FakeBackend::new().owned_chain().process(move |_| {
         Ok(if *process_cleaned.lock().unwrap() {
             Some((12, 100.0))
         } else {
@@ -902,7 +1020,7 @@ fn helper_cleanup_manual_launch_prevents_duplicate_steam_request() {
 
 #[test]
 fn restart_cleans_helpers_before_waiting_for_steam_to_release_session() {
-    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
     let events = fake.events.clone();
     let mut first = true;
     fake.on_close_orphans = Box::new(move || {
@@ -962,7 +1080,7 @@ fn test_steam_wait_does_not_launch_again_during_process_overlap() {
     let clock = Arc::new(ManualClock::default());
     let c = clock.clone();
     let mut first = true;
-    let mut fake = FakeBackend::new().process(move |_| {
+    let mut fake = FakeBackend::new().owned_chain().process(move |_| {
         if first {
             first = false;
             Ok(None)
@@ -988,7 +1106,9 @@ fn test_steam_wait_does_not_launch_again_during_process_overlap() {
 
 #[test]
 fn test_first_restart_action_can_start_stopped_game_with_auto_disabled() {
-    let fake = FakeBackend::new().process(processes(&[None, None, None], Some((13, 300.0))));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[None, None, None], Some((13, 300.0))));
     let mut h = Harness::new(
         json!({"name":"manual restart","steps":[{"action":"restart_game"}]}),
         fake,
@@ -1002,7 +1122,16 @@ fn test_first_restart_action_can_start_stopped_game_with_auto_disabled() {
 
 #[test]
 fn test_restart_requests_ui_quit_before_steam_launch() {
-    let fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None, None], None));
+    let fake = FakeBackend::new().owned_chain().process(processes(
+        &[
+            Some((12, 100.0)),
+            Some((12, 100.0)),
+            Some((12, 100.0)),
+            None,
+            None,
+        ],
+        None,
+    ));
     let mut h = Harness::new(json!({}), fake);
     h.runner.restart_game(360.0).unwrap();
     let calls = h.calls();
@@ -1018,8 +1147,17 @@ fn test_restart_requests_ui_quit_before_steam_launch() {
 fn test_restart_forces_only_same_process_after_grace() {
     let mut first_states = true;
     let mut fake = FakeBackend::new()
+        .owned_chain()
         .process(processes(
-            &[Some((12, 100.0)), Some((12, 100.0)), None, None],
+            &[
+                Some((12, 100.0)),
+                Some((12, 100.0)),
+                Some((12, 100.0)),
+                Some((12, 100.0)),
+                Some((12, 100.0)),
+                None,
+                None,
+            ],
             None,
         ))
         .states(move || {
@@ -1048,7 +1186,9 @@ fn test_restart_forces_only_same_process_after_grace() {
 
 #[test]
 fn test_restart_without_process_launches_then_waits_for_frontend() {
-    let fake = FakeBackend::new().process(processes(&[None, None, None], None));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[None, None, None], None));
     let mut h = Harness::new(json!({}), fake);
     h.runner.restart_game(360.0).unwrap();
     let events = h.events();
@@ -1062,8 +1202,9 @@ fn test_restart_without_process_launches_then_waits_for_frontend() {
 
 #[test]
 fn test_restart_still_refuses_when_several_processes_persist() {
-    let fake =
-        FakeBackend::new().process(|_| Err(Error::input("Multiple Civ VI processes found (2)")));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .process(|_| Err(Error::input("Multiple Civ VI processes found (2)")));
     let mut h = Harness::new(json!({}), fake);
     assert_eq!(
         h.runner.restart_game(360.0).unwrap_err().kind,
@@ -1077,7 +1218,9 @@ fn test_restart_still_refuses_when_several_processes_persist() {
 
 #[test]
 fn test_run_launches_civ_when_not_running_and_first_step_needs_game() {
-    let fake = FakeBackend::new().process(processes(&[None, None, None, None], Some((13, 300.0))));
+    let fake = FakeBackend::new()
+        .owned_chain()
+        .process(processes(&[None, None, None, None], Some((13, 300.0))));
     let mut h = Harness::new(pause_scenario(), fake);
     h.runner.auto_restart = false;
     prepare_run(&mut h);

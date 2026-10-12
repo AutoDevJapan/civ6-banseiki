@@ -1,0 +1,61 @@
+{
+  "name": "ToDo880 fixed load sites: same-process LeaveGame then reload the same physical save",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "restart_game",
+      "timeout": 360
+    },
+    {
+      "action": "load",
+      "name": "JAC-Todo324-GameplayEvents-Cos-b499eff3aa0d40849f6fe526f7413751-0000000000000001",
+      "exact_name": true,
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "timeout": 20,
+      "state_name": "InGame",
+      "code": "assert(Players[0] and type(ExposedMembers.JAC_LeaderPersona)=='table'); return 'ORDER_CAPTURE_GAMEPLAY_AVAILABLE turn='..tostring(Game.GetCurrentGameTurn())"
+    },
+    {
+      "front_prefix": 4,
+      "source_dll_sha256": "c11255ebc2e1a825d6027adb3ca9fa3130d48e9fd943cc813ec21a4d7dcbc775",
+      "max_seconds": 300,
+      "action": "start_native_order_capture",
+      "load_prefix": 4,
+      "source_dll": "D:\\CC\\Work\\todo880\\order-live-01-assets\\civ6_native_bridge_rs.dll",
+      "name": "fixed-load-leave",
+      "max_hits": 256,
+      "phase": "load",
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "timeout": 20,
+      "state_name": "InGame",
+      "code": "assert(Players[0] and type(ExposedMembers.JAC_LeaderPersona)=='table'); return 'ORDER_FIXED_LOAD_BEFORE_LEAVE turn='..tostring(Game.GetCurrentGameTurn())"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Todo324-GameplayEvents-Cos-b499eff3aa0d40849f6fe526f7413751-0000000000000001",
+      "exact_name": true,
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "timeout": 20,
+      "state_name": "InGame",
+      "code": "assert(Players[0] and type(ExposedMembers.JAC_LeaderPersona)=='table'); return 'ORDER_FIXED_LOAD_AFTER_RELOAD turn='..tostring(Game.GetCurrentGameTurn())"
+    },
+    {
+      "action": "stop_native_order_capture",
+      "timeout": 45
+    }
+  ]
+}

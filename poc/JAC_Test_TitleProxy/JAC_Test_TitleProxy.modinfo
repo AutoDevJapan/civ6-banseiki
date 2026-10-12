@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PR86 test component only. The production persona MOD is untouched. -->
+<Mod id="5d4393c0-c02a-48bf-83d2-7b6839d4e5cb" version="1">
+  <Properties>
+    <Name>LOC_JAC_TITLE_PROXY_TEST_NAME</Name>
+    <Teaser>LOC_JAC_TITLE_PROXY_TEST_DESCRIPTION</Teaser>
+    <Description>LOC_JAC_TITLE_PROXY_TEST_DESCRIPTION</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="LOC_JAC_PERSONA_MOD_NAME"/>
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_TITLE_PROXY_TEST_NAME">
+      <ja_JP>JAC テスト専用：称号支払い総督</ja_JP>
+      <en_US>JAC TEST ONLY: title payment governor</en_US>
+      <ru_RU>JAC ТЕСТ: оплата звания губернатора</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_TITLE_PROXY_TEST_DESCRIPTION">
+      <ja_JP>公式称号の会計と配置不能な総督の証跡を測る診断用MOD。</ja_JP>
+      <en_US>Diagnostic for native title accounting and receipts of a governor that cannot be assigned.</en_US>
+      <ru_RU>Проверяет учёт званий и свойства губернатора без размещения.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_TitleProxy_15km">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_TitleProxy_Data" criteria="JAC_TitleProxy_15km">
+      <Properties><LoadOrder>440</LoadOrder></Properties>
+      <File>Data/JAC_TitleProxy_Probe.sql</File>
+    </UpdateDatabase>
+    <ImportFiles id="JAC_TitleProxy_Import" criteria="JAC_TitleProxy_15km">
+      <File>Shared/JAC_TitlePaymentRules.lua</File>
+      <File>UI/JAC_TitleProxy_View.lua</File>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+      <File>UI/JAC_TitleProxy_GovernorPanel.lua</File>
+    </ImportFiles>
+    <AddGameplayScripts id="JAC_TitleProxy_Core" criteria="JAC_TitleProxy_15km">
+      <Properties><LoadOrder>440</LoadOrder></Properties>
+      <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    </AddGameplayScripts>
+    <AddUserInterfaces id="JAC_TitleProxy_View" criteria="JAC_TitleProxy_15km">
+      <Properties><LoadOrder>440</LoadOrder><Context>InGame</Context></Properties>
+      <File>UI/JAC_TitleProxy_View.xml</File>
+    </AddUserInterfaces>
+    <ReplaceUIScript id="JAC_TitleProxy_GovernorPanel" criteria="JAC_TitleProxy_15km">
+      <Properties><LoadOrder>440</LoadOrder><LuaContext>GovernorPanel</LuaContext>
+        <LuaReplace>UI/JAC_TitleProxy_GovernorPanel.lua</LuaReplace></Properties>
+    </ReplaceUIScript>
+  </InGameActions>
+  <Files>
+    <File>Data/JAC_TitleProxy_Probe.sql</File>
+    <File>Shared/JAC_TitlePaymentRules.lua</File>
+    <File>Scripts/JAC_TitleProxy_Probe.lua</File>
+    <File>UI/JAC_TitleProxy_View.lua</File>
+    <File>UI/JAC_TitleProxy_View.xml</File>
+    <File>UI/JAC_TitleProxy_GovernorPanel.lua</File>
+  </Files>
+</Mod>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_NAME" Language="ja_JP"><Text>検証用の汎用総督枠</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_DESCRIPTION" Language="ja_JP"><Text>人物未対応の本体総督。任命は追加検証費用として称号1個を使う。忠誠圧力8、定着5ターン。任命前のAI選択を測る。</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_BASE_NAME" Language="ja_JP"><Text>取得証跡の検証</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_BASE_DESCRIPTION" Language="ja_JP"><Text>公式のプレイヤーと都市のプロパティの発効時点を測る。人物の技能効果は付けない。</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_NAME" Language="en_US"><Text>Diagnostic governor slot</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_DESCRIPTION" Language="en_US"><Text>Unmatched native governor. Appointment spends one additional diagnostic title. Loyalty pressure 8, establishment 5 turns. AI appointment remains under test.</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_BASE_NAME" Language="en_US"><Text>Native receipt probe</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_BASE_DESCRIPTION" Language="en_US"><Text>Measures activation of official player and city properties. No persona skill effects.</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_NAME" Language="ru_RU"><Text>Тестовое место губернатора</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_DESCRIPTION" Language="ru_RU"><Text>Губернатор без персонажа. Назначение стоит один дополнительный титул для теста. Давление лояльности 8, размещение 5 ходов. Выбор ИИ проверяется.</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_BASE_NAME" Language="ru_RU"><Text>Проверка подтверждения</Text></Row>
+    <Row Tag="LOC_JAC_NATIVE_SLOT_BASE_DESCRIPTION" Language="ru_RU"><Text>Проверяет момент действия свойств игрока и города. Навыки персонажа не добавлены.</Text></Row>
+  </LocalizedText>
+</GameData>

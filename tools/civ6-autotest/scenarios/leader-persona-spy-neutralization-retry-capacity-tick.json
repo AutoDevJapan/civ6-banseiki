@@ -1,0 +1,15 @@
+{
+  "name": "Advance one real turn and read actual Government Plaza building and spy capacity",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome(); local ready=o.targetBuilt and ((o.stage=='TIER1_BUILT' and o.capacity==1 and o.buildingType~='BUILDING_GOV_SPIES') or (o.stage=='CAPACITY_READY' and o.capacity==2 and o.buildingType=='BUILDING_GOV_SPIES')); assert((o.stage=='PROGRESS_PENDING' or o.stage=='EFFECT_PENDING' or ready) and o.occupied==1 and o.captured==1,'capacity building or captive differs before real turn: '..o.stage); return o.stage..' '..o.buildingType"},
+    {"action":"end_turn","turns":1,"timeout":300},
+    {"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; if not (p and p:IsTurnActive()) then return false end; local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome(); return o.turn>o.progressTurn and (o.stage=='TIER1_BUILT' or o.stage=='CAPACITY_READY')"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityOutcome(); assert(o.turn>o.progressTurn and o.targetBuilt and o.captured==1 and ((o.occupied==1 and o.mapSpies==0) or (o.occupied==2 and o.mapSpies==1)),'native building, old captive or second operative not confirmed'); if o.buildingType=='BUILDING_GOV_SPIES' then assert(o.stage=='CAPACITY_READY' and o.capacity==2,'Intelligence Agency or native second capacity missing') else assert(o.stage=='TIER1_BUILT' and o.capacity==1 and o.occupied==1,'native tier-one building not confirmed') end; return o.stage..' '..o.buildingType..' capacity='..o.capacity"},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"exit_to_menu"}
+  ]
+}

@@ -371,7 +371,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
     let required_turn = match number {
         4..=6 => 3,
         7..=10 => 6,
-        12 | 13 => 11,
+        12..=13 => 11,
         14..=16 => 13,
         17..=19 => 16,
         21 => 20,

@@ -1,7 +1,8 @@
 mod support_fixture;
 
 use civ6_autotest_rs::scenario::{
-    enable_mods_code, enable_mods_code_with_scope, validate_scenario,
+    enable_mods_code, enable_mods_code_with_scope, isolated_disabled_mods, validate_scenario,
+    ENEMY_PERSONA_GATE_ID, PROPERTY_OBSERVER_MOD_ID, STATIC_PERSONA_GATE_ID, TRAIT_GRANT_PROBE_ID,
 };
 use mlua::{Lua, Table};
 use serde_json::{json, Value};
@@ -16,6 +17,214 @@ const KEEP: u8 = 5;
 const OFF: u8 = 6;
 const MISSING: u8 = 7;
 const OFFICIAL: u8 = 8;
+
+#[test]
+fn property_observer_is_disabled_after_its_scene_unless_explicitly_enabled() {
+    let all = [
+        STATIC_PERSONA_GATE_ID,
+        ENEMY_PERSONA_GATE_ID,
+        TRAIT_GRANT_PROBE_ID,
+        PROPERTY_OBSERVER_MOD_ID,
+    ]
+    .map(str::to_owned);
+    assert!(isolated_disabled_mods(&all, &[]).is_empty());
+    assert_eq!(isolated_disabled_mods(&[], &[]), all);
+    let lua = Lua::new();
+    let definitions = lua.create_table().unwrap();
+    let definition = lua.create_table().unwrap();
+    definition
+        .set("Id", PROPERTY_OBSERVER_MOD_ID.to_uppercase())
+        .unwrap();
+    definition.set("Enabled", true).unwrap();
+    definition
+        .set("Dependencies", lua.create_table().unwrap())
+        .unwrap();
+    definitions.set(1, definition).unwrap();
+    lua.load(include_str!("fixtures/modding_stub.lua"))
+        .call::<()>(definitions)
+        .unwrap();
+    lua.load(enable_mods_code(&[], &[])).exec().unwrap();
+    let mods: Table = lua.globals().get("MODS").unwrap();
+    let observer: Table = mods.get(PROPERTY_OBSERVER_MOD_ID).unwrap();
+    assert!(!observer.get::<bool>("Enabled").unwrap());
+    let disabled: Table = lua.globals().get("DISABLED").unwrap();
+    assert_eq!(disabled.raw_len(), 1);
+}
+
+#[test]
+fn exclusive_selection_disables_unrequested_persona_observer_once() {
+    let lua = Lua::new();
+    let definitions = lua.create_table().unwrap();
+    let observer = lua.create_table().unwrap();
+    observer.set("Id", PROPERTY_OBSERVER_MOD_ID).unwrap();
+    observer.set("Enabled", true).unwrap();
+    observer.set("Official", false).unwrap();
+    observer
+        .set("Dependencies", lua.create_table().unwrap())
+        .unwrap();
+    definitions.set(1, observer).unwrap();
+    lua.load(include_str!("fixtures/modding_stub.lua"))
+        .call::<()>(definitions)
+        .unwrap();
+    lua.load(enable_mods_code_with_scope(&[], &[], true))
+        .exec()
+        .unwrap();
+    let mods: Table = lua.globals().get("MODS").unwrap();
+    let observer: Table = mods.get(PROPERTY_OBSERVER_MOD_ID).unwrap();
+    assert!(!observer.get::<bool>("Enabled").unwrap());
+    let disabled: Table = lua.globals().get("DISABLED").unwrap();
+    assert_eq!(disabled.raw_len(), 1);
+}
+
+#[test]
+fn static_gate_is_disabled_by_default_but_an_explicit_diagnostic_can_enable_it() {
+    use civ6_autotest_rs::scenario::STATIC_PERSONA_GATE_ID;
+    for (installed, opt_in, initially_enabled, expected) in [
+        (true, false, true, false),
+        (true, true, false, true),
+        (true, true, true, true),
+        (false, false, false, false),
+    ] {
+        let lua = Lua::new();
+        let definitions = lua.create_table().unwrap();
+        if installed {
+            let definition = lua.create_table().unwrap();
+            definition
+                .set("Id", STATIC_PERSONA_GATE_ID.to_uppercase())
+                .unwrap();
+            definition.set("Enabled", initially_enabled).unwrap();
+            definition
+                .set("Dependencies", lua.create_table().unwrap())
+                .unwrap();
+            definitions.set(1, definition).unwrap();
+        }
+        lua.load(include_str!("fixtures/modding_stub.lua"))
+            .call::<()>(definitions)
+            .unwrap();
+        let enabled = if opt_in {
+            vec![STATIC_PERSONA_GATE_ID.to_uppercase()]
+        } else {
+            vec![]
+        };
+        lua.load(enable_mods_code(&enabled, &[])).exec().unwrap();
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        if installed {
+            let gate: Table = mods.get(STATIC_PERSONA_GATE_ID).unwrap();
+            assert_eq!(gate.get::<bool>("Enabled").unwrap(), expected);
+            let disabled: Table = lua.globals().get("DISABLED").unwrap();
+            assert_eq!(
+                disabled.raw_len(),
+                usize::from(!opt_in && initially_enabled)
+            );
+        } else {
+            assert_eq!(mods.raw_len(), 0);
+        }
+        assert_eq!(lua.globals().get::<u32>("UPDATES").unwrap(), 1);
+    }
+}
+
+#[test]
+#[expect(
+    clippy::bool_assert_comparison,
+    reason = "Keep the existing typed Lua equality assertions that both unrelated diagnostic MOD gates are disabled"
+)]
+fn persona_runs_select_their_required_mods_after_another_diagnostic() {
+    const PERSONA: &str = "91cf7b65-54bb-4f69-a452-19a65527cde2";
+    const BOUNDARY: &str = "4a72b1c0-958b-4bd5-81e4-a094f86ce643";
+    const ABSORPTION: &str = "61320778-2e75-4c11-9009-94101b519aba";
+    const STATIC_GATE: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
+    const ENEMY_GATE: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
+    for name in [
+        "leader-persona-15km.json",
+        "leader-persona-baseline-15km.json",
+        "leader-persona-native-eligibility-15km.json",
+        "leader-persona-city-loss-15km.json",
+        "leader-persona-spy-access-15km.json",
+        "leader-persona-spy-production-15km.json",
+    ] {
+        let data = support_fixture::scenario(name);
+        validate_scenario(&data).unwrap();
+        let step = &data["steps"][0];
+        assert_eq!(step["action"], "enable_mods");
+        let strings = |key: &str| -> Vec<String> {
+            step[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|id| id.as_str().unwrap().to_owned())
+                .collect()
+        };
+        let enabled = strings("ids");
+        let disabled = strings("disable_ids");
+        let ids: std::collections::BTreeSet<_> = enabled
+            .iter()
+            .chain(&disabled)
+            .cloned()
+            .chain([
+                BOUNDARY.to_owned(),
+                ABSORPTION.to_owned(),
+                STATIC_GATE.to_owned(),
+                ENEMY_GATE.to_owned(),
+            ])
+            .collect();
+        let lua = Lua::new();
+        let definitions = lua.create_table().unwrap();
+        for (index, id) in ids.iter().enumerate() {
+            let definition = lua.create_table().unwrap();
+            definition.set("Id", id.as_str()).unwrap();
+            definition.set("Enabled", true).unwrap();
+            let dependencies = if id == BOUNDARY || id == STATIC_GATE || id == ENEMY_GATE {
+                vec![PERSONA]
+            } else {
+                vec![]
+            };
+            definition
+                .set(
+                    "Dependencies",
+                    lua.create_sequence_from(dependencies).unwrap(),
+                )
+                .unwrap();
+            definitions.set(index + 1, definition).unwrap();
+        }
+        lua.load(include_str!("fixtures/modding_stub.lua"))
+            .call::<()>(definitions)
+            .unwrap();
+        lua.load(enable_mods_code(&enabled, &disabled))
+            .exec()
+            .unwrap();
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        let gate: Table = mods.get(STATIC_GATE).unwrap();
+        assert_eq!(gate.get::<bool>("Enabled").unwrap(), false, "{name}");
+        let enemy_gate: Table = mods.get(ENEMY_GATE).unwrap();
+        assert_eq!(enemy_gate.get::<bool>("Enabled").unwrap(), false, "{name}");
+        let boundary: Table = mods.get(BOUNDARY).unwrap();
+        let expected_boundary = matches!(
+            name,
+            "leader-persona-city-loss-15km.json"
+                | "leader-persona-spy-access-15km.json"
+                | "leader-persona-spy-production-15km.json"
+        );
+        assert!(
+            matches!(boundary.get::<mlua::Value>("Enabled").unwrap(),
+            mlua::Value::Boolean(value) if value == expected_boundary),
+            "{name}"
+        );
+        let absorption: Table = mods.get(ABSORPTION).unwrap();
+        assert!(
+            matches!(
+                absorption.get::<mlua::Value>("Enabled").unwrap(),
+                mlua::Value::Boolean(false)
+            ),
+            "{name}"
+        );
+        let persona: Table = mods.get(PERSONA).unwrap();
+        let expected = name != "leader-persona-baseline-15km.json";
+        assert!(
+            matches!(persona.get::<mlua::Value>("Enabled").unwrap(), mlua::Value::Boolean(value) if value == expected),
+            "{name}"
+        );
+    }
+}
 
 fn id(n: u8) -> String {
     format!("abcdef{n:02x}-1234-1234-1234-123456789abc")

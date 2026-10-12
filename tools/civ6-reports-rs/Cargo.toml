@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+civ6-autotest-rs = { path = "../civ6-autotest-rs" }
 civ6-cli-compat-rs = { path = "../civ6-cli-compat-rs" }
 clap = { version = "4.5", features = ["derive"] }
 regex = "1"
@@ -30,3 +31,7 @@ path = "src/bin/research_report.rs"
 [[bin]]
 name = "civ6-build-arbitration-ai-scenario"
 path = "src/bin/build_arbitration_ai_scenario.rs"
+
+[[bin]]
+name = "civ6-build-persona-ai-scenario"
+path = "src/bin/build_persona_ai_scenario.rs"

@@ -31,6 +31,9 @@ struct Args {
     no_auto_restart: bool,
     #[arg(long)]
     owner_start: bool,
+    /// Diagnostic resident runtime; each saved-game load uses a fresh process.
+    #[arg(long = "resident-persona-runtime-restart")]
+    persona_runtime_restart: bool,
 }
 fn run(args: Args) -> Result<i32> {
     let bytes = fs::read(&args.scenario)?;
@@ -87,6 +90,27 @@ fn run(args: Args) -> Result<i32> {
     runner.auto_restart = !args.no_auto_restart;
     runner.owner_start = args.owner_start;
     runner.test_mode = args.test_mode;
+    runner.persona_runtime_restart = args.persona_runtime_restart
+        || match std::env::var("CIV6_PERSONA_RUNTIME_RESTART") {
+            Err(std::env::VarError::NotPresent) => false,
+            Ok(value) if value == "1" => true,
+            Ok(value) if value == "0" => false,
+            _ => {
+                return Err(civ6_autotest_rs::Error::input(
+                    "CIV6_PERSONA_RUNTIME_RESTART must be 0 or 1",
+                ));
+            }
+        };
+    if runner.persona_runtime_restart {
+        if runner.test_mode || runner.owner_start {
+            return Err(civ6_autotest_rs::Error::input(
+                "resident restart diagnostic requires automatic execution without test-mode",
+            ));
+        }
+        println!(
+            "PERSONA RUNTIME: explicit diagnostic; saved-game loads renew the owned process; in-process reload and product autostart remain unproven"
+        );
+    }
     if let Some(mods) = args.mods {
         runner.mods_dir = mods;
     }
@@ -114,6 +138,23 @@ mod parser_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resident_restart_is_explicit_and_preserves_existing_port_abbreviation() {
+        let default =
+            Args::try_parse_from(["civ6-autotest", "scenario.json", "--p", "4318"]).unwrap();
+        assert!(!default.persona_runtime_restart);
+        let enabled = Args::try_parse_from([
+            "civ6-autotest",
+            "scenario.json",
+            "--resident-persona-runtime-restart",
+            "--p",
+            "4318",
+        ])
+        .unwrap();
+        assert!(enabled.persona_runtime_restart);
+        assert_eq!(enabled.port.socket_port().unwrap(), 4318);
+    }
 
     #[test]
     fn compat_scenario_negative_number_paths_preserve_values_and_last_occurrences() {
@@ -163,6 +204,7 @@ mod tests {
                 ("--mods", &["mods"]),
                 ("--no-auto-restart", &[]),
                 ("--owner-start", &[]),
+                ("--resident-persona-runtime-restart", &[]),
             ],
         );
     }

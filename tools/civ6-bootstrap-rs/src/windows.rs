@@ -1,0 +1,1113 @@
+use super::*;
+use sha2::{Digest, Sha256};
+use std::{
+    ffi::c_void,
+    fs::{File, OpenOptions},
+    io::Read,
+    mem::size_of,
+    os::windows::fs::OpenOptionsExt,
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Mutex,
+    },
+};
+use windows_sys::Win32::{
+    Foundation::*,
+    System::{
+        Diagnostics::Debug::{FlushInstructionCache, ReadProcessMemory},
+        LibraryLoader::*,
+        Memory::*,
+        Threading::*,
+    },
+};
+#[path = "hotpatch.rs"]
+mod hotpatch;
+const GAME_ROOT: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";
+const RELEASE: usize = 0xf7110;
+const SET: usize = 0xf7830;
+const LOADER: usize = 0xf8510;
+const HOLDER: usize = 0x22d6070;
+const CONTEXT: usize = 0x22d60c0;
+type Api = unsafe extern "system" fn(*mut c_void) -> u32;
+
+// Static codes only: no exception strings, filenames or personal paths cross ABI.
+#[repr(C)]
+pub struct PrepareDiagnostic {
+    words: [AtomicU64; 8],
+}
+const _: () = assert!(size_of::<PrepareDiagnostic>() == 64);
+static PREPARE_DIAGNOSTIC: PrepareDiagnostic = PrepareDiagnostic {
+    words: [
+        AtomicU64::new(1),
+        AtomicU64::new(64),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+        AtomicU64::new(0),
+    ],
+};
+#[unsafe(no_mangle)]
+pub static BOOTSTRAP_PREPARE_DIAGNOSTIC_POINTER: &PrepareDiagnostic = &PREPARE_DIAGNOSTIC;
+#[unsafe(no_mangle)]
+pub static BOOTSTRAP_PREPARE_DIAGNOSTIC_SIZE: u64 = 64;
+struct PrepareDiagnosis {
+    owner: bool,
+}
+impl PrepareDiagnosis {
+    fn begin() -> Self {
+        Self {
+            owner: PREPARE_DIAGNOSTIC.words[2]
+                .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok(),
+        }
+    }
+    fn stage(&self, stage: u64) {
+        if self.owner {
+            PREPARE_DIAGNOSTIC.words[3].store(stage, Ordering::Release);
+        }
+    }
+    fn finish(&self, reason: u64) {
+        if self.owner {
+            PREPARE_DIAGNOSTIC.words[4].store(reason, Ordering::Relaxed);
+            PREPARE_DIAGNOSTIC.words[2].store(if reason == 0 { 2 } else { 3 }, Ordering::Release);
+        }
+    }
+}
+fn diagnostic_reason(error: &str) -> u64 {
+    match error {
+        "unreadable in-process range" => 2,
+        "source SHA differs" => 3,
+        "runtime export absent" => 4,
+        "runtime export outside executable source module" => 5,
+        "runtime data export outside readable source module" => 6,
+        "capture exported size differs" => 7,
+        "capture trace outside readable source module" => 8,
+        _ => 1, // fixed stage identifies the failed dependency; never export arbitrary ErrString
+    }
+}
+fn capture_ready_symbols(
+    bridge: usize,
+    submission: bool,
+    mut resolve: impl FnMut(&[u8]) -> Result<usize, String>,
+) -> Result<(Api, Api), String> {
+    let names: [&[u8]; 4] = if submission {
+        [
+            b"BridgeSubmissionObservationInstall\0",
+            b"BridgeSubmissionObservationStop\0",
+            b"BRIDGE_SUBMISSION_OBSERVATION_TRACE\0",
+            b"BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE\0",
+        ]
+    } else {
+        [
+            b"BridgeRootObservationInstall\0",
+            b"BridgeRootObservationStop\0",
+            b"BRIDGE_ROOT_OBSERVATION_TRACE\0",
+            b"BRIDGE_ROOT_OBSERVATION_TRACE_SIZE\0",
+        ]
+    };
+    let install = validate_api(bridge, resolve(names[0])?)?;
+    let stop = validate_api(bridge, resolve(names[1])?)?;
+    let pointer = validate_data(bridge, resolve(names[2])?)?;
+    let size = validate_data(bridge, resolve(names[3])?)?;
+    let expected = if submission {
+        protocol::SUBMISSION_BYTES
+    } else {
+        protocol::ROOT_BYTES
+    };
+    if ptr_at(size)? != expected {
+        return Err("capture exported size differs".into());
+    }
+    let p = ptr_at(pointer)?;
+    let mut m = MEMORY_BASIC_INFORMATION::default();
+    if !p.is_multiple_of(8)
+        || unsafe { VirtualQuery(p as _, &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
+        || m.AllocationBase as usize != bridge
+        || m.State != MEM_COMMIT
+        || m.Protect & PAGE_GUARD != 0
+        || !matches!(
+            m.Protect & 0xff,
+            PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
+        )
+        || p.checked_add(expected)
+            .is_none_or(|end| end > m.BaseAddress as usize + m.RegionSize)
+        || read(p, 8).is_err()
+    {
+        return Err("capture trace outside readable source module".into());
+    }
+    // Uninstalled trace words are legitimately zero. Do not parse magic/version
+    // before the deferred loader-return install or call any runtime API here.
+    Ok((install, stop))
+}
+
+#[unsafe(no_mangle)]
+static BOOT_RELEASE_CONTINUE: AtomicUsize = AtomicUsize::new(0);
+#[unsafe(no_mangle)]
+static BOOT_SET_CONTINUE: AtomicUsize = AtomicUsize::new(0);
+#[unsafe(no_mangle)]
+static BOOT_LOADER_CONTINUE: AtomicUsize = AtomicUsize::new(0);
+static STATE: Mutex<Option<Resident>> = Mutex::new(None);
+static CALLS: AtomicU64 = AtomicU64::new(0);
+static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
+static ROOT_PROFILE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SUBMISSION_PROFILE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+static OBSERVATION: crate::observation::ObservationGate =
+    crate::observation::ObservationGate::new(true);
+struct RecordFlight;
+impl RecordFlight {
+    fn try_enter() -> Option<Self> {
+        OBSERVATION.try_acquire().then(|| Self)
+    }
+}
+impl Drop for RecordFlight {
+    fn drop(&mut self) {
+        OBSERVATION.release();
+    }
+}
+#[repr(C)]
+struct TraceRow {
+    sequence: AtomicU64,
+    kind: AtomicU64,
+    tid: AtomicU64,
+    receiver: AtomicU64,
+    old: AtomicU64,
+    incoming: AtomicU64,
+    caller: AtomicU64,
+    generation: AtomicU64,
+    status: AtomicU64,
+    calibration_next: AtomicU64,
+    calibration_in_flight: AtomicU64,
+    property_next: AtomicU64,
+    property_in_flight: AtomicU64,
+}
+#[repr(C)]
+pub struct Trace {
+    version: u64,
+    capacity: u64,
+    pid: AtomicU64,
+    filetime: AtomicU64,
+    core: AtomicU64,
+    runtime_trace: AtomicU64,
+    runtime_trace_size: AtomicU64,
+    reserved: AtomicU64,
+    dropped: AtomicU64,
+    rows: [TraceRow; 128],
+}
+static TRACE: Trace = Trace {
+    version: 2,
+    capacity: 128,
+    pid: AtomicU64::new(0),
+    filetime: AtomicU64::new(0),
+    core: AtomicU64::new(0),
+    runtime_trace: AtomicU64::new(0),
+    runtime_trace_size: AtomicU64::new(0),
+    reserved: AtomicU64::new(0),
+    dropped: AtomicU64::new(0),
+    rows: [const {
+        TraceRow {
+            sequence: AtomicU64::new(0),
+            kind: AtomicU64::new(0),
+            tid: AtomicU64::new(0),
+            receiver: AtomicU64::new(0),
+            old: AtomicU64::new(0),
+            incoming: AtomicU64::new(0),
+            caller: AtomicU64::new(0),
+            generation: AtomicU64::new(0),
+            status: AtomicU64::new(0),
+            calibration_next: AtomicU64::new(u64::MAX),
+            calibration_in_flight: AtomicU64::new(u64::MAX),
+            property_next: AtomicU64::new(u64::MAX),
+            property_in_flight: AtomicU64::new(u64::MAX),
+        }
+    }; 128],
+};
+#[unsafe(no_mangle)]
+pub static BOOTSTRAP_TRACE_POINTER: &Trace = &TRACE;
+fn record(
+    kind: u64,
+    receiver: usize,
+    old: usize,
+    incoming: usize,
+    caller: u64,
+    generation: u64,
+    status: u32,
+) {
+    let Some(_flight) = RecordFlight::try_enter() else {
+        return;
+    };
+    let seq = TRACE.reserved.fetch_add(1, Ordering::AcqRel);
+    let Some(row) = TRACE.rows.get(seq as usize) else {
+        TRACE.dropped.fetch_add(1, Ordering::Relaxed);
+        return;
+    };
+    row.kind.store(kind, Ordering::Relaxed);
+    row.tid
+        .store(unsafe { GetCurrentThreadId() } as u64, Ordering::Relaxed);
+    row.receiver.store(receiver as u64, Ordering::Relaxed);
+    row.old.store(old as u64, Ordering::Relaxed);
+    row.incoming.store(incoming as u64, Ordering::Relaxed);
+    row.caller.store(caller, Ordering::Relaxed);
+    row.generation.store(generation, Ordering::Relaxed);
+    row.status.store(status as u64, Ordering::Relaxed);
+    let counts = native_counts();
+    row.calibration_next.store(counts[0], Ordering::Relaxed);
+    row.calibration_in_flight
+        .store(counts[1], Ordering::Relaxed);
+    row.property_next.store(counts[2], Ordering::Relaxed);
+    row.property_in_flight.store(counts[3], Ordering::Relaxed);
+    row.sequence.store(seq + 1, Ordering::Release);
+}
+fn native_counts() -> [u64; 4] {
+    // The calibration version fixes the PropertyTrace prefix offset. The
+    // runtime marks that prefix external and writes every property
+    // row to its separate log, so the property counts come from the log.
+    // These read-only checkpoints are NOT an authorization/publication fence.
+    use protocol::*;
+    let base = TRACE.runtime_trace.load(Ordering::Acquire) as usize;
+    if base == 0 || TRACE.runtime_trace_size.load(Ordering::Acquire) < 20 {
+        return [u64::MAX; 4];
+    }
+    let Ok(header) = read(base, 20) else {
+        return [u64::MAX; 4];
+    };
+    let Ok((_, _, property_offset)) = calibration_layout(&header) else {
+        return [u64::MAX; 4];
+    };
+    if TRACE.runtime_trace_size.load(Ordering::Acquire) < (property_offset + 32) as u64 {
+        return [u64::MAX; 4];
+    }
+    let u = |b: &[u8], n: usize| u32::from_le_bytes(b[n..n + 4].try_into().unwrap());
+    let property = || -> Option<[u64; 2]> {
+        let prefix = read(base.checked_add(property_offset)?, 32).ok()?;
+        if u(&prefix, 0) != 0x4a414350
+            || u(&prefix, 4) != PROPERTY_EXTERNAL_VERSION
+            || u(&prefix, 28) != PROPERTY_LOG_MAGIC
+        {
+            return None;
+        }
+        let log = ptr_at(LOG_EXPORT.load(Ordering::Acquire)).ok()?;
+        let b = read(log, PROPERTY_LOG_HEADER).ok()?;
+        let w = |n: usize| u64::from_le_bytes(b[n..n + 8].try_into().unwrap());
+        (log != 0 && u(&b, 0) == PROPERTY_LOG_MAGIC && u(&b, 4) == PROPERTY_LOG_VERSION)
+            .then(|| [w(PROPERTY_LOG_NEXT), w(PROPERTY_LOG_IN_FLIGHT)])
+    };
+    match property() {
+        Some(b) => [u(&header, 8) as u64, u(&header, 16) as u64, b[0], b[1]],
+        None => [u64::MAX; 4],
+    }
+}
+/// Address of the pinned runtime's `BRIDGE_RUNTIME_PROPERTY_LOG` data export.
+static LOG_EXPORT: AtomicUsize = AtomicUsize::new(0);
+
+core::arch::global_asm!(
+    ".text",
+    ".globl boot_release_original",
+    ".seh_proc boot_release_original",
+    "boot_release_original:",
+    "push rbx",
+    ".seh_pushreg rbx",
+    ".seh_endprologue",
+    "jmp qword ptr [rip + BOOT_RELEASE_CONTINUE]",
+    ".seh_endproc",
+    ".globl boot_set_original",
+    ".seh_proc boot_set_original",
+    "boot_set_original:",
+    "mov [rsp + 8], rbx",
+    ".seh_savereg rbx, 8",
+    ".seh_endprologue",
+    "jmp qword ptr [rip + BOOT_SET_CONTINUE]",
+    ".seh_endproc",
+    ".globl boot_loader_original",
+    ".seh_proc boot_loader_original",
+    "boot_loader_original:",
+    "sub rsp,0x248",
+    ".seh_stackalloc 0x248",
+    ".seh_endprologue",
+    "jmp qword ptr [rip + BOOT_LOADER_CONTINUE]",
+    ".seh_endproc",
+);
+// Native callees are not proven noexcept; their unwind may cross this wrapper.
+extern "system-unwind" {
+    fn boot_release_original(a: usize, b: usize) -> usize;
+    fn boot_set_original(a: usize, b: usize) -> usize;
+    fn boot_loader_original(a: usize, b: usize) -> usize;
+}
+
+struct Resident {
+    exe: usize,
+    core: usize,
+    install: Api,
+    stop: Api,
+    close: Api,
+    rebuild: Api,
+    phase: Phase,
+    generation: u64,
+    close_tid: u32,
+    config: RuntimeConfig,
+    _source: File,
+    // Retained even after partial publication. Parent must close its owned
+    // process on a Prepare error after Mode6 became resident; no reattempt.
+    _hooks: Vec<hotpatch::Hook>,
+}
+
+fn read(address: usize, n: usize) -> Result<Vec<u8>, String> {
+    let mut bytes = vec![0; n];
+    let mut got = 0;
+    if unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            address as _,
+            bytes.as_mut_ptr().cast(),
+            n,
+            &mut got,
+        )
+    } == 0
+        || got != n
+    {
+        return Err("unreadable in-process range".into());
+    }
+    Ok(bytes)
+}
+fn ptr_at(address: usize) -> Result<usize, String> {
+    Ok(u64::from_le_bytes(read(address, 8)?.try_into().unwrap()) as usize)
+}
+fn path(module: usize) -> Result<PathBuf, String> {
+    let mut b = vec![0u16; 32768];
+    let n = unsafe { GetModuleFileNameW(module as _, b.as_mut_ptr(), b.len() as u32) } as usize;
+    if n == 0 || n >= b.len() {
+        return Err("module path unavailable".into());
+    }
+    Ok(PathBuf::from(
+        String::from_utf16(&b[..n]).map_err(|_| "module path encoding")?,
+    ))
+}
+fn same(a: &Path, b: &Path) -> bool {
+    a.to_string_lossy()
+        .replace('\\', "/")
+        .eq_ignore_ascii_case(&b.to_string_lossy().replace('\\', "/"))
+}
+fn pin_file(p: &Path, sha: &[u8; 32]) -> Result<File, String> {
+    let mut f = OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(p)
+        .map_err(|e| e.to_string())?;
+    let mut hash = Sha256::new();
+    let mut b = [0u8; 65536];
+    loop {
+        let n = f.read(&mut b).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        hash.update(&b[..n]);
+    }
+    if hash.finalize().as_slice() != sha {
+        return Err("source SHA differs".into());
+    }
+    Ok(f)
+}
+fn fixed_hash(p: &Path, expected: &str) -> Result<File, String> {
+    let mut sha = [0u8; 32];
+    for (i, v) in sha.iter_mut().enumerate() {
+        *v = u8::from_str_radix(&expected[i * 2..i * 2 + 2], 16).map_err(|_| "fixed SHA")?;
+    }
+    pin_file(p, &sha)
+}
+fn created() -> u64 {
+    let (mut a, mut b, mut c, mut d) = (
+        FILETIME::default(),
+        FILETIME::default(),
+        FILETIME::default(),
+        FILETIME::default(),
+    );
+    if unsafe { GetProcessTimes(GetCurrentProcess(), &mut a, &mut b, &mut c, &mut d) } == 0 {
+        return 0;
+    }
+    ((a.dwHighDateTime as u64) << 32) | u64::from(a.dwLowDateTime)
+}
+fn module(name: &str) -> usize {
+    #[cfg(test)]
+    if name == "GameCore_XP2_FinalRelease.dll" {
+        if let Some(value) = tests::CORE_MODULE_OVERRIDE.with(std::cell::Cell::get) {
+            return value;
+        }
+    }
+    let w: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+    unsafe { GetModuleHandleW(w.as_ptr()) as usize }
+}
+fn api(module: usize, name: &[u8]) -> Result<Api, String> {
+    let f = unsafe { GetProcAddress(module as _, name.as_ptr()) }.ok_or("runtime export absent")?;
+    validate_api(module, f as *const () as usize)
+}
+fn validate_api(module: usize, address: usize) -> Result<Api, String> {
+    let f = address as *const ();
+    let mut m = MEMORY_BASIC_INFORMATION::default();
+    if unsafe { VirtualQuery(f.cast(), &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
+        || m.AllocationBase as usize != module
+        || m.State != MEM_COMMIT
+        || m.Protect & PAGE_GUARD != 0
+        || !matches!(
+            m.Protect & 0xff,
+            PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY
+        )
+    {
+        return Err("runtime export outside executable source module".into());
+    }
+    Ok(unsafe { std::mem::transmute::<usize, Api>(address) })
+}
+/// A pointer-sized data export of `module`; its current value is read later.
+fn data(module: usize, name: &[u8]) -> Result<usize, String> {
+    let p = unsafe { GetProcAddress(module as _, name.as_ptr()) }.ok_or("runtime export absent")?
+        as usize;
+    validate_data(module, p)
+}
+fn validate_data(module: usize, p: usize) -> Result<usize, String> {
+    let mut m = MEMORY_BASIC_INFORMATION::default();
+    if unsafe { VirtualQuery(p as _, &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
+        || m.AllocationBase as usize != module
+        || m.State != MEM_COMMIT
+        || m.Protect & PAGE_GUARD != 0
+        || !matches!(
+            m.Protect & 0xff,
+            PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
+        )
+        || !p.is_multiple_of(8)
+        || p.checked_add(8)
+            .is_none_or(|end| end > m.BaseAddress as usize + m.RegionSize)
+        || read(p, 8).is_err()
+    {
+        return Err("runtime data export outside readable source module".into());
+    }
+    Ok(p)
+}
+fn typed(core: usize, p: usize) -> bool {
+    p != 0
+        && ptr_at(p).ok() == Some(core + 0xa101e8)
+        && ptr_at(core + 0xa101f0).ok() == Some(core + 0x8972d0)
+        && ptr_at(core + 0xa10388).ok() == Some(core + 0x58ff70)
+}
+fn caller(exe: usize, ret: usize, entry: usize) -> Result<u64, String> {
+    let rva = ret.checked_sub(exe).ok_or("foreign caller")?;
+    let bytes = read(ret.checked_sub(5).ok_or("caller underflow")?, 5)?;
+    let target =
+        ret.checked_add_signed(i32::from_le_bytes(bytes[1..5].try_into().unwrap()) as isize);
+    if bytes[0] != 0xe8 || target != Some(exe + entry) {
+        return Err("caller is not the fixed direct call".into());
+    }
+    Ok((rva - 5) as u64)
+}
+
+fn event(
+    receiver: usize,
+    incoming: usize,
+    ret: usize,
+    is_set: bool,
+) -> Result<Option<u64>, String> {
+    let mut lock = STATE.lock().map_err(|_| "resident mutex poisoned")?;
+    let s = lock.as_mut().ok_or("resident not prepared")?;
+    if ROOT_PROFILE.load(Ordering::Acquire) {
+        // Root-only bootstrap never closes or activates gameplay policy.
+        return Ok(None);
+    }
+    if s.phase == Phase::Prepared {
+        // Menu BaseContext has no XP2 runtime authority. Original menu
+        // transitions run untouched until the target loader returns.
+        record(15, receiver, usize::MAX, incoming, ret as u64, 0, 0);
+        return Ok(None);
+    }
+    if module("GameCore_XP2_FinalRelease.dll") != s.core {
+        return Err("pinned Core base changed".into());
+    }
+    if ptr_at(s.exe + HOLDER)? != receiver {
+        return Err("holder differs from fixed singleton".into());
+    }
+    let from = caller(s.exe, ret, if is_set { SET } else { RELEASE })?;
+    let old = ptr_at(receiver.checked_add(0x450).ok_or("holder overflow")?)?;
+    if is_set && old == incoming {
+        record(5, receiver, old, incoming, from, s.generation, 0);
+        CALLS.fetch_add(1, Ordering::Relaxed);
+        return Ok(None);
+    }
+    if old != 0 && !typed(s.core, old) {
+        return Err("old context type differs".into());
+    }
+    if is_set && incoming != 0 && (!typed(s.core, incoming) || ptr_at(s.exe + CONTEXT)? != incoming)
+    {
+        return Err("new context differs from factory global".into());
+    }
+    let mut close_token = None;
+    if old != 0 && s.phase == Phase::Open {
+        record(2, receiver, old, incoming, from, s.generation, 0);
+        let status = unsafe { (s.close)(std::ptr::null_mut()) };
+        LAST_STATUS.store(status as usize, Ordering::Release);
+        record(3, receiver, old, incoming, from, s.generation, status);
+        if status != 0 {
+            return Err("runtime Close failed".into());
+        }
+        s.phase = if is_set {
+            Phase::UnsupportedInlineExchange
+        } else {
+            Phase::Closing
+        };
+        s.generation = s.generation.checked_add(1).ok_or("generation exhausted")?;
+        s.close_tid = unsafe { GetCurrentThreadId() };
+        if !is_set {
+            close_token = Some(s.generation);
+        }
+    }
+    if is_set && s.phase == Phase::Closed && incoming != 0 {
+        // Rebuild here would erase natural RESET/COMMIT already issued by the
+        // factory and Context+60. Only the earlier verified loader may reopen.
+        return Err("SetContext reached before loader Rebuild".into());
+    }
+    record(
+        if is_set { 8 } else { 4 },
+        receiver,
+        old,
+        incoming,
+        from,
+        s.generation,
+        0,
+    );
+    CALLS.fetch_add(1, Ordering::Release);
+    Ok(close_token)
+}
+
+fn guarded_event(receiver: usize, incoming: usize, ret: usize, is_set: bool) -> Option<u64> {
+    match std::panic::catch_unwind(|| event(receiver, incoming, ret, is_set)) {
+        Ok(Ok(token)) => token,
+        _ => {
+            // An unproved Close must never let destructive native code proceed
+            // with old grants. This is a critical owned-process failure, not a
+            // successful detach. The driver retains its ownership/reap handle.
+            LAST_STATUS.store(usize::MAX, Ordering::Release);
+            std::process::abort();
+        }
+    }
+}
+extern "system-unwind" fn release_entry(receiver: usize, unused: usize, ret: usize) -> usize {
+    let error = unsafe { GetLastError() };
+    let token = guarded_event(receiver, 0, ret, false);
+    unsafe { SetLastError(error) };
+    let result = unsafe { boot_release_original(receiver, unused) };
+    let error = unsafe { GetLastError() };
+    if let Some(generation) = token {
+        let mut lock = STATE.lock().unwrap_or_else(|_| std::process::abort());
+        let state = lock.as_mut().unwrap_or_else(|| std::process::abort());
+        if state.phase != Phase::Closing || state.generation != generation {
+            std::process::abort();
+        }
+        state.phase = Phase::Closed;
+    }
+    record(9, receiver, 0, 0, ret as u64, token.unwrap_or(u64::MAX), 0);
+    unsafe { SetLastError(error) };
+    result
+}
+extern "system-unwind" fn set_entry(receiver: usize, incoming: usize, ret: usize) -> usize {
+    let error = unsafe { GetLastError() };
+    let _ = guarded_event(receiver, incoming, ret, true);
+    unsafe { SetLastError(error) };
+    let result = unsafe { boot_set_original(receiver, incoming) };
+    let error = unsafe { GetLastError() };
+    record(10, receiver, 0, incoming, ret as u64, u64::MAX, 0);
+    unsafe { SetLastError(error) };
+    result
+}
+
+fn loader_begin(ret: usize) -> Result<LoaderInvocation, String> {
+    let lock = STATE.lock().map_err(|_| "resident lock")?;
+    let s = lock.as_ref().ok_or("resident absent")?;
+    Ok(LoaderInvocation {
+        phase: s.phase,
+        generation: s.generation,
+        tid: unsafe { GetCurrentThreadId() },
+        caller: caller(s.exe, ret, LOADER).ok(),
+    })
+}
+
+fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> Result<(), String> {
+    let mut lock = STATE.lock().map_err(|_| "resident lock")?;
+    let s = lock.as_mut().ok_or("resident absent")?;
+    if result & 0xff == 0 {
+        return Ok(());
+    }
+    let core = module("GameCore_XP2_FinalRelease.dll");
+    if core == 0 {
+        return Ok(());
+    } // A Base/other loader is not target activation.
+    let action = loader_return_action(
+        entry,
+        s.phase,
+        s.generation,
+        unsafe { GetCurrentThreadId() },
+        result,
+        caller(s.exe, ret, LOADER).ok(),
+    )?;
+    if action == LoaderAction::Ignore {
+        return Ok(());
+    }
+    let core_path = path(core)?;
+    if !same(
+        &core_path,
+        &Path::new(GAME_ROOT).join("DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll"),
+    ) {
+        return Err("target Core path differs".into());
+    }
+    let _core_file = fixed_hash(&core_path, CORE_SHA)?;
+    if ptr_at(s.exe + 0x22d60d8)? != core
+        || ptr_at(s.exe + 0x22d64e8)? != core + 0x752d50
+        || ptr_at(s.exe + CONTEXT)? != 0
+        || read(core + 0x752d50, 5)? != [0xe9, 0x0b, 0xcf, 0xe3, 0xff]
+    {
+        return Err("target loader/factory-before-context boundary differs".into());
+    }
+    if action == LoaderAction::Rebuild {
+        let holder = ptr_at(s.exe + HOLDER)?;
+        let held_context = if holder == 0 {
+            0
+        } else {
+            ptr_at(holder.checked_add(0x450).ok_or("holder overflow")?)?
+        };
+        let boundary = ReloadBoundary {
+            loader_result: result,
+            caller: 0x24b52d, // caller() above verified the actual return site.
+            close_tid: s.close_tid,
+            current_tid: unsafe { GetCurrentThreadId() },
+            pinned_core: s.core,
+            current_core: core,
+            context: ptr_at(s.exe + CONTEXT)?,
+            holder,
+            held_context,
+        };
+        let generation = s.generation;
+        let rebuild = s.rebuild;
+        let status = rebuild_at_loader(&mut s.phase, boundary, || {
+            record(6, holder, 0, 0, 0x24b52d, generation, 0);
+            let status = unsafe { rebuild(std::ptr::null_mut()) };
+            LAST_STATUS.store(status as usize, Ordering::Release);
+            record(7, holder, 0, 0, 0x24b52d, generation, status);
+            status
+        })?
+        .ok_or("reload did not execute Rebuild")?;
+        if status != 0 {
+            return Err("runtime Rebuild failed before factory".into());
+        }
+        return Ok(());
+    }
+    s.core = core;
+    if ROOT_PROFILE.load(Ordering::Acquire) {
+        let mut config = protocol::RootConfig {
+            version: if SUBMISSION_PROFILE.load(Ordering::Acquire) {
+                protocol::SUBMISSION_CONFIG_VERSION
+            } else {
+                protocol::ROOT_CONFIG_VERSION
+            },
+            size: size_of::<protocol::RootConfig>() as u32,
+            pid: s.config.pid,
+            max_seconds: s.config.max_seconds,
+            created_filetime: s.config.created_filetime,
+            core: core as u64,
+            trace_address: 0,
+            trace_size: 0,
+            reserved: 0,
+        };
+        let status = unsafe { (s.install)((&mut config as *mut protocol::RootConfig).cast()) };
+        LAST_STATUS.store(status as usize, Ordering::Release);
+        if status != 0 {
+            return Err("deferred root observation install failed before factory".into());
+        }
+        let expected_size = if SUBMISSION_PROFILE.load(Ordering::Acquire) {
+            protocol::SUBMISSION_BYTES
+        } else {
+            protocol::ROOT_BYTES
+        };
+        if config.trace_size as usize != expected_size || config.trace_address == 0 {
+            return Err("root install returned an invalid trace receipt".into());
+        }
+        s.phase = Phase::Open;
+        if OBSERVATION.is_closed() && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+            return Err("deferred root stop failed".into());
+        }
+        return Ok(());
+    }
+    if let Some(_flight) = RecordFlight::try_enter() {
+        TRACE.core.store(core as u64, Ordering::Release);
+    }
+    record(13, 0, 0, core, 0x24b52d, 0, 0);
+    record(0, 0, 0, 0, 0, 0, 0);
+    let status = unsafe { (s.install)((&mut s.config as *mut RuntimeConfig).cast()) };
+    LAST_STATUS.store(status as usize, Ordering::Release);
+    if let Some(_flight) = RecordFlight::try_enter() {
+        TRACE
+            .runtime_trace
+            .store(s.config.trace_address, Ordering::Release);
+        TRACE
+            .runtime_trace_size
+            .store(s.config.trace_size as u64, Ordering::Release);
+    }
+    record(1, 0, 0, 0, 0, 0, status);
+    if status != 0 {
+        return Err("deferred Mode6 Install failed before factory".into());
+    }
+    s.phase = Phase::Open;
+    if OBSERVATION.is_closed() && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+        return Err("deferred observation stop failed".into());
+    }
+    Ok(())
+}
+extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usize) -> usize {
+    let error = unsafe { GetLastError() };
+    let entry = match std::panic::catch_unwind(|| loader_begin(ret)) {
+        Ok(Ok(entry)) => entry,
+        _ => {
+            LAST_STATUS.store(usize::MAX, Ordering::Release);
+            std::process::abort();
+        }
+    };
+    unsafe { SetLastError(error) };
+    let result = unsafe { boot_loader_original(argument, unused) };
+    let error = unsafe { GetLastError() };
+    if !std::panic::catch_unwind(|| target_loader_return(result, ret, entry))
+        .is_ok_and(|r| r.is_ok())
+    {
+        LAST_STATUS.store(usize::MAX, Ordering::Release);
+        std::process::abort();
+    }
+    unsafe { SetLastError(error) };
+    result
+}
+
+fn prepare_profile(
+    input: Prepare,
+    root_only: bool,
+    diagnosis: Option<&PrepareDiagnosis>,
+) -> Result<(), String> {
+    let stage = |v| {
+        if let Some(d) = diagnosis {
+            d.stage(v);
+        }
+    };
+    stage(1);
+    let submission_only = root_only && input.version == protocol::SUBMISSION_PREPARE_VERSION;
+    if input.version
+        != if root_only {
+            if submission_only {
+                protocol::SUBMISSION_PREPARE_VERSION
+            } else {
+                protocol::ROOT_PREPARE_VERSION
+            }
+        } else {
+            VERSION
+        }
+        || input.size as usize != size_of::<Prepare>()
+        || input.pid != unsafe { GetCurrentProcessId() }
+        || input.created_filetime == 0
+        || input.created_filetime != created()
+        || !(1..=300).contains(&input.observation_seconds)
+    {
+        return Err("bootstrap config/identity differs".into());
+    }
+    stage(2);
+    let mut lock = STATE.lock().map_err(|_| "resident lock")?;
+    if lock.is_some() {
+        return Err("resident already prepared; no retry".into());
+    }
+    #[cfg(test)]
+    if let Some(fixture) = tests::CAPTURE_READY_OVERRIDE.with(std::cell::Cell::get) {
+        if root_only {
+            stage(10);
+            return fixture(input.bridge_module as usize, submission_only);
+        }
+    }
+    stage(3);
+    let exe = unsafe { GetModuleHandleW(std::ptr::null()) } as usize;
+    let exe_path = path(exe)?;
+    if !same(
+        &exe_path,
+        &Path::new(GAME_ROOT).join("Base/Binaries/Win64Steam/CivilizationVI.exe"),
+    ) {
+        return Err("not pinned game EXE".into());
+    }
+    stage(4);
+    let _exe_pin = fixed_hash(&exe_path, EXE_SHA)?;
+    stage(5);
+    if module("GameCore_XP2_FinalRelease.dll") != 0 {
+        return Err("cold preparation refuses an already-loaded target Core".into());
+    }
+    stage(6);
+    let menu_core = module("GameCore_Base_FinalRelease.dll");
+    let core_path = path(menu_core)?;
+    if menu_core == 0
+        || !same(
+            &core_path,
+            &Path::new(GAME_ROOT).join("Base/Binaries/Win64Steam/GameCore_Base_FinalRelease.dll"),
+        )
+    {
+        return Err("Core path differs".into());
+    }
+    stage(7);
+    let _core_file = fixed_hash(&core_path, MENU_CORE_SHA)?;
+    stage(8);
+    if input.expected_menu_context == 0
+        || ptr_at(exe + CONTEXT)? != input.expected_menu_context as usize
+        || ptr_at(input.expected_menu_context as usize)? != menu_core + 0x79e020
+        || ptr_at(exe + 0x22d64e8)? != menu_core + 0x58dd30
+    {
+        return Err("MainMenu context identity differs".into());
+    }
+    let bridge = input.bridge_module as usize;
+    stage(9);
+    let source = pin_file(&path(bridge)?, &input.bridge_sha256)?;
+    stage(10);
+    let capture = if root_only {
+        Some(capture_ready_symbols(bridge, submission_only, |name| {
+            unsafe { GetProcAddress(bridge as _, name.as_ptr()) }
+                .map(|f| f as *const () as usize)
+                .ok_or_else(|| "runtime export absent".into())
+        })?)
+    } else {
+        None
+    };
+    let install = if let Some((install, _)) = capture {
+        install
+    } else {
+        api(
+            bridge,
+            if submission_only {
+                b"BridgeSubmissionObservationInstall\0"
+            } else if root_only {
+                b"BridgeRootObservationInstall\0"
+            } else {
+                b"BridgeRuntimeInstall\0"
+            },
+        )?
+    };
+    let stop = if let Some((_, stop)) = capture {
+        stop
+    } else {
+        api(
+            bridge,
+            if submission_only {
+                b"BridgeSubmissionObservationStop\0"
+            } else if root_only {
+                b"BridgeRootObservationStop\0"
+            } else {
+                b"BridgeRuntimeStopObservation\0"
+            },
+        )?
+    };
+    let close = if root_only {
+        stop
+    } else {
+        api(bridge, b"BridgeRuntimeClose\0")?
+    };
+    let rebuild = if root_only {
+        stop
+    } else {
+        api(bridge, b"BridgeRuntimeRebuild\0")?
+    };
+    let log_export = if root_only {
+        0
+    } else {
+        data(bridge, b"BRIDGE_RUNTIME_PROPERTY_LOG\0")?
+    };
+    // Own the lifetime of saved API addresses before any runtime invocation.
+    // Mode6 also pins itself, but a file handle alone is not a module reference.
+    stage(11);
+    let mut runtime_module = std::ptr::null_mut();
+    if unsafe {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+            install as *const () as _,
+            &mut runtime_module,
+        )
+    } == 0
+        || runtime_module as usize != bridge
+    {
+        return Err("runtime module lifetime could not be retained".into());
+    }
+    stage(12);
+    let mut pinned = std::ptr::null_mut();
+    if unsafe {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+            RustBridgeBootstrapPrepare as *const () as _,
+            &mut pinned,
+        )
+    } == 0
+    {
+        return Err("bootstrap pin failed".into());
+    }
+    BOOT_RELEASE_CONTINUE.store(exe + RELEASE + 2, Ordering::Release);
+    BOOT_SET_CONTINUE.store(exe + SET + 5, Ordering::Release);
+    BOOT_LOADER_CONTINUE.store(exe + LOADER + 7, Ordering::Release);
+    stage(13);
+    let a = hotpatch::prepare(
+        exe + RELEASE,
+        &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20],
+        release_entry as *const () as usize,
+    )?;
+    stage(14);
+    let b = hotpatch::prepare(
+        exe + SET,
+        &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x20],
+        set_entry as *const () as usize,
+    )?;
+    stage(15);
+    let c = hotpatch::prepare(
+        exe + LOADER,
+        &[0x48, 0x81, 0xec, 0x48, 0x02, 0, 0],
+        loader_entry as *const () as usize,
+    )?;
+    let config = RuntimeConfig {
+        version: 0x03240002,
+        size: 40,
+        pid: input.pid,
+        max_seconds: input.observation_seconds,
+        created_filetime: input.created_filetime,
+        trace_address: 0,
+        trace_size: 0,
+        mode: 6,
+    };
+    // Publish retained responsibility before the first runtime mutation.
+    ROOT_PROFILE.store(root_only, Ordering::Release);
+    SUBMISSION_PROFILE.store(submission_only, Ordering::Release);
+    *lock = Some(Resident {
+        exe,
+        core: 0,
+        install,
+        stop,
+        close,
+        rebuild,
+        phase: Phase::Prepared,
+        generation: 0,
+        close_tid: 0,
+        config,
+        _source: source,
+        _hooks: vec![a, b, c],
+    });
+    LOG_EXPORT.store(log_export, Ordering::Release);
+    if let Some(_flight) = RecordFlight::try_enter() {
+        TRACE.pid.store(input.pid as u64, Ordering::Release);
+        TRACE
+            .filetime
+            .store(input.created_filetime, Ordering::Release);
+    }
+    record(
+        12,
+        menu_core,
+        input.expected_menu_context as usize,
+        0,
+        0,
+        0,
+        0,
+    );
+    let s = lock.as_mut().unwrap();
+    for (i, hook) in s._hooks.iter().enumerate() {
+        stage(16 + i as u64);
+        hook.publish()?;
+    }
+    record(11, 0, 0, 0, 0, 0, 0); // Prepared entries, not XP2/Mode6 readiness.
+    Ok(())
+}
+/// Distinct explicit export AND strict input version; no old config can opt in.
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapPrepareRootObservation(input: *const Prepare) -> u32 {
+    prepare_capture_export(input, protocol::ROOT_PREPARE_VERSION)
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapPrepareSubmissionObservation(
+    input: *const Prepare,
+) -> u32 {
+    prepare_capture_export(input, protocol::SUBMISSION_PREPARE_VERSION)
+}
+fn prepare_capture_export(input: *const Prepare, version: u32) -> u32 {
+    prepare_export(input, version, true)
+}
+fn prepare_export(input: *const Prepare, version: u32, capture: bool) -> u32 {
+    let diagnosis = PrepareDiagnosis::begin();
+    diagnosis.stage(1);
+    let result = std::panic::catch_unwind(|| {
+        let bytes = read(input as usize, size_of::<Prepare>())?;
+        let config = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<Prepare>()) };
+        if diagnosis.owner {
+            PREPARE_DIAGNOSTIC.words[5].store(u64::from(config.pid), Ordering::Release);
+            PREPARE_DIAGNOSTIC.words[6].store(config.created_filetime, Ordering::Release);
+            PREPARE_DIAGNOSTIC.words[7].store(u64::from(config.version), Ordering::Release);
+        }
+        if config.version != version {
+            return Err("bootstrap selector version differs".into());
+        }
+        prepare_profile(config, capture, Some(&diagnosis))
+    });
+    match result {
+        Ok(Ok(())) => {
+            diagnosis.stage(19);
+            diagnosis.finish(0);
+            0
+        }
+        Ok(Err(error)) => {
+            diagnosis.finish(diagnostic_reason(&error));
+            1
+        }
+        Err(_) => {
+            diagnosis.finish(9);
+            1
+        }
+    }
+}
+
+/// Explicit call by the pinned owning driver in a fresh MainMenu. No DllMain
+/// work, automatic DLL search or default enable flag exists.
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapPrepare(input: *const Prepare) -> u32 {
+    prepare_export(input, VERSION, false)
+}
+
+/// Fixed POD snapshot: caller reads returned immutable-address atomics through
+/// the existing owned controller, not borrowed JSON or an external mapping.
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapCalls() -> u64 {
+    CALLS.load(Ordering::Acquire)
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapLastStatus() -> usize {
+    LAST_STATUS.load(Ordering::Acquire)
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapTrace() -> *const c_void {
+    std::ptr::addr_of!(TRACE).cast()
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapTraceSize() -> usize {
+    size_of::<Trace>()
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapStopObservation(_: *mut c_void) -> u32 {
+    std::panic::catch_unwind(|| -> Result<(), ()> {
+        OBSERVATION.close();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !OBSERVATION.drained() {
+            if std::time::Instant::now() >= deadline {
+                return Err(());
+            }
+            std::thread::yield_now();
+        }
+        let lock = STATE.lock().map_err(|_| ())?;
+        let s = lock.as_ref().ok_or(())?;
+        if s.phase != Phase::Prepared && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+            return Err(());
+        }
+        Ok(())
+    })
+    .ok()
+    .and_then(Result::ok)
+    .map_or(1, |_| 0)
+}
+
+#[cfg(test)]
+#[path = "tests.rs"]
+mod tests;

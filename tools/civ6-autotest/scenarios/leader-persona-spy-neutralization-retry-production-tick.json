@@ -1,0 +1,16 @@
+{
+  "name": "One real production turn and bind only the new native spy identity",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"end_turn","turns":1,"timeout":600},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; b.retryProductionStatus=b.TryBindRetrySpy(); return b.retryProductionStatus"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_BIND_SPY' then error(b.lastAction) end; return b.retryProductionStatus=='PRODUCTION_PENDING' or Game:GetProperty('JAC_BOUNDARY_SPY')~=nil"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); if not r.spyID then return 'PRODUCTION_PENDING' end; local s=ExposedMembers.JAC_PersonaBoundary.ReadEnemy(); assert(r.spyID~=r.archive.spyID and s.spy and s.spy.present and s.spy.id==r.spyID,'new native spy binding missing'); return 'NEW_SPY_BOUND'"},
+    {"action":"exit_to_menu"}
+  ]
+}
