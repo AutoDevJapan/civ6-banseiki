@@ -1130,7 +1130,7 @@ fn submission_owned_os_observed_sixteen_full_cycles_own_all_192_rows_without_ove
         );
         assert_eq!(
             h(12).load(Ordering::Acquire),
-            1,
+            if cycle == 15 { ROOT_CLOSED | 1 } else { 1 },
             "unobserved execution holds its sampling reservation"
         );
         p.execute(t);
@@ -1147,7 +1147,10 @@ fn submission_owned_os_observed_sixteen_full_cycles_own_all_192_rows_without_ove
             &submission_observed::fixture_bytes()[SUBMISSION_HEADER..SUBMISSION_HEADER + old.len()],
             old.as_slice()
         );
-        assert_eq!(h(12).load(Ordering::Acquire), 0);
+        assert_eq!(
+            h(12).load(Ordering::Acquire),
+            if cycle == 15 { ROOT_CLOSED } else { 0 }
+        );
     }
     assert_eq!(h(10).load(Ordering::Acquire), SUBMISSION_ROWS as u64);
     assert_eq!(h(29).load(Ordering::Acquire), 16);
@@ -1157,6 +1160,53 @@ fn submission_owned_os_observed_sixteen_full_cycles_own_all_192_rows_without_ove
     assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
     let sealed = submission_observed::fixture_bytes();
     p.execute(t);
+    assert_eq!(submission_observed::fixture_bytes(), sealed);
+}
+#[test]
+fn submission_owned_os_observed_sixteenth_admission_seals_new_producers_but_finishes_reserved_t() {
+    if !child("submission_owned_os_observed_sixteenth_admission_seals_new_producers_but_finishes_reserved_t") {return;}
+    let mut p = SubmissionPipeline::new();
+    for _ in 0..15 {
+        p.producer(true);
+        let t = p.task.as_ptr();
+        p.execute(t);
+    }
+    p.producer(true);
+    assert_eq!(h(29).load(Ordering::Acquire), 16);
+    assert_eq!(submission_observed::fixture_budget(7), 1);
+    assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED | 1);
+    let old = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106b3c8, 0]));
+    p.bind_task();
+    let before = submission_observed::fixture_bytes();
+    let calls = p.owner[0x80 / 8];
+    p.producer(true);
+    let new_t = p.task.as_ptr();
+    p.execute(new_t);
+    assert_eq!(
+        p.owner[0x80 / 8],
+        calls + 1,
+        "new producer original still executes once"
+    );
+    assert_eq!(
+        submission_observed::fixture_bytes(),
+        before,
+        "new unobserved dispatch and T do not rewrite the sealed sample"
+    );
+    assert_eq!(
+        stop_at(Instant::now()),
+        2,
+        "pending accepted T is not inferred zero from producer return"
+    );
+    assert_eq!(submission::TRACE.rows[188][0].load(Ordering::Acquire), 0);
+    p.execute(old.as_ptr());
+    assert_eq!(submission::TRACE.rows[189][2].load(Ordering::Acquire), 2);
+    assert_eq!(submission::TRACE.rows[191][2].load(Ordering::Acquire), 2);
+    assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+    assert_eq!(BridgeSubmissionObservationStop(null_mut()), 0);
+    let sealed = submission_observed::fixture_bytes();
+    p.producer(false);
+    p.producer(true);
+    p.execute(new_t);
     assert_eq!(submission_observed::fixture_bytes(), sealed);
 }
 #[test]

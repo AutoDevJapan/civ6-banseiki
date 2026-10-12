@@ -558,11 +558,59 @@ mod submission_reservation_tests {
             );
         }
     }
+    #[test]
+    fn submission_v8_first_sixteen_seal_is_explicit_and_never_clears_existing_losses() {
+        let mut b = fixture(16);
+        put(&mut b, 8, 8);
+        put(&mut b, 696, 1);
+        let v = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["sample_cycle_limit"], 16);
+        assert_eq!(v["sample_limit_sealed"], true);
+        assert_eq!(v["pending_observed_cycles"], 0);
+        assert!(v["native_pending_jobs"].is_null());
+        for (pos, val) in [(696, 0), (688, 22), (112, 30)] {
+            let mut bad = b.clone();
+            put(&mut bad, pos, val);
+            assert_eq!(
+                submission_trace(&bad, 23, 29).unwrap()["capture_complete"],
+                false
+            );
+        }
+        let old = fixture(16);
+        assert_eq!(
+            submission_trace(&old, 23, 29).unwrap()["schema"],
+            "todo880-native-submission-observed-trace-v7"
+        );
+    }
+    #[test]
+    fn submission_v8_zero_admission_flights_do_not_erase_unresolved_book_cycles() {
+        let mut b = fixture(1);
+        put(&mut b, 8, 8);
+        let ledger = SUBMISSION_HEADER + (SUBMISSION_ROWS + SUBMISSION_EXTRA_ROWS) * SUBMISSION_ROW;
+        b[SUBMISSION_HEADER + 8 * SUBMISSION_ROW..SUBMISSION_HEADER + 12 * SUBMISSION_ROW].fill(0);
+        for (f, v) in [
+            (6, 0),
+            (7, 0),
+            (11, 1 | 2 | 4 | 8 | 16 | 8192 | 16384),
+            (19, 15),
+            (20, 15),
+            (21, 0),
+        ] {
+            put(&mut b, ledger + f * 8, v);
+        }
+        let v = submission_trace(&b, 23, 29).unwrap();
+        assert_eq!(v["accepted_calls_stopped"], true);
+        assert_eq!(v["pending_observed_cycles"], 1);
+        assert_eq!(v["unresolved_recorded_t"], 1);
+        assert!(v["native_pending_jobs"].is_null());
+        assert_eq!(v["capture_complete"], false);
+    }
 }
 
 fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
-    let v7 = version == 7;
+    let v7 = version >= 7;
     let header = if v7 {
         SUBMISSION_HEADER
     } else {
@@ -578,7 +626,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
     let physical_rows = capacity + if v7 { SUBMISSION_EXTRA_ROWS } else { 0 };
     if b.len() != trace_size
         || word(b, 0)? != SUBMISSION_MAGIC
-        || !matches!(version, 4..=7)
+        || !matches!(version, 4..=8)
         || word(b, 16)? != trace_size as u64
         || word(b, 24)? != capacity as u64
         || word(b, 32)? != SUBMISSION_ROW as u64
@@ -617,10 +665,17 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
                 SUBMISSION_BIRTH_WORDS as u64,
                 SUBMISSION_EXTRA_ROWS as u64,
             ]
-            || word(b, 696)? != 0
+            || (if version == 8 {
+                word(b, 696)? > 1
+            } else {
+                word(b, 696)? != 0
+            })
             || next != count * SUBMISSION_CHAIN_ROWS
         {
             return Err("chain reservation layout/count mismatch".into());
+        }
+        if version == 8 && (word(b, 696)? == 1) != (count == SUBMISSION_BIRTHS) {
+            unknown.push("first-16 sampling seal does not match stored cycle limit".into());
         }
         if extra > 0 || word(b, 688)? != 0 {
             unknown
@@ -742,6 +797,8 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
     let mut previous_t = std::collections::BTreeMap::<u64, u64>::new();
     let mut accounted_calls = std::collections::BTreeSet::new();
     let mut complete_chains = 0;
+    let mut pending_observed = 0;
+    let mut unresolved_bound_t = 0;
     for i in 0..SUBMISSION_BIRTHS {
         let mut w = [0u64; SUBMISSION_BIRTH_WORDS];
         for (j, v) in w.iter_mut().enumerate().take(birth_words) {
@@ -786,6 +843,12 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             }
         }
         let unresolved = w[2] != 0 && w[11] & 256 == 0;
+        if v7 && (w[19] != 63 || w[20] != 63 || w[21] != 0 || w[15] != 0) {
+            pending_observed += 1;
+            if w[2] != 0 {
+                unresolved_bound_t += 1;
+            }
+        }
         births.push(json!({"raw":w[..birth_words].to_vec(),"observed_birth_id":w[0],"opaque_p":w[1],"opaque_t":w[2],
             "producer":w[3],"submit":w[4],"publication":w[5],"host_exec":w[6],"core_exec":w[7],
             "actual_push_host":w[16],"actual_push_host_return_r8":w[17],
@@ -954,14 +1017,19 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
         && word(b, 224)? == 1
         && unknown.is_empty();
     Ok(
-        json!({"schema":match version {7=>"todo880-native-submission-observed-trace-v7",6=>"todo880-native-submission-observed-trace-v6",5=>"todo880-native-submission-observed-trace-v5",_=>"todo880-native-submission-observed-trace-v4"},"pid":pid,"created_filetime":created,
+        json!({"schema":match version {8=>"todo880-native-submission-observed-trace-v8",7=>"todo880-native-submission-observed-trace-v7",6=>"todo880-native-submission-observed-trace-v6",5=>"todo880-native-submission-observed-trace-v5",_=>"todo880-native-submission-observed-trace-v4"},"pid":pid,"created_filetime":created,
+        "sample_cycle_limit":if version==8 {Some(SUBMISSION_BIRTHS)}else{None},
+        "sample_limit_sealed":version==8&&word(b,696)?==1,
+        "pending_observed_cycles":pending_observed,"unresolved_recorded_t":unresolved_bound_t,
+        "native_pending_jobs":null,
         "reserved_unused_pair_starts":unused,"unassigned_diagnostic_rows":extra,
         "entered_producer_serials":serial,"stored_birth_count":count,"normal_no_submit_returns":no_submit,
         "observed_core_epoch":epoch,"reserved_rows":next,"site_witnesses":sites,"rows":rows,"births":births,
         "excluded_calls":word(b,240)?,"excluded_unreadable_current_t":word(b,248)?,
         "accepted_calls_stopped":stopped,"complete_observed_p_t_execution_chains":complete_chains,
         "capture_complete":clean && complete_chains>0,"unknown":unknown,
-        "runtime_activated":false,"world_permit_issued":false,"scope":"fixed Governor observed invocations only",
+        "runtime_activated":false,"world_permit_issued":false,
+        "scope":if version==8 {"first up to 16 accepted Governor dispatch cycles; new producers after the limit seal are unobserved"}else{"fixed Governor observed invocations only"},
         "not_established_by_this_capture":["World birth generation or World identity","native ownership/retain/release/cancel",
             "T destructor completion or never-executed T recovery","sameSetWait or zero fields do not settle pending T",
             "other jobs and domains were excluded, not drained","natural Close/Rebuild authority"]}),
@@ -971,7 +1039,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
 /// this parser never follows them. Correspondence is not job ownership/join.
 pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
-    if matches!(version, 4..=7) {
+    if matches!(version, 4..=8) {
         return submission_observed_trace(b, pid, created);
     }
     let (row_bytes, trace_bytes) = match version {

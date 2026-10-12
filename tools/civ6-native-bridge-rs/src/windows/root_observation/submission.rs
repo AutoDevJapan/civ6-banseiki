@@ -24,7 +24,7 @@ pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE: u64 = SUBMISSION_BYTES as u
 pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
     for (i, v) in [
         SUBMISSION_MAGIC,
-        7,
+        8,
         SUBMISSION_BYTES as u64,
         SUBMISSION_ROWS as u64,
         SUBMISSION_ROW as u64,

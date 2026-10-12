@@ -90,10 +90,11 @@ struct Provisional {
     id: u64,
     row: [u64; 48],
     attempted: bool,
+    outside_window: bool,
 }
 thread_local! {
     static PROVISIONAL:std::cell::RefCell<[Provisional;DEPTH]>=const {std::cell::RefCell::new(
-        [Provisional {id:0,row:[0;48],attempted:false};DEPTH])};
+        [Provisional {id:0,row:[0;48],attempted:false,outside_window:false};DEPTH])};
 }
 // Completion is observed full-frame completion only. No heap reread, flags,
 // sameSetWait, ownership, destructor or World authority is inferred here.
@@ -276,6 +277,15 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         let kind = saved.invocation.kind;
         let stack = STACK.with(Cell::get);
         let parent = stack.depth.checked_sub(1).map(|n| stack.frames[n]);
+        if matches!(kind, 4 | 5)
+            && TRACE.budget[7].load(Ordering::Acquire) == 1
+            && parent.is_some_and(|p| p.cookie == COOKIE && p.kind == 6 && p.token == 0)
+        {
+            // A pre-seal provisional producer was never among the first 16
+            // dispatches. Its actual original call continues, without capture.
+            PROVISIONAL.with(|p| p.borrow_mut()[stack.depth - 1].outside_window = true);
+            return;
+        }
         let tls_inherit = parent.is_some_and(|p| {
             p.cookie == COOKIE && matches!((kind, p.kind), (4 | 5, 6) | (9, 4) | (8, 7))
         });
@@ -306,6 +316,17 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
         saved.invocation.thread_created = ft;
         saved.invocation.epoch = h(9).load(Ordering::Acquire);
         if kind == 6 {
+            // Linearize producer admission with dispatch publication's BOOK
+            // lock. An entry admitted before the seal remains provisional;
+            // an entry after it cannot create a serial/cookie or read receiver.
+            let _limit = BOOK
+                .lock()
+                .unwrap_or_else(|_| panic!("observed book poisoned"));
+            if TRACE.budget[7].load(Ordering::Acquire) == 1
+                || h(29).load(Ordering::Acquire) >= SUBMISSION_BIRTHS as u64
+            {
+                return;
+            }
             if stack.depth == DEPTH {
                 h(11).fetch_add(1, Ordering::Relaxed);
                 unknown();
@@ -337,6 +358,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                     id: saved.invocation.world,
                     row,
                     attempted: false,
+                    outside_window: false,
                 }
             });
             saved.invocation.cookie = COOKIE;
@@ -542,7 +564,11 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
             assert!(acquire(true));
             book[slot] = b;
             index = Some(slot);
-            h(29).fetch_add(1, Ordering::AcqRel);
+            let stored = h(29).fetch_add(1, Ordering::AcqRel) + 1;
+            if stored == SUBMISSION_BIRTHS as u64 {
+                TRACE.budget[7].store(1, Ordering::Release);
+                h(12).fetch_or(ROOT_CLOSED, Ordering::AcqRel);
+            }
             entry[3] = producer.token;
             entry[20] |= producer.errors;
             commit_entry(row as usize, entry);
@@ -727,6 +753,7 @@ pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
 }
 fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) {
     let mut attempted = false;
+    let mut outside_window = false;
     let _ = STACK.try_with(|s| {
         let mut stack = s.get();
         if stack.depth > 0
@@ -745,6 +772,7 @@ fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) 
                     let mut entries = p.borrow_mut();
                     let entry = &mut entries[stack.depth - 1];
                     attempted = entry.attempted;
+                    outside_window = entry.outside_window;
                     if entry.id != inv.world {
                         fail(&mut inv, 0x20);
                     }
@@ -752,6 +780,7 @@ fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) 
                         id: 0,
                         row: [0; 48],
                         attempted: false,
+                        outside_window: false,
                     };
                 });
             }
@@ -772,6 +801,9 @@ fn finish_admitted(raw: &mut Saved, mut inv: Invocation, edge: u64, error: u32) 
         h(13).fetch_add(1, Ordering::Relaxed);
     }
     if inv.kind == 6 && inv.token == 0 {
+        if edge == 2 && inv.errors == 0 && outside_window {
+            return;
+        }
         if edge == 2 && inv.errors == 0 && !attempted {
             h(20).fetch_add(1, Ordering::Relaxed);
         } else {
