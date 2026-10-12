@@ -3,6 +3,164 @@
 use super::*;
 use civ6_bootstrap_rs::{protocol as wire, Prepare};
 use std::os::windows::fs::OpenOptionsExt;
+use windows_sys::Win32::System::Memory::{
+    VirtualQuery, VirtualQueryEx, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
+    PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READONLY, PAGE_WRITECOPY,
+};
+
+fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, String> {
+    let local = LocalDll(unsafe {
+        LoadLibraryExW(
+            wide(&path.to_string_lossy()).as_ptr(),
+            null_mut(),
+            DONT_RESOLVE_DLL_REFERENCES,
+        )
+    });
+    if local.0.is_null() {
+        return Err("root export image inspection failed".into());
+    }
+    names
+        .iter()
+        .map(|(name, executable)| {
+            let p = unsafe { GetProcAddress(local.0, name.as_ptr()) }.ok_or("root export absent")?
+                as usize;
+            let mut info: MEMORY_BASIC_INFORMATION = unsafe { zeroed() };
+            if unsafe { VirtualQuery(p as _, &mut info, size_of::<MEMORY_BASIC_INFORMATION>()) }
+                == 0
+                || info.AllocationBase != local.0
+                || info.State != MEM_COMMIT
+                || info.Protect & PAGE_GUARD != 0
+            {
+                return Err("root export outside committed source module".into());
+            }
+            let protection = info.Protect & 0xff;
+            let valid = if *executable {
+                matches!(
+                    protection,
+                    PAGE_EXECUTE
+                        | PAGE_EXECUTE_READ
+                        | PAGE_EXECUTE_READWRITE
+                        | PAGE_EXECUTE_WRITECOPY
+                )
+            } else {
+                p.is_multiple_of(8)
+                    && p + 8 <= info.BaseAddress as usize + info.RegionSize
+                    && matches!(protection, PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY)
+            };
+            if !valid {
+                return Err("root export function/data type mismatch".into());
+            }
+            p.checked_sub(local.0 as usize)
+                .ok_or("root export RVA underflow".into())
+        })
+        .collect()
+}
+
+// Preserve the actual copied prefix, including a failed/partial RPM, before a
+// second attempt. Zero-filled unread bytes must never become captured evidence.
+fn root_samples(
+    pid: u32,
+    created: u64,
+    stop_succeeded: bool,
+    mut read: impl FnMut(&mut [u8]) -> (usize, Option<String>),
+    mut save: impl FnMut(&str, &[u8]) -> Result<(), String>,
+) -> Value {
+    let mut result = json!({"schema":"todo880-root-controller-receipt-v1","pid":pid,
+        "created_filetime":created,"stop_response_succeeded":stop_succeeded,
+        "status":"unknown","samples":[],"not_established_by_this_capture":
+        ["native producer lifetime","world lifetime","all-domain drainage","runtime activation authority"]});
+    let mut samples = Vec::new();
+    for name in ["root-first.bin", "root-second.bin"] {
+        let mut bytes = vec![0u8; wire::ROOT_BYTES];
+        let (copied, error) = read(&mut bytes);
+        if copied > bytes.len() {
+            result["error"] = json!("root read returned impossible size");
+            return result;
+        }
+        if let Err(error) = save(name, &bytes[..copied]) {
+            result["error"] = json!(format!("preserve {name}: {error}"));
+            return result;
+        }
+        result["samples"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"file":name,"copied":copied,"error":error}));
+        samples.push(bytes[..copied].to_vec());
+        if copied != wire::ROOT_BYTES || error.is_some() {
+            result["error"] = json!("root original sample was partial or unreadable");
+            return result;
+        }
+    }
+    let equal = samples[0] == samples[1];
+    result["copies_equal"] = json!(equal);
+    match wire::root_trace(&samples[0], pid, created) {
+        Ok(trace) => {
+            let complete = stop_succeeded && equal && trace["capture_complete"] == true;
+            result["status"] = json!(if complete { "captured" } else { "unknown" });
+            result["trace"] = trace;
+        }
+        Err(error) => result["error"] = json!(error),
+    }
+    result
+}
+fn capture_root(
+    game: &Handle,
+    address: usize,
+    output: &Path,
+    pid: u32,
+    created: u64,
+    stopped: bool,
+) -> Value {
+    root_samples(
+        pid,
+        created,
+        stopped,
+        |bytes| {
+            let mut copied = 0usize;
+            let ok = unsafe {
+                ReadProcessMemory(
+                    game.0,
+                    address as _,
+                    bytes.as_mut_ptr().cast(),
+                    bytes.len(),
+                    &mut copied,
+                )
+            };
+            let error = (ok == 0).then(|| std::io::Error::last_os_error().to_string());
+            (copied, error)
+        },
+        |name, bytes| preserve(output, name, bytes),
+    )
+}
+fn root_address(game: &Handle, module: &Module, data: usize, size: usize) -> Result<usize, String> {
+    if pointer(game, module.base + size)? != wire::ROOT_BYTES {
+        return Err("root trace exported size mismatch".into());
+    }
+    let p = pointer(game, module.base + data)?;
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { zeroed() };
+    if !p.is_multiple_of(8)
+        || unsafe {
+            VirtualQueryEx(
+                game.0,
+                p as _,
+                &mut info,
+                size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        } == 0
+        || info.AllocationBase as usize != module.base
+        || info.State != MEM_COMMIT
+        || info.Protect & PAGE_GUARD != 0
+        || !matches!(
+            info.Protect & 0xff,
+            PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY
+        )
+        || p.checked_add(wire::ROOT_BYTES)
+            .is_none_or(|end| end > info.BaseAddress as usize + info.RegionSize)
+    {
+        return Err("root trace outside source data image".into());
+    }
+    Ok(p)
+}
 
 fn pin(path: &Path, expected: &str) -> Result<File, String> {
     wire::digest(expected)?;
@@ -233,24 +391,47 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     let _exe_pin = pin(Path::new(GAME_EXE), civ6_bootstrap_rs::EXE_SHA)?;
     let _runtime_pin = pin(&req.runtime, &req.runtime_sha)?;
     let _bootstrap_pin = pin(&req.bootstrap, &req.bootstrap_sha)?;
-    let prepared = exports(
-        &req.bootstrap,
-        &[
-            b"RustBridgeBootstrapPrepare\0",
-            b"RustBridgeBootstrapStopObservation\0",
-            b"BOOTSTRAP_TRACE_POINTER\0",
-        ],
-    )?;
-    let runtime_exports = exports(
-        &req.runtime,
-        &[
-            b"BridgeRuntimeInstall\0",
-            b"BridgeRuntimeClose\0",
-            b"BridgeRuntimeRebuild\0",
-            b"BridgeRuntimeStopObservation\0",
-            b"BRIDGE_RUNTIME_PROPERTY_LOG\0",
-        ],
-    )?;
+    let prepared = if req.root_only {
+        typed_exports(
+            &req.bootstrap,
+            &[
+                (b"RustBridgeBootstrapPrepareRootObservation\0", true),
+                (b"RustBridgeBootstrapStopObservation\0", true),
+                (b"BOOTSTRAP_TRACE_POINTER\0", false),
+            ],
+        )?
+    } else {
+        exports(
+            &req.bootstrap,
+            &[
+                b"RustBridgeBootstrapPrepare\0",
+                b"RustBridgeBootstrapStopObservation\0",
+                b"BOOTSTRAP_TRACE_POINTER\0",
+            ],
+        )?
+    };
+    let runtime_exports = if req.root_only {
+        typed_exports(
+            &req.runtime,
+            &[
+                (b"BridgeRootObservationInstall\0", true),
+                (b"BridgeRootObservationStop\0", true),
+                (b"BRIDGE_ROOT_OBSERVATION_TRACE\0", false),
+                (b"BRIDGE_ROOT_OBSERVATION_TRACE_SIZE\0", false),
+            ],
+        )?
+    } else {
+        exports(
+            &req.runtime,
+            &[
+                b"BridgeRuntimeInstall\0",
+                b"BridgeRuntimeClose\0",
+                b"BridgeRuntimeRebuild\0",
+                b"BridgeRuntimeStopObservation\0",
+                b"BRIDGE_RUNTIME_PROPERTY_LOG\0",
+            ],
+        )?
+    };
     let list = modules(req.pid)?;
     if list.iter().any(|m| same_path(&m.path, Path::new(GAMECORE))) {
         return Err("cold bootstrap requires target XP2 absent before Prepare".into());
@@ -269,10 +450,12 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     let mut writer = BufWriter::new(file);
     write_json(
         &mut writer,
-        json!({"type":"bootstrap_identity","pid":req.pid,"created_filetime":req.created,"chain_pid":chain_pid,"chain_created_filetime":process_created(&chain)?,"runner_pid":runner_pid,"runner_created_filetime":process_created(&runner)?,"bootstrap_sha256":req.bootstrap_sha,"runtime_sha256":req.runtime_sha,"prepare_version":civ6_bootstrap_rs::VERSION,"menu_context":menu_context,"runtime_installed":false}),
+        json!({"type":"bootstrap_identity","pid":req.pid,"created_filetime":req.created,"chain_pid":chain_pid,"chain_created_filetime":process_created(&chain)?,"runner_pid":runner_pid,"runner_created_filetime":process_created(&runner)?,"bootstrap_sha256":req.bootstrap_sha,"runtime_sha256":req.runtime_sha,"prepare_version":if req.root_only {wire::ROOT_PREPARE_VERSION} else {civ6_bootstrap_rs::VERSION},"menu_context":menu_context,"runtime_installed":false}),
     )?;
     let mut job = OwnedJob::attach(&game, req.pid, req.created)?;
     let mut prepared_trace_address = None;
+    let mut root_trace_address = None;
+    let mut root_evidence_saved = false;
     let mut stop_observation_stage = ObservationStopStage::NotRequested;
     let result = (|| -> Result<(), String> {
         let runtime = load(&game, req.pid, &req.runtime, loader)?;
@@ -282,8 +465,20 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         {
             return Err("export outside source image".into());
         }
+        if req.root_only {
+            root_trace_address = Some(root_address(
+                &game,
+                &runtime,
+                runtime_exports[2],
+                runtime_exports[3],
+            )?);
+        }
         let config = Prepare {
-            version: civ6_bootstrap_rs::VERSION,
+            version: if req.root_only {
+                wire::ROOT_PREPARE_VERSION
+            } else {
+                civ6_bootstrap_rs::VERSION
+            },
             size: size_of::<Prepare>() as u32,
             pid: req.pid,
             observation_seconds: req.seconds,
@@ -376,6 +571,39 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             return Err("bootstrap observation drain failed".into());
         }
         stop_observation_stage = ObservationStopStage::ReturnedSuccess;
+        if req.root_only {
+            let evidence = capture_root(
+                &game,
+                root_trace_address.ok_or("root trace address absent")?,
+                &req.output,
+                req.pid,
+                req.created,
+                true,
+            );
+            root_evidence_saved = true;
+            let captured = evidence["status"] == "captured";
+            preserve(
+                &req.output,
+                "root-receipt.json",
+                &serde_json::to_vec(&evidence).map_err(|e| e.to_string())?,
+            )?;
+            write_json(&mut writer, evidence)?;
+            if !captured {
+                return Err("root observation remained unknown; original samples preserved".into());
+            }
+            if !alive(&game) || process_created(&game)? != req.created {
+                return Err("root owned game changed before stop".into());
+            }
+            write_json(
+                &mut writer,
+                json!({"type":"root_observation_stop","pid":req.pid,
+                "created_filetime":req.created,"observation_stopped":true,
+                "resident_code_retained":true,"not_established_by_this_capture":
+                ["all-domain drainage","world lifetime","runtime activation authority"]}),
+            )?;
+            job.disarm_after_verified_operation()?;
+            return Ok(());
+        }
         let (trace, bytes) = stable_trace(&game, address, req.pid, req.created)?;
         fs::OpenOptions::new()
             .write(true)
@@ -439,6 +667,48 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     match result {
         Ok(()) => Ok(()),
         Err(e) => {
+            if req.root_only {
+                let evidence = if !root_evidence_saved {
+                    root_trace_address.map(|address| {
+                        capture_root(
+                            &game,
+                            address,
+                            &req.output,
+                            req.pid,
+                            req.created,
+                            matches!(
+                                stop_observation_stage,
+                                ObservationStopStage::ReturnedSuccess
+                            ),
+                        )
+                    })
+                } else {
+                    None
+                };
+                let evidence = evidence.or_else(|| {
+                    (!root_evidence_saved).then(|| {
+                        json!({
+                        "schema":"todo880-root-controller-receipt-v1","pid":req.pid,
+                        "created_filetime":req.created,"status":"unknown","samples":[],
+                        "stop_response_succeeded":false,"error":"root trace address unavailable"})
+                    })
+                });
+                let error = failure_evidence_error(e, evidence, |record| {
+                    preserve(
+                        &req.output,
+                        "root-receipt.json",
+                        &serde_json::to_vec(&record).map_err(|e| e.to_string())?,
+                    )?;
+                    write_json(&mut writer, record)
+                        .and_then(|_| writer.flush().map_err(|e| e.to_string()))
+                });
+                return Err(fail_owned_call(
+                    &mut job,
+                    &game,
+                    error,
+                    RECOVERY_SECONDS * 1000,
+                ));
+            }
             let evidence = prepared_trace_address.map(|address| {
                 failure_trace_snapshot(
                     req.pid,
@@ -465,6 +735,68 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn root_controller_preserves_actual_partial_bytes_and_never_completes_empty() {
+        let mut reads = 0;
+        let mut saved = Vec::new();
+        let evidence = root_samples(
+            41,
+            42,
+            true,
+            |bytes| {
+                reads += 1;
+                bytes[..3].copy_from_slice(&[7, 8, 9]);
+                (3, Some("owned partial RPM".into()))
+            },
+            |name, bytes| {
+                saved.push((name.to_owned(), bytes.to_vec()));
+                Ok(())
+            },
+        );
+        assert_eq!(reads, 1);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].1, vec![7, 8, 9]);
+        assert_eq!(evidence["status"], "unknown");
+        assert_eq!(evidence["samples"][0]["copied"], 3);
+        assert!(evidence.get("copies_equal").is_none());
+        let mut copies = 0;
+        let empty = root_samples(
+            41,
+            42,
+            true,
+            |bytes| {
+                copies += 1;
+                bytes.fill(0);
+                (bytes.len(), None)
+            },
+            |_, _| Ok(()),
+        );
+        assert_eq!(copies, 2);
+        assert_eq!(empty["copies_equal"], true);
+        assert_eq!(empty["status"], "unknown");
+    }
+    #[test]
+    fn root_controller_create_new_failure_does_not_replace_or_resample() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("capture.jsonl");
+        let original = path.with_extension("root-first.bin");
+        fs::write(&original, [5, 6]).unwrap();
+        let mut reads = 0;
+        let result = root_samples(
+            41,
+            42,
+            false,
+            |b| {
+                reads += 1;
+                b.fill(0);
+                (b.len(), None)
+            },
+            |extension, b| preserve(&path, extension, b),
+        );
+        assert_eq!(reads, 1);
+        assert_eq!(fs::read(original).unwrap(), vec![5, 6]);
+        assert_eq!(result["status"], "unknown");
+    }
 
     #[test]
     fn bootstrap_failure_summary_retains_original_capture_and_log_errors() {

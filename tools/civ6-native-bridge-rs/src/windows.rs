@@ -103,6 +103,7 @@ pub const GAMECORE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Me
 const CONFIG_VERSION: u32 = 1;
 pub const EXPERIMENTAL_PAID_CONFIG_VERSION: u32 = 0x0853_0001;
 use crate::MAX_ACTIVE_SECONDS;
+mod root_observation;
 
 /// AMD64 APM 3.11 permits an asynchronous single atomic store to a code
 /// region wholly within an aligned eight-byte word. The fixed operand meets

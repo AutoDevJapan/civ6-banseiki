@@ -40,6 +40,7 @@ static BOOT_LOADER_CONTINUE: AtomicUsize = AtomicUsize::new(0);
 static STATE: Mutex<Option<Resident>> = Mutex::new(None);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
+static ROOT_PROFILE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static OBSERVATION: crate::observation::ObservationGate =
     crate::observation::ObservationGate::new(true);
 struct RecordFlight;
@@ -387,6 +388,10 @@ fn event(
 ) -> Result<Option<u64>, String> {
     let mut lock = STATE.lock().map_err(|_| "resident mutex poisoned")?;
     let s = lock.as_mut().ok_or("resident not prepared")?;
+    if ROOT_PROFILE.load(Ordering::Acquire) {
+        // Root-only bootstrap never closes or activates gameplay policy.
+        return Ok(None);
+    }
     if s.phase == Phase::Prepared {
         // Menu BaseContext has no XP2 runtime authority. Original menu
         // transitions run untouched until the target loader returns.
@@ -573,6 +578,32 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
         return Ok(());
     }
     s.core = core;
+    if ROOT_PROFILE.load(Ordering::Acquire) {
+        let mut config = protocol::RootConfig {
+            version: protocol::ROOT_CONFIG_VERSION,
+            size: size_of::<protocol::RootConfig>() as u32,
+            pid: s.config.pid,
+            max_seconds: s.config.max_seconds,
+            created_filetime: s.config.created_filetime,
+            core: core as u64,
+            trace_address: 0,
+            trace_size: 0,
+            reserved: 0,
+        };
+        let status = unsafe { (s.install)((&mut config as *mut protocol::RootConfig).cast()) };
+        LAST_STATUS.store(status as usize, Ordering::Release);
+        if status != 0 {
+            return Err("deferred root observation install failed before factory".into());
+        }
+        if config.trace_size as usize != protocol::ROOT_BYTES || config.trace_address == 0 {
+            return Err("root install returned an invalid trace receipt".into());
+        }
+        s.phase = Phase::Open;
+        if OBSERVATION.is_closed() && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+            return Err("deferred root stop failed".into());
+        }
+        return Ok(());
+    }
     if let Some(_flight) = RecordFlight::try_enter() {
         TRACE.core.store(core as u64, Ordering::Release);
     }
@@ -620,8 +651,13 @@ extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usiz
     result
 }
 
-fn prepare(input: Prepare) -> Result<(), String> {
-    if input.version != VERSION
+fn prepare_profile(input: Prepare, root_only: bool) -> Result<(), String> {
+    if input.version
+        != if root_only {
+            protocol::ROOT_PREPARE_VERSION
+        } else {
+            VERSION
+        }
         || input.size as usize != size_of::<Prepare>()
         || input.pid != unsafe { GetCurrentProcessId() }
         || input.created_filetime == 0
@@ -666,11 +702,37 @@ fn prepare(input: Prepare) -> Result<(), String> {
     }
     let bridge = input.bridge_module as usize;
     let source = pin_file(&path(bridge)?, &input.bridge_sha256)?;
-    let install = api(bridge, b"BridgeRuntimeInstall\0")?;
-    let close = api(bridge, b"BridgeRuntimeClose\0")?;
-    let rebuild = api(bridge, b"BridgeRuntimeRebuild\0")?;
-    let stop = api(bridge, b"BridgeRuntimeStopObservation\0")?;
-    let log_export = data(bridge, b"BRIDGE_RUNTIME_PROPERTY_LOG\0")?;
+    let install = api(
+        bridge,
+        if root_only {
+            b"BridgeRootObservationInstall\0"
+        } else {
+            b"BridgeRuntimeInstall\0"
+        },
+    )?;
+    let stop = api(
+        bridge,
+        if root_only {
+            b"BridgeRootObservationStop\0"
+        } else {
+            b"BridgeRuntimeStopObservation\0"
+        },
+    )?;
+    let close = if root_only {
+        stop
+    } else {
+        api(bridge, b"BridgeRuntimeClose\0")?
+    };
+    let rebuild = if root_only {
+        stop
+    } else {
+        api(bridge, b"BridgeRuntimeRebuild\0")?
+    };
+    let log_export = if root_only {
+        0
+    } else {
+        data(bridge, b"BRIDGE_RUNTIME_PROPERTY_LOG\0")?
+    };
     // Own the lifetime of saved API addresses before any runtime invocation.
     // Mode6 also pins itself, but a file handle alone is not a module reference.
     let mut runtime_module = std::ptr::null_mut();
@@ -725,6 +787,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
         mode: 6,
     };
     // Publish retained responsibility before the first runtime mutation.
+    ROOT_PROFILE.store(root_only, Ordering::Release);
     *lock = Some(Resident {
         exe,
         core: 0,
@@ -761,6 +824,22 @@ fn prepare(input: Prepare) -> Result<(), String> {
     }
     record(11, 0, 0, 0, 0, 0, 0); // Prepared entries, not XP2/Mode6 readiness.
     Ok(())
+}
+fn prepare(input: Prepare) -> Result<(), String> {
+    prepare_profile(input, false)
+}
+
+/// Distinct explicit export AND strict input version; no old config can opt in.
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapPrepareRootObservation(input: *const Prepare) -> u32 {
+    std::panic::catch_unwind(|| {
+        let bytes = read(input as usize, size_of::<Prepare>()).map_err(|_| ())?;
+        let config = unsafe { std::ptr::read_unaligned(bytes.as_ptr().cast::<Prepare>()) };
+        prepare_profile(config, true).map_err(|_| ())
+    })
+    .ok()
+    .and_then(Result::ok)
+    .map_or(1, |_| 0)
 }
 
 /// Explicit call by the pinned owning driver in a fresh MainMenu. No DllMain
