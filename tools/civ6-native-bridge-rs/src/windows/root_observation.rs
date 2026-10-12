@@ -863,6 +863,9 @@ unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'sta
 unsafe fn restore_all() -> Result<(), &'static str> {
     h(12).fetch_or(ROOT_CLOSED, Ordering::AcqRel);
     let mut failed = false;
+    if submission::active() && unsafe { submission::restore_extra() }.is_err() {
+        failed = true;
+    }
     for (i, slot) in HOOKS.iter().take(site_count()).enumerate() {
         h(17).fetch_or(1 << i, Ordering::Release);
         site_row(i)[5].store(1, Ordering::Release);
@@ -1037,6 +1040,9 @@ fn install(config: &mut RootConfig) -> Result<(), &'static str> {
     })
     .map_err(|_| "root binding already set")?;
     unsafe { install_sites(core as usize, words) }?;
+    if submission::active() {
+        unsafe { submission::install_extra(core as usize) }?;
+    }
     config.trace_address = if submission::active() {
         std::ptr::addr_of!(submission::TRACE) as u64
     } else {
@@ -2511,6 +2517,7 @@ mod tests {
         assert!(HOOKS.iter().all(|slot| slot.lock().unwrap().is_none()));
     }
     fn submission_fixture(core: usize) {
+        submission::LEGACY_FIXTURE.store(true, Ordering::Release);
         submission::PROFILE.store(true, Ordering::Release);
         bind_fixture(core, 0, 0);
     }

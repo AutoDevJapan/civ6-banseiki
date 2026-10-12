@@ -21,17 +21,560 @@ pub const SUBMISSION_V1_ROW: usize = 256;
 pub const SUBMISSION_V1_BYTES: usize = ROOT_HEADER + SUBMISSION_V1_ROW * ROOT_ROWS;
 pub const SUBMISSION_V2_ROW: usize = 272;
 pub const SUBMISSION_V2_BYTES: usize = ROOT_HEADER + SUBMISSION_V2_ROW * ROOT_ROWS;
-pub const SUBMISSION_ROW: usize = 280;
-pub const SUBMISSION_BYTES: usize = ROOT_HEADER + SUBMISSION_ROW * ROOT_ROWS;
+pub const SUBMISSION_V3_ROW: usize = 280;
+pub const SUBMISSION_V3_BYTES: usize = ROOT_HEADER + SUBMISSION_V3_ROW * ROOT_ROWS;
+pub const SUBMISSION_ROW: usize = 384;
+pub const SUBMISSION_HEADER: usize = 640;
+pub const SUBMISSION_BIRTHS: usize = 16;
+pub const SUBMISSION_BYTES: usize =
+    SUBMISSION_HEADER + SUBMISSION_ROW * ROOT_ROWS + SUBMISSION_BIRTHS * 144;
 
+#[cfg(test)]
+mod observed_submission_tests {
+    use super::*;
+    const CORE: u64 = 0x180000000;
+    const EXE: u64 = 0x140000000;
+    const P: u64 = 0x50000;
+    const T: u64 = 0x60000;
+    fn put(b: &mut [u8], word: usize, v: u64) {
+        b[word * 8..word * 8 + 8].copy_from_slice(&v.to_le_bytes());
+    }
+    fn row_word(row: usize, field: usize) -> usize {
+        SUBMISSION_HEADER / 8 + row * SUBMISSION_ROW / 8 + field
+    }
+    fn fixture() -> Vec<u8> {
+        let mut b = vec![0; SUBMISSION_BYTES];
+        for (i, v) in [
+            (0, SUBMISSION_MAGIC),
+            (1, 4),
+            (2, SUBMISSION_BYTES as u64),
+            (3, 128),
+            (4, 384),
+            (5, 23),
+            (6, 29),
+            (7, CORE),
+            (8, EXE),
+            (9, 1),
+            (10, 12),
+            (12, ROOT_CLOSED),
+            (15, 63),
+            (19, 3),
+            (23, 2),
+            (24, 12),
+            (25, 63),
+            (26, 63),
+            (27, 3),
+            (28, 1),
+            (29, 1),
+        ] {
+            put(&mut b, i, v);
+        }
+        for (i, (rva, bytes)) in [
+            (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
+            (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+            (0x4a79b0, [0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83]),
+            (0x985ec0, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+            (0x4a8530, [0x40, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+            (0x986060, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let w = u64::from_le_bytes(bytes);
+            for (j, v) in [rva, w, w, 1, 1, 0, 0, 0].into_iter().enumerate() {
+                put(&mut b, 32 + i * 8 + j, v);
+            }
+        }
+        // Reservation order differs from event order, including execution on another thread.
+        for (i, (kind, parent, rsp, caller, entry, exit)) in [
+            (6, 0, 0x101d0, CORE + 0x1000, 1, 12),
+            (4, 1, 0xff90, CORE + 0x4a114a, 2, 5),
+            (9, 3, 0xfd80, CORE + 0x992267, 3, 4),
+            (5, 1, 0xffd0, CORE + 0x4a7a58, 6, 7),
+            (7, 0, 0x201d0, EXE + 0x1000, 8, 11),
+            (8, 9, 0x1ffd0, EXE + 0x985ef4, 9, 10),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut a = [0; 48];
+            a[1] = kind;
+            a[2] = 1;
+            a[3] = (i * 2 + 1) as u64;
+            a[4] = parent;
+            a[5] = if i < 4 { 31 } else { 41 };
+            a[6] = if i < 4 { 37 } else { 43 };
+            a[7] = 1;
+            a[8] = caller;
+            a[9] = rsp;
+            a[23] = entry;
+            a[29] = rsp - 0x1d0;
+            a[35] = 1;
+            a[36] = P;
+            match kind {
+                6 => a[10] = P - 0xd0,
+                4 | 9 => {
+                    a[10] = 2;
+                    a[11] = P;
+                    a[12] = 0x30000;
+                }
+                5 => {
+                    a[10] = 2;
+                    a[37] = T;
+                }
+                7 => {
+                    a[10] = T;
+                    a[37] = T;
+                    a[38] = 16;
+                    a[39] = 1;
+                    a[40] = EXE + 0x106b3c8;
+                    a[41] = P;
+                }
+                8 => {
+                    a[10] = P;
+                    a[37] = T;
+                    a[38] = 64;
+                    a[39] = 1;
+                    a[40] = CORE + 0xa06648;
+                }
+                _ => unreachable!(),
+            }
+            if kind == 4 {
+                a[13] = rsp + 0x28;
+                a[14] = CORE + 0xa06648;
+                a[18] = CORE + 0xa06920;
+                a[19] = 0x1f00000000;
+                a[24] = 32;
+                a[26] = 16;
+                a[30] = 1;
+                a[31] = 1;
+                a[32] = CORE + 0x4a7a50;
+                a[33] = 0x108;
+            }
+            let mut z = a;
+            z[2] = 2;
+            z[23] = exit;
+            if kind == 4 || kind == 9 {
+                z[34] = T;
+            }
+            if kind == 4 {
+                z[37] = T;
+            }
+            for (row, r) in [(i * 2, a), (i * 2 + 1, z)] {
+                for (j, v) in r.into_iter().enumerate() {
+                    put(&mut b, row_word(row, j), v);
+                }
+                put(&mut b, row_word(row, 0), row as u64 + 1);
+            }
+        }
+        let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+        for (j, v) in [
+            1,
+            P,
+            T,
+            1,
+            3,
+            7,
+            9,
+            11,
+            31,
+            37,
+            1,
+            511 | 8192 | 16384,
+            0x10000,
+            0x30000,
+            2,
+            0,
+            5,
+            T,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            put(&mut b, ledger + j, v);
+        }
+        b
+    }
+    #[test]
+    fn observed_governor_actual_callee_and_both_execution_frames_are_sampling_only() {
+        let v = submission_trace(&fixture(), 23, 29).unwrap();
+        assert_eq!(v["capture_complete"], true);
+        assert_eq!(v["complete_observed_p_t_execution_chains"], 1);
+        assert_eq!(v["runtime_activated"], false);
+        assert_eq!(v["world_permit_issued"], false);
+    }
+    #[test]
+    fn actual_callee_missing_foreign_caller_identity_or_return_cannot_type_raw_r8() {
+        for (row, field, value) in [
+            (4, 4, 1),
+            (4, 5, 99),
+            (4, 6, 99),
+            (4, 8, CORE + 0x99226a),
+            (4, 9, 0xfd88),
+            (5, 34, T + 8),
+            (5, 23, 6),
+            (5, 2, 3),
+            (3, 34, T + 8),
+            (2, 33, 0),
+            (8, 41, P + 8),
+            (10, 40, CORE + 0xa06650),
+            (10, 4, 1),
+            (11, 2, 3),
+        ] {
+            let mut b = fixture();
+            put(&mut b, row_word(row, field), value);
+            let v = submission_trace(&b, 23, 29).unwrap();
+            assert_eq!(v["capture_complete"], false, "row{row} field{field}");
+            assert_eq!(
+                v["rows"][3]["raw_return_r8"],
+                if row == 3 && field == 34 { T + 8 } else { T }
+            );
+        }
+    }
+    #[test]
+    fn cold_resolution_needs_entry_witness_and_cached_aba_is_never_evidence() {
+        // Cache values are deliberately absent from v4. A cold resolver reaches the
+        // exact callee; known->other and ABA with no actual entry cannot manufacture it.
+        assert_eq!(
+            submission_trace(&fixture(), 23, 29).unwrap()["capture_complete"],
+            true
+        );
+        for token in [0, 3, 7] {
+            let mut b = fixture();
+            let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+            put(&mut b, ledger + 16, token);
+            let v = submission_trace(&b, 23, 29).unwrap();
+            assert_eq!(v["capture_complete"], false);
+            assert_eq!(v["rows"][3]["raw_return_r8"], T);
+        }
+    }
+    #[test]
+    fn observed_pending_reused_epoch_partial_sites_and_dropped_remain_unknown() {
+        let ledger = (SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW) / 8;
+        for (offset, value) in [
+            (ledger + 7, 0),
+            (ledger + 10, 2),
+            (ledger + 15, 1),
+            (15, 31),
+            (11, 1),
+            (13, 1),
+            (32 + 5 * 8 + 5, 1),
+            (32 + 3 * 8 + 4, 0),
+            (25, 31),
+            (28, 0),
+        ] {
+            let mut b = fixture();
+            put(&mut b, offset, value);
+            assert_eq!(
+                submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+                false,
+                "word{offset}"
+            );
+        }
+    }
+}
+
+fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    if b.len() != SUBMISSION_BYTES
+        || word(b, 0)? != SUBMISSION_MAGIC
+        || word(b, 8)? != 4
+        || word(b, 16)? != SUBMISSION_BYTES as u64
+        || word(b, 24)? != ROOT_ROWS as u64
+        || word(b, 32)? != SUBMISSION_ROW as u64
+        || word(b, 40)? != u64::from(pid)
+        || word(b, 48)? != created
+    {
+        return Err("observed submission size/version/identity".into());
+    }
+    let core = word(b, 56)?;
+    let exe = word(b, 64)?;
+    let epoch = word(b, 72)?;
+    let next = usize::try_from(word(b, 80)?).map_err(|_| "observed row count")?;
+    let count = usize::try_from(word(b, 232)?).map_err(|_| "observed birth count")?;
+    if next > ROOT_ROWS || next % 2 != 0 || count > SUBMISSION_BIRTHS {
+        return Err("observed bounded count".into());
+    }
+    let mut unknown = Vec::<String>::new();
+    let mut sites = Vec::new();
+    for (i, (rva, bytes)) in [
+        (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
+        (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+        (0x4a79b0, [0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83]),
+        (0x985ec0, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+        (0x4a8530, [0x40, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+        (0x986060, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let s = (0..8)
+            .map(|j| word(b, 256 + i * 64 + j * 8))
+            .collect::<Result<Vec<_>, _>>()?;
+        let expected = u64::from_le_bytes(bytes);
+        if s[..5] != [rva, expected, expected, 1, 1] || s[5..] != [0, 0, 0] {
+            unknown.push(format!("site{i} incomplete/rollback/failure"));
+        }
+        sites.push(s);
+    }
+    let mut pairs = std::collections::BTreeMap::<u64, ([u64; 48], [u64; 48])>::new();
+    let mut rows = Vec::new();
+    let mut events = std::collections::BTreeSet::new();
+    for i in (0..next).step_by(2) {
+        let read = |row: usize| -> Result<[u64; 48], String> {
+            let mut r = [0; 48];
+            for (j, v) in r.iter_mut().enumerate() {
+                *v = word(b, SUBMISSION_HEADER + row * SUBMISSION_ROW + j * 8)?;
+            }
+            Ok(r)
+        };
+        let a = read(i)?;
+        let z = read(i + 1)?;
+        for r in [&a, &z] {
+            rows.push(json!({"raw":r.to_vec(),"kind":r[1],"edge":r[2],"invocation_id":r[3],
+                "parent":r[4],"tid":r[5],"thread_created_filetime":r[6],"observed_core_epoch":r[7],
+                "caller":r[8],"entry_rsp":r[9],"native_entry_rsp":r[29],
+                "observed_birth_id":r[35],"opaque_p":r[36],"opaque_t":r[37],
+                "raw_return_r8":if r[2]==2 {Some(r[34])}else{None},"errors":r[20],
+                "current_entry_object_copied":r[38],"current_entry_read_status":r[39],
+                "entry_snapshot_words":r[40..48],
+                "status":match r[2]{1=>"entry",2=>"normal_return",3=>"exception_unwind",_=>"unknown"},
+                "snapshot_scope":"entry only; no pointer dereference after return"}));
+        }
+        let frozen = (4..48)
+            .filter(|j| !matches!(j, 20 | 21 | 22 | 23 | 28 | 34 | 37))
+            .all(|j| a[j] == z[j]);
+        let valid = a[0] == i as u64 + 1
+            && z[0] == i as u64 + 2
+            && (4..=9).contains(&a[1])
+            && a[1] == z[1]
+            && a[2] == 1
+            && z[2] == 2
+            && a[3] == i as u64 + 1
+            && z[3] == a[3]
+            && a[5] > 0
+            && a[6] > 0
+            && a[7] == epoch
+            && epoch > 0
+            && core > 0
+            && exe > 0
+            && a[9].checked_sub(0x1d0) == Some(a[29])
+            && a[20] == 0
+            && z[20] == 0
+            && frozen
+            && a[23] > 0
+            && z[23] > a[23]
+            && z[23] <= word(b, 192)?
+            && events.insert(a[23])
+            && events.insert(z[23]);
+        if valid {
+            pairs.insert(a[3], (a, z));
+        } else {
+            unknown.push(format!(
+                "invocation{} missing/exception/identity/read/order",
+                i + 1
+            ));
+        }
+    }
+    let ledger = SUBMISSION_HEADER + ROOT_ROWS * SUBMISSION_ROW;
+    let mut births = Vec::new();
+    let mut used_p = std::collections::BTreeSet::new();
+    let mut used_t = std::collections::BTreeSet::new();
+    let mut accounted_calls = std::collections::BTreeSet::new();
+    let mut complete_chains = 0;
+    for i in 0..SUBMISSION_BIRTHS {
+        let mut w = [0u64; 18];
+        for (j, v) in w.iter_mut().enumerate() {
+            *v = word(b, ledger + i * 144 + j * 8)?;
+        }
+        if i >= count {
+            if w != [0; 18] {
+                unknown.push("unused birth slot nonzero".into());
+            }
+            continue;
+        }
+        for token in [w[3], w[4], w[5], w[6], w[7], w[16]]
+            .into_iter()
+            .filter(|t| *t != 0)
+        {
+            if !accounted_calls.insert(token) {
+                unknown.push("invocation assigned to multiple birth roles".into());
+            }
+            if let Some((a, z)) = pairs.get(&token) {
+                if a[35] != w[0] || a[36] != w[1] || z[36] != w[1] {
+                    unknown.push("birth/opaque P differs from invocation".into());
+                }
+            }
+        }
+        let unresolved = w[2] != 0 && w[11] & 256 == 0;
+        births.push(json!({"raw":w.to_vec(),"observed_birth_id":w[0],"opaque_p":w[1],"opaque_t":w[2],
+            "producer":w[3],"submit":w[4],"publication":w[5],"host_exec":w[6],"core_exec":w[7],
+            "actual_push_host":w[16],"actual_push_host_return_r8":w[17],
+            "errors":w[15],"unresolved_not_executed_t":unresolved,"world_generation":null,"world_permit_issued":false}));
+        let Some((p, pr)) = pairs.get(&w[3]) else {
+            unknown.push(format!("birth{} producer pair missing", w[0]));
+            continue;
+        };
+        if w[0] != i as u64 + 1
+            || w[1] == 0
+            || !used_p.insert(w[1])
+            || w[10] != epoch
+            || p[1] != 6
+            || p[4] != 0
+            || p[10].checked_add(0xd0) != Some(w[1])
+            || p[35] != w[0]
+            || p[36] != w[1]
+            || p[29] != w[12]
+            || p[5] != w[8]
+            || p[6] != w[9]
+            || w[15] != 0
+        {
+            unknown.push(format!("birth{} producer/reusedP identity mismatch", w[0]));
+            continue;
+        }
+        if w[11] & 4096 != 0 {
+            if w[4..8] != [0; 4] || w[2] != 0 || w[11] != (1 | 16 | 4096) {
+                unknown.push("no-submit birth contains task evidence".into());
+            }
+            continue;
+        }
+        let Some((s, sr)) = pairs.get(&w[4]) else {
+            unknown.push("submit pair missing".into());
+            continue;
+        };
+        let Some((c, cr)) = pairs.get(&w[16]) else {
+            unknown.push("actual986060 callee pair missing".into());
+            continue;
+        };
+        let Some((u, ur)) = pairs.get(&w[5]) else {
+            unknown.push("publication pair missing".into());
+            continue;
+        };
+        let Some((h, hr)) = pairs.get(&w[6]) else {
+            unknown.push("T never observed executing; recovery unresolved".into());
+            continue;
+        };
+        let Some((x, xr)) = pairs.get(&w[7]) else {
+            unknown.push("Core execution pair missing".into());
+            continue;
+        };
+        let relation = s[1] == 4
+            && s[4] == p[3]
+            && s[5..8] == p[5..8]
+            && core.checked_add(0x4a114a) == Some(s[8])
+            && s[9].checked_add(0x70) == Some(p[29])
+            && s[11] == w[1]
+            && s[35] == w[0]
+            && s[10] == w[14]
+            && s[12] == w[13]
+            && p[23] < s[23]
+            && core.checked_add(0x4a7a50) == Some(s[32])
+            && s[33] == 0x108
+            && s[13] == s[9].checked_add(0x28).unwrap_or(0)
+            && s[18] == core.checked_add(0xa06920).unwrap_or(0)
+            && s[19] == 0x1f00000000
+            && matches!(s[24], 16 | 32)
+            && s[25] == 0
+            && s[26] == 16
+            && s[27] == 0
+            && s[30] != 0
+            && s[31] != 0
+            && c[1] == 9
+            && c[4] == s[3]
+            && c[5..8] == s[5..8]
+            && core.checked_add(0x992267) == Some(c[8])
+            && c[9].checked_add(0x40) == Some(s[29])
+            && c[10..13] == s[10..13]
+            && c[35] == w[0]
+            && s[23] < c[23]
+            && cr[23] < sr[23]
+            && cr[34] > 0
+            && cr[34] == sr[34]
+            && sr[34] == w[2]
+            && w[17] == w[2]
+            && u[1] == 5
+            && u[4] == p[3]
+            && u[5..8] == p[5..8]
+            && core.checked_add(0x4a7a58) == Some(u[8])
+            && u[9].checked_add(0x30) == Some(p[29])
+            && u[10] == s[10]
+            && u[35] == w[0]
+            && sr[23] < u[23]
+            && ur[23] < pr[23]
+            && h[1] == 7
+            && h[10] == w[2]
+            && h[35] == w[0]
+            && h[37] == w[2]
+            && h[38] == 16
+            && h[39] == 1
+            && exe.checked_add(0x106b3c8) == Some(h[40])
+            && h[41] == w[1]
+            && sr[23] < h[23]
+            && x[1] == 8
+            && x[4] == h[3]
+            && x[5..8] == h[5..8]
+            && exe.checked_add(0x985ef4) == Some(x[8])
+            && x[9].checked_add(0x30) == Some(h[29])
+            && x[10] == w[1]
+            && x[35] == w[0]
+            && x[37] == w[2]
+            && x[38] == 64
+            && x[39] == 1
+            && core.checked_add(0xa06648) == Some(x[40])
+            && h[23] < x[23]
+            && xr[23] < hr[23]
+            && w[11] == (511 | 8192 | 16384)
+            && used_t.insert(w[2]);
+        if relation {
+            complete_chains += 1;
+        } else {
+            unknown.push(format!(
+                "birth{} actual P/T/frame/normal-return chain incomplete",
+                w[0]
+            ));
+        }
+    }
+    if pairs.keys().any(|token| !accounted_calls.contains(token)) {
+        unknown.push("accepted invocation absent from birth ledger".into());
+    }
+    let stopped = word(b, 96)? == ROOT_CLOSED && word(b, 184)? == 2;
+    let clean = stopped
+        && word(b, 88)? == 0
+        && word(b, 104)? == 0
+        && word(b, 112)? == 0
+        && word(b, 120)? == 63
+        && word(b, 128)? == 0
+        && word(b, 136)? == 0
+        && word(b, 144)? == 0
+        && word(b, 152)? == 3
+        && word(b, 176)? == 0
+        && word(b, 200)? == 63
+        && word(b, 208)? == 63
+        && word(b, 216)? == 3
+        && word(b, 224)? == 1
+        && unknown.is_empty();
+    Ok(
+        json!({"schema":"todo880-native-submission-observed-trace-v4","pid":pid,"created_filetime":created,
+        "observed_core_epoch":epoch,"reserved_rows":next,"site_witnesses":sites,"rows":rows,"births":births,
+        "excluded_calls":word(b,240)?,"excluded_unreadable_current_t":word(b,248)?,
+        "accepted_calls_stopped":stopped,"complete_observed_p_t_execution_chains":complete_chains,
+        "capture_complete":clean && complete_chains>0,"unknown":unknown,
+        "runtime_activated":false,"world_permit_issued":false,"scope":"fixed Governor observed invocations only",
+        "not_established_by_this_capture":["World birth generation or World identity","native ownership/retain/release/cancel",
+            "T destructor completion or never-executed T recovery","sameSetWait or zero fields do not settle pending T",
+            "other jobs and domains were excluded, not drained","natural Close/Rebuild authority"]}),
+    )
+}
 /// Copies made at entry only. Scalar addresses in these records are opaque;
 /// this parser never follows them. Correspondence is not job ownership/join.
 pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let version = word(b, 8)?;
+    if version == 4 {
+        return submission_observed_trace(b, pid, created);
+    }
     let (row_bytes, trace_bytes) = match version {
         1 => (SUBMISSION_V1_ROW, SUBMISSION_V1_BYTES),
         2 => (SUBMISSION_V2_ROW, SUBMISSION_V2_BYTES),
-        3 => (SUBMISSION_ROW, SUBMISSION_BYTES),
+        3 => (SUBMISSION_V3_ROW, SUBMISSION_V3_BYTES),
         _ => return Err("submission trace version".into()),
     };
     if b.len() != trace_bytes
@@ -60,8 +603,11 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
     let core = word(b, 56)?;
     let epoch = word(b, 72)?;
     let mut unknown = Vec::<String>::new();
-    if version == 3 && word(b, 232)? != 1 {
-        unknown.push("actual cached Push target unconfirmed; raw R8 is not typed T".into());
+    if version == 3 {
+        unknown.push(
+            "legacy cached target is not a per-invocation callee witness; raw R8 is not typed T"
+                .into(),
+        );
     }
     let mut sites = Vec::new();
     for (i, (rva, bytes)) in [
@@ -132,12 +678,7 @@ pub fn submission_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, Strin
                 let index = rows.len() - 2 + offset;
                 rows[index]["normal_return_r8_raw"] =
                     json!(if r[2] == 2 { Some(r[34]) } else { None });
-                rows[index]["normal_return_r8_t"] =
-                    json!(if r[2] == 2 && r[1] == 4 && word(b, 232)? == 1 {
-                        Some(r[34])
-                    } else {
-                        None
-                    });
+                rows[index]["normal_return_r8_t"] = Value::Null;
             }
         }
         let valid = a[0] == i as u64 + 1
@@ -518,25 +1059,26 @@ mod submission_protocol_tests {
     #[test]
     fn submission_r8_normal_return_is_preserved_without_exit_heap_reads_or_world_certificate() {
         let old = governor();
-        let mut b = vec![0; SUBMISSION_BYTES];
+        let mut b = vec![0; SUBMISSION_V3_BYTES];
         b[..ROOT_HEADER].copy_from_slice(&old[..ROOT_HEADER]);
         put(&mut b, 1, 3);
-        put(&mut b, 2, SUBMISSION_BYTES as u64);
-        put(&mut b, 4, SUBMISSION_ROW as u64);
+        put(&mut b, 2, SUBMISSION_V3_BYTES as u64);
+        put(&mut b, 4, SUBMISSION_V3_ROW as u64);
         put(&mut b, 29, 1);
         for i in 0..4 {
-            b[ROOT_HEADER + i * SUBMISSION_ROW
-                ..ROOT_HEADER + i * SUBMISSION_ROW + SUBMISSION_V2_ROW]
+            b[ROOT_HEADER + i * SUBMISSION_V3_ROW
+                ..ROOT_HEADER + i * SUBMISSION_V3_ROW + SUBMISSION_V2_ROW]
                 .copy_from_slice(
                     &old[ROOT_HEADER + i * SUBMISSION_V2_ROW
                         ..ROOT_HEADER + (i + 1) * SUBMISSION_V2_ROW],
                 );
         }
-        let slot = ROOT_HEADER / 8 + SUBMISSION_ROW / 8 + 34;
+        let slot = ROOT_HEADER / 8 + SUBMISSION_V3_ROW / 8 + 34;
         put(&mut b, slot, 0x11223344);
         let v = submission_trace(&b, 23, 29).unwrap();
-        assert_eq!(v["capture_complete"], true);
-        assert_eq!(v["rows"][1]["normal_return_r8_t"], 0x11223344_u64);
+        assert_eq!(v["capture_complete"], false);
+        assert!(v["rows"][1]["normal_return_r8_t"].is_null());
+        assert_eq!(v["rows"][1]["normal_return_r8_raw"], 0x11223344_u64);
         assert!(v["rows"][0]["normal_return_r8_t"].is_null());
         assert_eq!(v["runtime_activated"], false);
         put(&mut b, slot, 0);

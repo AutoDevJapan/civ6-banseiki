@@ -2,6 +2,10 @@
 //! Snapshot addresses are opaque scalars. No job pointer is followed at exit.
 use super::*;
 use civ6_bootstrap_rs::protocol::{SUBMISSION_BYTES, SUBMISSION_MAGIC, SUBMISSION_ROW};
+mod observed;
+pub(super) use observed::TRACE;
+#[cfg(test)]
+pub(super) static LEGACY_FIXTURE: AtomicBool = AtomicBool::new(false);
 pub(super) static PROFILE: AtomicBool = AtomicBool::new(false);
 pub(super) fn active() -> bool {
     PROFILE.load(Ordering::Acquire)
@@ -11,26 +15,14 @@ pub(super) const WORDS: [[u8; 8]; 3] = [
     [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b],
     [0; 8],
 ];
-#[repr(C)]
-pub struct SubmissionTrace {
-    pub(super) header: [AtomicU64; 32],
-    pub(super) sites: [[AtomicU64; 8]; 3],
-    pub(super) rows: [[AtomicU64; 35]; ROOT_ROWS],
-}
-pub(super) static TRACE: SubmissionTrace = SubmissionTrace {
-    header: [const { AtomicU64::new(0) }; 32],
-    sites: [const { [const { AtomicU64::new(0) }; 8] }; 3],
-    rows: [const { [const { AtomicU64::new(0) }; 35] }; ROOT_ROWS],
-};
-const _: () = assert!(std::mem::size_of::<SubmissionTrace>() == SUBMISSION_BYTES);
 #[unsafe(no_mangle)]
-pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE: &SubmissionTrace = &TRACE;
+pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE: &observed::ObservedTrace = &TRACE;
 #[unsafe(no_mangle)]
 pub static BRIDGE_SUBMISSION_OBSERVATION_TRACE_SIZE: u64 = SUBMISSION_BYTES as u64;
 pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
     for (i, v) in [
         SUBMISSION_MAGIC,
-        3,
+        4,
         SUBMISSION_BYTES as u64,
         ROOT_ROWS as u64,
         SUBMISSION_ROW as u64,
@@ -51,7 +43,7 @@ pub(super) fn initialize(config: RootConfig, core: usize, exe: usize) {
         site_row(i)[1].store(u64::from_le_bytes(*words), Ordering::Release);
     }
 }
-fn commit(index: usize, mut row: [u64; 35]) {
+fn commit(index: usize, mut row: [u64; 48]) {
     row[23] = h(24).fetch_add(1, Ordering::AcqRel) + 1;
     for (dst, v) in TRACE.rows[index].iter().zip(row) {
         dst.store(v, Ordering::Relaxed);
@@ -79,8 +71,8 @@ fn read_once<const N: usize>(address: u64) -> ([u8; N], usize, u32, u64) {
     };
     (bytes, copied, error, ok as u32 as u64)
 }
-fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 35] {
-    let mut r = [0; 35];
+fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 48] {
+    let mut r = [0; 48];
     r[1] = inv.kind;
     r[2] = 1;
     r[3] = inv.token;
@@ -146,6 +138,15 @@ fn entry_snapshot(saved: &Saved, inv: Invocation, error: u32) -> [u64; 35] {
     r
 }
 pub(super) extern "system" fn begin(raw: *mut Saved) {
+    #[cfg(test)]
+    if LEGACY_FIXTURE.load(Ordering::Acquire) {
+        begin_legacy(raw);
+        return;
+    }
+    observed::begin(raw);
+}
+#[cfg(test)]
+fn begin_legacy(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let saved = unsafe { &mut *raw };
@@ -211,6 +212,15 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
+    #[cfg(test)]
+    if LEGACY_FIXTURE.load(Ordering::Acquire) {
+        finish_legacy(raw, edge, error);
+        return;
+    }
+    observed::finish(raw, edge, error);
+}
+#[cfg(test)]
+fn finish_legacy(raw: &mut Saved, edge: u64, error: u32) {
     let mut inv = raw.invocation;
     if inv.cookie != COOKIE {
         return;
@@ -238,7 +248,7 @@ pub(super) fn finish(raw: &mut Saved, edge: u64, error: u32) {
     }
     // Clone the already copied entry row; NEVER reread RDX, R9, set or list.
     let index = inv.token as usize - 1;
-    let mut r = [0; 35];
+    let mut r = [0; 48];
     for (dst, src) in r.iter_mut().zip(&TRACE.rows[index]) {
         *dst = src.load(Ordering::Acquire);
     }
@@ -662,16 +672,19 @@ pub(super) fn verify_r8_flow(
     {
         return Err("R8 host direct-call target differs");
     }
-    let target = core
-        .checked_add(0xb90688)
-        .and_then(|p| copy_current::<8>(p as u64))
-        .map(u64::from_le_bytes);
-    h(29).store(
-        u64::from(r8_target_confirmed(target, exe)),
-        Ordering::Release,
-    );
+    // This bit witnesses fixed forwarding BYTES only. Actual callee identity
+    // comes from the nested986060 entry/return for EACH accepted Push.
+    h(27).fetch_or(2, Ordering::Release);
+    observed::verify(core_file, exe_file, core, exe)?;
     Ok(())
 }
+pub(super) unsafe fn install_extra(core: usize) -> Result<(), &'static str> {
+    unsafe { observed::install_extra(core) }
+}
+pub(super) unsafe fn restore_extra() -> Result<(), &'static str> {
+    unsafe { observed::restore_extra() }
+}
+#[cfg(test)]
 pub(super) fn r8_target_confirmed(target: Option<u64>, exe: usize) -> bool {
     exe.checked_add(0x986060)
         .is_some_and(|expected| target == Some(expected as u64))
