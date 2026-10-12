@@ -86,6 +86,8 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
             "native_entry_rsp":raw[21],"entry_rbx":raw[22],"event_sequence":raw[23]}));
     }
     let core = word(b, 56)?;
+    let epoch = word(b, 72)?;
+    let mut valid_pairs = std::collections::BTreeSet::new();
     let mut wait_pairs = 0usize;
     for (id, pair) in &pairs {
         if pair.len() != 2 || pair[0][2] != 1 || pair[1][2] != 2 {
@@ -97,19 +99,31 @@ pub fn root_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
         if [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 21, 22]
             .into_iter()
             .any(|j| a[j] != z[j])
+            || a[5] == 0
+            || a[6] == 0
+            || epoch == 0
+            || a[7] != epoch
             || a[19] != 0
             || z[19] != 0
         {
             unknown.push(format!("invocation {id} binding/read mismatch"));
             continue;
         }
+        valid_pairs.insert(*id);
+    }
+    // A parent's entry cannot supply authority when its own return belongs
+    // to another thread lifetime, epoch or binding. Validate every pair first.
+    for id in &valid_pairs {
+        let pair = &pairs[id];
+        let a = &pair[0];
+        let z = &pair[1];
         if a[1] == 3 {
-            let Some(parent) = pairs.get(&a[4]).filter(|v| v.len() == 2) else {
+            let Some(parent) = pairs.get(&a[4]).filter(|_| valid_pairs.contains(&a[4])) else {
                 unknown.push(format!("wait {id} has no complete manager"));
                 continue;
             };
             let m = &parent[0];
-            let Some(world) = pairs.get(&m[4]).filter(|v| v.len() == 2) else {
+            let Some(world) = pairs.get(&m[4]).filter(|_| valid_pairs.contains(&m[4])) else {
                 unknown.push(format!("manager {} has no complete world", m[3]));
                 continue;
             };
