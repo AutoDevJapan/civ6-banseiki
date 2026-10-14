@@ -24,6 +24,8 @@ jobs:
         run: cargo fmt --manifest-path tools/Cargo.toml --all -- --check
       - name: Run all Rust and Lua tests
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+      - name: Run all workspace doctests
+        run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --doc
       - name: Build all tools
         run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
       - name: Check existing scenario JSON
