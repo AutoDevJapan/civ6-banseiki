@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   native-driver:
-    runs-on: windows-latest
+    runs-on: ${{ (github.repository_id == '1392152644' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 148 && github.event.pull_request.head.repo.id == 1392152644) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/todo2640-workspace-doctests-20261015'))) && 'cc-product-2736-1392152644-windows-latest' || 'windows-latest' }}
     timeout-minutes: 20
     defaults:
       run:
@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ (github.repository_id == '1392152644' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 148 && github.event.pull_request.head.repo.id == 1392152644) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/todo2640-workspace-doctests-20261015'))) && (github.event.pull_request.head.sha || github.sha) || github.sha }}
       - name: Select Rust and required components
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
       - name: Check formatting

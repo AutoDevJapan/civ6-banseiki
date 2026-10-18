@@ -15,9 +15,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ (github.repository_id == '1392152644' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 148 && github.event.pull_request.head.repo.id == 1392152644) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/todo2640-workspace-doctests-20261015'))) && format('cc-product-2736-1392152644-{0}', matrix.os) || matrix.os }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          ref: ${{ (github.repository_id == '1392152644' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 148 && github.event.pull_request.head.repo.id == 1392152644) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/todo2640-workspace-doctests-20261015'))) && (github.event.pull_request.head.sha || github.sha) || github.sha }}
       - name: Install Rust
         run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
       - name: Check formatting
