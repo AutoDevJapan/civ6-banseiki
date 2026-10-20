@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   live-chain:
-    runs-on: windows-latest
+    runs-on: ${{ fromJSON(format((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && '["windows-latest"]' || '["self-hosted","Windows","X64","civ6-ci-windows","civ6-ci-run-{0}-{1}-live-chain-Windows"]', github.run_id, github.run_attempt)) }}
     timeout-minutes: 15
     defaults:
       run:
@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
       - run: cargo +stable fmt --check
       - run: cargo +stable test --locked
