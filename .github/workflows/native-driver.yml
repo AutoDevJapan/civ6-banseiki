@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   native-driver:
-    runs-on: ${{ (github.repository_id == '1392152644' && ((github.event_name == 'pull_request' && github.event.pull_request.number == 148 && github.event.pull_request.head.repo.id == 1392152644) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/todo2640-workspace-doctests-20261015'))) && 'cc-product-2736-1392152644-windows-latest' || 'windows-latest' }}
+    runs-on: windows-latest
     timeout-minutes: 20
     defaults:
       run:
