@@ -20,6 +20,12 @@ fn checkout(parent: &Path, name: &str, marker: &str) -> PathBuf {
     root
 }
 
+fn moved_binary_tempdir() -> tempfile::TempDir {
+    let original = Path::new(env!("CARGO_BIN_EXE_civ6-build-arbitration-ai-scenario"));
+    // Unix fixtures hard-link the immutable executable, so they must share its filesystem.
+    tempfile::tempdir_in(original.parent().unwrap()).unwrap()
+}
+
 fn moved_binary(root: &Path) -> PathBuf {
     let original = Path::new(env!("CARGO_BIN_EXE_civ6-build-arbitration-ai-scenario"));
     let folder = root.join("tools/target/debug");
@@ -39,7 +45,7 @@ fn moved_binary(root: &Path) -> PathBuf {
 
 #[test]
 fn generator_moved_with_checkout_uses_executable_repository() {
-    let temp = support::tempdir();
+    let temp = moved_binary_tempdir();
     let executable_root = checkout(temp.path(), "moved-checkout", "executable checkout");
     let other_root = checkout(temp.path(), "other-checkout", "other current directory");
     let binary = moved_binary(&executable_root);
@@ -86,7 +92,7 @@ fn generator_moved_with_checkout_uses_executable_repository() {
 
 #[test]
 fn generator_explicit_repo_overrides_executable_checkout_and_validates_it() {
-    let temp = support::tempdir();
+    let temp = moved_binary_tempdir();
     let executable_root = checkout(temp.path(), "executable", "executable checkout");
     let selected_root = checkout(temp.path(), "selected", "selected with repo option");
     let binary = moved_binary(&executable_root);
