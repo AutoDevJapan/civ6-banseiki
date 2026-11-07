@@ -36,3 +36,15 @@ MOD 本体・マップ・ゲーム外の常駐アプリなどの実装用ディ�
 - `main` に直接コミットせず、作業ブランチから PR を作る
 
 ツールとテストは Rust を使用する。`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` で検査し、シナリオの実行方法は [検証ドライバー](documents/poc/autotest.md) を参照する。
+
+## ライセンスと第三者データ
+
+AutoDevJapanが権利を持つ自作コードは [MIT License](LICENSE) で提供します。Civilization VI本体、Firaxis/2Kのコード・データ・画像・商標、第三者MODや資料はこの許諾に含みません。各権利者の条件に従い、ゲーム本体は正規に取得してください。
+
+次のテスト素材は、出所と再配布許諾の確認が未完了です。テスト用であることだけを根拠にMIT対象とは扱いません。
+
+- `tools/civ6-assets-rs/tests/fixtures/source-cache.zip`、`geography.zip`
+- 同ディレクトリの `Icons.blp.prefix`、`JAC_CustomCivs_*.blp.prefix`、`PlayerStandardColors.xml`、`official.json`、`notebooks_generated.png`
+- これらの元データ、派生fixture、および過去履歴に含まれる同種の素材
+
+現在公開されているリポジトリですが、公開済みであることは素材の再配布許諾を証明しません。自作コードのMIT化と、全履歴・全素材の公開適格性の確認は別です。未確認素材の削除や履歴書換えは行っていません。出所・権利者・取得条件・再配布許諾を個別に確認する必要があります。
