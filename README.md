@@ -43,6 +43,8 @@ AutoDevJapanが権利を持つ自作コードは [MIT License](LICENSE) で提�
 
 次のテスト素材は、出所と再配布許諾の確認が未完了です。テスト用であることだけを根拠にMIT対象とは扱いません。
 
+これらをテストに使う `civ6-assets-rs` は、Cargoのレジストリへの誤公開を防ぐため `publish = false` としています。この設定はGitリポジトリや手動で作成した配布物の公開範囲を制御するものではありません。
+
 - `tools/civ6-assets-rs/tests/fixtures/source-cache.zip`、`geography.zip`
 - 同ディレクトリの `Icons.blp.prefix`、`JAC_CustomCivs_*.blp.prefix`、`PlayerStandardColors.xml`、`official.json`、`notebooks_generated.png`
 - これらの元データ、派生fixture、および過去履歴に含まれる同種の素材
