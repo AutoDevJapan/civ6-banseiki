@@ -20,6 +20,8 @@ mod consumers;
 mod control;
 #[path = "native_jobs.rs"]
 mod jobs;
+#[path = "native_loads.rs"]
+mod loads;
 #[path = "native_operations.rs"]
 mod operations;
 #[path = "native_sessions.rs"]
@@ -482,7 +484,11 @@ fn session_leave(hold: u64, exceptional: bool) -> Result<(), sessions::SessionEr
         .map_err(|_| sessions::SessionError::Unresolved)
 }
 pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
-    unsafe { sessions::NativeSessionApi::prepare_host(exe) }
+    unsafe {
+        sessions::NativeSessionApi::prepare_host(exe)?;
+        loads::prepare_host(exe)?;
+        jobs::prepare_host(exe)
+    }
 }
 pub(in super::super) fn bind_host(core: usize) -> bool {
     sessions::NativeSessionApi::bind_core(
@@ -537,6 +543,8 @@ pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
     failed |= unsafe { worlds::restore() }.is_err();
     failed |= unsafe { control::restore() }.is_err();
     failed |= unsafe { operations::restore() }.is_err();
+    failed |= unsafe { loads::restore() }.is_err();
+    failed |= unsafe { sessions::NativeSessionApi::restore() }.is_err();
     hooks.retain(|owned| {
         let hook = &owned.hook;
         let current = copy_current::<8>(hook.target as u64);

@@ -33,7 +33,16 @@ extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
-        let f = FRAMES.get().unwrap_or_else(|| fault());
+        loads::job_begin(raw);
+        // Host load jobs can be published before the first Core is loaded.
+        // Their separate load carrier is retained above; Core accounting is
+        // activated only when its original runtime owner binds the Core.
+        let Some(f) = FRAMES.get() else {
+            return;
+        };
+        if CORE.load(Ordering::Acquire) == 0 {
+            return;
+        }
         let (id, task) = match raw.invocation.kind {
             20 => {
                 let core = CORE.load(Ordering::Acquire);
@@ -96,6 +105,7 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    loads::job_finish(raw, exceptional);
     if raw.invocation.cookie != COOKIE {
         return;
     }
@@ -259,6 +269,23 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
     EXE.store(exe as u64, Ordering::Release);
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
+    let prepared = HOOKS.lock().map_err(|_| "native job owner poisoned")?;
+    if !prepared.is_empty() {
+        if prepared.len() != 4
+            || prepared
+                .iter()
+                .any(|o| copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched))
+        {
+            return Err("native job early installation differs");
+        }
+        return Ok(());
+    }
+    drop(prepared);
+    unsafe { install_at(exe) }
+}
+pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
+    EXE.store(exe as u64, Ordering::Release);
     unsafe { install_at(exe) }
 }
 unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
@@ -586,6 +613,7 @@ mod tests {
         }
         let f = FRAMES.get_or_init(NativeFrames::new);
         EXE.store(0x140000000, Ordering::Release);
+        CORE.store(0x180000000, Ordering::Release);
         let id = f.issue_on_set(100, 10).unwrap();
         STACK.with(|s| s.borrow_mut().push((20, id, 0)));
         let mut allocation: Saved = unsafe { std::mem::zeroed() };
@@ -608,6 +636,7 @@ mod tests {
             return;
         }
         let f = FRAMES.get_or_init(NativeFrames::new);
+        CORE.store(0x180000000, Ordering::Release);
         let old = f.issue_on_set(100, 10).unwrap();
         f.bind_before_publication(old, 123).unwrap();
         f.pushed(old, 123).unwrap();

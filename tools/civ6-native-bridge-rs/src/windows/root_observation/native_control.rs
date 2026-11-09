@@ -191,6 +191,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             {
                 fault();
             }
+            if let Some(birth) = worlds::birth(raw.invocation.world) {
+                sessions::retire_world(sessions::SessionWorldReceipt {
+                    binding_id: birth.serial,
+                    epoch: birth.epoch,
+                })
+                .unwrap_or_else(|_| fault());
+            }
             SHUTDOWN_RETURNED.store(true, Ordering::Release);
         }
         31 => {

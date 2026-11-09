@@ -1,5 +1,5 @@
 //! Identity accounting. Native addresses and IDs never create World authority.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Lease(pub(super) u64);
@@ -65,6 +65,7 @@ pub(super) struct Ledger {
     callbacks: HashMap<u64, Lease>,
     keys: HashMap<(u64, u32), Lease>,
     packets: HashMap<u64, Packet>,
+    retired_worlds: HashSet<(u64, u64)>,
     unresolved: bool,
 }
 impl Ledger {
@@ -186,6 +187,67 @@ impl Ledger {
     pub fn session(&self, session: u64) -> Option<Lease> {
         self.sessions.get(&session).copied()
     }
+    pub fn snapshot_owner(&self, owner: u64, session: u64) -> Option<Lease> {
+        let lease = self.session(session)?;
+        self.records
+            .get(&lease.0)
+            .filter(|r| {
+                r.owner == owner
+                    && r.registry_lifetime.is_some()
+                    && r.phase == Phase::Open
+                    && r.kind != 4
+                    && r.callback != 0
+            })
+            .map(|_| lease)
+    }
+    /// The caller supplies the previous binding captured by the accepted
+    /// native load request and the new World's before-publication birth.
+    /// Existing packets retain their issued World even after this transition.
+    pub fn loaded_world(
+        &mut self,
+        lease: Lease,
+        previous: Option<WorldReceipt>,
+        new: WorldReceipt,
+    ) -> Result<(), Error> {
+        if previous.is_some_and(|old| !self.retired_worlds.contains(&(old.binding_id, old.epoch))) {
+            return Err(Error::Busy);
+        }
+        let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
+        if self.unresolved
+            || r.phase != Phase::Open
+            || r.registry_lifetime.is_none()
+            || r.kind == 4
+            || r.world != previous
+            || new.binding_id == 0
+            || new.epoch == 0
+            || previous
+                .is_some_and(|old| old.binding_id == new.binding_id || old.epoch >= new.epoch)
+        {
+            return Err(Error::Stale);
+        }
+        r.world = Some(new);
+        Ok(())
+    }
+    /// Logical fence after the verified old World's native cleanup. It
+    /// accounts for tracked packets only and is not a transport/OS queue seal.
+    pub fn retire_world(&mut self, world: WorldReceipt) -> Result<(), Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        if world.binding_id == 0 || world.epoch == 0 {
+            return Err(Error::Unbound);
+        }
+        if self.packets.values().any(|p| p.world == world)
+            || self
+                .records
+                .values()
+                .any(|r| r.world == Some(world) && r.active != 0)
+        {
+            return Err(Error::Busy);
+        }
+        self.retired_worlds.insert((world.binding_id, world.epoch));
+        Ok(())
+    }
     pub fn reserve_incoming(&mut self, callback: u64, id: u32) -> Result<Option<Message>, Error> {
         let Some(lease) = self.callbacks.get(&callback).copied() else {
             return Ok(None);
@@ -279,6 +341,12 @@ impl Ledger {
             return Err(Error::Closed);
         }
         let world = self.world(lease)?;
+        if self
+            .retired_worlds
+            .contains(&(world.binding_id, world.epoch))
+        {
+            return Err(Error::Closed);
+        }
         let transport = r.transport.ok_or(Error::Unbound)?.incarnation;
         let id = self.id()?;
         self.packets.insert(
@@ -298,13 +366,64 @@ impl Ledger {
             .map(|p| p.world)
             .ok_or(Error::Unknown)
     }
+    pub fn message_lease(&self, message: Message) -> Result<Lease, Error> {
+        self.packets
+            .get(&message.0)
+            .map(|p| p.lease)
+            .ok_or(Error::Unknown)
+    }
+    pub fn message_session(&self, message: Message) -> Result<u64, Error> {
+        let lease = self.message_lease(message)?;
+        self.records
+            .get(&lease.0)
+            .map(|r| r.session)
+            .ok_or(Error::Unknown)
+    }
+    /// A pending native serialized record copies an already executing packet;
+    /// it never reserves from the Session's mutable World binding.
+    pub fn fork_message(&mut self, parent: Message) -> Result<Message, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let p = self.packets.get(&parent.0).ok_or(Error::Unknown)?;
+        let r = self.records.get(&p.lease.0).ok_or(Error::Unknown)?;
+        if !p.active
+            || !matches!(r.phase, Phase::Open | Phase::Closing)
+            || self
+                .retired_worlds
+                .contains(&(p.world.binding_id, p.world.epoch))
+        {
+            return Err(Error::Stale);
+        }
+        let packet = Packet {
+            lease: p.lease,
+            transport: p.transport,
+            world: p.world,
+            active: false,
+        };
+        let id = self.id()?;
+        self.packets.insert(id, packet);
+        Ok(Message(id))
+    }
+    pub fn dispatch_deferred(&mut self, message: Message, session: u64) -> Result<Lease, Error> {
+        let lease = self.message_lease(message)?;
+        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if r.session != session || self.sessions.get(&session) != Some(&lease) {
+            return Err(Error::Stale);
+        }
+        let (callback, id) = (r.callback, r.native_id.ok_or(Error::Unbound)?);
+        self.dispatch(message, callback, id)
+    }
     pub fn dispatch(&mut self, message: Message, callback: u64, id: u32) -> Result<Lease, Error> {
         if self.unresolved {
             return Err(Error::Unresolved);
         }
         let p = self.packets.get_mut(&message.0).ok_or(Error::Unknown)?;
         let r = self.records.get(&p.lease.0).ok_or(Error::Unknown)?;
-        if p.active
+        if self
+            .retired_worlds
+            .contains(&(p.world.binding_id, p.world.epoch))
+            || p.active
             || !matches!(r.phase, Phase::Open | Phase::Closing)
             || r.callback != callback
             || r.native_id != Some(id)

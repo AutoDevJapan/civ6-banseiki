@@ -987,6 +987,51 @@ extern "system" fn thread_noop(_: u64) -> u64 {
     0
 }
 #[test]
+fn same_native_session_load_requires_old_world_retirement_and_preserves_issued_packet() {
+    let mut s = Ledger::default();
+    let lease = s.birth(10, Some(11), 20, 2).unwrap();
+    s.factory(lease, 17, 20, 30, 40).unwrap();
+    s.published(lease, 17).unwrap();
+    let old = WorldReceipt {
+        binding_id: 8,
+        epoch: 1,
+    };
+    let new = WorldReceipt {
+        binding_id: 9,
+        epoch: 2,
+    };
+    s.bind_world(lease, old).unwrap();
+    s.bind_transport(lease, 50, 60, 70).unwrap();
+    assert_eq!(s.snapshot_owner(20, 30), Some(lease));
+    assert_eq!(s.snapshot_owner(21, 30), None);
+    let input = s.reserve(lease).unwrap();
+    s.dispatch(input, 40, 17).unwrap();
+    let deferred = s.fork_message(input).unwrap();
+    assert_eq!(s.message_world(deferred), Ok(old));
+    assert_eq!(s.message_session(deferred), Ok(30));
+    assert_eq!(s.message_lease(deferred), Ok(lease));
+    assert_eq!(s.loaded_world(lease, Some(old), new), Err(Error::Busy));
+    assert_eq!(s.retire_world(old), Err(Error::Busy));
+    s.dispatched(input).unwrap();
+    assert_eq!(s.dispatch_deferred(deferred, 31), Err(Error::Stale));
+    assert_eq!(s.dispatch_deferred(deferred, 30), Ok(lease));
+    assert_eq!(s.message_world(deferred), Ok(old));
+    s.dispatched(deferred).unwrap();
+    s.retire_world(old).unwrap();
+    assert_eq!(s.reserve(lease), Err(Error::Closed));
+    assert_eq!(s.loaded_world(lease, None, new), Err(Error::Stale));
+    s.loaded_world(lease, Some(old), new).unwrap();
+    let next = s.reserve(lease).unwrap();
+    assert_eq!(s.message_world(next), Ok(new));
+    assert_eq!(s.message_world(input), Err(Error::Unknown));
+    assert_eq!(s.message_world(deferred), Err(Error::Unknown));
+    assert_eq!(
+        s.fork_message(next),
+        Err(Error::Stale),
+        "pending is not an executing parent"
+    );
+}
+#[test]
 fn actual_fixed_join_body_waits_on_owned_os_handle_before_disconnect_receipt() {
     if !child("actual_fixed_join_body_waits_on_owned_os_handle_before_disconnect_receipt") {
         return;

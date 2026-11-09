@@ -21,6 +21,12 @@ Closeは資格と橋の新受付を失効させ、nativeの自然shutdownを先�
 
 所有する合成命令のOS試験では、操作キュー9入口の実パッチ設置・復元、複製と解放、相対比較命令の移設後のflags保持を確認した。同期6入口を同じworker stackへ積み、元Waitがそのworkerの終了を待ってから後処理へ進む試験も成功した。同じ制御stackに外側6frameが残る負例では、Wait境界の自己待ちを検出し、破壊処理への復帰を拒否する。これらは合成経路の確認であり、そのscheduleが実ゲームで発生した証明や全域停止の許可ではない。
 
+Host準備時に、registryとnative sessionの出生、受信・遅延キュー、snapshotからのロード要求を先に追跡する。snapshot `273F40`→request `16B5C0`→所有streamのコピー `166B40`→command36の確保 `162480`をつなぐ。元requestのAL1はcommandの公開より後なので、発行と成功を別々に保持する。commandは実bank consumer `5F470` が選んだbankとdescriptorで照合し、`EF220`→`DB810`→`6B7D0`からpending Viewを選択する。再利用されるViewのアドレスだけで新要求へ結び直さない。
+
+View初期化 `82E50` が `986150` で発行するHost jobは、既存allocatorの正常return `985904`でTが共有される前に要求へ結ぶ。元T executeから `82DA0`へ保存済みの要求を渡し、その完全な呼出しが終わり、元destructorが正常復帰するまで予約を保持する。World factoryの正常returnは、この要求と元requestの成功がそろった場合だけnative sessionのWorld関係へ反映する。旧Worldに追跡中packetがあれば退役と次Worldへの関係変更を拒否し、発行済みpacketのWorldを現在値から作り直さない。
+
+遅延受信は、既にadmitされたmessageの保存内容を再serializeする `847510`→move `527440`と、pump `83D570`→decode `7F9C30`→元storage freeの正常return→元session dispatchを区別する。slotの再利用、map growth、未実行取消、storage free中の例外でも元packetの識別を保持する。合成経路では共有session gatewayも経由してこの対応を確認している。これは最初のOS受信queue全体の出生や停止を証明するものではない。
+
 全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。現在は未確立の全域被覆を理由にRebuildを拒否し、同process再読込を新候補の合格としていない。
 
 以下は従来版に対する元の静的調査である。新版のRVAや受入結果へ読み替えない。

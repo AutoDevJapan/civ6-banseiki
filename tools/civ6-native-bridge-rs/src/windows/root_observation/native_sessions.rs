@@ -3,6 +3,8 @@
 //! Unknown pre-install sessions remain unknown. No all-domain seal is issued.
 use super::*;
 use std::cell::RefCell;
+#[path = "native_session_queue.rs"]
+mod deferred;
 #[path = "native_sessions_fixed.rs"]
 mod fixed;
 #[path = "native_sessions_ledger.rs"]
@@ -45,6 +47,7 @@ impl NativeSessionApi {
         let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
         unsafe {
             verify_loaded(exe)?;
+            deferred::install(exe)?;
             install_at(exe)
         }
     }
@@ -123,6 +126,9 @@ impl NativeSessionApi {
         CALLS.with(|s| s.borrow().iter().any(|s| s.kind == 72 || s.kind == 73))
     }
     pub fn drained(world: SessionWorldReceipt) -> Result<(), SessionError> {
+        if deferred::pending().map_err(|_| Error::Unresolved)? != 0 {
+            return Err(Error::Busy);
+        }
         state().drained(world)
     }
     /// The lifecycle owner must first drain every native and bootstrap caller.
@@ -132,7 +138,9 @@ impl NativeSessionApi {
     /// The caller must own the installed entries and ensure all native callers
     /// have exited before invoking restoration. Published relays stay resident.
     pub unsafe fn restore() -> Result<(), &'static str> {
-        unsafe { restore() }
+        let queued = unsafe { deferred::restore() };
+        let session = unsafe { restore() };
+        queued.and(session)
     }
 }
 struct RegistryGuard;
@@ -173,6 +181,27 @@ fn state() -> std::sync::MutexGuard<'static, Ledger> {
         .get_or_init(|| Mutex::new(Ledger::default()))
         .lock()
         .unwrap_or_else(|_| std::process::abort())
+}
+pub(super) fn snapshot_owner(
+    owner: u64,
+    session: u64,
+) -> Option<(SessionLease, Option<SessionWorldReceipt>)> {
+    let s = state();
+    let lease = s.snapshot_owner(owner, session)?;
+    Some((lease, s.world(lease).ok()))
+}
+pub(super) fn loaded_world(
+    lease: SessionLease,
+    previous: Option<SessionWorldReceipt>,
+    world: SessionWorldReceipt,
+) -> Result<(), SessionError> {
+    state().loaded_world(lease, previous, world)
+}
+pub(super) fn retire_world(world: SessionWorldReceipt) -> Result<(), SessionError> {
+    if deferred::pending().map_err(|_| Error::Unresolved)? != 0 {
+        return Err(Error::Busy);
+    }
+    state().retire_world(world)
 }
 fn unresolved(lease: Option<Lease>) {
     // An error can be reported while the failing ledger guard is still live.
@@ -375,12 +404,14 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
             }
             73 => {
-                let parent = CALLS.with(|s| {
-                    s.borrow()
-                        .iter()
-                        .rev()
-                        .find(|s| s.kind == 72)
-                        .and_then(|s| s.lease.zip(s.message))
+                let parent = deferred::admission(raw).unwrap_or_else(|| {
+                    CALLS.with(|s| {
+                        s.borrow()
+                            .iter()
+                            .rev()
+                            .find(|s| s.kind == 72)
+                            .and_then(|s| s.lease.zip(s.message))
+                    })
                 });
                 if let Some((lease, message)) = parent {
                     let exe = EXE.load(Ordering::Acquire);

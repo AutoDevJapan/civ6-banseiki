@@ -255,8 +255,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             if value(world) != core + 0xa45160 || value(world + 0x270) != raw.invocation.manager {
                 fault();
             }
-            b.world(raw.invocation.manager, world, raw.invocation.epoch)
+            let lease = b
+                .world(raw.invocation.manager, world, raw.invocation.epoch)
                 .unwrap_or_else(|_| fault());
+            // The native load carrier, if present, was retained before the
+            // asynchronous command selected this view. Current globals alone
+            // never create a Session/World relation.
+            loads::world_created(lease);
         }
     }
     FRAMES
