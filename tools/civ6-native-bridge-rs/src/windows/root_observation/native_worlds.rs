@@ -619,6 +619,7 @@ mod tests {
         assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
     }
     #[test]
+    #[ignore = "explicit licensed local primary-image acceptance"]
     fn pinned_primary_context_and_world_factory_boundaries_match_install() {
         let mut file = super::super::super::pin(GAMECORE, civ6_bootstrap_rs::CORE_SHA).unwrap();
         for (rva, expected) in SITES {

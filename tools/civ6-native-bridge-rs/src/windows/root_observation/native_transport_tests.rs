@@ -530,6 +530,7 @@ fn actual_receive_seh_keeps_native_birth_unresolved_and_cannot_issue_join() {
     unsafe { restore().unwrap() };
 }
 #[test]
+#[ignore = "explicit licensed local primary-image acceptance"]
 fn exact_native_bodies_pdata_prefixes_and_mutated_tails_are_required() {
     let mut file = super::super::super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA).unwrap();
     for f in fixed::FRAMES {

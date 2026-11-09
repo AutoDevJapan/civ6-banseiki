@@ -31,6 +31,12 @@ native transportは元factory、network、threadの出生を公開前から別�
 
 Worldの資格が不明な受信も、元のenqueue・実行・解放を通常どおり進める。この入力から生まれた保存ノード、複製、非同期Host job、呼出し全体には不明の印を引き継ぎ、現在のWorld世代を後から発行しない。これらも完全な復帰と元の解放までは排出待ちに含め、その処理中は製品側の許可を発行しない。
 
+HostのAddJob `9858B0`、Push `985F40`、再発行 `986010`、公開 `E3E8C0`、typed dispatcher `E42470/E427F0`も完全な呼出しを保持する。既存の予約からだけ所有を継承し、既設allocatorで元Tが返ってから公開される前に対応を保存する。DestroyJobSetとFreeJobListの復帰を、未実行Tの取消や全producer停止の証明にはしない。
+
+NetSnapshot `80F230`からsnapshot ownerへの実呼出しは、元messageの値、payload、長さ、metadataをコピーしてロード要求へ保持する。同じアドレスの後のmessageは別の呼出しとして区別する。turn/sequenceやローカルに解決されたplayer番号をWorld nonceへ読み替えず、OS queueの排出証明は発行しない。
+
+ライセンス済みローカルのEXE/Coreを必要とする一次照合は、配布可能な所有fixtureのCIと分け、Windowsの実機作業先で明示実行する。`cargo nextest run --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs -E 'test(native_frames::)' --run-ignored only`で一次照合を選び、対象件数と実結果を保持する。通常CIで省略されることを、これらの合格とは扱わない。
+
 遅延受信は、既にadmitされたmessageの保存内容を再serializeする `847510`→move `527440`と、pump `83D570`→decode `7F9C30`→元storage freeの正常return→元session dispatchを区別する。slotの再利用、map growth、未実行取消、storage free中の例外でも元packetの識別を保持する。合成経路では共有session gatewayも経由してこの対応を確認している。これは最初のOS受信queue全体の出生や停止を証明するものではない。
 
 全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。現在は未確立の全域被覆を理由にRebuildを拒否し、同process再読込を新候補の合格としていない。

@@ -572,6 +572,7 @@ fn shared_free_keeps_old_serial_until_normal_return_despite_address_reuse() {
     assert_eq!(pending(), Ok(0));
 }
 #[test]
+#[ignore = "explicit licensed local primary-image acceptance"]
 fn pinned_input_whole_bytes_pdata_and_mutations_match() {
     let mut file = pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA).unwrap();
     for f in fixed::FRAMES {

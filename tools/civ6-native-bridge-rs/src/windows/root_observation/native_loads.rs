@@ -23,6 +23,7 @@ struct Source {
         sessions::SessionLease,
         Option<sessions::SessionWorldReceipt>,
     )>,
+    wire: Option<wire::Snapshot>,
 }
 #[derive(Default)]
 struct State {
@@ -380,6 +381,12 @@ pub(super) fn world_created(world: worlds::WorldLease) {
     s.worlds.insert(request.0, world);
     let accepted = s.accepted.contains(&request.0);
     drop(s);
+    if source
+        .wire
+        .is_some_and(|snapshot| !snapshot.matches_session(source.session))
+    {
+        fault();
+    }
     if let Some((lease, previous)) = source.session.filter(|_| accepted) {
         sessions::loaded_world(
             lease,
@@ -415,7 +422,16 @@ extern "system" fn begin(raw: *mut Saved) {
                     let session = value(owner + 8);
                     c.source = Some(Source {
                         session: sessions::snapshot_owner(owner, session),
+                        wire: wire::request(raw),
                     });
+                    if c.source
+                        .and_then(|source| source.wire)
+                        .is_some_and(|snapshot| {
+                            !snapshot.matches_session(c.source.unwrap().session)
+                        })
+                    {
+                        fault();
+                    }
                 }
             }
             81 if raw.gpr[1] as u32 == 2 => {
@@ -441,7 +457,10 @@ extern "system" fn begin(raw: *mut Saved) {
                             .find(|c| c.kind == 80)
                             .and_then(|c| c.source)
                     })
-                    .unwrap_or(Source { session: None });
+                    .unwrap_or(Source {
+                        session: None,
+                        wire: None,
+                    });
                 let mut s = state();
                 let request = s.ledger.enter().unwrap_or_else(|_| fault());
                 s.sources.insert(request.0, source);

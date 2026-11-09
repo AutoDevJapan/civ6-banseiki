@@ -638,6 +638,7 @@ fn load_shims_virtual_unwind_restore_nonvolatile_registers_and_original_return()
     }
 }
 #[test]
+#[ignore = "explicit licensed local primary-image acceptance"]
 fn pinned_native_load_complete_bodies_partitions_and_entry_boundaries_match() {
     let mut f = pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA).unwrap();
     for body in fixed::FRAMES {

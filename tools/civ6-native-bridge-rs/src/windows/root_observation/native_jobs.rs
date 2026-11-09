@@ -65,6 +65,7 @@ extern "system" fn begin(raw: *mut Saved) {
             }
             21 => {
                 let t = raw.gpr[0];
+                scheduler::attach_current(t);
                 let _attached = consumers::attach_current(t);
                 let p = u64::from_le_bytes(
                     copy_current::<8>(t.checked_add(8).unwrap_or_else(|| fault()))
@@ -80,6 +81,7 @@ extern "system" fn begin(raw: *mut Saved) {
                 (f.execute(t, p).unwrap_or_else(|_| fault()), t)
             }
             22 => {
+                scheduler::attach_current(raw.gpr[0]);
                 let _attached = consumers::attach_current(raw.gpr[0]);
                 let Some(id) = f.retire_task(raw.gpr[0]).unwrap_or_else(|_| fault()) else {
                     return;
@@ -109,6 +111,7 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    scheduler::allocated(raw, exceptional);
     loads::job_finish(raw, exceptional);
     if raw.invocation.cookie != COOKIE {
         return;
@@ -291,6 +294,9 @@ pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
     EXE.store(exe as u64, Ordering::Release);
     unsafe { install_at(exe) }
+}
+pub(super) fn push_reserved() -> bool {
+    STACK.with(|s| s.borrow().last().is_some_and(|(kind, _, _)| *kind == 20))
 }
 #[cfg(test)]
 pub(super) fn fixture_early_load_execute(continuation: usize) -> usize {

@@ -454,6 +454,7 @@ global_asm!(
     ".seh_endproc"
 );
 #[test]
+#[ignore = "explicit licensed local primary-image acceptance"]
 fn fixed_terminal_bodies_and_chained_pdata_are_exact_primary_bytes() {
     let mut f = super::super::super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA).unwrap();
     for body in fixed::FRAMES {
@@ -854,6 +855,7 @@ impl Drop for LiveFixture {
     }
 }
 #[test]
+#[ignore = "explicit licensed local primary-image acceptance with owned mapped copy"]
 fn original_remove_live_transport_uses_shared_75_wait_then_native_node_free_and_full_return() {
     if !child(
         "original_remove_live_transport_uses_shared_75_wait_then_native_node_free_and_full_return",
