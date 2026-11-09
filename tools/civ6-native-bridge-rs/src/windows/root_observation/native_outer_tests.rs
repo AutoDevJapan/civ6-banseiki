@@ -35,37 +35,29 @@ fn child(name: &str) -> bool {
         return true;
     }
     let full = format!("windows::root_observation::native_frames::outer_tests::{name}");
-    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-        .creation_flags(0x08000000)
-        .env(ENV, name)
-        .args(["--exact", &full, "--include-ignored", "--nocapture"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            let output = child.wait_with_output().unwrap();
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(status.success(), "outer child {status}\n{stdout}\n{stderr}");
-            assert!(
-                stdout.contains("running 1 test")
-                    && stdout.contains(&full)
-                    && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;"),
-                "outer exact test was not executed: {stdout}\n{stderr}"
-            );
-            print!("{stdout}");
-            return false;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("owned outer child deadline");
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    let output = crate::windows::test_child_output::run(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, name)
+            .args(["--exact", &full, "--include-ignored", "--nocapture"]),
+        Duration::from_secs(30),
+    )
+    .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "outer child {}\n{stdout}\n{stderr}",
+        output.status
+    );
+    assert!(
+        stdout.contains("running 1 test")
+            && stdout.contains(&full)
+            && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;"),
+        "outer exact test was not executed: {stdout}\n{stderr}"
+    );
+    print!("{stdout}");
+    false
 }
 
 extern "system" fn probe(value: *mut u64) -> u64 {

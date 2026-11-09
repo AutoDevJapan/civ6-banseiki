@@ -590,32 +590,25 @@ mod tests {
         if std::env::var_os(ENV).is_some() {
             return true;
         }
-        let mut p = std::process::Command::new(std::env::current_exe().unwrap())
-            .creation_flags(0x08000000)
-            .env(ENV, "1")
-            .args([
-                "--exact",
-                &format!("windows::root_observation::native_frames::operations::tests::{name}"),
-                "--nocapture",
-            ])
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .unwrap();
-        let d = Instant::now() + Duration::from_secs(20);
-        loop {
-            if let Some(s) = p.try_wait().unwrap() {
-                assert!(s.success());
-                break;
-            }
-            if Instant::now() >= d {
-                let _ = p.kill();
-                let _ = p.wait();
-                panic!("native operation child timeout");
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let output = p.wait_with_output().unwrap();
+        let output = crate::windows::test_child_output::run(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000)
+                .env(ENV, "1")
+                .args([
+                    "--exact",
+                    &format!("windows::root_observation::native_frames::operations::tests::{name}"),
+                    "--nocapture",
+                ]),
+            Duration::from_secs(20),
+        )
+        .unwrap();
         let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "native operation child {}\n{stdout}\n{stderr}",
+            output.status
+        );
         assert!(
             stdout.contains("running 1 test") && stdout.contains(name),
             "owned child did not execute the selected test: {stdout}"

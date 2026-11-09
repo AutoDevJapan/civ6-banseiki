@@ -531,23 +531,10 @@ mod tests {
         };
         const ENV: &str = "CIV6_NATIVE_CONTROL_SIX_STACK_CHILD";
         if std::env::var_os(ENV).is_none() {
-            let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+            let out = crate::windows::test_child_output::run(std::process::Command::new(std::env::current_exe().unwrap())
                 .creation_flags(0x08000000).env(ENV,"1").args([
                     "--exact","windows::root_observation::native_frames::control::tests::same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return","--nocapture"
-                ]).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
-            let deadline = Instant::now() + Duration::from_secs(15);
-            loop {
-                if p.try_wait().unwrap().is_some() {
-                    break;
-                }
-                if Instant::now() >= deadline {
-                    let _ = p.kill();
-                    let _ = p.wait();
-                    panic!("mixed control child timeout");
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            let out = p.wait_with_output().unwrap();
+                ]),Duration::from_secs(10)).unwrap();
             assert!(!out.status.success());
             assert!(
                 String::from_utf8_lossy(&out.stdout)
@@ -598,23 +585,10 @@ mod tests {
         };
         const ENV: &str = "CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD";
         if std::env::var_os(ENV).is_none() {
-            let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+            let out = crate::windows::test_child_output::run(std::process::Command::new(std::env::current_exe().unwrap())
                 .creation_flags(0x08000000).env(ENV,"1").args([
                     "--exact","windows::root_observation::native_frames::control::tests::current_arena_normal_return_never_reaches_destructive_control_cleanup","--nocapture"
-                ]).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
-            let deadline = Instant::now() + Duration::from_secs(15);
-            loop {
-                if p.try_wait().unwrap().is_some() {
-                    break;
-                }
-                if Instant::now() >= deadline {
-                    let _ = p.kill();
-                    let _ = p.wait();
-                    panic!("current arena fixture timeout");
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            let out = p.wait_with_output().unwrap();
+                ]),Duration::from_secs(10)).unwrap();
             assert!(!out.status.success());
             assert!(
                 String::from_utf8_lossy(&out.stdout).contains("HOST_CURRENT_ARENA_RECEIPT_REFUSED"),

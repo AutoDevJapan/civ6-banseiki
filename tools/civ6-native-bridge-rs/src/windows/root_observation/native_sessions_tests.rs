@@ -444,31 +444,18 @@ fn actual_al0_join_aborts_before_original_destructive_continuation() {
         x.close();
         panic!("AL0 unexpectedly reached normal close return");
     }
-    let mut p = std::process::Command::new(std::env::current_exe().unwrap())
-        .creation_flags(0x08000000)
-        .env(ENV, "1")
-        .args([
-            "--exact",
-            &format!("windows::root_observation::native_frames::sessions::tests::{NAME}"),
-            "--nocapture",
-        ])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        if p.try_wait().unwrap().is_some() {
-            break;
-        }
-        if Instant::now() >= deadline {
-            let _ = p.kill();
-            let _ = p.wait();
-            panic!("AL0 fixture timeout");
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    let out = p.wait_with_output().unwrap();
+    let out = crate::windows::test_child_output::run(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args([
+                "--exact",
+                &format!("windows::root_observation::native_frames::sessions::tests::{NAME}"),
+                "--nocapture",
+            ]),
+        Duration::from_secs(15),
+    )
+    .unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!out.status.success(), "AL0 was accepted");
     assert!(

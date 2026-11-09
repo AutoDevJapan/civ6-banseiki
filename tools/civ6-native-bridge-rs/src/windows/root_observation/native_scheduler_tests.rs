@@ -34,35 +34,27 @@ fn child(name: &str) -> bool {
         return true;
     }
     let full_name = format!("windows::root_observation::native_frames::scheduler::tests::{name}");
-    let mut p = std::process::Command::new(std::env::current_exe().unwrap())
-        .creation_flags(0x08000000)
-        .env(ENV, "1")
-        .args(["--exact", &full_name, "--include-ignored", "--nocapture"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(20);
-    loop {
-        if let Some(s) = p.try_wait().unwrap() {
-            let output = p.wait_with_output().unwrap();
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            assert!(s.success(), "scheduler child{s}\n{stdout}\n{stderr}");
-            assert!(
-                stdout.contains("running 1 test")
-                    && stdout.contains(&format!("{full_name} ... ok")),
-                "scheduler child did not execute its exact test: {stdout}\n{stderr}"
-            );
-            return false;
-        }
-        if Instant::now() >= deadline {
-            let _ = p.kill();
-            let _ = p.wait();
-            panic!("scheduler timeout");
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    let output = crate::windows::test_child_output::run(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args(["--exact", &full_name, "--include-ignored", "--nocapture"]),
+        Duration::from_secs(20),
+    )
+    .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "scheduler child{}\n{stdout}\n{stderr}",
+        output.status
+    );
+    assert!(
+        stdout.contains("running 1 test") && stdout.contains(&format!("{full_name} ... ok")),
+        "scheduler child did not execute its exact test: {stdout}\n{stderr}"
+    );
+    print!("{stdout}");
+    false
 }
 extern "system" fn producer_body(payload: u64, _: u64, _: u64) -> u64 {
     let mut raw: Saved = unsafe { std::mem::zeroed() };

@@ -377,23 +377,8 @@ fn load_group_wait_uses_existing_arena_gateway_and_requires_external_normal_retu
     }
     assert!(CALLS.with(|s| s.borrow().is_empty()));
     assert_eq!(state().ledger.joined(invocation), Err(ledger::Error::Busy));
-    let mut p=std::process::Command::new(std::env::current_exe().unwrap()).creation_flags(0x08000000)
-        .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped())
-        .env(ENV,"1").args(["--exact","windows::root_observation::native_frames::loads::tests::load_group_wait_uses_existing_arena_gateway_and_requires_external_normal_return","--nocapture"])
-        .spawn().unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        if p.try_wait().unwrap().is_some() {
-            break;
-        }
-        if Instant::now() >= deadline {
-            let _ = p.kill();
-            let _ = p.wait();
-            panic!("current arena child timed out");
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    let out = p.wait_with_output().unwrap();
+    let out = crate::windows::test_child_output::run(std::process::Command::new(std::env::current_exe().unwrap()).creation_flags(0x08000000)
+        .env(ENV,"1").args(["--exact","windows::root_observation::native_frames::loads::tests::load_group_wait_uses_existing_arena_gateway_and_requires_external_normal_return","--nocapture"]),Duration::from_secs(10)).unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stdout).contains("LOAD_GROUP_CURRENT_ARENA_REACHED"));
     assert!(!String::from_utf8_lossy(&out.stderr).contains("current arena unexpectedly returned"));

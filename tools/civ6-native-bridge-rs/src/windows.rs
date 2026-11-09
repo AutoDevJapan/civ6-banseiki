@@ -121,6 +121,8 @@ pub fn supports_atomic_promotion_fetch() -> bool {
 
 #[cfg(test)]
 mod atomic_fixture;
+#[cfg(test)]
+mod test_child_output;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]

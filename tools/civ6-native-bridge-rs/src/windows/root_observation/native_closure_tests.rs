@@ -1,7 +1,6 @@
 use super::*;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::windows::process::CommandExt;
-use std::process::Stdio;
 use windows_sys::Win32::System::Diagnostics::Debug::{
     RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
@@ -261,37 +260,37 @@ fn child(name: &str, abort: bool, marker: &str) -> bool {
     if std::env::var_os(ENV).is_some() {
         return true;
     }
-    let mut p = std::process::Command::new(std::env::current_exe().unwrap())
-        .creation_flags(0x08000000)
-        .env(ENV, "1")
-        .args([
-            "--exact",
-            &format!("windows::root_observation::native_frames::scheduler::closure::tests::{name}"),
-            "--nocapture",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(20);
-    let status = loop {
-        if let Some(status) = p.try_wait().unwrap() {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = p.kill();
-            let _ = p.wait();
-            panic!("closure child timeout");
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    };
-    let mut out = String::new();
-    p.stdout.take().unwrap().read_to_string(&mut out).unwrap();
+    let output = crate::windows::test_child_output::run(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args([
+                "--exact",
+                &format!(
+                    "windows::root_observation::native_frames::scheduler::closure::tests::{name}"
+                ),
+                "--nocapture",
+            ]),
+        Duration::from_secs(20),
+    )
+    .unwrap();
+    let status = output.status;
+    let out = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     if abort {
-        assert!(!status.success(), "expected abort: {out}");
-        assert!(out.contains(marker), "missing {marker}: {out}");
+        assert!(!status.success(), "expected abort: {out}\n{stderr}");
+        assert_eq!(
+            status.code().map(|code| code as u32),
+            Some(0xc0000409),
+            "wrong termination before the owned fatal boundary: {out}\n{stderr}"
+        );
+        assert!(
+            !stderr.contains("panicked"),
+            "fixture panic is not the expected fatal rejection: {stderr}"
+        );
+        assert!(out.contains(marker), "missing {marker}: {out}\n{stderr}");
     } else {
-        assert!(status.success(), "child failed: {out}");
+        assert!(status.success(), "child failed: {out}\n{stderr}");
     }
     false
 }
