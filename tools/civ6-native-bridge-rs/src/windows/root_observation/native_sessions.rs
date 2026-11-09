@@ -63,6 +63,40 @@ pub(super) fn fixture_snapshot_session(owner: u64, session: u64) -> SessionLease
         .unwrap();
     lease
 }
+#[cfg(test)]
+pub(super) fn fixture_snapshot_message<R>(lease: SessionLease, body: impl FnOnce() -> R) -> R {
+    let message = {
+        let mut state = state();
+        state.bind_transport(lease, 20, 30, 40).unwrap();
+        let message = state.reserve(lease).unwrap();
+        let (_, id, callback) = state.snapshot(lease).unwrap();
+        state.dispatch(message, callback, id).unwrap();
+        message
+    };
+    CALLS.with(|calls| {
+        calls.borrow_mut().push(Call {
+            serial: 1,
+            kind: 73,
+            lease: Some(lease),
+            hold: None,
+            message: Some(message),
+            registry: 0,
+            owner: 0,
+            id: 0,
+            transport: None,
+            native_transport: false,
+            thread: 0,
+            unproven_hold: None,
+            packet: None,
+        })
+    });
+    let result = body();
+    CALLS.with(|calls| {
+        calls.borrow_mut().pop();
+    });
+    state().dispatched(message).unwrap();
+    result
+}
 pub(super) fn current_packet() -> Option<PacketReceipt> {
     CALLS
         .with(|calls| {

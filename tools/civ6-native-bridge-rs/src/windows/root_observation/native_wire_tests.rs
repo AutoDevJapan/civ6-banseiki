@@ -198,6 +198,23 @@ fn unknown_snapshot_cannot_borrow_a_live_sessions_current_world() {
     assert_eq!(snapshot.session, None);
     assert_eq!(snapshot.packet, None);
     assert!(snapshot.matches_session(None));
+    let qualified = sessions::fixture_snapshot_message(lease, || {
+        capture(f.message.as_ptr() as u64, f.session.as_ptr() as u64, 2).unwrap()
+    });
+    assert_eq!(
+        qualified.session,
+        Some((
+            lease,
+            Some(sessions::SessionWorldReceipt {
+                binding_id: 10,
+                epoch: 3
+            })
+        ))
+    );
+    assert_eq!(
+        sessions::admitted_source_world(f.session.as_ptr() as u64),
+        None
+    );
 }
 global_asm!(
     ".globl wire_owned_original",
