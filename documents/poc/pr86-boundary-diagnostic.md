@@ -41,7 +41,7 @@
 
 ## 公式インストールと既存一次資料の根拠
 
-以下の`G/`は`C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/`である。指定された調査報告[D:/CC/Tools/codex-jobs/jobs/20261002-003855-pr86-virtual-spy/last_message.md](D:/CC/Tools/codex-jobs/jobs/20261002-003855-pr86-virtual-spy/last_message.md)を先に読み、ここで同じ資格調査をやり直していない。
+以下の`G/`は`C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/`である。保全済みの資格調査報告を先に読み、ここで同じ資格調査をやり直していない。
 
 | 操作・観測 | 一次根拠と適用範囲 |
 |---|---|
