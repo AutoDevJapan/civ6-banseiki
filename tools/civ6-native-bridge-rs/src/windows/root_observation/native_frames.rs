@@ -22,6 +22,8 @@ mod control;
 mod jobs;
 #[path = "native_operations.rs"]
 mod operations;
+#[path = "native_worlds.rs"]
+mod worlds;
 const SITES: [(usize, &[u8], usize); 6] = [
     (
         0x35f70,
@@ -351,6 +353,7 @@ pub(in super::super) unsafe fn install(core: usize) -> Result<(), &'static str> 
     unsafe {
         jobs::install(core)?;
         consumers::install(core)?;
+        worlds::install(core)?;
         control::install(core)?;
         operations::install(core)?;
     }
@@ -501,6 +504,7 @@ pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "native frame owner poisoned")?;
     let mut failed = unsafe { jobs::restore() }.is_err();
     failed |= unsafe { consumers::restore() }.is_err();
+    failed |= unsafe { worlds::restore() }.is_err();
     failed |= unsafe { control::restore() }.is_err();
     failed |= unsafe { operations::restore() }.is_err();
     hooks.retain(|owned| {

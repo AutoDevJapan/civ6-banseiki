@@ -198,6 +198,17 @@ impl NativeFrames {
         self.leave(hold)
     }
 
+    /// Observed only from a verified native constructor/factory invocation,
+    /// before its first object publication. Not an epoch for a delayed input.
+    pub fn native_birth_epoch(&self) -> Result<u64, Error> {
+        let s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.unresolved || s.sealed || s.executions_drained {
+            Err(Error::Closed)
+        } else {
+            Ok(s.generation)
+        }
+    }
+
     pub fn reopen(&self) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.unresolved {
