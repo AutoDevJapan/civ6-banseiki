@@ -207,11 +207,21 @@ mod platform {
                 }
             }
         }
-        let remaining = registry.pending.len();
         drop(registry);
         // Closing authority can contain caller-owned RAII state. Release it
         // only after OS confirmation and outside the registry mutex.
-        drop(completed);
+        for completed in completed {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(completed))).is_err() {
+                failure = Some(Error::input("native recovery resource destructor panicked; any newly retained ownership remains pending"));
+            }
+        }
+        // A caller's destructor can register another owner. A snapshot from
+        // before external Drop must never end the exit wait or allow attach.
+        let remaining = owner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pending
+            .len();
         match failure {
             Some(error) => Err(error),
             None => Ok(remaining),
@@ -510,14 +520,14 @@ mod platform {
 
         #[test]
         fn target_exit_allows_controller_to_flush_terminal_output_before_forced_reap() {
-            use std::io::{Read, Write};
+            use std::io::{BufRead, BufReader, Read, Write};
             let mut target = Fixture::spawn();
             let mut controller = Command::new("powershell.exe")
                 .args([
                     "-NoProfile",
                     "-NonInteractive",
                     "-Command",
-                    "[Console]::ReadLine() | Out-Null; [Console]::Write('terminal complete')",
+                    "[Console]::WriteLine('controller ready'); [Console]::Out.Flush(); [Console]::ReadLine() | Out-Null; [Console]::Write('terminal complete')",
                 ])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -527,7 +537,26 @@ mod platform {
                 .unwrap();
             let guard = ControllerGuard(controller.as_handle().try_clone_to_owned().unwrap());
             let mut input = controller.stdin.take().unwrap();
-            let mut output = controller.stdout.take().unwrap();
+            let output = controller.stdout.take().unwrap();
+            let (ready_tx, ready_rx) = mpsc::channel();
+            let reader = std::thread::spawn(move || {
+                let mut output = BufReader::new(output);
+                let mut ready = String::new();
+                let result = output.read_line(&mut ready).map(|_| ready);
+                let _ = ready_tx.send(result);
+                let mut text = String::new();
+                output.read_to_string(&mut text).map(|_| text)
+            });
+            // The real controller is already READY before target shutdown.
+            // Keep process startup out of the terminal-output grace assertion.
+            assert_eq!(
+                ready_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .unwrap()
+                    .trim(),
+                "controller ready"
+            );
             let owner = Mutex::new(Registry {
                 next: 1,
                 pending: vec![Pending {
@@ -546,11 +575,112 @@ mod platform {
             input.write_all(b"target exited\n").unwrap();
             drop(input);
             wait_for(&owner);
-            let mut text = String::new();
-            output.read_to_string(&mut text).unwrap();
+            let text = reader.join().unwrap().unwrap();
             assert_eq!(pending, 1);
             assert!(alive);
             assert_eq!(text, "terminal complete");
+        }
+
+        fn reentrant_destructor_case(panic_after: bool) {
+            struct RegisterOnDrop {
+                handle: OwnedHandle,
+                owner: Arc<Mutex<Registry>>,
+                pending: Option<Pending>,
+                panic_after: bool,
+            }
+            impl AsHandle for RegisterOnDrop {
+                fn as_handle(&self) -> BorrowedHandle<'_> {
+                    self.handle.as_handle()
+                }
+            }
+            impl Drop for RegisterOnDrop {
+                fn drop(&mut self) {
+                    if let Some(pending) = self.pending.take() {
+                        self.owner.lock().unwrap().pending.push(pending);
+                    }
+                    assert!(
+                        !self.panic_after,
+                        "owned destructor fixture panic after registration"
+                    );
+                }
+            }
+            let owner = Arc::new(Mutex::new(Registry::default()));
+            let mut old_target = Fixture::spawn();
+            let mut old_controller = Fixture::spawn();
+            let mut next_target = Fixture::spawn();
+            let mut next_controller = Fixture::spawn();
+            let next_guard =
+                ControllerGuard(next_controller.0.as_handle().try_clone_to_owned().unwrap());
+            let folder = tempfile::tempdir().unwrap();
+            let path = folder.path().join("reentrant-retention-pin.bin");
+            std::fs::write(&path, [9u8; 48]).unwrap();
+            let pin = OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&path)
+                .unwrap();
+            old_target.stop();
+            old_controller.stop();
+            owner.lock().unwrap().pending.push(Pending {
+                id: 1,
+                description: "completed owner with reentrant destructor".into(),
+                child: old_controller.0.take_owned(),
+                target: Box::new(RegisterOnDrop {
+                    handle: old_target.0.as_handle().try_clone_to_owned().unwrap(),
+                    owner: Arc::clone(&owner),
+                    panic_after,
+                    pending: Some(Pending {
+                        id: 2,
+                        description: "registered during resource destruction".into(),
+                        child: next_controller.0.take_owned(),
+                        target: Box::new(HookedTarget {
+                            handle: next_target.0.as_handle().try_clone_to_owned().unwrap(),
+                            _pin: pin,
+                            entered: Mutex::new(None),
+                            release: Mutex::new(mpsc::channel().1),
+                        }),
+                        kill_requested: false,
+                        controller_grace: None,
+                    }),
+                }),
+                kill_requested: false,
+                controller_grace: None,
+            });
+            let reported =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reap_in(&owner)));
+            let actual = owner.lock().unwrap().pending.len();
+            let held = OpenOptions::new().write(true).open(&path).is_err();
+            let alive = unsafe { WaitForSingleObject(next_guard.0.as_raw_handle() as HANDLE, 0) }
+                == WAIT_TIMEOUT;
+            next_target.stop();
+            wait_for(&owner);
+            let released = OpenOptions::new().write(true).open(&path).is_ok();
+            assert!(held && alive && released);
+            assert_eq!(actual, 1);
+            assert!(
+                reported.is_ok(),
+                "resource destructor escaped the recovery owner"
+            );
+            let reported = reported.unwrap();
+            if panic_after {
+                assert!(reported.is_err());
+            } else {
+                assert_eq!(
+                    reported.unwrap(),
+                    actual,
+                    "reap returned a pre-destructor snapshot"
+                );
+            }
+        }
+
+        #[test]
+        fn destructor_registration_cannot_make_reap_return_a_stale_zero() {
+            reentrant_destructor_case(false);
+        }
+
+        #[test]
+        fn panicking_resource_destructor_keeps_new_ownership_and_returns_an_error() {
+            reentrant_destructor_case(true);
         }
 
         #[test]
