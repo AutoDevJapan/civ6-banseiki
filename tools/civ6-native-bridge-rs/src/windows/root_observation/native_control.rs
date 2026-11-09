@@ -376,6 +376,22 @@ fn sites() -> [(usize, [u8; 8], usize, usize); 3] {
         ),
     ]
 }
+fn entry_protection(core: usize, rva: usize, expected: [u8; 8]) -> Result<u32, &'static str> {
+    let entry = (core + rva) as *const u8;
+    if copy_current::<8>(entry as u64) != Some(expected) {
+        return Err("native control entry differs");
+    }
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+    if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+        || !entry.addr().is_multiple_of(8)
+        || info.State != MEM_COMMIT
+        || info.Protect & PAGE_GUARD != 0
+        || info.Protect & 0xff != PAGE_EXECUTE_READ
+    {
+        return Err("native control protection");
+    }
+    Ok(info.Protect)
+}
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     let sites = sites();
     let mut owners = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
@@ -386,19 +402,7 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     // before the first entry exchange so concurrent callbacks never see zero;
     // each exchange still rechecks its bytes and protection below.
     for (rva, expected, _, _) in sites {
-        let entry = (core + rva) as *const u8;
-        if copy_current::<8>(entry as u64) != Some(expected) {
-            return Err("native control entry differs");
-        }
-        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-        if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
-            || !entry.addr().is_multiple_of(8)
-            || info.State != MEM_COMMIT
-            || info.Protect & PAGE_GUARD != 0
-            || info.Protect & 0xff != PAGE_EXECUTE_READ
-        {
-            return Err("native control protection");
-        }
+        entry_protection(core, rva, expected)?;
     }
     let previous_core = CORE.swap(core as u64, Ordering::AcqRel);
     let result = (|| -> Result<(), &'static str> {
@@ -406,18 +410,7 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
             #[cfg(test)]
             tests::before_publication(core, i);
             let entry = (core + rva) as *mut u8;
-            if copy_current::<8>(entry as u64) != Some(expected) {
-                return Err("native control entry differs");
-            }
-            let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-            if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
-                || !entry.addr().is_multiple_of(8)
-                || info.State != MEM_COMMIT
-                || info.Protect & PAGE_GUARD != 0
-                || info.Protect & 0xff != PAGE_EXECUTE_READ
-            {
-                return Err("native control protection");
-            }
+            let protection = entry_protection(core, rva, expected)?;
             let code = unsafe { executable_near(entry as usize, entry as usize, n) }
                 .ok_or("native control relay unavailable")?;
             let mut unpublished = Unpublished(code);
@@ -445,7 +438,7 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
                     prefix: None,
                     _code: code,
                 },
-                protection: info.Protect,
+                protection,
             });
             unpublished.0 = null_mut();
             let r = unsafe {
@@ -502,6 +495,30 @@ pub(super) fn fixture_observation_resume_guards(resume: fn() -> bool, complete: 
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn entry_validation_rejects_unaligned_guarded_and_uncommitted_data() {
+        worlds::install_fixture::rejects_invalid_entry_data(entry_protection);
+    }
+    #[test]
+    fn protected_control_preflight_publishes_no_entry_or_core() {
+        if !child("protected_control_preflight_publishes_no_entry_or_core") {
+            return;
+        }
+        let entries = sites().map(|(rva, original, _, _)| (rva, original));
+        let memory = worlds::install_fixture::Memory::new(&entries);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        memory.protect(entries[1].0, PAGE_READWRITE);
+        let before = entries.map(|(rva, _)| memory.bytes(rva));
+        let result = unsafe { install(memory.base) };
+        let core = CORE.load(Ordering::Acquire);
+        let owners = HOOKS.lock().unwrap().len();
+        unsafe { restore() }.unwrap();
+        CORE.store(0, Ordering::Release);
+        assert_eq!(result, Err("native control protection"));
+        assert_eq!(core, 0);
+        assert_eq!(owners, 0);
+        assert_eq!(entries.map(|(rva, _)| memory.bytes(rva)), before);
+    }
     static FAIL_SITE: AtomicUsize = AtomicUsize::new(usize::MAX);
     pub(super) fn before_publication(core: usize, index: usize) {
         if FAIL_SITE.load(Ordering::Acquire) == index {
@@ -545,6 +562,12 @@ mod tests {
         assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
         assert_eq!(HOOKS.lock().unwrap().len(), 1);
         assert_ne!(memory.bytes(entries[0].0), entries[0].1);
+        assert_eq!(
+            unsafe { install(1) },
+            Err("native control hooks already installed")
+        );
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(HOOKS.lock().unwrap().len(), 1);
         unsafe { restore() }.unwrap();
         assert!(HOOKS.lock().unwrap().is_empty());
         assert_eq!(memory.bytes(entries[0].0), entries[0].1);
@@ -1214,6 +1237,7 @@ mod tests {
                     runtime::fixture_product_inactive(),
                     runtime::fixture_invocation_closed(),
                 ),
+                CORE.load(Ordering::Acquire),
             )
         };
         let rejected = |reason: &str| {
@@ -1229,6 +1253,9 @@ mod tests {
         rejected("World's outer return is still absent");
         worlds::fixture_world_close(birth);
         assert!(observed_shutdown_complete());
+        let installed_core = CORE.swap(0, Ordering::AcqRel);
+        rejected("unbound Core cannot finish a World");
+        CORE.store(installed_core, Ordering::Release);
         for flag in [&CLOSING, &WAITED, &SHUTDOWN_RETURNED, &CLOSURE_COMPLETE] {
             flag.store(false, Ordering::Release);
             rejected("one shutdown receipt is absent");

@@ -1,25 +1,41 @@
 //! Process-owned entry data for installer ordering tests; never executed.
 use std::ptr;
 use windows_sys::Win32::System::Memory::{
-    VirtualAlloc, VirtualFree, VirtualProtect, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
+    VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT,
+    MEM_DECOMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_GUARD, PAGE_NOACCESS,
+    PAGE_READWRITE,
 };
 
 pub(in super::super) struct Memory {
     pub(in super::super) base: usize,
+    allocation: usize,
     len: usize,
 }
 impl Memory {
     pub(in super::super) fn new(entries: &[(usize, [u8; 8])]) -> Self {
+        Self::with_bias(entries, 0)
+    }
+    pub(in super::super) fn with_bias(entries: &[(usize, [u8; 8])], bias: usize) -> Self {
+        assert!(bias < 8);
         let len = entries
             .iter()
             .map(|(rva, _)| rva.checked_add(8).unwrap())
             .max()
             .unwrap();
-        let base =
-            unsafe { VirtualAlloc(ptr::null(), len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
-                as usize;
-        assert_ne!(base, 0);
-        let memory = Self { base, len };
+        let allocation = unsafe {
+            VirtualAlloc(
+                ptr::null(),
+                len.checked_add(bias).unwrap(),
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            )
+        } as usize;
+        assert_ne!(allocation, 0);
+        let memory = Self {
+            base: allocation + bias,
+            allocation,
+            len,
+        };
         for (rva, bytes) in entries {
             memory.write(*rva, bytes);
         }
@@ -50,6 +66,13 @@ impl Memory {
             0
         );
     }
+    pub(in super::super) fn decommit(&self, rva: usize) {
+        assert!(rva < self.len);
+        assert_ne!(
+            unsafe { VirtualFree((self.base + rva) as _, 1, MEM_DECOMMIT) },
+            0
+        );
+    }
 }
 /// # Safety
 /// The full range must belong to the test's still-owned allocation.
@@ -68,6 +91,60 @@ pub(in super::super) unsafe fn write_at(address: usize, bytes: &[u8]) {
 }
 impl Drop for Memory {
     fn drop(&mut self) {
-        assert_ne!(unsafe { VirtualFree(self.base as _, 0, MEM_RELEASE) }, 0);
+        assert_ne!(
+            unsafe { VirtualFree(self.allocation as _, 0, MEM_RELEASE) },
+            0
+        );
     }
+}
+
+pub(in super::super) fn rejects_invalid_entry_data(
+    validate: fn(usize, usize, [u8; 8]) -> Result<u32, &'static str>,
+) {
+    const RVA: usize = 0x1000;
+    const BYTES: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let valid = Memory::new(&[(RVA, BYTES)]);
+    valid.protect_all(PAGE_EXECUTE_READ);
+    assert_eq!(validate(valid.base, RVA, BYTES), Ok(PAGE_EXECUTE_READ));
+    let unaligned = Memory::with_bias(&[(RVA, BYTES)], 1);
+    unaligned.protect_all(PAGE_EXECUTE_READ);
+    assert!(
+        validate(unaligned.base, RVA, BYTES).is_err(),
+        "unaligned entry was accepted"
+    );
+    for protection in [
+        PAGE_READWRITE,
+        PAGE_NOACCESS,
+        PAGE_EXECUTE_READ | PAGE_GUARD,
+    ] {
+        let memory = Memory::new(&[(RVA, BYTES)]);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        memory.protect(RVA, protection);
+        assert!(
+            validate(memory.base, RVA, BYTES).is_err(),
+            "invalid protection was accepted: {protection}"
+        );
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        assert_ne!(
+            unsafe {
+                VirtualQuery(
+                    (memory.base + RVA) as _,
+                    &mut info,
+                    std::mem::size_of_val(&info),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            info.Protect, protection,
+            "entry validation consumed the page protection"
+        );
+    }
+    let reserved = Memory::new(&[(RVA, BYTES)]);
+    reserved.protect_all(PAGE_EXECUTE_READ);
+    reserved.decommit(RVA);
+    assert!(
+        validate(reserved.base, RVA, BYTES).is_err(),
+        "uncommitted entry was accepted"
+    );
 }

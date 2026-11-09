@@ -934,6 +934,44 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn host_prepare_uses_the_actual_cpu_fact_before_entering_the_installer() {
+        const ENV: &str = "CIV6_RUNTIME_CPU_WIRING_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            use std::os::windows::process::CommandExt;
+            let output = test_child_output::run(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .creation_flags(0x08000000)
+                    .env(ENV, "1")
+                    .args(["--exact", "windows::runtime::tests::host_prepare_uses_the_actual_cpu_fact_before_entering_the_installer", "--nocapture"]),
+                std::time::Duration::from_secs(20),
+            ).unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        assert!(!root_observation::native_frames::host_prepared());
+        let calls = std::cell::Cell::new(0);
+        let supported = supports_atomic_promotion_fetch();
+        let result = guard_host_prepare(std::panic::AssertUnwindSafe(|| {
+            calls.set(calls.get() + 1);
+            Ok(())
+        }));
+        assert_eq!(
+            result,
+            if supported {
+                BridgeStatus::Ok
+            } else {
+                BridgeStatus::InvalidInput
+            } as u32
+        );
+        assert_eq!(calls.get(), usize::from(supported));
+        assert!(!root_observation::native_frames::host_prepared());
+    }
 
     #[test]
     fn unsupported_host_cpu_never_enters_native_preparation() {

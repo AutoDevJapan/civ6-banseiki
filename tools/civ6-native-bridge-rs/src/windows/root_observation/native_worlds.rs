@@ -602,6 +602,10 @@ pub(super) mod install_fixture;
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn entry_validation_rejects_unaligned_guarded_and_uncommitted_data() {
+        install_fixture::rejects_invalid_entry_data(entry_protection);
+    }
     static FAIL_SITE: std::sync::atomic::AtomicUsize =
         std::sync::atomic::AtomicUsize::new(usize::MAX);
     static FAIL_CAS_SITE: std::sync::atomic::AtomicUsize =
