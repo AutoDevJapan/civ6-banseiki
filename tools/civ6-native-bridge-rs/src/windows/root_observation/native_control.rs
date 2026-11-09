@@ -112,11 +112,14 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
                 raw.invocation.world = raw.gpr[0];
                 if worlds::installed() {
-                    let birth = worlds::birth(raw.gpr[0]);
-                    if birth != worlds::closing(raw.gpr[0]) || birth.is_none() {
+                    let Some(birth) = worlds::birth(raw.gpr[0]) else {
+                        worlds::unobserved_close();
+                        return;
+                    };
+                    if Some(birth) != worlds::closing(raw.gpr[0]) {
                         fault();
                     }
-                    *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = birth;
+                    *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = Some(birth);
                 }
                 if raw.gpr[0] == 0 {
                     fault();
@@ -1010,6 +1013,43 @@ mod tests {
             "one native path must not certify all publisher/copy/cancel domains"
         );
         assert!(!super::reopen());
+    }
+    #[test]
+    fn unobserved_world_shutdown_never_acquires_a_closure_receipt() {
+        if !child("unobserved_world_shutdown_never_acquires_a_closure_receipt") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let core = 0x180000000;
+        CORE.store(core, Ordering::Release);
+        worlds::fixture_cold_observer(core);
+        let frames = FRAMES.get().unwrap();
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        world[0x250 / 8] = key;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, core + 0x471c2);
+        begin(&mut w);
+        assert_eq!(w.invocation.cookie, 0);
+        let mut m = raw(31, key, core + 0x63e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, key + 0x400, core + 0x4a1196);
+        begin(&mut wait);
+        finish(&mut wait, false);
+        finish(&mut m, false);
+        finish(&mut w, false);
+        assert!(STACK.with(|s| s.borrow().is_empty()));
+        assert!(!WAITED.load(Ordering::Acquire));
+        assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!observed_shutdown_complete());
+        assert!(!super::super::reopen());
+        assert!(!super::super::resume_unqualified_observation());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert!(frames.healthy());
+        let later = frames.enter().unwrap();
+        frames.leave(later).unwrap();
     }
     #[test]
     fn shutdown_outside_the_tracked_world_close_is_recorded_without_a_closing_certificate() {

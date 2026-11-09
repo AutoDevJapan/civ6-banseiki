@@ -53,6 +53,7 @@ struct ContextBirth {
 struct Bindings {
     next: u64,
     contexts: HashMap<u64, ContextBirth>,
+    unobserved_close: bool,
 }
 static BINDINGS: std::sync::LazyLock<Mutex<Bindings>> =
     std::sync::LazyLock::new(|| Mutex::new(Bindings::default()));
@@ -77,6 +78,9 @@ fn value(address: u64) -> u64 {
 }
 impl Bindings {
     fn birth_window(&self) -> Option<BirthWindow> {
+        if self.unobserved_close {
+            return None;
+        }
         let live: Vec<_> = self.contexts.iter().filter(|(_, b)| !b.closed).collect();
         if live.is_empty() {
             return Some(BirthWindow {
@@ -196,15 +200,23 @@ pub(super) fn installed() -> bool {
 }
 pub(super) fn completed(lease: WorldLease) -> bool {
     BINDINGS.lock().is_ok_and(|bindings| {
-        bindings.contexts.get(&lease.context).is_some_and(|birth| {
-            birth.serial == lease.serial
-                && birth.epoch == lease.epoch
-                && birth.game == lease.game
-                && birth.world == Some(lease)
-                && birth.closing
-                && birth.closed
-        })
+        !bindings.unobserved_close
+            && bindings.contexts.get(&lease.context).is_some_and(|birth| {
+                birth.serial == lease.serial
+                    && birth.epoch == lease.epoch
+                    && birth.game == lease.game
+                    && birth.world == Some(lease)
+                    && birth.closing
+                    && birth.closed
+            })
     })
+}
+/// Missing birth evidence denies a closure certificate. It does not mean an
+/// owned executing frame or reservation was lost, and cannot poison ordinary
+/// native frame accounting into an unrelated process abort.
+pub(super) fn unobserved_close() {
+    BINDINGS.lock().unwrap_or_else(|_| fault()).unobserved_close = true;
+    diagnostic(2062);
 }
 pub(super) fn capture_birth_window() -> Option<BirthWindow> {
     if !HOST_PREPARED.load(Ordering::Acquire) {
@@ -215,6 +227,10 @@ pub(super) fn capture_birth_window() -> Option<BirthWindow> {
 #[cfg(test)]
 pub(super) fn fixture_first_birth_window() -> BirthWindow {
     Bindings::default().birth_window().unwrap()
+}
+#[cfg(test)]
+pub(super) fn fixture_cold_observer(core: u64) {
+    assert_eq!(CORE.swap(core, Ordering::AcqRel), 0);
 }
 #[cfg(test)]
 pub(super) fn fixture_world_birth() -> WorldLease {
@@ -263,7 +279,9 @@ extern "system" fn begin(raw: *mut Saved) {
                     .values()
                     .find(|b| b.game == raw.gpr[0] && !b.closed)
                 else {
-                    fault();
+                    b.unobserved_close = true;
+                    diagnostic(2062);
+                    return;
                 };
                 raw.invocation.parent = birth.serial;
                 raw.invocation.manager = raw.gpr[0];
@@ -804,6 +822,77 @@ mod tests {
         assert!(b.world(20, 30, 2).is_err());
         b.world(20, 30, 1).unwrap();
         assert!(b.world(20, 40, 1).is_err());
+    }
+    #[test]
+    fn unobserved_game_close_preserves_native_return_without_certifying_worlds() {
+        if !child("unobserved_game_close_preserves_native_return_without_certifying_worlds") {
+            return;
+        }
+        let frames = FRAMES.get_or_init(NativeFrames::new);
+        let core = 0x180000000u64;
+        CORE.store(core, Ordering::Release);
+        let known = fixture_world_birth();
+        fixture_world_close(known);
+        assert!(completed(known));
+
+        // Only an owned native stub executes. It counts calls, clears the
+        // original's World field and preserves its full return value.
+        let mut code = vec![0x48, 0xff, 0x41, 0x68, 0x48, 0xc7, 0x41, 0x60, 0, 0, 0, 0];
+        code.extend([0x48, 0xb8]);
+        code.extend(0x1122334455667788u64.to_le_bytes());
+        code.extend([0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3]);
+        let page =
+            unsafe { VirtualAlloc(null_mut(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
+        assert!(!page.is_null());
+        unsafe { ptr::copy_nonoverlapping(code.as_ptr(), page.cast(), code.len()) };
+        let mut protection = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(page, 4096, PAGE_EXECUTE_READ, &mut protection) },
+            0
+        );
+        assert_ne!(
+            unsafe { FlushInstructionCache(GetCurrentProcess(), page, code.len()) },
+            0
+        );
+        NATIVE_WORLD_CONTINUE[2].store(page as u64, Ordering::Release);
+        let close: unsafe extern "system" fn(*mut u64) -> u64 =
+            unsafe { std::mem::transmute(native_world_close_gateway as *const ()) };
+        let mut game = [0u64; 0x80 / 8];
+        game[0] = core + 0xa44f70;
+        // A native no-op without a World does not create a coverage gap.
+        unsafe { SetLastError(0x12345678) };
+        assert_eq!(unsafe { close(game.as_mut_ptr()) }, 0x1122334455667788);
+        assert_eq!(unsafe { GetLastError() }, 0x12345678);
+        assert_eq!(game[0x68 / 8], 1);
+        assert!(completed(known));
+        assert!(BINDINGS.lock().unwrap().birth_window().is_some());
+        println!("UNOBSERVED_CLOSE_NOOP_PASSED");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+
+        game[0x40 / 8] = 1;
+        game[0x60 / 8] = 0x1234;
+        unsafe { SetLastError(0x87654321) };
+        assert_eq!(unsafe { close(game.as_mut_ptr()) }, 0x1122334455667788);
+        assert_eq!(unsafe { GetLastError() }, 0x87654321);
+        assert_eq!(game[0x68 / 8], 2, "each original runs exactly once");
+        assert_eq!(game[0x60 / 8], 0);
+        assert!(
+            !completed(known),
+            "an unseen lifetime denies all-World closure"
+        );
+        assert_eq!(TRACE.0[13].load(Ordering::Acquire), 2062);
+        assert!(BINDINGS.lock().unwrap().birth_window().is_none());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert!(frames.healthy());
+        // A coverage gap alone must not abort a later unrelated native frame.
+        let mut later: Saved = unsafe { std::mem::zeroed() };
+        super::super::begin(&mut later);
+        super::super::finish(&mut later, false);
+        assert_eq!(frames.observation_state_for_test().2, 0);
+        assert!(!completed(known), "ordinary traffic cannot erase the gap");
+        NATIVE_WORLD_CONTINUE[2].store(0, Ordering::Release);
+        assert_ne!(unsafe { VirtualFree(page, 0, MEM_RELEASE) }, 0);
     }
     #[test]
     fn original_context_and_world_return_bind_before_cgame_publication() {
