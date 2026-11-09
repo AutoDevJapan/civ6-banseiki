@@ -225,6 +225,69 @@ impl NativeFrames {
         s.jobs.get_mut(&id).unwrap().task = task;
         Ok(())
     }
+    pub fn reserve_queue(&self) -> Result<u64, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.sealed || s.unresolved {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
+        let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+        s.next = id;
+        let generation = s.generation;
+        s.jobs.insert(
+            id,
+            Job {
+                generation,
+                payload: 0,
+                task: 0,
+                push_returned: false,
+                execution: 0,
+                set: u64::MAX,
+            },
+        );
+        Ok(id)
+    }
+    pub fn finish_unpublished_queue(&self, id: u64) -> Result<(), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.jobs
+            .get(&id)
+            .is_none_or(|j| j.task != 0 || j.push_returned)
+        {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
+        s.jobs.remove(&id);
+        self.changed.notify_all();
+        Ok(())
+    }
+    pub fn queue_published(&self, id: u64) -> Result<(), Error> {
+        let task = {
+            let s = self.state.lock().map_err(|_| Error::Poisoned)?;
+            s.jobs.get(&id).ok_or(Error::Unresolved)?.task
+        };
+        if task == 0 {
+            self.finish_unpublished_queue(id)
+        } else {
+            self.pushed(id, task)
+        }
+    }
+    pub fn queue_execute(&self, task: u64) -> Result<u64, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        let id = s.jobs.iter().find_map(|(id, j)| {
+            (j.task == task
+                && task != 0
+                && j.set == u64::MAX
+                && j.execution == 0
+                && j.generation == s.generation)
+                .then_some(*id)
+        });
+        let Some(id) = id else {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        };
+        s.jobs.get_mut(&id).unwrap().execution = 1;
+        Ok(id)
+    }
 
     /// The current execution invocation supplies both T and its current P.
     /// Never adopt the newest generation for an unrecorded native task.
@@ -400,6 +463,20 @@ mod tests {
         f.pushed(id, 200).unwrap();
         f.seal_and_wait(deadline()).unwrap();
         f.reopen().unwrap();
+    }
+    #[test]
+    fn serialized_operation_is_reserved_before_its_node_is_published() {
+        let f = NativeFrames::new();
+        let id = f.reserve_queue().unwrap();
+        f.bind_before_publication(id, 123).unwrap();
+        f.queue_published(id).unwrap();
+        assert_eq!(f.seal_and_wait(Instant::now()), Err(Error::Timeout));
+        assert_eq!(f.reopen(), Err(Error::Busy));
+        assert_eq!(f.queue_execute(123), Ok(id));
+        f.completed(id).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert_eq!(f.queue_execute(123), Err(Error::Unresolved));
     }
 
     #[test]

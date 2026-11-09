@@ -115,166 +115,6 @@ pub(super) fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
             "basis":"file-buffer-only audit structure, not measured native execution counters"}}))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn image() -> Vec<u8> {
-        let mut b = vec![0; 0x1240000];
-        for &(r, code) in BLOCKS {
-            let p = r as usize - 0xc00;
-            b[p..p + code.len()].copy_from_slice(code);
-        }
-        b[0x106c428 - 0xc00..0x106c430 - 0xc00].copy_from_slice(&0x1400967b0u64.to_le_bytes());
-        b[0x967b0 - 0xc00..0x967b3 - 0xc00].copy_from_slice(&[0xc2, 0, 0]);
-        b
-    }
-
-    fn pe(b: &[u8]) -> Pe<'_> {
-        Pe {
-            image: b,
-            base: 0x140000000,
-            sections: vec![
-                Section {
-                    name: *b".text\0\0\0",
-                    rva: 0x1000,
-                    virtual_size: 0xf95000,
-                    raw: 0x400,
-                    size: 0xf95000,
-                    flags: 0x60000020,
-                },
-                Section {
-                    name: *b".rdata\0\0",
-                    rva: 0xf96000,
-                    virtual_size: 0x2b0000,
-                    raw: 0xf95400,
-                    size: 0x2b0000,
-                    flags: 0x40000040,
-                },
-            ],
-            functions: vec![],
-            relocations: Default::default(),
-        }
-    }
-
-    #[test]
-    fn consumer_execute_skip_destructor_and_tag_bytes_reject_each_mutation() {
-        let mut b = image();
-        blocks(&pe(&b)).unwrap();
-        for &(r, code) in BLOCKS {
-            for i in 0..code.len() {
-                let p = r as usize - 0xc00 + i;
-                b[p] ^= 1;
-                assert!(blocks(&pe(&b)).is_err(), "instruction {r:x}+{i}");
-                b[p] ^= 1;
-            }
-        }
-    }
-
-    #[test]
-    fn consumer_branch_directions_and_signed_targets_reject_mutations() {
-        let mut b = image();
-        references(&pe(&b)).unwrap();
-        for &(r, prefix, length, offset, _, _) in BRANCHES {
-            for i in (0..prefix.len()).chain(offset..length) {
-                let p = r as usize - 0xc00 + i;
-                b[p] ^= 1;
-                assert!(references(&pe(&b)).is_err(), "branch {r:x}+{i}");
-                b[p] ^= 1;
-            }
-        }
-        assert!(rel_target(0, &[0xe9, 0xf0, 0xff, 0xff, 0xff], 0xe9, 5, 1).is_err());
-        assert!(rel_target(u32::MAX, &[0xe9, 1, 0, 0, 0], 0xe9, 5, 1).is_err());
-        assert_eq!(relative_target(0x100, &[0x75, 0xf0], 2, 1).unwrap(), 0xf2);
-        assert_eq!(relative_target(0x100, &[0x74, 0x10], 2, 1).unwrap(), 0x112);
-        assert!(relative_target(0, &[0x75, 0xf0], 2, 1).is_err());
-        assert!(relative_target(u32::MAX, &[0x75, 0], 2, 1).is_err());
-        assert!(relative_target(0, &[0x75], 2, 1).is_err());
-    }
-
-    #[test]
-    fn consumer_code_data_affinity_and_truncation_are_checked() {
-        let mut b = image();
-        references(&pe(&b)).unwrap();
-        b[0x106c428 - 0xc00] ^= 1;
-        assert!(references(&pe(&b)).is_err());
-        b[0x106c428 - 0xc00] ^= 1;
-        b[0x967b0 - 0xc00] ^= 1;
-        assert!(references(&pe(&b)).is_err());
-        let mut p = pe(&b);
-        p.sections[0].flags &= !0x20000000;
-        assert!(blocks(&p).is_err());
-        let mut p = pe(&b);
-        p.sections[1].flags |= 0x20000000;
-        assert!(references(&p).is_err());
-        assert!(blocks(&pe(&b[..0xe410a8 - 0xc00])).is_err());
-    }
-
-    #[test]
-    fn consumer_complete_frames_reject_unwitnessed_tail_pdata_and_unwind_mutations() {
-        // Synthetic complete bodies exercise the same frame/CHAININFO checker
-        // without requiring a local game installation or redistributing it.
-        let mut b = image();
-        let mut functions = Vec::new();
-        for s in FRAMES {
-            b[s.begin as usize - 0xc00..s.end as usize - 0xc00].fill(0x90);
-            for &(begin, end, unwind, hex) in s.fragments {
-                functions.push(Function { begin, end, unwind });
-                for i in (0..hex.len()).step_by(2) {
-                    b[unwind as usize - 0xc00 + i / 2] =
-                        u8::from_str_radix(&hex[i..i + 2], 16).unwrap();
-                }
-            }
-        }
-        functions.sort_by_key(|f| f.begin);
-        for s in FRAMES {
-            let sha = format!(
-                "{:x}",
-                Sha256::digest(&b[s.begin as usize - 0xc00..s.end as usize - 0xc00])
-            );
-            let fixture = Frame {
-                sha: Box::leak(sha.into_boxed_str()),
-                begin: s.begin,
-                end: s.end,
-                fragments: s.fragments,
-            };
-            let mapped = || {
-                let mut p = pe(&b);
-                p.functions = functions.clone();
-                p
-            };
-            frame(&mapped(), &fixture).unwrap();
-            let mut p = mapped();
-            p.functions
-                .retain(|f| f.begin != s.fragments.last().unwrap().0);
-            assert!(frame(&p, &fixture).is_err(), "missing pdata {:x}", s.begin);
-            let tail = s.end as usize - 0xc00 - 1;
-            b[tail] ^= 1;
-            let mut p = pe(&b);
-            p.functions = functions.clone();
-            assert!(frame(&p, &fixture).is_err(), "complete body {:x}", s.begin);
-            b[tail] ^= 1;
-            for &(_, _, unwind, hex) in s.fragments {
-                let p = unwind as usize - 0xc00 + hex.len() / 2 - 1;
-                b[p] ^= 1;
-                let mut mapped = pe(&b);
-                mapped.functions = functions.clone();
-                assert!(frame(&mapped, &fixture).is_err(), "unwind {unwind:x}");
-                b[p] ^= 1;
-            }
-        }
-    }
-
-    #[test]
-    fn consumer_selector_requires_both_complete_pinned_buffers() {
-        assert!(audit_queue_consumer(b"MZ", b"PE")
-            .unwrap_err()
-            .contains("pinned"));
-        assert!(require_image_pair(CORE_SHA, "wrong-host").is_err());
-        assert!(require_image_pair("wrong-core", HOST_SHA).is_err());
-    }
-}
-
 const FRAMES: &[Frame] = &[
     Frame {
         begin: 0xe3ccf0,
@@ -724,3 +564,163 @@ const BRANCHES: &[RelativeEdge] = &[
     (0xe41aed, &[0xeb], 2, 1, 0xe41ab0, "short_jump"),
     (0xe41eaa, &[0xeb], 2, 1, 0xe41e6d, "short_jump"),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn image() -> Vec<u8> {
+        let mut b = vec![0; 0x1240000];
+        for &(r, code) in BLOCKS {
+            let p = r as usize - 0xc00;
+            b[p..p + code.len()].copy_from_slice(code);
+        }
+        b[0x106c428 - 0xc00..0x106c430 - 0xc00].copy_from_slice(&0x1400967b0u64.to_le_bytes());
+        b[0x967b0 - 0xc00..0x967b3 - 0xc00].copy_from_slice(&[0xc2, 0, 0]);
+        b
+    }
+
+    fn pe(b: &[u8]) -> Pe<'_> {
+        Pe {
+            image: b,
+            base: 0x140000000,
+            sections: vec![
+                Section {
+                    name: *b".text\0\0\0",
+                    rva: 0x1000,
+                    virtual_size: 0xf95000,
+                    raw: 0x400,
+                    size: 0xf95000,
+                    flags: 0x60000020,
+                },
+                Section {
+                    name: *b".rdata\0\0",
+                    rva: 0xf96000,
+                    virtual_size: 0x2b0000,
+                    raw: 0xf95400,
+                    size: 0x2b0000,
+                    flags: 0x40000040,
+                },
+            ],
+            functions: vec![],
+            relocations: Default::default(),
+        }
+    }
+
+    #[test]
+    fn consumer_execute_skip_destructor_and_tag_bytes_reject_each_mutation() {
+        let mut b = image();
+        blocks(&pe(&b)).unwrap();
+        for &(r, code) in BLOCKS {
+            for i in 0..code.len() {
+                let p = r as usize - 0xc00 + i;
+                b[p] ^= 1;
+                assert!(blocks(&pe(&b)).is_err(), "instruction {r:x}+{i}");
+                b[p] ^= 1;
+            }
+        }
+    }
+
+    #[test]
+    fn consumer_branch_directions_and_signed_targets_reject_mutations() {
+        let mut b = image();
+        references(&pe(&b)).unwrap();
+        for &(r, prefix, length, offset, _, _) in BRANCHES {
+            for i in (0..prefix.len()).chain(offset..length) {
+                let p = r as usize - 0xc00 + i;
+                b[p] ^= 1;
+                assert!(references(&pe(&b)).is_err(), "branch {r:x}+{i}");
+                b[p] ^= 1;
+            }
+        }
+        assert!(rel_target(0, &[0xe9, 0xf0, 0xff, 0xff, 0xff], 0xe9, 5, 1).is_err());
+        assert!(rel_target(u32::MAX, &[0xe9, 1, 0, 0, 0], 0xe9, 5, 1).is_err());
+        assert_eq!(relative_target(0x100, &[0x75, 0xf0], 2, 1).unwrap(), 0xf2);
+        assert_eq!(relative_target(0x100, &[0x74, 0x10], 2, 1).unwrap(), 0x112);
+        assert!(relative_target(0, &[0x75, 0xf0], 2, 1).is_err());
+        assert!(relative_target(u32::MAX, &[0x75, 0], 2, 1).is_err());
+        assert!(relative_target(0, &[0x75], 2, 1).is_err());
+    }
+
+    #[test]
+    fn consumer_code_data_affinity_and_truncation_are_checked() {
+        let mut b = image();
+        references(&pe(&b)).unwrap();
+        b[0x106c428 - 0xc00] ^= 1;
+        assert!(references(&pe(&b)).is_err());
+        b[0x106c428 - 0xc00] ^= 1;
+        b[0x967b0 - 0xc00] ^= 1;
+        assert!(references(&pe(&b)).is_err());
+        let mut p = pe(&b);
+        p.sections[0].flags &= !0x20000000;
+        assert!(blocks(&p).is_err());
+        let mut p = pe(&b);
+        p.sections[1].flags |= 0x20000000;
+        assert!(references(&p).is_err());
+        assert!(blocks(&pe(&b[..0xe410a8 - 0xc00])).is_err());
+    }
+
+    #[test]
+    fn consumer_complete_frames_reject_unwitnessed_tail_pdata_and_unwind_mutations() {
+        // Synthetic complete bodies exercise the same frame/CHAININFO checker
+        // without requiring a local game installation or redistributing it.
+        let mut b = image();
+        let mut functions = Vec::new();
+        for s in FRAMES {
+            b[s.begin as usize - 0xc00..s.end as usize - 0xc00].fill(0x90);
+            for &(begin, end, unwind, hex) in s.fragments {
+                functions.push(Function { begin, end, unwind });
+                for i in (0..hex.len()).step_by(2) {
+                    b[unwind as usize - 0xc00 + i / 2] =
+                        u8::from_str_radix(&hex[i..i + 2], 16).unwrap();
+                }
+            }
+        }
+        functions.sort_by_key(|f| f.begin);
+        for s in FRAMES {
+            let sha = format!(
+                "{:x}",
+                Sha256::digest(&b[s.begin as usize - 0xc00..s.end as usize - 0xc00])
+            );
+            let fixture = Frame {
+                sha: Box::leak(sha.into_boxed_str()),
+                begin: s.begin,
+                end: s.end,
+                fragments: s.fragments,
+            };
+            let mapped = || {
+                let mut p = pe(&b);
+                p.functions = functions.clone();
+                p
+            };
+            frame(&mapped(), &fixture).unwrap();
+            let mut p = mapped();
+            p.functions
+                .retain(|f| f.begin != s.fragments.last().unwrap().0);
+            assert!(frame(&p, &fixture).is_err(), "missing pdata {:x}", s.begin);
+            let tail = s.end as usize - 0xc00 - 1;
+            b[tail] ^= 1;
+            let mut p = pe(&b);
+            p.functions = functions.clone();
+            assert!(frame(&p, &fixture).is_err(), "complete body {:x}", s.begin);
+            b[tail] ^= 1;
+            for &(_, _, unwind, hex) in s.fragments {
+                let p = unwind as usize - 0xc00 + hex.len() / 2 - 1;
+                b[p] ^= 1;
+                let mut mapped = pe(&b);
+                mapped.functions = functions.clone();
+                assert!(frame(&mapped, &fixture).is_err(), "unwind {unwind:x}");
+                b[p] ^= 1;
+            }
+        }
+    }
+
+    #[test]
+    fn consumer_selector_requires_both_complete_pinned_buffers() {
+        assert!(audit_queue_consumer(b"MZ", b"PE")
+            .unwrap_err()
+            .contains("pinned"));
+        assert!(require_image_pair(CORE_SHA, "wrong-host").is_err());
+        assert!(require_image_pair("wrong-core", HOST_SHA).is_err());
+    }
+}

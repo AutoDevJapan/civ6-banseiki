@@ -623,6 +623,9 @@ macro_rules! gateway {
         gateway!($name,$kind,$original,begin,end,unwind);
     };
     ($name:literal,$kind:literal,$original:ident,$begin:path,$end:path,$unwind:path) => {
+        gateway!($name,$kind,$original,$begin,$end,$unwind,"");
+    };
+    ($name:literal,$kind:literal,$original:ident,$begin:path,$end:path,$unwind:path,$stack_args:literal) => {
         global_asm!(concat!(
             ".globl ",$name,"\n.seh_proc ",$name,"\n",$name,":\n",
             // pushfq precedes SUB: input flags must not be sampled after SUB.
@@ -646,6 +649,7 @@ macro_rules! gateway {
             "mov rax,[rsp+0x40]\nmov r10,[rsp+0x48]\nmov r11,[rsp+0x50]\n",
             "movdqu xmm0,[rsp+0x60]\nmovdqu xmm1,[rsp+0x70]\nmovdqu xmm2,[rsp+0x80]\n",
             "movdqu xmm3,[rsp+0x90]\nmovdqu xmm4,[rsp+0xa0]\nmovdqu xmm5,[rsp+0xb0]\n",
+            $stack_args,
             "call {restore_flags}\n.globl ",$name,"_flags_input_return\n",$name,"_flags_input_return:\ncall {original}\n",
             // Preserve the ORIGINAL outputs before any helper or flag change.
             "call {save_flags}\n.globl ",$name,"_flags_save_return\n",$name,"_flags_save_return:\n",
@@ -1872,6 +1876,70 @@ mod tests {
                 [ctx.Rbx, ctx.Rsi, ctx.Rbp, ctx.Rdi, ctx.R14],
                 [0x55667700, 0x55667701, 0x55667702, 0x55667703, 0x55667704]
             );
+        }
+    }
+    #[test]
+    fn operation_four_push_shims_virtual_unwind_preserves_real_return_and_rbp() {
+        unsafe extern "system" {
+            fn native_operation_enqueue_body();
+            fn native_operation_execute_body();
+        }
+        for (address, regs) in [
+            (
+                native_operation_enqueue_body as *const () as usize,
+                [0u8, 1, 2, 3],
+            ),
+            (
+                native_operation_execute_body as *const () as usize,
+                [0u8, 4, 5, 6],
+            ),
+        ] {
+            let mut stack = [0u64; 32];
+            stack[4] = 0x11223344;
+            for (i, r) in regs.into_iter().enumerate() {
+                stack[3 - i] = 0x55667700 + r as u64;
+            }
+            let mut base = 0;
+            let entry = unsafe { RtlLookupFunctionEntry(address as u64, &mut base, null_mut()) };
+            assert!(!entry.is_null());
+            let mut ctx: CONTEXT = unsafe { std::mem::zeroed() };
+            ctx.Rip = address as u64;
+            ctx.Rsp = stack.as_mut_ptr() as u64;
+            ctx.Rbp = 0;
+            ctx.Rsi = 0;
+            ctx.Rdi = 0;
+            ctx.R14 = 0;
+            ctx.Rbx = 0;
+            ctx.R12 = 0;
+            ctx.R13 = 0;
+            let mut handler = null_mut();
+            let mut frame = 0;
+            unsafe {
+                RtlVirtualUnwind(
+                    0,
+                    base,
+                    ctx.Rip,
+                    entry,
+                    &mut ctx,
+                    &mut handler,
+                    &mut frame,
+                    null_mut(),
+                );
+            }
+            assert_eq!(ctx.Rip, 0x11223344);
+            assert_eq!(ctx.Rsp, stack.as_ptr() as u64 + 40);
+            assert_eq!(ctx.Rbp, 0x55667700);
+            if regs[1] == 1 {
+                assert_eq!(
+                    [ctx.Rsi, ctx.Rdi, ctx.R14],
+                    [0x55667701, 0x55667702, 0x55667703]
+                );
+            } else {
+                assert_eq!(
+                    [ctx.Rbx, ctx.R12, ctx.R13],
+                    [0x55667704, 0x55667705, 0x55667706]
+                );
+            }
         }
     }
     #[test]
