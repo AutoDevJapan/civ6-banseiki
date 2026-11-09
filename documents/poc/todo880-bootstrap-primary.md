@@ -33,6 +33,8 @@ HostのPush、allocator正常return、元T execute、元destructorを区別し�
 
 serialized operationでは、enqueue `373E0`、保存データの再読込 `37690`、複製 `36520`、実行・解放 `372F0`、複製元の後処理 `37F70`、終了時 `380B0`を追跡します。allocator `994970`が元ノードを返してから共有リストへ公開される前に識別を保存し、元の解放 `36E20`が正常returnするまで保持します。同じアドレスが再利用されても、旧識別で新ノードを精算しません。
 
+履歴側の消去 `36950`も完全な呼出しを保持します。payload解放の戻り `3699F`とnode解放の戻り `369B4`を区別し、nodeの予約は元の解放から正常returnするまで残します。最後のsentinel更新と消去関数の復帰より前に排出成功にしません。Worldの元の破棄処理内では、Wait後のinert storageだけを扱う専用の寿命を保持し、新しい実行・製品操作の受付を開きません。
+
 World資格の不明な仕事も元の処理を続けます。不明の印を発行元frame、既発行の兄弟の仕事、複製、worker、consumerへ伝え、その完全な復帰まで製品側の許可を拒否します。workerで不明状態が判明した場合も、保存した発行元の対応を使って逆方向へ伝播します。bridge呼出し自身も入口から最後の借用・returnまで所有を保持します。
 
 ## session・入力・ロード要求
@@ -54,6 +56,8 @@ NetSnapshot `80F230`からsnapshot ownerへの実呼出しでは、元messageの
 Closeは製品側の許可を失効させ、元の自然shutdownを進めます。World `63E160`→manager `4A1150`→同setのWait `9922C0`をreceiver・caller・stackで照合します。元Waitから後続の破壊処理へ戻す前に実行中の仕事と同期frameを排出し、元の `380B0`で保存用ノードを解放してから最終排出を確認します。現在のshutdown制御stackを自己待ちに含めません。
 
 managerは元の初期化 `49C7C0`の正常returnで世代を作ります。閉鎖時のlist識別と、そのmanager自身による `4A1209`のFreeJobList呼出し・一度だけの正常returnを記録します。Wait後の同setへのAdd/Pushを拒否し、閉鎖済みの記録は実際の再初期化まで残します。list識別だけを使うSpawnは別domainでの再利用を区別できないため、遅いSpawnを検出した場合は受領を未完にします。World閉鎖外のmanager再初期化経路を、World停止の証明には使いません。
+
+list解放は元の戻り番地と、元shutdownがRBXに保持するmanagerを組み合わせて帰属します。解放済みの識別を別managerが再利用しても旧managerへ帰属せず、同じmanagerによる二重解放とは区別します。
 
 現在の接続は全producerの自然停止、全scheduler domain、コピー・再発行・取消の全alias、OS受信済みqueueやremote送信元の世代切替を証明していません。`native_coverage_complete()`はfalseのまま、Rebuildを拒否します。正常Waitや追跡件数0だけを全域の許可へ変換しません。
 

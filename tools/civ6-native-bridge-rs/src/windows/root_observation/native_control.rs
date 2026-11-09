@@ -24,10 +24,13 @@ pub(super) fn request_close() {
     CLOSING.store(true, Ordering::Release);
 }
 pub(super) fn owns_operation_cleanup(caller: u64) -> bool {
-    if !CLOSING.load(Ordering::Acquire)
-        || !WAITED.load(Ordering::Acquire)
-        || caller != CORE.load(Ordering::Acquire) + 0x63e239
-    {
+    caller == CORE.load(Ordering::Acquire) + 0x63e239 && owns_inert_cleanup()
+}
+/// A verified World shutdown is still inside its original destruction body,
+/// after its own set Wait. Pure inert-storage cleanup may retain that same
+/// lifetime; this does not reopen producer or product admission.
+pub(super) fn owns_inert_cleanup() -> bool {
+    if !CLOSING.load(Ordering::Acquire) || !WAITED.load(Ordering::Acquire) {
         return false;
     }
     STACK.with(|s| {

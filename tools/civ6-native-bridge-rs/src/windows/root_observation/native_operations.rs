@@ -1,14 +1,17 @@
 //! Serialized operation queue reservations, separate from Host job-set work.
 //! Whole original calls execute once. Queue node identity is bound before the
 //! original enqueue links it, and inherited at the exact dequeue call site.
+use super::scheduler::{FixedFrame, Fragment};
 use super::*;
 use std::cell::RefCell;
+#[path = "native_history_clear_fixed.rs"]
+mod history_clear;
 static CORE: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]
 static NATIVE_OPERATION_FLAG: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 #[unsafe(no_mangle)]
-static NATIVE_OPERATION_CONTINUE: [AtomicU64; 9] = [const { AtomicU64::new(0) }; 9];
+static NATIVE_OPERATION_CONTINUE: [AtomicU64; 10] = [const { AtomicU64::new(0) }; 10];
 thread_local! {static STACK:RefCell<Vec<(u64,u64)>>=const {RefCell::new(Vec::new())};}
 type Site = (usize, [u8; 8], usize, usize);
 fn fault() -> ! {
@@ -32,7 +35,11 @@ extern "system" fn begin(raw: *mut Saved) {
                 raw.invocation.errors = 2;
                 f.begin_native_cleanup().unwrap_or_else(|_| fault())
             }
-            40 | 43 | 44 | 46 | 47 | 48 => f
+            49 if control::owns_inert_cleanup() => {
+                raw.invocation.errors = 2;
+                f.begin_native_cleanup().unwrap_or_else(|_| fault())
+            }
+            40 | 43 | 44 | 46 | 47 | 48 | 49 => f
                 .begin_queue_producer_with_provenance(unproven)
                 .unwrap_or_else(|_| fault()),
             41 => {
@@ -56,10 +63,18 @@ extern "system" fn begin(raw: *mut Saved) {
                 id
             }
             45 => {
-                if !matches!(
-                    raw.invocation.caller.wrapping_sub(core),
-                    0x373a2 | 0x38024 | 0x381a4 | 0x38204
-                ) {
+                let caller = raw.invocation.caller.wrapping_sub(core);
+                if caller == 0x369b4 {
+                    if STACK.with(|s| s.borrow().last().is_none_or(|(kind, _)| *kind != 49)) {
+                        // A node free without the containing clear frame is
+                        // not a full lifetime receipt. Preserve the original
+                        // call, deny product authority, and do not certify it.
+                        f.mark_unresolved();
+                        FAILED.store(true, Ordering::Release);
+                        TRACE.0[6].store(1, Ordering::Release);
+                        return;
+                    }
+                } else if !matches!(caller, 0x373a2 | 0x38024 | 0x381a4 | 0x38204) {
                     return;
                 }
                 f.retire_queue(raw.gpr[1]).unwrap_or_else(|_| fault())
@@ -100,10 +115,10 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         return;
     }
     match raw.invocation.kind {
-        48 if raw.invocation.errors == 2 => {
+        48 | 49 if raw.invocation.errors == 2 => {
             f.leave(raw.invocation.token).unwrap_or_else(|_| fault())
         }
-        40 | 43 | 44 | 46 | 47 | 48 => f
+        40 | 43 | 44 | 46 | 47 | 48 | 49 => f
             .queue_producer_returned(raw.invocation.token)
             .unwrap_or_else(|_| fault()),
         41 => {
@@ -283,6 +298,18 @@ global_asm!(
     "mov rax,[rsp+0x10]",
     "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
+    ".globl native_operation_history_clear_original",
+    ".seh_proc native_operation_history_clear_original",
+    "native_operation_history_clear_original:",
+    "mov [rsp+0x10],rbx",
+    ".seh_savereg rbx,0x10",
+    ".seh_endprologue",
+    "mov [rsp+8],rax",
+    "mov rax,[rip+NATIVE_OPERATION_CONTINUE+72]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+8]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
 );
 unsafe extern "system" {
     fn native_operation_enqueue_original();
@@ -303,6 +330,8 @@ unsafe extern "system" {
     fn native_operation_drain_gateway();
     fn native_operation_transfer_gateway();
     fn native_operation_cleanup_gateway();
+    fn native_operation_history_clear_original();
+    fn native_operation_history_clear_gateway();
 }
 gateway!(
     "native_operation_enqueue_gateway",
@@ -377,7 +406,15 @@ gateway!(
     end,
     unwind
 );
-fn sites() -> [Site; 9] {
+gateway!(
+    "native_operation_history_clear_gateway",
+    "49",
+    native_operation_history_clear_original,
+    begin,
+    end,
+    unwind
+);
+fn sites() -> [Site; 10] {
     [
         (
             0x373e0,
@@ -433,9 +470,21 @@ fn sites() -> [Site; 9] {
             5,
             native_operation_cleanup_gateway as *const () as usize,
         ),
+        (
+            0x36950,
+            [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83],
+            5,
+            native_operation_history_clear_gateway as *const () as usize,
+        ),
     ]
 }
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
+    unsafe {
+        scheduler::verify_frames(core, history_clear::FRAMES)?;
+        install_at(core)
+    }
+}
+unsafe fn install_at(core: usize) -> Result<(), &'static str> {
     CORE.store(core as u64, Ordering::Release);
     NATIVE_OPERATION_FLAG.store((core + 0xb8aa1a) as u64, Ordering::Release);
     if copy_current::<10>((core + 0x37f70) as u64)
@@ -537,6 +586,7 @@ mod tests {
                 &format!("windows::root_observation::native_frames::operations::tests::{name}"),
                 "--nocapture",
             ])
+            .stdout(std::process::Stdio::piped())
             .spawn()
             .unwrap();
         let d = Instant::now() + Duration::from_secs(20);
@@ -552,6 +602,12 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+        let output = p.wait_with_output().unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("running 1 test") && stdout.contains(name),
+            "owned child did not execute the selected test: {stdout}"
+        );
         false
     }
     #[test]
@@ -618,6 +674,202 @@ mod tests {
         finish(&mut r, false);
     }
     #[test]
+    fn history_clear_keeps_its_outer_frame_and_retires_only_history_nodes() {
+        if !child("history_clear_keeps_its_outer_frame_and_retires_only_history_nodes") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let f = FRAMES.get().unwrap();
+        let mut enqueue = saved(40, 0);
+        begin(&mut enqueue);
+        allocation(0x3743a, 100, 0);
+        allocation(0x374ce, 200, 0);
+        finish(&mut enqueue, false);
+        let mut clear = saved(49, 0);
+        begin(&mut clear);
+        // 3699F frees payload storage. It must not settle the node's receipt.
+        retire(0x3699f, 300);
+        assert!(f.contains_task(200));
+        let mut node = saved(45, 0x369b4);
+        node.gpr[1] = 200;
+        begin(&mut node);
+        assert_eq!(node.invocation.cookie, COOKIE);
+        assert!(!f.contains_task(200));
+        assert_eq!(
+            f.seal_and_wait(Instant::now()),
+            Err(crate::native_flight::Error::Reentrant)
+        );
+        finish(&mut node, false);
+        // The original clear still has to update the native sentinel links.
+        assert_eq!(
+            f.seal_and_wait(Instant::now()),
+            Err(crate::native_flight::Error::Reentrant)
+        );
+        finish(&mut clear, false);
+        assert!(f.contains_task(100), "the first queue is independent");
+        retire(0x373a2, 100);
+        f.seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        assert!(STACK.with(|s| s.borrow().is_empty()));
+        assert!(!FAILED.load(Ordering::Acquire));
+    }
+    static HISTORY_FREES: AtomicU64 = AtomicU64::new(0);
+    unsafe extern "system" fn history_original_free(node: u64) -> u64 {
+        let frames = FRAMES.get().unwrap();
+        assert!(
+            !frames.contains_task(node),
+            "opaque node lookup retires before native free"
+        );
+        assert_eq!(
+            frames.pending_on_set(u64::MAX),
+            Ok(1),
+            "free return still owns the reservation"
+        );
+        assert!(STACK.with(|s| s.borrow().iter().map(|v| v.0).collect::<Vec<_>>() == [49, 45]));
+        assert_eq!(
+            frames.seal_and_wait(Instant::now()),
+            Err(crate::native_flight::Error::Reentrant)
+        );
+        HISTORY_FREES.fetch_add(1, Ordering::Relaxed);
+        unsafe {
+            SetLastError(0x36950);
+        }
+        0x369b4
+    }
+    #[test]
+    fn pinned_history_clear_gateway_frees_once_and_rejects_a_changed_complete_body() {
+        if !child("pinned_history_clear_gateway_frees_once_and_rejects_a_changed_complete_body") {
+            return;
+        }
+        if !supports_atomic_promotion_fetch() {
+            assert!(HOOKS.lock().unwrap().is_empty());
+            println!("NOT EXECUTED: history-clear entry exchange requires supported atomic instruction fetch");
+            return;
+        }
+        use windows_sys::Win32::System::Diagnostics::Debug::{
+            RtlAddFunctionTable, RtlDeleteFunctionTable, IMAGE_RUNTIME_FUNCTION_ENTRY,
+        };
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let size = 0xb8b000;
+        let base =
+            unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
+                as usize;
+        assert_ne!(base, 0);
+        let decode = |hex: &str| -> Vec<u8> {
+            (0..hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+                .collect()
+        };
+        for (rva, bytes, _, _) in sites() {
+            unsafe {
+                ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, 8);
+            }
+        }
+        let frame = &history_clear::FRAMES[0];
+        let body = decode(frame.specimen);
+        unsafe {
+            ptr::copy_nonoverlapping(
+                body.as_ptr(),
+                (base + frame.begin as usize) as *mut u8,
+                body.len(),
+            );
+            ptr::copy_nonoverlapping([0xb5u8, 0].as_ptr(), (base + 0x37f78) as *mut u8, 2);
+            ptr::copy_nonoverlapping([0x48u8, 0xb8].as_ptr(), (base + 0x9908f0) as *mut u8, 2);
+            ptr::copy_nonoverlapping(
+                (history_original_free as *const () as u64)
+                    .to_le_bytes()
+                    .as_ptr(),
+                (base + 0x9908f2) as *mut u8,
+                8,
+            );
+            ptr::copy_nonoverlapping([0xffu8, 0xe0].as_ptr(), (base + 0x9908fa) as *mut u8, 2);
+        }
+        let mut table: Vec<[u32; 3]> = frame
+            .parts
+            .iter()
+            .map(|p| [p.begin, p.end, p.unwind])
+            .collect();
+        assert_eq!(std::mem::size_of::<IMAGE_RUNTIME_FUNCTION_ENTRY>(), 12);
+        for part in frame.parts {
+            let bytes = decode(part.hex);
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    bytes.as_ptr(),
+                    (base + part.unwind as usize) as *mut u8,
+                    bytes.len(),
+                );
+            }
+        }
+        assert!(unsafe {
+            RtlAddFunctionTable(table.as_mut_ptr().cast(), table.len() as u32, base as u64)
+        });
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, 0xa00000, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        // The actual production verifier checks the complete body and all
+        // chained unwind partitions before publishing the ten owned entries.
+        unsafe { install(base) }.unwrap();
+        assert_eq!(HOOKS.lock().unwrap().len(), sites().len());
+        let sentinel = (base + 0xb8aa00) as u64;
+        let mut node = [sentinel, sentinel, 0, 0, 0, 0, 0];
+        let pointer = node.as_mut_ptr() as u64;
+        unsafe {
+            *(sentinel as *mut u64) = pointer;
+            *((sentinel + 8) as *mut u64) = pointer;
+        }
+        let mut enqueue: Saved = unsafe { std::mem::zeroed() };
+        enqueue.invocation.kind = 40;
+        begin(&mut enqueue);
+        let mut allocation: Saved = unsafe { std::mem::zeroed() };
+        allocation.invocation.kind = 41;
+        allocation.invocation.caller = base as u64 + 0x374ce;
+        begin(&mut allocation);
+        allocation.gpr[4] = pointer;
+        finish(&mut allocation, false);
+        finish(&mut enqueue, false);
+        let clear: unsafe extern "system" fn() -> u64 =
+            unsafe { std::mem::transmute(base + 0x36950) };
+        unsafe {
+            SetLastError(0x1234);
+        }
+        assert_eq!(unsafe { clear() }, 0x369b4);
+        assert_eq!(unsafe { GetLastError() }, 0x36950);
+        assert_eq!(HISTORY_FREES.load(Ordering::Relaxed), 1);
+        assert_eq!(unsafe { *(sentinel as *const u64) }, sentinel);
+        assert_eq!(unsafe { *((sentinel + 8) as *const u64) }, sentinel);
+        assert_eq!(FRAMES.get().unwrap().pending_on_set(u64::MAX), Ok(0));
+        FRAMES
+            .get()
+            .unwrap()
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        unsafe { restore() }.unwrap();
+        let mut protection = 0;
+        let last = (base + frame.end as usize - 1) as *mut u8;
+        assert_ne!(
+            unsafe { VirtualProtect(last.cast(), 1, PAGE_READWRITE, &mut protection) },
+            0
+        );
+        unsafe {
+            *last ^= 1;
+        }
+        assert_ne!(
+            unsafe { VirtualProtect(last.cast(), 1, protection, &mut old) },
+            0
+        );
+        assert_eq!(
+            unsafe { install(base) },
+            Err("scheduler whole code differs")
+        );
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert!(unsafe { RtlDeleteFunctionTable(table.as_ptr().cast()) });
+        assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+    }
+    #[test]
     fn second_node_replay_copy_and_original_free_have_distinct_lifetimes() {
         if !child("second_node_replay_copy_and_original_free_have_distinct_lifetimes") {
             return;
@@ -682,8 +934,8 @@ mod tests {
     }
 
     #[test]
-    fn nine_original_entry_patches_restore_without_losing_relocated_operands() {
-        if !child("nine_original_entry_patches_restore_without_losing_relocated_operands") {
+    fn ten_original_entry_patches_restore_without_losing_relocated_operands() {
+        if !child("ten_original_entry_patches_restore_without_losing_relocated_operands") {
             return;
         }
         if !supports_atomic_promotion_fetch() {
@@ -708,8 +960,8 @@ mod tests {
             unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
             0
         );
-        unsafe { install(base) }.unwrap();
-        assert_eq!(HOOKS.lock().unwrap().len(), 9);
+        unsafe { install_at(base) }.unwrap();
+        assert_eq!(HOOKS.lock().unwrap().len(), 10);
         for (i, (rva, _, n, _)) in sites().into_iter().enumerate() {
             assert_eq!(copy_current::<1>((base + rva) as u64), Some([0xe9]));
             assert_eq!(

@@ -2,19 +2,19 @@
 //! Unknown native work stays transparent. These frames do not seal producers.
 use super::*;
 use std::cell::RefCell;
-struct Fragment {
-    begin: u32,
-    end: u32,
-    unwind: u32,
-    hex: &'static str,
+pub(super) struct Fragment {
+    pub(super) begin: u32,
+    pub(super) end: u32,
+    pub(super) unwind: u32,
+    pub(super) hex: &'static str,
 }
-struct FixedFrame {
-    begin: u32,
-    end: u32,
-    sha: &'static str,
+pub(super) struct FixedFrame {
+    pub(super) begin: u32,
+    pub(super) end: u32,
+    pub(super) sha: &'static str,
     #[cfg(test)]
-    specimen: &'static str,
-    parts: &'static [Fragment],
+    pub(super) specimen: &'static str,
+    pub(super) parts: &'static [Fragment],
 }
 #[path = "native_scheduler_audit.rs"]
 mod audit;
@@ -513,7 +513,10 @@ unsafe fn verify(module: usize) -> Result<(), &'static str> {
     // as live original bytes after their single owner published its gateway.
     unsafe { verify_frames(module, &fixed::FRAMES[..SITES.len()]) }
 }
-unsafe fn verify_frames(module: usize, frames: &[FixedFrame]) -> Result<(), &'static str> {
+pub(super) unsafe fn verify_frames(
+    module: usize,
+    frames: &[FixedFrame],
+) -> Result<(), &'static str> {
     for f in frames {
         let len = (f.end - f.begin) as usize;
         if !committed_range(module + f.begin as usize, len, 1, false) {
