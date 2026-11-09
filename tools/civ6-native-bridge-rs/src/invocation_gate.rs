@@ -71,6 +71,10 @@ impl InvocationGate {
     pub(crate) fn pending_for_test(&self) -> u32 {
         (self.0.load(Ordering::Acquire) & COUNT) as u32
     }
+    #[cfg(test)]
+    pub(crate) fn closed_for_test(&self) -> bool {
+        self.0.load(Ordering::Acquire) & CLOSED != 0
+    }
     pub fn current(&self, generation: u32) -> bool {
         let state = self.0.load(Ordering::Acquire);
         state & CLOSED == 0 && (state >> 32) as u32 == generation

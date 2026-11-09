@@ -100,7 +100,7 @@ pub(super) fn fixture_invocation_runtime() {
 }
 #[cfg(test)]
 pub(super) fn fixture_invocation_closed() -> bool {
-    !INVOCATIONS.current(1)
+    INVOCATIONS.closed_for_test()
 }
 #[cfg(test)]
 pub(super) fn fixture_product_inactive() -> bool {
@@ -666,6 +666,18 @@ pub extern "system" fn BridgeRuntimePrepareHost(input: *mut c_void) -> u32 {
 fn guard_host_prepare(
     prepare: impl FnOnce() -> Result<(), &'static str> + std::panic::UnwindSafe,
 ) -> u32 {
+    guard_host_prepare_for_cpu(supports_atomic_promotion_fetch(), prepare)
+}
+
+fn guard_host_prepare_for_cpu(
+    cpu_gate: bool,
+    prepare: impl FnOnce() -> Result<(), &'static str> + std::panic::UnwindSafe,
+) -> u32 {
+    // Host gateways use the same asynchronous eight-byte publication contract
+    // as Core installation. Refuse before the first Host entry can change.
+    if !cpu_gate {
+        return BridgeStatus::InvalidInput as u32;
+    }
     if root_observation::native_frames::host_prepared() {
         // A repeated request does not own the earlier successful transaction.
         return BridgeStatus::HookFailure as u32;
@@ -924,6 +936,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unsupported_host_cpu_never_enters_native_preparation() {
+        let calls = std::cell::Cell::new(0);
+        let before = root_observation::native_frames::host_prepared();
+        let result = guard_host_prepare_for_cpu(
+            false,
+            std::panic::AssertUnwindSafe(|| {
+                calls.set(calls.get() + 1);
+                Ok(())
+            }),
+        );
+        assert_eq!(result, BridgeStatus::InvalidInput as u32);
+        assert_eq!(
+            calls.get(),
+            0,
+            "unsupported CPU entered the native installer"
+        );
+        assert_eq!(root_observation::native_frames::host_prepared(), before);
+        let result = guard_host_prepare_for_cpu(
+            true,
+            std::panic::AssertUnwindSafe(|| {
+                calls.set(calls.get() + 1);
+                Ok(())
+            }),
+        );
+        assert_eq!(result, BridgeStatus::Ok as u32);
+        assert_eq!(
+            calls.get(),
+            1,
+            "supported CPU did not reach native preparation"
+        );
+    }
+
+    #[test]
     fn install_panic_keeps_recovery_lock_usable_and_rebuild_closed() {
         const CHILD: &str = "JAC_RUNTIME_INSTALL_PANIC_CHILD";
         if std::env::var_os(CHILD).is_none() {
@@ -1172,20 +1217,25 @@ mod tests {
             unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
             0
         );
+        // This fixture exercises owned byte publication/rollback only; it never executes the patched native entries.
+        // Its supplied supported-CPU fact does not assert that this runner supports native instruction fetching.
         let _lock = INSTALL_LOCK.lock().unwrap();
         let published = std::cell::Cell::new(None);
         assert_eq!(
-            guard_host_prepare(std::panic::AssertUnwindSafe(|| {
-                let result = unsafe { native::fixture_host_jobs(base) };
-                published.set(Some((
-                    result,
-                    sites
-                        .iter()
-                        .take(3)
-                        .all(|(rva, _, _)| (unsafe { *((base + rva) as *const u8) }) == 0xe9),
-                )));
-                result
-            })),
+            guard_host_prepare_for_cpu(
+                true,
+                std::panic::AssertUnwindSafe(|| {
+                    let result = unsafe { native::fixture_host_jobs(base) };
+                    published.set(Some((
+                        result,
+                        sites
+                            .iter()
+                            .take(3)
+                            .all(|(rva, _, _)| (unsafe { *((base + rva) as *const u8) }) == 0xe9),
+                    )));
+                    result
+                })
+            ),
             BridgeStatus::Critical as u32
         );
         assert!(
@@ -1205,7 +1255,7 @@ mod tests {
         }
         assert_ne!(unsafe { VirtualProtect(bad.cast(), 8, old, &mut old) }, 0);
         assert_eq!(
-            guard_host_prepare(|| unsafe { native::fixture_host_jobs(base) }),
+            guard_host_prepare_for_cpu(true, || unsafe { native::fixture_host_jobs(base) }),
             BridgeStatus::Ok as u32
         );
         unsafe { native::restore() }.unwrap();
@@ -1215,16 +1265,19 @@ mod tests {
         let retained = (base + sites[0].0) as *mut u8;
         let panic_reached = AtomicBool::new(false);
         assert_eq!(
-            guard_host_prepare(std::panic::AssertUnwindSafe(|| {
-                unsafe { native::fixture_host_jobs(base) }?;
-                unsafe {
-                    VirtualProtect(retained.cast(), 8, PAGE_READWRITE, &mut old);
-                    ptr::write(retained.cast::<[u8; 8]>(), [0xcc; 8]);
-                    VirtualProtect(retained.cast(), 8, old, &mut old);
-                }
-                panic_reached.store(true, Ordering::Release);
-                panic!("owned Host preparation panic")
-            })),
+            guard_host_prepare_for_cpu(
+                true,
+                std::panic::AssertUnwindSafe(|| {
+                    unsafe { native::fixture_host_jobs(base) }?;
+                    unsafe {
+                        VirtualProtect(retained.cast(), 8, PAGE_READWRITE, &mut old);
+                        ptr::write(retained.cast::<[u8; 8]>(), [0xcc; 8]);
+                        VirtualProtect(retained.cast(), 8, old, &mut old);
+                    }
+                    panic_reached.store(true, Ordering::Release);
+                    panic!("owned Host preparation panic")
+                })
+            ),
             BridgeStatus::Critical as u32
         );
         assert!(panic_reached.load(Ordering::Acquire));
@@ -1233,7 +1286,7 @@ mod tests {
             assert_eq!(unsafe { ptr::read((base + rva) as *const [u8; 8]) }, *bytes);
         }
         assert_eq!(
-            guard_host_prepare(|| unsafe { native::fixture_host_jobs(base) }),
+            guard_host_prepare_for_cpu(true, || unsafe { native::fixture_host_jobs(base) }),
             BridgeStatus::Critical as u32
         );
         assert_ne!(
@@ -1249,7 +1302,7 @@ mod tests {
         );
         unsafe { native::restore() }.unwrap();
         assert_eq!(
-            guard_host_prepare(|| unsafe { native::fixture_host_jobs(base) }),
+            guard_host_prepare_for_cpu(true, || unsafe { native::fixture_host_jobs(base) }),
             BridgeStatus::Ok as u32
         );
         unsafe { native::restore() }.unwrap();

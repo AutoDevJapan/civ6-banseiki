@@ -1180,6 +1180,10 @@ mod tests {
         runtime::fixture_invocation_runtime();
         rejected("product permission is still open");
         assert!(!runtime::fixture_product_inactive());
+        assert!(
+            !runtime::fixture_invocation_closed(),
+            "the second invocation generation is open"
+        );
         assert_eq!(
             runtime::BridgeRuntimeClose(null_mut()),
             BridgeStatus::Ok as u32
