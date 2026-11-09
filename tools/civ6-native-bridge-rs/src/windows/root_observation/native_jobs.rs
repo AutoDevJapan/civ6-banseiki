@@ -66,10 +66,10 @@ extern "system" fn begin(raw: *mut Saved) {
                 (f.execute(t, p).unwrap_or_else(|_| fault()), t)
             }
             22 => {
-                if !f.contains_task(raw.gpr[0]) {
+                let Some(id) = f.retire_task(raw.gpr[0]).unwrap_or_else(|_| fault()) else {
                     return;
-                }
-                (0, raw.gpr[0])
+                };
+                (id, raw.gpr[0])
             }
             23 => {
                 if raw.invocation.caller != EXE.load(Ordering::Acquire) + 0x985f9e {
@@ -122,7 +122,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             .completed(raw.invocation.token)
             .unwrap_or_else(|_| fault()),
         22 => f
-            .cancelled(raw.invocation.world)
+            .task_retired(raw.invocation.token)
             .unwrap_or_else(|_| fault()),
         23 => f
             .bind_before_publication(raw.invocation.token, raw.gpr[4])
@@ -598,6 +598,31 @@ mod tests {
         f.pushed(id, 200).unwrap();
         assert_eq!(f.pending_on_set(10), Ok(0));
         assert_eq!(STACK.with(|s| s.borrow_mut().pop()), Some((20, id, 0)));
+    }
+
+    #[test]
+    fn destructor_callback_keeps_original_id_when_native_free_reuses_t() {
+        if !child("destructor_callback_keeps_original_id_when_native_free_reuses_t") {
+            return;
+        }
+        let f = FRAMES.get_or_init(NativeFrames::new);
+        let old = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(old, 123).unwrap();
+        f.pushed(old, 123).unwrap();
+        let mut destroy: Saved = unsafe { std::mem::zeroed() };
+        destroy.invocation.kind = 22;
+        destroy.gpr[0] = 123;
+        begin(&mut destroy);
+        assert_eq!(destroy.invocation.token, old);
+        let new = f.issue_on_set(200, 10).unwrap();
+        f.bind_before_publication(new, 123).unwrap();
+        f.pushed(new, 123).unwrap();
+        finish(&mut destroy, false);
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        assert_eq!(f.execute(123, 200), Ok(new));
+        f.completed(new).unwrap();
+        f.seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
     }
 
     global_asm!(

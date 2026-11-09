@@ -23,6 +23,7 @@ struct Job {
     generation: u64,
     payload: u64,
     task: u64,
+    bound_task: u64,
     push_returned: bool,
     execution: u8,
     set: u64,
@@ -256,6 +257,7 @@ impl NativeFrames {
                 generation,
                 payload,
                 task: 0,
+                bound_task: 0,
                 push_returned: false,
                 execution: 0,
                 set,
@@ -283,7 +285,7 @@ impl NativeFrames {
             j.generation == generation
                 && !j.push_returned
                 && task != 0
-                && (j.task == 0 || j.task == task)
+                && (j.bound_task == 0 || j.bound_task == task)
         });
         if !valid {
             s.unresolved = true;
@@ -291,9 +293,14 @@ impl NativeFrames {
             return Err(Error::Unresolved);
         }
         let j = s.jobs.get_mut(&id).unwrap();
-        j.task = task;
+        j.bound_task = task;
+        j.task = if j.retiring || j.execution == 3 {
+            0
+        } else {
+            task
+        };
         j.push_returned = true;
-        if (j.execution == 2 && j.set != u64::MAX) || (j.execution == 3 && !j.retiring) {
+        if !j.retiring && ((j.execution == 2 && j.set != u64::MAX) || j.execution == 3) {
             s.jobs.remove(&id);
         }
         self.changed.notify_all();
@@ -304,15 +311,16 @@ impl NativeFrames {
     pub fn bind_before_publication(&self, id: u64, task: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let valid = task != 0
-            && s.jobs
-                .get(&id)
-                .is_some_and(|j| j.generation == s.generation && j.task == 0 && !j.push_returned)
+            && s.jobs.get(&id).is_some_and(|j| {
+                j.generation == s.generation && j.bound_task == 0 && !j.retiring && !j.push_returned
+            })
             && !s.jobs.values().any(|j| j.task == task);
         if !valid {
             s.unresolved = true;
             return Err(Error::Unresolved);
         }
         s.jobs.get_mut(&id).unwrap().task = task;
+        s.jobs.get_mut(&id).unwrap().bound_task = task;
         Ok(())
     }
     pub fn reserve_queue(&self) -> Result<u64, Error> {
@@ -330,6 +338,7 @@ impl NativeFrames {
                 generation,
                 payload: 0,
                 task: 0,
+                bound_task: 0,
                 push_returned: false,
                 execution: 0,
                 set: u64::MAX,
@@ -406,6 +415,7 @@ impl NativeFrames {
                 generation,
                 payload: 0,
                 task,
+                bound_task: task,
                 push_returned: false,
                 execution: 0,
                 set: u64::MAX,
@@ -513,6 +523,7 @@ impl NativeFrames {
                 && task != 0
                 && j.set == u64::MAX
                 && j.execution == 0
+                && !j.retiring
                 && j.generation == s.generation)
                 .then_some(*id)
         });
@@ -533,7 +544,8 @@ impl NativeFrames {
             (j.payload == payload
                 && j.generation == s.generation
                 && j.execution == 0
-                && (j.task == 0 || j.task == task)
+                && !j.retiring
+                && (j.bound_task == 0 || j.bound_task == task)
                 && task != 0)
                 .then_some(*id)
         });
@@ -543,6 +555,7 @@ impl NativeFrames {
         };
         let j = s.jobs.get_mut(&id).unwrap();
         j.task = task;
+        j.bound_task = task;
         j.execution = 1;
         j.executing_thread = Some(thread::current().id());
         Ok(id)
@@ -588,6 +601,47 @@ impl NativeFrames {
             }
             self.changed.notify_all();
         }
+        Ok(())
+    }
+
+    /// Reserve the exact original destructor invocation before it can free T.
+    /// An address reused while its normal return is pending is a new key.
+    pub fn retire_task(&self, task: u64) -> Result<Option<u64>, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        let id = s
+            .jobs
+            .iter()
+            .find_map(|(id, j)| (j.task == task && task != 0 && j.set != u64::MAX).then_some(*id));
+        let Some(id) = id else {
+            return Ok(None);
+        };
+        let job = s.jobs.get_mut(&id).unwrap();
+        if !matches!(job.execution, 0 | 2) || job.retiring {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
+        job.retiring = true;
+        job.task = 0;
+        Ok(Some(id))
+    }
+    pub fn task_retired(&self, id: u64) -> Result<(), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.jobs.get(&id).is_none_or(|j| {
+            j.generation != s.generation
+                || j.set == u64::MAX
+                || !j.retiring
+                || !matches!(j.execution, 0 | 2)
+        }) {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
+        let j = s.jobs.get_mut(&id).unwrap();
+        j.retiring = false;
+        j.execution = 3;
+        if j.push_returned {
+            s.jobs.remove(&id);
+        }
+        self.changed.notify_all();
         Ok(())
     }
 
@@ -848,6 +902,42 @@ mod tests {
         f.seal_and_wait(deadline()).unwrap();
         f.reopen().unwrap();
         assert_eq!(f.consumer_enter(123), Ok(None));
+    }
+
+    #[test]
+    fn deleting_t_cannot_cancel_a_new_allocation_at_the_same_address() {
+        let f = NativeFrames::new();
+        let old = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(old, 123).unwrap();
+        f.pushed(old, 123).unwrap();
+        assert_eq!(f.retire_task(123), Ok(Some(old)));
+        let new = f.issue_on_set(200, 10).unwrap();
+        f.bind_before_publication(new, 123).unwrap();
+        f.pushed(new, 123).unwrap();
+        f.task_retired(old).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        assert_eq!(f.execute(123, 200), Ok(new));
+        f.completed(new).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+    }
+    #[test]
+    fn completed_t_destructor_before_push_return_keeps_old_id_during_reuse() {
+        let f = NativeFrames::new();
+        let old = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(old, 123).unwrap();
+        assert_eq!(f.execute(123, 100), Ok(old));
+        f.completed(old).unwrap();
+        assert_eq!(f.retire_task(123), Ok(Some(old)));
+        let new = f.issue_on_set(200, 10).unwrap();
+        f.bind_before_publication(new, 123).unwrap();
+        f.pushed(new, 123).unwrap();
+        f.pushed(old, 123).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(2));
+        f.task_retired(old).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        assert_eq!(f.execute(123, 200), Ok(new));
+        f.completed(new).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
     }
 
     #[test]
