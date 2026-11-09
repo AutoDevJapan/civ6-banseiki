@@ -445,6 +445,26 @@ impl Ledger {
         self.views.get_mut(&invocation.0).unwrap().stream_read = true;
         Ok(())
     }
+    pub fn input_read(
+        &mut self,
+        invocation: Invocation,
+        kind: u32,
+        pointer: u64,
+    ) -> Result<(), Error> {
+        let request = self.request(invocation)?;
+        let load = self.loads.get(&request.0).ok_or(Error::Unknown)?;
+        let Some(path) = &load.path else {
+            return self.stream_read(invocation, pointer);
+        };
+        if kind == 4 || kind != u32::from_le_bytes(path.options[8..12].try_into().unwrap()) {
+            return Err(Error::Stale);
+        }
+        // 16D280 also borrows native file inputs. No file pointer becomes a
+        // copied-stream incarnation or a Session authority. A missing input is
+        // the original reader's ordinary AL5 branch, not a completed read.
+        self.views.get_mut(&invocation.0).unwrap().stream_read |= pointer != 0;
+        Ok(())
+    }
     pub fn unresolved(&mut self) {
         self.unresolved = true;
     }
@@ -523,6 +543,12 @@ mod tests {
         l.initialized(v).unwrap();
         assert_eq!(l.world(v, 2, 1), Ok(r));
         assert_eq!(l.stream_read(v, 10), Err(Error::Stale));
+        assert_eq!(l.input_read(v, 4, 10), Err(Error::Stale));
+        assert_eq!(l.input_read(v, 1, 10), Err(Error::Stale));
+        l.input_read(v, 0, 0).unwrap();
+        assert!(!l.views.get(&v.0).unwrap().stream_read);
+        l.input_read(v, 0, 10).unwrap();
+        assert!(l.views.get(&v.0).unwrap().stream_read);
         l.worker_returned(v).unwrap();
     }
     #[test]

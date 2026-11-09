@@ -703,14 +703,14 @@ extern "system" fn begin(raw: *mut Saved) {
             }
             88 => {
                 if let Some(invocation) = current_worker() {
-                    let stream = if raw.gpr[1] == 0 {
-                        value(exe(0x22d8d18))
+                    let (kind, input) = if raw.gpr[1] == 0 {
+                        (dword(exe(0x22d8d20)), value(exe(0x22d8d18)))
                     } else {
-                        raw.gpr[1]
+                        (raw.gpr[0] as u32, raw.gpr[1])
                     };
                     state()
                         .ledger
-                        .stream_read(invocation, stream)
+                        .input_read(invocation, kind, input)
                         .unwrap_or_else(|_| fault());
                     c.invocation = Some(invocation);
                 }

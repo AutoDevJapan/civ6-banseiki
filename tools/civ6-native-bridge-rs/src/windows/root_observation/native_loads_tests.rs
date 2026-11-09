@@ -71,6 +71,15 @@ extern "system" fn flow_worker_body() {
         game: 20,
         world: 30,
     });
+    if FLOW_PATH.load(Ordering::Acquire) {
+        // The pinned 85857 caller enters the shared input reader with both
+        // arguments zero. For pathname loads its global input is a native file,
+        // so it cannot satisfy a copied snapshot-stream incarnation.
+        let mut reader: Saved = unsafe { std::mem::zeroed() };
+        reader.invocation.kind = 88;
+        begin(&mut reader);
+        finish(&mut reader, false);
+    }
     assert_eq!(
         FRAMES
             .get()
