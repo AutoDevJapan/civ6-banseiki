@@ -27,7 +27,7 @@ Coreの元Context factory `58FB40`、World factory `7504C0`の正常returnから
 
 ## 呼出しと非同期仕事の寿命
 
-Coreの同期入口 `35F70`、`34840`、`4AFC0`、`36180`、`39920`、`4182B0`を、元の正常returnまたはterminal SEHまで保持します。inner bridge呼出しが0でも外側frameが残れば排出成功にしません。
+Coreの同期入口 `35F70`、`34840`、`4AFC0`、`36180`、`39920`、`4182B0`に加え、その外側の `35800`、`383E0`、`39650`、`413B70`、`41A400`を、元の正常returnまたはterminal SEHまで保持します。追加5入口は完全な本体と全11unwind区間を固定し、入口公開より前に照合します。inner bridge呼出しや内側のnative frameが0でも、外側frameが残れば排出成功にしません。全native入口の網羅を意味するものではありません。
 
 HostのPush、allocator正常return、元T execute、元destructorを区別し、T/Pの公開前から予約します。元Tの実行がPushのreturnより早くても、発行元の寿命を残します。AddJob `9858B0`、Push `985F40`、再発行 `986010`、公開 `E3E8C0`、typed dispatcher `E42470/E427F0`も完全な呼出しを保持します。DestroyJobSetやFreeJobListのreturnだけを、全仕事の取消やproducer停止にしません。
 

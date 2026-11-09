@@ -49,6 +49,8 @@ mod jobs;
 mod loads;
 #[path = "native_operations.rs"]
 mod operations;
+#[path = "native_outer_fixed.rs"]
+mod outer_fixed;
 #[path = "native_scheduler.rs"]
 mod scheduler;
 #[path = "native_sessions.rs"]
@@ -57,7 +59,7 @@ pub(crate) mod sessions;
 mod wire;
 #[path = "native_worlds.rs"]
 mod worlds;
-const SITES: [(usize, &[u8], usize); 6] = [
+const SITES: [(usize, &[u8], usize); 11] = [
     (
         0x35f70,
         &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b],
@@ -90,9 +92,22 @@ const SITES: [(usize, &[u8], usize); 6] = [
         &[0x40, 0x53, 0x57, 0x48, 0x81, 0xec, 0xd8, 0, 0, 0],
         10,
     ),
+    (0x35800, &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83], 5),
+    (
+        0x383e0,
+        &[0x4c, 0x8b, 0xdc, 0x55, 0x57, 0x49, 0x8d, 0xab],
+        5,
+    ),
+    (
+        0x39650,
+        &[0x40, 0x55, 0x48, 0x83, 0xec, 0x30, 0x48, 0x8b],
+        6,
+    ),
+    (0x413b70, &[0x48, 0x8b, 0xc4, 0x48, 0x89, 0x48, 8, 0x55], 8),
+    (0x41a400, &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83], 5),
 ];
 #[unsafe(no_mangle)]
-static NATIVE_FRAME_CONTINUE: [AtomicU64; 6] = [const { AtomicU64::new(0) }; 6];
+static NATIVE_FRAME_CONTINUE: [AtomicU64; 11] = [const { AtomicU64::new(0) }; 11];
 
 #[repr(C)]
 pub struct FrameTrace([AtomicU64; 16]);
@@ -319,7 +334,84 @@ unsafe extern "system" {
     fn native_frame_loop_gateway();
     fn native_frame_repeat_gateway();
     fn native_frame_dispatch_owner_gateway();
+    fn native_frame_35800_original();
+    fn native_frame_383e0_original();
+    fn native_frame_39650_original();
+    fn native_frame_413b70_original();
+    fn native_frame_41a400_original();
+    fn native_frame_35800_gateway();
+    fn native_frame_383e0_gateway();
+    fn native_frame_39650_gateway();
+    fn native_frame_413b70_gateway();
+    fn native_frame_41a400_gateway();
 }
+
+macro_rules! outer_home_original {
+    ($name:literal,$slot:literal) => {
+        global_asm!(concat!(
+            ".globl ",
+            $name,
+            "\n.seh_proc ",
+            $name,
+            "\n",
+            $name,
+            ":\n",
+            "mov [rsp+8],rbx\n.seh_savereg rbx,8\n.seh_endprologue\n",
+            "mov [rsp+0x10],rax\nmov rax,[rip+NATIVE_FRAME_CONTINUE+",
+            $slot,
+            "]\n",
+            "mov [rsp+0x18],rax\nmov rax,[rsp+0x10]\njmp qword ptr [rsp+0x18]\n.seh_endproc\n"
+        ));
+    };
+}
+outer_home_original!("native_frame_35800_original", "48");
+outer_home_original!("native_frame_41a400_original", "80");
+global_asm!(
+    ".globl native_frame_383e0_original",
+    ".seh_proc native_frame_383e0_original",
+    "native_frame_383e0_original:",
+    "mov r11,rsp",
+    "push rbp",
+    ".seh_pushreg rbp",
+    "push rdi",
+    ".seh_pushreg rdi",
+    ".seh_endprologue",
+    "mov [rsp+0x28],rax",
+    "mov rax,[rip+NATIVE_FRAME_CONTINUE+56]",
+    "mov [rsp+0x30],rax",
+    "mov rax,[rsp+0x28]",
+    "jmp qword ptr [rsp+0x30]",
+    ".seh_endproc",
+    ".globl native_frame_39650_original",
+    ".seh_proc native_frame_39650_original",
+    "native_frame_39650_original:",
+    ".byte 0x40,0x55",
+    ".seh_pushreg rbp",
+    "sub rsp,0x30",
+    ".seh_stackalloc 0x30",
+    ".seh_endprologue",
+    "mov [rsp+0x20],rax",
+    "mov rax,[rip+NATIVE_FRAME_CONTINUE+64]",
+    "mov [rsp+0x28],rax",
+    "mov rax,[rsp+0x20]",
+    "jmp qword ptr [rsp+0x28]",
+    ".seh_endproc",
+    ".globl native_frame_413b70_original",
+    ".seh_proc native_frame_413b70_original",
+    "native_frame_413b70_original:",
+    "mov rax,rsp",
+    "mov [rax+8],rcx",
+    "push rbp",
+    ".seh_pushreg rbp",
+    ".seh_endprologue",
+    // Keep the native RCX home at entry RSP+8 untouched.
+    "mov [rsp+0x18],rax",
+    "mov rax,[rip+NATIVE_FRAME_CONTINUE+72]",
+    "mov [rsp+0x20],rax",
+    "mov rax,[rsp+0x18]",
+    "jmp qword ptr [rsp+0x20]",
+    ".seh_endproc",
+);
 gateway!(
     "native_frame_outer_gateway",
     "10",
@@ -368,8 +460,48 @@ gateway!(
     end,
     unwind
 );
+gateway!(
+    "native_frame_35800_gateway",
+    "16",
+    native_frame_35800_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_frame_383e0_gateway",
+    "17",
+    native_frame_383e0_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_frame_39650_gateway",
+    "18",
+    native_frame_39650_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_frame_413b70_gateway",
+    "19",
+    native_frame_413b70_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_frame_41a400_gateway",
+    "20",
+    native_frame_41a400_original,
+    begin,
+    end,
+    unwind
+);
 
-fn gateways() -> [usize; 6] {
+fn gateways() -> [usize; 11] {
     [
         native_frame_outer_gateway as *const () as usize,
         native_frame_dispatch_gateway as *const () as usize,
@@ -377,12 +509,27 @@ fn gateways() -> [usize; 6] {
         native_frame_loop_gateway as *const () as usize,
         native_frame_repeat_gateway as *const () as usize,
         native_frame_dispatch_owner_gateway as *const () as usize,
+        native_frame_35800_gateway as *const () as usize,
+        native_frame_383e0_gateway as *const () as usize,
+        native_frame_39650_gateway as *const () as usize,
+        native_frame_413b70_gateway as *const () as usize,
+        native_frame_41a400_gateway as *const () as usize,
     ]
 }
 
 /// Installation precedes factory execution. The runtime has already pinned
 /// the exact Core/module and source file hash before reaching this function.
 pub(in super::super) unsafe fn install(core: usize) -> Result<(), &'static str> {
+    unsafe {
+        scheduler::verify_frames(core, outer_fixed::FRAMES)?;
+        install_at(core)
+    }
+}
+#[cfg(test)]
+pub(super) unsafe fn fixture_install(core: usize) -> Result<(), &'static str> {
+    unsafe { install_at(core) }
+}
+unsafe fn install_at(core: usize) -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "native frame owner poisoned")?;
     if !hooks.is_empty() || FRAMES.set(NativeFrames::new()).is_err() {
         return Err("native frames already owned");
@@ -698,6 +845,13 @@ pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
 }
 
 #[cfg(test)]
+#[path = "native_outer_tests.rs"]
+mod outer_tests;
+#[cfg(test)]
+#[path = "native_primary_image.rs"]
+mod primary_image;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
@@ -737,11 +891,11 @@ mod tests {
         assert!(!owns_hook_entries(&owners, 2));
     }
     #[test]
-    fn six_real_entry_exchanges_restore_original_bytes_and_keep_frame_ownership() {
+    fn eleven_real_entry_exchanges_restore_original_bytes_and_keep_frame_ownership() {
         const ENV: &str = "CIV6_NATIVE_FRAMES_CAS_CHILD";
         if std::env::var_os(ENV).is_none() {
             let mut child=std::process::Command::new(std::env::current_exe().unwrap()).creation_flags(0x08000000)
-                .env(ENV,"1").args(["--exact","windows::root_observation::native_frames::tests::six_real_entry_exchanges_restore_original_bytes_and_keep_frame_ownership","--nocapture"])
+                .env(ENV,"1").args(["--exact","windows::root_observation::native_frames::tests::eleven_real_entry_exchanges_restore_original_bytes_and_keep_frame_ownership","--nocapture"])
                 .spawn().unwrap();
             let deadline = Instant::now() + Duration::from_secs(30);
             loop {
@@ -759,6 +913,7 @@ mod tests {
             return;
         }
         if !supports_atomic_promotion_fetch() {
+            println!("eleven native frame entries NOT EXECUTED: unsupported CPU vendor");
             return;
         }
         let base = unsafe {
@@ -780,7 +935,7 @@ mod tests {
             &[0x48, 0x81, 0xc4, 0xd8, 0, 0, 0, 0x5f, 0x5b, 0xc3],
         ];
         let mut originals = Vec::new();
-        for (i, (rva, prefix, displaced)) in SITES.into_iter().enumerate() {
+        for (i, (rva, prefix, displaced)) in SITES.into_iter().take(6).enumerate() {
             let mut bytes = prefix[..displaced].to_vec();
             if i < 2 {
                 bytes.extend([0x48, 0x8b, if i == 0 { 0xd9 } else { 0xf1 }]);
@@ -795,6 +950,7 @@ mod tests {
             }
             originals.push(bytes);
         }
+        super::outer_tests::seed_extra(base);
         let mut old = 0;
         assert_ne!(
             unsafe { VirtualProtect(base as _, 0x420000, PAGE_EXECUTE_READ, &mut old) },
@@ -804,8 +960,8 @@ mod tests {
             unsafe { FlushInstructionCache(GetCurrentProcess(), base as _, 0x420000) },
             0
         );
-        unsafe { install(base) }.unwrap();
-        assert_eq!(TRACE.0[7].load(Ordering::Acquire), 63);
+        unsafe { fixture_install(base) }.unwrap();
+        assert_eq!(TRACE.0[7].load(Ordering::Acquire), (1 << SITES.len()) - 1);
         for (i, (rva, _, _)) in SITES.into_iter().enumerate() {
             let invoke: unsafe extern "system" fn(*mut u64) -> u64 =
                 unsafe { std::mem::transmute(base + rva) };
@@ -813,11 +969,11 @@ mod tests {
             assert_eq!(unsafe { invoke(&mut n) }, 0x1122);
             assert_eq!(n, 1, "site{i}");
         }
-        assert_eq!(counts(), [6, 6, 0, 0, 0]);
+        assert_eq!(counts(), [11, 11, 0, 0, 0]);
         assert!(close(Instant::now() + Duration::from_secs(2)));
         assert!(reopen());
         unsafe { restore() }.unwrap();
-        for (i, (rva, _, _)) in SITES.into_iter().enumerate() {
+        for (i, (rva, _, _)) in SITES.into_iter().take(6).enumerate() {
             let restored = unsafe {
                 std::slice::from_raw_parts((base + rva) as *const u8, originals[i].len())
             };

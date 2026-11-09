@@ -647,7 +647,7 @@ mod tests {
             &[0x48, 0x83, 0xc4, 0x28, 0x41, 0x5e, 0x5d, 0xc3],
             &[0x48, 0x81, 0xc4, 0xd8, 0, 0, 0, 0x5f, 0x5b, 0xc3],
         ];
-        for (i, (rva, prefix, n)) in super::super::SITES.into_iter().enumerate() {
+        for (i, (rva, prefix, n)) in super::super::SITES.into_iter().take(6).enumerate() {
             let mut code = prefix[..n].to_vec();
             code.extend(extensions[i]);
             if i < 5 {
@@ -664,6 +664,7 @@ mod tests {
             code.extend(tails[i]);
             put(rva, &code);
         }
+        super::super::outer_tests::seed_extra(base);
         unsafe {
             ptr::write_bytes((base + 0x63e160) as *mut u8, 0x90, 0x200);
             ptr::write_bytes((base + 0x4a1150) as *mut u8, 0x90, 0x80);
@@ -758,7 +759,7 @@ mod tests {
             unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
             0
         );
-        unsafe { super::super::install(base) }.unwrap();
+        unsafe { super::super::fixture_install(base) }.unwrap();
         unsafe { install(base) }.unwrap();
         if with_host {
             unsafe { consumers::fixture_install(base, base) }.unwrap();
