@@ -3,7 +3,7 @@
 pub const CAN_EVER_RVA: u64 = 0x2d_ddd0;
 pub const CAN_APPOINT_RVA: u64 = 0x2d_d820;
 pub const EXPECTED_SHA256: &str =
-    "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
+    "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
 pub const MAX_SECONDS: u64 = 300;
 pub const MAX_LIFECYCLE_SECONDS: u64 = 20;
 pub const NATIVE_TRACE_SCHEMA_VERSION: u64 = 1;

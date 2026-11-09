@@ -5,7 +5,9 @@
 //! Inner callbacks borrow that caller; they must never enter a newer world.
 //! This module does not establish native entry coverage, stop the game's
 //! producers, publish a native list, or perform its Wait. A drained accounting
-//! result is not a native shutdown certificate. No runtime enables it yet.
+//! result is not a native shutdown certificate. Runtime full-frame accounting
+//! is separate from this dispatch/publication contract.
+pub mod frames;
 use std::{
     collections::HashMap,
     marker::PhantomData,

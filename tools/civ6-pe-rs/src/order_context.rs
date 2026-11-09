@@ -137,7 +137,7 @@ pub(super) fn capture(d: &Debugger, exe: &Module, site: Site, c: &CONTEXT, old: 
     );
     json!({"sample":"callee_entry_before_original_instruction","holder":c.Rcx,
         "slot_address":c.Rcx.checked_add(0x450),"holder_vtable":qword(&d.game,c.Rcx),
-        "global_context":qword(&d.game,exe.base+0x22d60c0),
+        "global_context":qword(&d.game,exe.base+0x22d70c0),
         "old":object(&d.game,d.pid,old,core,verified),
         "incoming":if site.name=="context_replace" {object(&d.game,d.pid,c.Rdx,core,verified)}else{Value::Null},
         "same_pointer_noop":site.name=="context_replace" && old==c.Rdx,

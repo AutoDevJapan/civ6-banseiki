@@ -1,0 +1,509 @@
+//! Natural shutdown control frames. Their successful normal returns do not
+//! stand in for native producer coverage or a scheduler's full join proof.
+use super::*;
+use std::cell::RefCell;
+static CLOSING: AtomicBool = AtomicBool::new(false);
+static WAITED: AtomicBool = AtomicBool::new(false);
+static SHUTDOWN_RETURNED: AtomicBool = AtomicBool::new(false);
+static WORLD: AtomicU64 = AtomicU64::new(0);
+static CORE: AtomicU64 = AtomicU64::new(0);
+static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+#[unsafe(no_mangle)]
+static NATIVE_CONTROL_CONTINUE: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+thread_local! {static STACK:RefCell<Vec<(u64,u64,u64)>>=const {RefCell::new(Vec::new())};}
+fn fault() -> ! {
+    diagnostic(30);
+    FAILED.store(true, Ordering::Release);
+    TRACE.0[6].store(1, Ordering::Release);
+    std::process::abort()
+}
+pub(super) fn request_close() {
+    CLOSING.store(true, Ordering::Release);
+}
+pub(super) fn ready() -> bool {
+    #[cfg(test)]
+    if CORE.load(Ordering::Acquire) == 0 {
+        return true;
+    }
+    WAITED.load(Ordering::Acquire) && SHUTDOWN_RETURNED.load(Ordering::Acquire)
+}
+pub(super) fn reopened() {
+    CLOSING.store(false, Ordering::Release);
+    WAITED.store(false, Ordering::Release);
+    SHUTDOWN_RETURNED.store(false, Ordering::Release);
+    WORLD.store(0, Ordering::Release);
+}
+extern "system" fn begin(raw: *mut Saved) {
+    let error = unsafe { GetLastError() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = unsafe { &mut *raw };
+        if !CLOSING.load(Ordering::Acquire) {
+            return;
+        }
+        let core = CORE.load(Ordering::Acquire);
+        let parent = STACK.with(|s| s.borrow().last().copied());
+        match raw.invocation.kind {
+            30 => {
+                raw.invocation.world = raw.gpr[0];
+                if raw.gpr[0] == 0 {
+                    fault();
+                }
+                let old = WORLD
+                    .compare_exchange(0, raw.gpr[0], Ordering::AcqRel, Ordering::Acquire)
+                    .unwrap_or_else(|old| old);
+                if old != 0 && old != raw.gpr[0] {
+                    fault();
+                }
+            }
+            31 => {
+                let Some((30, world, _)) = parent else {
+                    return;
+                };
+                if raw.invocation.caller != core + 0x63e1d5
+                    || copy_current::<8>(world + 0x250).map(u64::from_le_bytes) != Some(raw.gpr[0])
+                {
+                    fault();
+                }
+                raw.invocation.world = world;
+                raw.invocation.manager = raw.gpr[0];
+            }
+            32 => {
+                let Some((31, world, manager)) = parent else {
+                    return;
+                };
+                if raw.invocation.caller != core + 0x4a1196 || raw.gpr[0] != manager + 0x400 {
+                    fault();
+                }
+                raw.invocation.world = world;
+                raw.invocation.manager = manager;
+            }
+            _ => fault(),
+        }
+        raw.invocation.cookie = COOKIE;
+        STACK.with(|s| {
+            s.borrow_mut().push((
+                raw.invocation.kind,
+                raw.invocation.world,
+                raw.invocation.manager,
+            ))
+        });
+    }))
+    .is_err()
+    {
+        fault();
+    }
+    unsafe { SetLastError(error) };
+}
+fn finish(raw: &mut Saved, exceptional: bool) {
+    if raw.invocation.cookie != COOKIE {
+        return;
+    }
+    raw.invocation.cookie = 0;
+    let expected = (
+        raw.invocation.kind,
+        raw.invocation.world,
+        raw.invocation.manager,
+    );
+    if STACK.with(|s| s.borrow_mut().pop()) != Some(expected) {
+        fault();
+    }
+    if exceptional {
+        if let Some(f) = FRAMES.get() {
+            f.mark_unresolved();
+        }
+        FAILED.store(true, Ordering::Release);
+        TRACE.0[6].store(1, Ordering::Release);
+        WAITED.store(false, Ordering::Release);
+        SHUTDOWN_RETURNED.store(false, Ordering::Release);
+        return;
+    }
+    match raw.invocation.kind {
+        32 => {
+            // Native shutdown progressed through its own Wait. This gate is
+            // BEFORE returning to4A1196 and its subsequent cleanup calls.
+            // Jobs are settled by their original execute/destructor wrappers,
+            // never by assuming that an empty set or this return is a join.
+            if FRAMES
+                .get()
+                .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
+                || !super::close(Instant::now() + Duration::from_secs(2))
+            {
+                fault();
+            }
+            WAITED.store(true, Ordering::Release);
+        }
+        30 => {
+            if !WAITED.load(Ordering::Acquire) {
+                fault();
+            }
+            SHUTDOWN_RETURNED.store(true, Ordering::Release);
+        }
+        31 => {
+            if !WAITED.load(Ordering::Acquire) {
+                fault();
+            }
+        }
+        _ => fault(),
+    }
+}
+extern "system" fn end(raw: *mut Saved) {
+    let e = unsafe { GetLastError() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        finish(unsafe { &mut *raw }, false)
+    }))
+    .is_err()
+    {
+        fault();
+    }
+    unsafe { SetLastError(e) };
+}
+unsafe extern "system" fn unwind(
+    r: *const EXCEPTION_RECORD,
+    frame: usize,
+    _: *mut CONTEXT,
+    _: *mut c_void,
+) -> i32 {
+    let e = unsafe { GetLastError() };
+    if !r.is_null() && unsafe { (*r).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
+        finish(unsafe { &mut *((frame + 0x20) as *mut Saved) }, true);
+    }
+    unsafe { SetLastError(e) };
+    1
+}
+global_asm!(
+    ".globl native_control_world_original",
+    ".seh_proc native_control_world_original",
+    "native_control_world_original:",
+    "push rbx",
+    ".seh_pushreg rbx",
+    "sub rsp,0x20",
+    ".seh_stackalloc 0x20",
+    ".seh_endprologue",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+NATIVE_CONTROL_CONTINUE]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
+    ".globl native_control_manager_original",
+    ".seh_proc native_control_manager_original",
+    "native_control_manager_original:",
+    "mov [rsp+0x10],rbx",
+    ".seh_savereg rbx,0x10",
+    ".seh_endprologue",
+    "mov [rsp+8],rax",
+    "mov rax,[rip+NATIVE_CONTROL_CONTINUE+8]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+8]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
+    ".globl native_control_wait_original",
+    ".seh_proc native_control_wait_original",
+    "native_control_wait_original:",
+    "mov [rsp+8],rbx",
+    ".seh_savereg rbx,8",
+    ".seh_endprologue",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+NATIVE_CONTROL_CONTINUE+16]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
+);
+unsafe extern "system" {
+    fn native_control_world_original();
+    fn native_control_manager_original();
+    fn native_control_wait_original();
+    fn native_control_world_gateway();
+    fn native_control_manager_gateway();
+    fn native_control_wait_gateway();
+}
+gateway!(
+    "native_control_world_gateway",
+    "30",
+    native_control_world_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_control_manager_gateway",
+    "31",
+    native_control_manager_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_control_wait_gateway",
+    "32",
+    native_control_wait_original,
+    begin,
+    end,
+    unwind
+);
+pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
+    CORE.store(core as u64, Ordering::Release);
+    let sites = [
+        (
+            0x63e160,
+            [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9],
+            6,
+            native_control_world_gateway as *const () as usize,
+        ),
+        (
+            0x4a1150,
+            [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83],
+            5,
+            native_control_manager_gateway as *const () as usize,
+        ),
+        (
+            0x9922c0,
+            [0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83],
+            5,
+            native_control_wait_gateway as *const () as usize,
+        ),
+    ];
+    let mut owners = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
+    for (i, (rva, expected, n, gateway)) in sites.into_iter().enumerate() {
+        let entry = (core + rva) as *mut u8;
+        if copy_current::<8>(entry as u64) != Some(expected) {
+            return Err("native control entry differs");
+        }
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+            || info.Protect & 0xff != PAGE_EXECUTE_READ
+        {
+            return Err("native control protection");
+        }
+        let code = unsafe { executable_near(entry as usize, entry as usize, n) }
+            .ok_or("native control relay unavailable")?;
+        let mut unpublished = Unpublished(code);
+        unsafe {
+            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
+            ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), code.add(6), 8);
+        }
+        let mut old = 0;
+        if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
+            || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
+        {
+            return Err("native control relay publication");
+        }
+        let mut patched = expected;
+        patched[..5].copy_from_slice(
+            &rel32_jump(entry as usize, code as usize).ok_or("native control range")?,
+        );
+        patched[5..n].fill(0x90);
+        NATIVE_CONTROL_CONTINUE[i].store((core + rva + n) as u64, Ordering::Release);
+        owners.push(OwnedHook {
+            hook: Hook {
+                target: entry,
+                original: expected,
+                patched,
+                prefix: None,
+                _code: code,
+            },
+            protection: info.Protect,
+        });
+        unpublished.0 = null_mut();
+        let r = unsafe {
+            exchange_entry(
+                entry,
+                u64::from_le_bytes(expected),
+                u64::from_le_bytes(patched),
+            )
+        }?;
+        if !r.exchanged || !r.protection_restored || !r.cache_flushed {
+            return Err("critical: native control publication");
+        }
+    }
+    Ok(())
+}
+pub(super) unsafe fn restore() -> Result<(), &'static str> {
+    let mut o = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
+    o.retain(|x| {
+        let h = &x.hook;
+        let now = copy_current::<8>(h.target as u64);
+        let ok = now == Some(h.original)
+            || (now == Some(h.patched)
+                && unsafe {
+                    exchange_entry(
+                        h.target,
+                        u64::from_le_bytes(h.patched),
+                        u64::from_le_bytes(h.original),
+                    )
+                }
+                .is_ok_and(|r| r.exchanged && r.protection_restored && r.cache_flushed));
+        let mut old = 0;
+        !(ok && unsafe { VirtualProtect(h.target.cast(), 8, x.protection, &mut old) } != 0)
+    });
+    if o.is_empty() {
+        Ok(())
+    } else {
+        Err("critical: native control restoration")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+    fn child(name: &str) -> bool {
+        const ENV: &str = "CIV6_NATIVE_CONTROL_OWNED_CHILD";
+        if std::env::var_os(ENV).is_some() {
+            return true;
+        }
+        let mut p = std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args([
+                "--exact",
+                &format!("windows::root_observation::native_frames::control::tests::{name}"),
+                "--nocapture",
+            ])
+            .spawn()
+            .unwrap();
+        let d = Instant::now() + Duration::from_secs(20);
+        loop {
+            if let Some(s) = p.try_wait().unwrap() {
+                assert!(s.success());
+                break;
+            }
+            if Instant::now() >= d {
+                let _ = p.kill();
+                let _ = p.wait();
+                panic!("native control child timeout");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+    fn raw(kind: u64, input: u64, caller: u64) -> Saved {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.gpr[0] = input;
+        raw.invocation.kind = kind;
+        raw.invocation.caller = caller;
+        raw
+    }
+    #[test]
+    fn native_shutdown_progresses_after_grant_close_and_gates_before_cleanup() {
+        if !child("native_shutdown_progresses_after_grant_close_and_gates_before_cleanup") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let _install: unsafe fn(usize) -> Result<(), &'static str> = install;
+        let f = FRAMES.get().unwrap();
+        let job = f.issue(100).unwrap();
+        f.pushed(job, 200).unwrap();
+        assert!(!ready());
+        request_close(); // No blocking seal before native shutdown.
+        let mut world = vec![0u64; 0x260 / 8];
+        world[0x250 / 8] = 300;
+        let mut w = raw(30, world.as_ptr() as u64, 0);
+        begin(&mut w);
+        let mut m = raw(31, 300, 0x18063e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, 300 + 0x400, 0x1804a1196);
+        begin(&mut wait);
+        // Original natural Wait completes the already reserved native work.
+        assert_eq!(f.execute(200, 100), Ok(job));
+        f.completed(job).unwrap();
+        finish(&mut wait, false);
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(!ready());
+        finish(&mut m, false);
+        assert!(!ready());
+        finish(&mut w, false);
+        assert!(ready());
+        assert!(super::reopen());
+        assert!(!ready());
+        assert_eq!(
+            f.execute(200, 100),
+            Err(crate::native_flight::Error::Unresolved)
+        );
+    }
+    global_asm!(
+        ".p2align 4",
+        ".globl native_control_probe_world",
+        ".seh_proc native_control_probe_world",
+        "native_control_probe_world:",
+        ".byte 0x40,0x53",
+        ".seh_pushreg rbx",
+        "sub rsp,0x20",
+        ".seh_stackalloc 0x20",
+        ".seh_endprologue",
+        "inc qword ptr [rcx]",
+        "mov eax,0x1122",
+        "mov rbx,[rsp+0x20]",
+        "lea rsp,[rsp+0x28]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_control_probe_manager",
+        ".seh_proc native_control_probe_manager",
+        "native_control_probe_manager:",
+        "mov [rsp+0x10],rbx",
+        ".seh_savereg rbx,0x10",
+        ".seh_endprologue",
+        "inc qword ptr [rcx]",
+        "mov eax,0x2233",
+        "mov rbx,[rsp+0x10]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_control_probe_wait",
+        ".seh_proc native_control_probe_wait",
+        "native_control_probe_wait:",
+        "mov [rsp+8],rbx",
+        ".seh_savereg rbx,8",
+        ".seh_endprologue",
+        "inc qword ptr [rcx]",
+        "mov eax,0x3344",
+        "mov rbx,[rsp+8]",
+        "ret",
+        ".seh_endproc",
+    );
+    unsafe extern "system" {
+        fn native_control_probe_world();
+        fn native_control_probe_manager();
+        fn native_control_probe_wait();
+    }
+    #[test]
+    fn control_gateways_run_original_once_without_claiming_a_shutdown_receipt() {
+        if !child("control_gateways_run_original_once_without_claiming_a_shutdown_receipt") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let _install: unsafe fn(usize) -> Result<(), &'static str> = install;
+        for (i, (body, gateway, result)) in [
+            (
+                native_control_probe_world as *const () as u64,
+                native_control_world_gateway as *const () as usize,
+                0x1122,
+            ),
+            (
+                native_control_probe_manager as *const () as u64,
+                native_control_manager_gateway as *const () as usize,
+                0x2233,
+            ),
+            (
+                native_control_probe_wait as *const () as u64,
+                native_control_wait_gateway as *const () as usize,
+                0x3344,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            NATIVE_CONTROL_CONTINUE[i].store(body + if i == 0 { 6 } else { 5 }, Ordering::Release);
+            let invoke: unsafe extern "system" fn(*mut u64) -> u64 =
+                unsafe { std::mem::transmute(gateway) };
+            let mut n = 0;
+            assert_eq!(unsafe { invoke(&mut n) }, result);
+            assert_eq!(n, 1);
+        }
+        assert!(!WAITED.load(Ordering::Acquire));
+        assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+    }
+}

@@ -3,6 +3,8 @@
 //! No timer uninstalls it. The single finite observation may expire or stop;
 //! its allocation, gateways and authority remain resident until process exit.
 //! Close/rebuild exports are control boundaries, NOT an observed reload hook.
+//! Pinned synchronous native frames are tracked separately from bridge calls;
+//! neither count certifies pending publication or all native dispatch domains.
 use super::*;
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
@@ -659,6 +661,16 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
                 BridgeStatus::HookFailure
             } as u32;
         }
+        if unsafe { root_observation::native_frames::install(gamecore as usize) }.is_err() {
+            product_deactivate();
+            let restored = unsafe { root_observation::native_frames::restore() }.is_ok();
+            let promotion_restored = unsafe { promotion::restore() }.is_ok();
+            return if restored && promotion_restored {
+                BridgeStatus::HookFailure
+            } else {
+                BridgeStatus::Critical
+            } as u32;
+        }
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;
         config.trace_size = std::mem::size_of::<CompositeTrace>() as u32;
@@ -667,7 +679,8 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             // Storage stays alive for any already-fetched relay. No retry may
             // repoint it. guarded_install/composite restore the installed set.
             product_deactivate();
-            if unsafe { promotion::restore() }.is_err() {
+            let native_restored = unsafe { root_observation::native_frames::restore() }.is_ok();
+            if unsafe { promotion::restore() }.is_err() || !native_restored {
                 return BridgeStatus::Critical as u32;
             }
             return status as u32;
@@ -695,7 +708,13 @@ fn guard_runtime_install(action: impl FnOnce() -> u32 + std::panic::UnwindSafe) 
         INSTALLED.store(false, Ordering::Release);
         product_deactivate();
         match std::panic::catch_unwind(|| unsafe { uninstall() }) {
-            Ok(Ok(())) | Ok(Err("bridge not installed")) => BridgeStatus::Panic as u32,
+            Ok(Ok(())) | Ok(Err("bridge not installed")) => {
+                (if unsafe { root_observation::native_frames::restore() }.is_ok() {
+                    BridgeStatus::Panic
+                } else {
+                    BridgeStatus::Critical
+                }) as u32
+            }
             _ => BridgeStatus::Critical as u32,
         }
     })
@@ -722,6 +741,9 @@ fn close() -> u32 {
     INVOCATIONS.close();
     product_deactivate();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    if !root_observation::native_frames::request_close() {
+        return BridgeStatus::Critical as u32;
+    }
     while !INVOCATIONS.drained() {
         if std::time::Instant::now() >= deadline {
             return BridgeStatus::Critical as u32;
@@ -750,6 +772,9 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
         return BridgeStatus::Panic as u32;
     };
     if close() != BridgeStatus::Ok as u32 {
+        return BridgeStatus::Critical as u32;
+    }
+    if !root_observation::native_frames::reopen() {
         return BridgeStatus::Critical as u32;
     }
     if !product_activate() {

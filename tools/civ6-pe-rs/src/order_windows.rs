@@ -1111,7 +1111,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     d.mode = ProbeMode::Property; // existing restoration walks our pinned threads
     d.order_core_pin = Some(core_pin);
     d.attach_ready_deadline = Some(Instant::now() + ATTACH_READY_BUDGET);
-    let initial_context = read_pointer(&d.game, exe.base + 0x22d60c0)?;
+    let initial_context = read_pointer(&d.game, exe.base + 0x22d70c0)?;
     let mut module_identities = BTreeMap::new();
     if let Some(core) = &initial_core {
         module_identities.insert(core.base, context_facts::module_row(core));

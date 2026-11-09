@@ -620,6 +620,9 @@ unsafe extern "system" {
 }
 macro_rules! gateway {
     ($name:literal,$kind:literal,$original:ident) => {
+        gateway!($name,$kind,$original,begin,end,unwind);
+    };
+    ($name:literal,$kind:literal,$original:ident,$begin:path,$end:path,$unwind:path) => {
         global_asm!(concat!(
             ".globl ",$name,"\n.seh_proc ",$name,"\n",$name,":\n",
             // pushfq precedes SUB: input flags must not be sampled after SUB.
@@ -659,12 +662,13 @@ macro_rules! gateway {
             // This exact LEA/RET is an epilogue: the flags helper's CALL frame
             // is already gone before the gateway releases its fixed frame.
             "lea rsp,[rsp+0x1c8]\nret\n.seh_endproc\n"
-        ), begin=sym begin,end=sym end,unwind=sym unwind,original=sym $original,
+        ), begin=sym $begin,end=sym $end,unwind=sym $unwind,original=sym $original,
             restore_flags=sym root_flags_restore,save_flags=sym root_flags_save);
     };
 }
 // Keep the child after gateway!'s textual definition: it reuses this macro,
 // including the exact shared flags helpers and unwind handler.
+pub(super) mod native_frames;
 mod submission;
 unsafe extern "system" {
     fn root_world_original();
@@ -1394,6 +1398,153 @@ mod tests {
         assert_eq!(h(10).load(Ordering::Acquire), next);
         assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
     }
+    global_asm!(
+        ".p2align 4",
+        ".globl native_probe_dispatch",
+        ".seh_proc native_probe_dispatch",
+        "native_probe_dispatch:",
+        ".byte 0x40,0x56",
+        ".seh_pushreg rsi",
+        "sub rsp,0x50",
+        ".seh_stackalloc 0x50",
+        ".seh_endprologue",
+        "root_probe_inputs",
+        "mov [rsp+0x40],rbx",
+        "root_probe_outputs",
+        "mov rbx,[rsp+0x40]",
+        "mov rsi,[rsp+0x50]",
+        "lea rsp,[rsp+0x58]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_probe_pump",
+        ".seh_proc native_probe_pump",
+        "native_probe_pump:",
+        "mov [rsp+0x18],rbx",
+        ".seh_savereg rbx,0x18",
+        ".seh_endprologue",
+        "root_probe_inputs",
+        "sub rsp,0x28",
+        "root_probe_outputs",
+        "mov rbx,[rsp+0x40]",
+        "lea rsp,[rsp+0x28]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_probe_loop",
+        ".seh_proc native_probe_loop",
+        "native_probe_loop:",
+        ".byte 0x40,0x53",
+        ".seh_pushreg rbx",
+        "push rbp",
+        ".seh_pushreg rbp",
+        "push rdi",
+        ".seh_pushreg rdi",
+        "sub rsp,0x290",
+        ".seh_stackalloc 0x290",
+        ".seh_endprologue",
+        "root_probe_inputs",
+        "root_probe_outputs",
+        "mov rdi,[rsp+0x290]",
+        "mov rbp,[rsp+0x298]",
+        "mov rbx,[rsp+0x2a0]",
+        "lea rsp,[rsp+0x2a8]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_probe_repeat",
+        ".seh_proc native_probe_repeat",
+        "native_probe_repeat:",
+        ".byte 0x40,0x55",
+        ".seh_pushreg rbp",
+        "push r14",
+        ".seh_pushreg r14",
+        "lea rbp,[rsp-0x1a8]",
+        "sub rsp,0x2a8",
+        ".seh_stackalloc 0x2a8",
+        ".seh_endprologue",
+        "root_probe_inputs",
+        "mov [rsp+0x280],rbx",
+        "root_probe_outputs",
+        "mov rbx,[rsp+0x280]",
+        "mov r14,[rsp+0x2a8]",
+        "mov rbp,[rsp+0x2b0]",
+        "lea rsp,[rsp+0x2b8]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_probe_owner",
+        ".seh_proc native_probe_owner",
+        "native_probe_owner:",
+        ".byte 0x40,0x53",
+        ".seh_pushreg rbx",
+        "push rdi",
+        ".seh_pushreg rdi",
+        "sub rsp,0xd8",
+        ".seh_stackalloc 0xd8",
+        ".seh_endprologue",
+        "root_probe_inputs",
+        "root_probe_outputs",
+        "mov rdi,[rsp+0xd8]",
+        "mov rbx,[rsp+0xe0]",
+        "lea rsp,[rsp+0xe8]",
+        "ret",
+        ".seh_endproc",
+    );
+    unsafe extern "system" {
+        fn native_probe_dispatch();
+        fn native_probe_pump();
+        fn native_probe_loop();
+        fn native_probe_repeat();
+        fn native_probe_owner();
+    }
+    #[test]
+    fn runtime_native_frames_preserve_original_outputs_and_track_after_seal() {
+        if !child("runtime_native_frames_preserve_original_outputs_and_track_after_seal") {
+            return;
+        }
+        for (i, body) in [
+            root_probe_world as *const () as usize,
+            native_probe_dispatch as *const () as usize,
+            native_probe_pump as *const () as usize,
+            native_probe_loop as *const () as usize,
+            native_probe_repeat as *const () as usize,
+            native_probe_owner as *const () as usize,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let gateway = native_frames::fixture(i, body + [6, 6, 5, 11, 12, 10][i]);
+            let mut baseline = vec![0u8; 0x500];
+            let mut observed = vec![0u8; 0x500];
+            unsafe {
+                SetLastError(0x1234);
+                root_probe_driver(baseline.as_mut_ptr(), body);
+            }
+            unsafe {
+                SetLastError(0x1234);
+                root_probe_driver(observed.as_mut_ptr(), gateway);
+            }
+            assert_eq!(unsafe { GetLastError() }, 0x880);
+            assert_eq!(u64_at(&observed, 0x80), 1);
+            assert_eq!(u64_at(&observed, 0x90), 0x1234);
+            assert_eq!(&observed[..48], &baseline[..48]);
+            // SUB in the first two original prologues derives flags from
+            // their actual RSP. Only the MOV-only third shim preserves them.
+            if i == 2 {
+                assert_eq!(u64_at(&observed, 56), u64_at(&observed, 0x98));
+            }
+            assert_eq!(&observed[0x100..0x160], &baseline[0x100..0x160]);
+            assert_eq!(&observed[0x200..0x238], &baseline[0x200..0x238]);
+            assert_eq!(&observed[0x300..0x360], &baseline[0x300..0x360]);
+            assert_eq!(u64_at(&observed, 0x280), u64_at(&observed, 0x88));
+        }
+        assert_eq!(native_frames::counts(), [6, 6, 0, 0, 0]);
+        assert!(native_frames::close(
+            Instant::now() + Duration::from_secs(2)
+        ));
+        assert!(native_frames::reopen());
+    }
     #[test]
     fn root_capacity_and_depth_overflow_preserve_original() {
         if !child("root_capacity_and_depth_overflow_preserve_original") {
@@ -1610,6 +1761,118 @@ mod tests {
         assert_eq!(TRACE.rows[1][18].load(Ordering::Acquire), 0);
         assert_eq!(BridgeRootObservationStop(null_mut()), 0);
         assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED);
+    }
+    #[test]
+    fn runtime_native_frame_actual_seh_settles_once_without_native_return() {
+        if !child("runtime_native_frame_actual_seh_settles_once_without_native_return") {
+            return;
+        }
+        let gateway = native_frames::fixture(0, root_unwind_original as *const () as usize + 6);
+        let mut state = [0u64; 2];
+        assert_eq!(
+            unsafe { root_unwind_driver(state.as_mut_ptr(), gateway) },
+            1
+        );
+        assert_eq!(native_frames::counts(), [1, 0, 1, 0, 0]);
+        assert!(native_frames::close(
+            Instant::now() + Duration::from_secs(2)
+        ));
+        assert!(native_frames::reopen());
+    }
+    #[test]
+    fn runtime_native_six_shim_unwind_restores_complete_original_stack_and_registers() {
+        unsafe extern "system" {
+            fn native_frame_outer_body();
+            fn native_frame_dispatch_body();
+            fn native_frame_pump_body();
+            fn native_frame_loop_body();
+            fn native_frame_repeat_body();
+            fn native_frame_dispatch_owner_body();
+        }
+        let targets: [(usize, usize, [Option<usize>; 5]); 6] = [
+            (
+                native_frame_outer_body as *const () as usize,
+                0x28,
+                [Some(0x20), None, None, None, None],
+            ),
+            (
+                native_frame_dispatch_body as *const () as usize,
+                0x58,
+                [None, Some(0x50), None, None, None],
+            ),
+            (
+                native_frame_pump_body as *const () as usize,
+                0,
+                [Some(0x18), None, None, None, None],
+            ),
+            (
+                native_frame_loop_body as *const () as usize,
+                0x2a8,
+                [Some(0x2a0), None, Some(0x298), Some(0x290), None],
+            ),
+            (
+                native_frame_repeat_body as *const () as usize,
+                0x10,
+                [None, None, Some(8), None, Some(0)],
+            ),
+            (
+                native_frame_dispatch_owner_body as *const () as usize,
+                0xe8,
+                [Some(0xe0), None, None, Some(0xd8), None],
+            ),
+        ];
+        for (address, allocation, registers) in targets {
+            let mut stack = [0u64; 128];
+            stack[allocation / 8] = 0x11223344;
+            for (i, offset) in registers.into_iter().enumerate() {
+                if let Some(offset) = offset {
+                    stack[offset / 8] = 0x55667700 + i as u64;
+                }
+            }
+            let mut base = 0;
+            let entry = unsafe { RtlLookupFunctionEntry(address as u64, &mut base, null_mut()) };
+            assert!(!entry.is_null());
+            let mut ctx: CONTEXT = unsafe { std::mem::zeroed() };
+            ctx.Rip = address as u64;
+            ctx.Rsp = stack.as_mut_ptr() as u64;
+            ctx.Rbx = 0x55667700;
+            ctx.Rsi = 0x55667701;
+            ctx.Rbp = 0x55667702;
+            ctx.Rdi = 0x55667703;
+            ctx.R14 = 0x55667704;
+            for (i, offset) in registers.into_iter().enumerate() {
+                if offset.is_some() {
+                    match i {
+                        0 => ctx.Rbx = 0,
+                        1 => ctx.Rsi = 0,
+                        2 => ctx.Rbp = 0,
+                        3 => ctx.Rdi = 0,
+                        4 => ctx.R14 = 0,
+                        _ => unreachable!(),
+                    }
+                }
+            }
+            let mut handler = null_mut();
+            let mut frame = 0;
+            unsafe {
+                RtlVirtualUnwind(
+                    0,
+                    base,
+                    ctx.Rip,
+                    entry,
+                    &mut ctx,
+                    &mut handler,
+                    &mut frame,
+                    null_mut(),
+                );
+            }
+            assert_eq!(ctx.Rip, 0x11223344, "shim{address:x}");
+            assert_eq!(ctx.Rsp, stack.as_ptr() as u64 + allocation as u64 + 8);
+            assert_eq!(
+                [ctx.Rbx, ctx.Rsi, ctx.Rbp, ctx.Rdi, ctx.R14],
+                [0x55667700, 0x55667701, 0x55667702, 0x55667703, 0x55667704]
+            );
+        }
     }
     #[test]
     fn root_virtual_unwind_gateway_and_displaced_prologues() {

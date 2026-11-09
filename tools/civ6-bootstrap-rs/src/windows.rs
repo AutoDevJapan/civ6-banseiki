@@ -24,11 +24,11 @@ use windows_sys::Win32::{
 #[path = "hotpatch.rs"]
 mod hotpatch;
 const GAME_ROOT: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";
-const RELEASE: usize = 0xf7110;
-const SET: usize = 0xf7830;
-const LOADER: usize = 0xf8510;
-const HOLDER: usize = 0x22d6070;
-const CONTEXT: usize = 0x22d60c0;
+const RELEASE: usize = 0xf68d0;
+const SET: usize = 0xf6ff0;
+const LOADER: usize = 0xf7cd0;
+const HOLDER: usize = 0x22d7070;
+const CONTEXT: usize = 0x22d70c0;
 type Api = unsafe extern "system" fn(*mut c_void) -> u32;
 
 // Static codes only: no exception strings, filenames or personal paths cross ABI.
@@ -657,8 +657,8 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
         return Err("target Core path differs".into());
     }
     let _core_file = fixed_hash(&core_path, CORE_SHA)?;
-    if ptr_at(s.exe + 0x22d60d8)? != core
-        || ptr_at(s.exe + 0x22d64e8)? != core + 0x752d50
+    if ptr_at(s.exe + 0x22d70d8)? != core
+        || ptr_at(s.exe + 0x22d74e8)? != core + 0x752d50
         || ptr_at(s.exe + CONTEXT)? != 0
         || read(core + 0x752d50, 5)? != [0xe9, 0x0b, 0xcf, 0xe3, 0xff]
     {
@@ -673,7 +673,7 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
         };
         let boundary = ReloadBoundary {
             loader_result: result,
-            caller: 0x24b52d, // caller() above verified the actual return site.
+            caller: 0x24a90d, // caller() above verified the actual return site.
             close_tid: s.close_tid,
             current_tid: unsafe { GetCurrentThreadId() },
             pinned_core: s.core,
@@ -685,10 +685,10 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
         let generation = s.generation;
         let rebuild = s.rebuild;
         let status = rebuild_at_loader(&mut s.phase, boundary, || {
-            record(6, holder, 0, 0, 0x24b52d, generation, 0);
+            record(6, holder, 0, 0, 0x24a90d, generation, 0);
             let status = unsafe { rebuild(std::ptr::null_mut()) };
             LAST_STATUS.store(status as usize, Ordering::Release);
-            record(7, holder, 0, 0, 0x24b52d, generation, status);
+            record(7, holder, 0, 0, 0x24a90d, generation, status);
             status
         })?
         .ok_or("reload did not execute Rebuild")?;
@@ -736,7 +736,7 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
     if let Some(_flight) = RecordFlight::try_enter() {
         TRACE.core.store(core as u64, Ordering::Release);
     }
-    record(13, 0, 0, core, 0x24b52d, 0, 0);
+    record(13, 0, 0, core, 0x24a90d, 0, 0);
     record(0, 0, 0, 0, 0, 0, 0);
     let status = unsafe { (s.install)((&mut s.config as *mut RuntimeConfig).cast()) };
     LAST_STATUS.store(status as usize, Ordering::Release);
@@ -854,7 +854,7 @@ fn prepare_profile(
     if input.expected_menu_context == 0
         || ptr_at(exe + CONTEXT)? != input.expected_menu_context as usize
         || ptr_at(input.expected_menu_context as usize)? != menu_core + 0x79e020
-        || ptr_at(exe + 0x22d64e8)? != menu_core + 0x58dd30
+        || ptr_at(exe + 0x22d74e8)? != menu_core + 0x58dd30
     {
         return Err("MainMenu context identity differs".into());
     }

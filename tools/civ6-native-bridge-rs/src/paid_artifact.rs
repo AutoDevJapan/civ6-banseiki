@@ -60,8 +60,13 @@ pub fn validate(text: &str, pid: u32, created: u64) -> Result<usize, String> {
                     || row["artifact_schema"] != 1
                     || row["paid_assignment_experimental"] != true
                     || row["scope_key_ranges"] != serde_json::json!(KEY_RANGES)
-                    || row["gamecore_sha256"]
-                        != "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c"
+                    || !matches!(
+                        row["gamecore_sha256"].as_str(),
+                        Some(
+                            "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c"
+                                | crate::PINNED_GAMECORE_SHA256
+                        )
+                    )
                     || row["assignment_rva"] != 0x2dd880u64
                     || row["can_ever_rva"] != 0x2dddd0u64
                     || row["property_rva"] != 0x99f5c0u64

@@ -1,6 +1,125 @@
 // Included in the existing owned-OS test module: every case has its own child.
 use super::submission::observed as submission_observed;
 
+// Map pinned file bytes into ordinary, non-executable owned memory. Register
+// their original exception tables only; never load or invoke either game image.
+struct SubmissionPrimaryImage {
+    bytes: Vec<u8>,
+    table: *mut IMAGE_RUNTIME_FUNCTION_ENTRY,
+}
+impl SubmissionPrimaryImage {
+    fn from_file(file: &mut File, expected_sha: &str) -> Self {
+        file.seek(SeekFrom::Start(0)).unwrap();
+        let mut source = Vec::new();
+        file.read_to_end(&mut source).unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(&source)), expected_sha);
+        let u16at = |p| u16::from_le_bytes(source[p..p + 2].try_into().unwrap());
+        let u32at = |p| u32::from_le_bytes(source[p..p + 4].try_into().unwrap());
+        assert_eq!(&source[..2], b"MZ");
+        let nt = u32at(0x3c) as usize;
+        assert_eq!(&source[nt..nt + 4], b"PE\0\0");
+        assert_eq!(u16at(nt + 4), 0x8664);
+        let opt = nt + 24;
+        assert_eq!(u16at(opt), 0x20b);
+        let image_size = u32at(opt + 56) as usize;
+        assert!((0x1000..0x08000000).contains(&image_size));
+        let mut bytes = vec![0u8; image_size];
+        let headers = u32at(opt + 60) as usize;
+        bytes[..headers].copy_from_slice(&source[..headers]);
+        let sections = opt + usize::from(u16at(nt + 20));
+        for i in 0..usize::from(u16at(nt + 6)) {
+            let p = sections + 40 * i;
+            let rva = u32at(p + 12) as usize;
+            let size = u32at(p + 16) as usize;
+            let raw = u32at(p + 20) as usize;
+            bytes[rva..rva + size].copy_from_slice(&source[raw..raw + size]);
+        }
+        let pdata = u32at(opt + 112 + 3 * 8) as usize;
+        let pdata_size = u32at(opt + 116 + 3 * 8) as usize;
+        assert!(pdata_size > 0 && pdata_size.is_multiple_of(12));
+        assert!(pdata + pdata_size <= bytes.len());
+        let table = unsafe { bytes.as_mut_ptr().add(pdata).cast() };
+        assert_ne!(
+            unsafe { RtlAddFunctionTable(table, (pdata_size / 12) as u32, bytes.as_ptr() as u64) },
+            0
+        );
+        Self { bytes, table }
+    }
+    fn base(&self) -> usize {
+        self.bytes.as_ptr() as usize
+    }
+}
+impl Drop for SubmissionPrimaryImage {
+    fn drop(&mut self) {
+        assert_ne!(unsafe { RtlDeleteFunctionTable(self.table) }, 0);
+    }
+}
+
+#[test]
+fn submission_primary_images_verify_new_host_r8_spans_pdata_and_table_without_execution() {
+    if !Path::new(GAMECORE).is_file() || !Path::new(GAME_EXE).is_file() {
+        println!("fixed primary images NOT AVAILABLE; submission primary witness NOT EXECUTED");
+        return;
+    }
+    let name =
+        "submission_primary_images_verify_new_host_r8_spans_pdata_and_table_without_execution";
+    if !child(name) {
+        return;
+    }
+    let core_sha = "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
+    let host_sha = "d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe";
+    let mut core_file = pin(GAMECORE, core_sha).unwrap();
+    let mut host_file = pin(GAME_EXE, host_sha).unwrap();
+    let core = SubmissionPrimaryImage::from_file(&mut core_file, core_sha);
+    let mut host = SubmissionPrimaryImage::from_file(&mut host_file, host_sha);
+    submission::PROFILE.store(true, Ordering::Release);
+    initialize(config(core.base()), core.base(), host.base());
+    submission::verify(&mut core_file, core.base()).unwrap();
+    submission::verify_r8_flow(&mut core_file, &mut host_file, core.base(), host.base()).unwrap();
+    assert_eq!(h(25).load(Ordering::Acquire), 63);
+    assert_eq!(h(26).load(Ordering::Acquire), 63);
+    assert_eq!(h(27).load(Ordering::Acquire), 3);
+    // Fixed current table slots, read from the same hashed disk file.
+    let preferred = 0x140000000u64;
+    for (slot, target) in [(0x106c418, 0x9857c0), (0x106c420, 0x9862e0)] {
+        let word = host.bytes[slot..slot + 8].try_into().unwrap();
+        assert_eq!(u64::from_le_bytes(word) - preferred, target);
+    }
+    // A wrong full-body byte, caller operand or original unwind is rejected.
+    for offset in [0x985f9e, 0x985fb4, 0x986314, 0x986492] {
+        host.bytes[offset] ^= 1;
+        assert!(submission::verify_r8_flow(
+            &mut core_file,
+            &mut host_file,
+            core.base(),
+            host.base()
+        )
+        .is_err());
+        host.bytes[offset] ^= 1;
+    }
+    let unwind = unsafe {
+        let mut image = 0;
+        let entry = windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry(
+            (host.base() + 0x9862e0) as u64,
+            &mut image,
+            null_mut(),
+        );
+        assert!(!entry.is_null());
+        assert_eq!(image, host.base() as u64);
+        assert_eq!((*entry).BeginAddress, 0x9862e0);
+        assert_eq!((*entry).EndAddress, 0x98631c);
+        (*entry).Anonymous.UnwindData as usize
+    };
+    host.bytes[unwind + 1] ^= 1;
+    assert!(
+        submission::verify_r8_flow(&mut core_file, &mut host_file, core.base(), host.base())
+            .is_err()
+    );
+    host.bytes[unwind + 1] ^= 1;
+    submission::verify_r8_flow(&mut core_file, &mut host_file, core.base(), host.base()).unwrap();
+    println!("both complete SHA gates, six code spans, live pdata/unwind copies, R8 call/return and task table slots verified; no native game code executed");
+}
+
 fn submission_observed_fixture(core: usize, exe: usize) {
     submission::LEGACY_FIXTURE.store(false, Ordering::Release);
     submission::PROFILE.store(true, Ordering::Release);
@@ -71,7 +190,7 @@ fn submission_observed_seed(data: &mut [u8], kind: u64, core: u64, exe: u64) {
     let p = data.as_mut_ptr() as u64;
     match kind {
         7 => {
-            data[..8].copy_from_slice(&(exe + 0x106b3c8).to_le_bytes());
+            data[..8].copy_from_slice(&(exe + 0x106c418).to_le_bytes());
             data[8..16].copy_from_slice(&(p + 0xd0).to_le_bytes());
             data[0xd0..0xd8].copy_from_slice(&(core + 0xa06648).to_le_bytes());
             submission_observed::fixture_birth(p + 0xd0, p);
@@ -91,7 +210,7 @@ fn submission_owned_os_observed_four_gateways_real_shims_state_and_normal_return
     }
     let ret = submission_observed_probe_return as *const () as u64;
     let core = ret - 0x992267;
-    let exe = ret - 0x985ef4;
+    let exe = ret - 0x986314;
     submission_observed_fixture(core as usize, exe as usize);
     for (i, body) in [
         submission_observed_probe_producer as *const () as usize,
@@ -196,7 +315,7 @@ fn submission_owned_os_observed_stop_freezes_exclusions_lookup_failure_and_book_
         return;
     }
     let ret = submission_observed_probe_return as *const () as u64;
-    submission_observed_fixture((ret - 0x992267) as usize, (ret - 0x985ef4) as usize);
+    submission_observed_fixture((ret - 0x992267) as usize, (ret - 0x986314) as usize);
     for (i, body) in [
         submission_observed_probe_producer as *const () as usize,
         submission_observed_probe_host as *const () as usize,
@@ -210,7 +329,7 @@ fn submission_owned_os_observed_stop_freezes_exclusions_lookup_failure_and_book_
     }
     let mut native = vec![0u8; 0x500];
     let other_p = Box::new([ret - 0x992267 + 0xa06650]);
-    native[..8].copy_from_slice(&(ret - 0x985ef4 + 0x106b3c8).to_le_bytes());
+    native[..8].copy_from_slice(&(ret - 0x986314 + 0x106c418).to_le_bytes());
     native[8..16].copy_from_slice(&(other_p.as_ptr() as u64).to_le_bytes());
     // A non-Governor real call is excluded while open and releases its flight.
     unsafe {
@@ -313,7 +432,7 @@ fn submission_observed_late(name: &str, index: usize) {
         return;
     }
     let ret = submission_observed_probe_return as *const () as u64;
-    submission_observed_fixture((ret - 0x992267) as usize, (ret - 0x985ef4) as usize);
+    submission_observed_fixture((ret - 0x992267) as usize, (ret - 0x986314) as usize);
     let kind = if index == 0 { 6 } else { 9 };
     let body = if index == 0 {
         submission_observed_delay_producer as *const () as usize
@@ -623,7 +742,7 @@ fn submission_observed_seh(name: &str, index: usize) {
     }
     let ret = submission_observed_seh_return as *const () as u64;
     let core = ret - 0x992267;
-    let exe = ret - 0x985ef4;
+    let exe = ret - 0x986314;
     submission_observed_fixture(core as usize, exe as usize);
     let body = [
         submission_observed_seh_producer as *const () as usize,
@@ -711,7 +830,7 @@ impl SubmissionPipeline {
         let mut owner = Box::new([0u64; 160]);
         let mut task = Box::new([0u64; 2]);
         owner[0xd0 / 8] = core.base as u64 + 0xa06648;
-        task[0] = host.base as u64 + 0x106b3c8;
+        task[0] = host.base as u64 + 0x106c418;
         let mut this = Self {
             core,
             host,
@@ -821,7 +940,7 @@ impl SubmissionPipeline {
             ],
         );
         let mut target = vec![0x48, 0xb8];
-        target.extend_from_slice(&(self.host.base as u64 + 0x986060).to_le_bytes());
+        target.extend_from_slice(&(self.host.base as u64 + 0x986480).to_le_bytes());
         self.write(false, 0x992224, &target);
         self.branch(false, 0x99222e, 0xe9, 0x992265);
         self.write(
@@ -849,17 +968,17 @@ impl SubmissionPipeline {
         );
         self.write(
             true,
-            0x985ec0,
+            0x9862e0,
             &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x49, 8],
         );
-        self.branch(true, 0x985eca, 0xe9, 0x985ee0);
+        self.branch(true, 0x9862ea, 0xe9, 0x986300);
         let mut call = vec![0x48, 0xb8];
         call.extend_from_slice(&(self.core.base as u64 + 0x4a8530).to_le_bytes());
-        self.write(true, 0x985ee0, &call);
-        self.branch(true, 0x985eea, 0xe9, 0x985ef2);
+        self.write(true, 0x986300, &call);
+        self.branch(true, 0x98630a, 0xe9, 0x986312);
         self.write(
             true,
-            0x985ef2,
+            0x986312,
             &[0xff, 0xd0, 0x48, 0x8d, 0x64, 0x24, 0x20, 0x5b, 0xc3],
         );
         self.bind_task();
@@ -874,9 +993,9 @@ impl SubmissionPipeline {
         ]);
         // Before hooks only; later rebind preserves the installed first word.
         if h(15).load(Ordering::Acquire) & 32 != 0 {
-            self.write(true, 0x986068, &bytes[8..]);
+            self.write(true, 0x986488, &bytes[8..]);
         } else {
-            self.write(true, 0x986060, &bytes);
+            self.write(true, 0x986480, &bytes);
         }
     }
     fn producer(&mut self, submit: bool) {
@@ -893,7 +1012,7 @@ impl SubmissionPipeline {
     fn execute(&self, t: *const u64) {
         let call = unsafe {
             std::mem::transmute::<usize, unsafe extern "system" fn(*const u64)>(
-                self.host.base as usize + 0x985ec0,
+                self.host.base as usize + 0x9862e0,
             )
         };
         unsafe {
@@ -991,8 +1110,8 @@ fn submission_owned_os_observed_untracked_governor_and_unreadable_current_p_rema
     }
     let p = SubmissionPipeline::new();
     let governor = Box::new([p.core.base as u64 + 0xa06648, 0, 0, 0, 0, 0, 0, 0]);
-    let good = Box::new([p.host.base as u64 + 0x106b3c8, governor.as_ptr() as u64]);
-    let bad = Box::new([p.host.base as u64 + 0x106b3c8, 1]);
+    let good = Box::new([p.host.base as u64 + 0x106c418, governor.as_ptr() as u64]);
+    let bad = Box::new([p.host.base as u64 + 0x106c418, 1]);
     let excluded = h(30).load(Ordering::Acquire);
     p.execute(good.as_ptr());
     p.execute(bad.as_ptr());
@@ -1066,12 +1185,12 @@ fn submission_owned_os_observed_completed_p_t_reissue_and_late_old_or_unknown_t_
         submission_observed::fixture_bytes()[header..header + 12 * 384],
         preserved
     );
-    let old_owner = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106b3c8, 0]));
+    let old_owner = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106c418, 0]));
     p.bind_task();
     p.producer(true);
     let before =
         civ6_bootstrap_rs::protocol::SUBMISSION_ROWS + submission_observed::fixture_extra_next();
-    let unresolved = Box::new([p.host.base as u64 + 0x106b3c8, first[1]]);
+    let unresolved = Box::new([p.host.base as u64 + 0x106c418, first[1]]);
     p.execute(old_owner.as_ptr());
     p.execute(unresolved.as_ptr());
     for i in [before, before + 4] {
@@ -1175,7 +1294,7 @@ fn submission_owned_os_observed_sixteenth_admission_seals_new_producers_but_fini
     assert_eq!(h(29).load(Ordering::Acquire), 16);
     assert_eq!(submission_observed::fixture_budget(7), 1);
     assert_eq!(h(12).load(Ordering::Acquire), ROOT_CLOSED | 1);
-    let old = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106b3c8, 0]));
+    let old = std::mem::replace(&mut p.task, Box::new([p.host.base as u64 + 0x106c418, 0]));
     p.bind_task();
     let before = submission_observed::fixture_bytes();
     let calls = p.owner[0x80 / 8];
@@ -1244,10 +1363,10 @@ fn submission_owned_os_observed_book_wait_rechecks_sixteenth_seal_without_new_lo
     assert_eq!(submission_observed::fixture_budget(7), 1);
     assert_eq!(h(29).load(Ordering::Acquire), 16);
     let old_t = p.task.as_ptr();
-    let outside_t = Box::new([p.host.base as u64 + 0x106b3c8, 0]);
+    let outside_t = Box::new([p.host.base as u64 + 0x106c418, 0]);
     // The unobserved native call gets its own fixture T and cannot mutate the
     // still-pending accepted task. Only this owned machine body is changed.
-    p.write(true, 0x98606a, &(outside_t.as_ptr() as u64).to_le_bytes());
+    p.write(true, 0x98648a, &(outside_t.as_ptr() as u64).to_le_bytes());
     let mut before = Vec::new();
     submission_observed::fixture_with_book_lock(|| {
         go.wait();
@@ -1390,8 +1509,8 @@ fn submission_owned_os_observed_reserved_cycle_seh_settles_once_with_unresolved_
     // This fixture Host body has the same RBX push/20h allocation as its native
     // entry. Register the private-image unwind table for the actual SEH walk.
     p.write(true, 0xa0f000, &[1, 6, 2, 0, 6, 0x32, 2, 0x30]);
-    table[0].BeginAddress = 0x985ec0;
-    table[0].EndAddress = 0x985efb;
+    table[0].BeginAddress = 0x9862e0;
+    table[0].EndAddress = 0x98631b;
     table[0].Anonymous.UnwindData = 0xa0f000;
     assert_ne!(
         unsafe { RtlAddFunctionTable(table.as_mut_ptr(), 1, p.host.base as u64) },
@@ -1403,7 +1522,7 @@ fn submission_owned_os_observed_reserved_cycle_seh_settles_once_with_unresolved_
         2,
         submission_observed_seh_core as *const () as usize + 6,
     );
-    let landed = unsafe { submission_reserved_unwind_driver(t, p.host.base as usize + 0x985ec0) };
+    let landed = unsafe { submission_reserved_unwind_driver(t, p.host.base as usize + 0x9862e0) };
     assert_eq!(landed, 1);
     assert_eq!(h(13).load(Ordering::Acquire), 2);
     assert_eq!(submission::TRACE.rows[9][2].load(Ordering::Acquire), 3);

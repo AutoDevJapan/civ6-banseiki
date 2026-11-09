@@ -1,6 +1,25 @@
 # 通常起動・ロード前閉鎖のPE調査（880）
 
-通常接続は未実装である。この有限成果は、Steam配布PEから起動候補と破棄候補を再現できるRust解析器と、未確定の接続条件である。実hook・reload・通常userpathの実測はすべて0回。ゲーム起動、DLL配置、ゲームファイル変更、プロセスメモリ操作は行っていない。324のnative/runtime/composite/paid/eventsは変更していない。
+通常bootstrapからruntimeへの接続は実装済みである。固定した従来版で、通常Prepareと保存読込→メニュー→同process再読込の8手順が成功し、`NormalRuntimeInstalled=true`を確認した。これは全native外側呼出しの排出や製品受入の証明ではない。traceの`boundary_order_proven=false`と`product_acceptance=false`を保持する。
+
+現在の候補はSteam build26407122を対象とする。DX11 EXEは`d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe`、XP2 Coreは`092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f`、Base menu Coreは`160875db284b825ec2711d23ba425dab99e10a386b7ad0cbd4a33e40e75bcc05`へ固定した。3ファイルの2K署名が有効であることと、以下の接続位置・命令列を別々に照合している。署名やハッシュの許容範囲は広げていない。
+
+| 接続 | 新版EXE RVA |
+|---|---|
+| holder release / replace | `F68D0` / `F6FF0` |
+| loader / verified caller | `F7CD0` / `24A90D` |
+| context / holder globals | `22D70C0` / `22D7070` |
+| module / factory / destroy slots | `22D70D8` / `22D74E8` / `22D7548` |
+
+候補の同期frame会計は、Coreの`35F70`、`36180`、`39920`、`4182B0`と内側`34840`、`4AFC0`を原returnまたはterminal SEHまで保持する。観測期限で無効にせず、inner bridge呼出しが0でも外側frameが残る場合は成功としない。新しいrootが閉鎖中に入れば、破棄との競合を防ぐため所有processを重大終了させる。これはnative処理の成功や取消を作るものではない。
+
+CoreがHostのPushを呼ぶ前に、payloadとjob-setに対応する世代付き予約を保持する候補を追加した。元Pushが返すT、元execute wrapperの実行完了、未実行Tの元destructorによる取消を別々に精算する。Push復帰より早い実行完了でも予約を消さず、未実行・実行中・発行未復帰が残る限り新世代へ進めない。T/Pの値は不透明な識別子として保持し、nativeポインタの読取りは現在の実invocation内に限る。
+
+Closeは資格と橋の新受付を失効させ、nativeの自然shutdownを先に進める。World `63E160`→manager `4A1150`→同setのWait `9922C0`という実呼出しのreceiver・callerを照合し、Waitの元正常returnから`4A1196`へ戻す前に予約と同期frameの排出を確認する。現在のshutdown/manager/Waitを自己待ちに含めず、正常shutdown復帰が未確認ならRebuildを拒否する。SEHを正常returnや取消と扱わない。
+
+全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。
+
+以下は従来版に対する元の静的調査である。新版のRVAや受入結果へ読み替えない。
 
 ## 対象と再現
 

@@ -411,7 +411,7 @@ mod tests {
             (
                 1,
                 "context_factory_call",
-                0xf845du64,
+                0xf7c1du64,
                 0x180752d50u64,
                 0u64,
                 0x180752d50u64,
@@ -419,8 +419,8 @@ mod tests {
             (
                 2,
                 "context_factory_return",
-                0xf845f,
-                0x1400f8466,
+                0xf7c1f,
+                0x1400f7c26,
                 0x12340000,
                 0,
             ),

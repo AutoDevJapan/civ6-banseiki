@@ -12,7 +12,7 @@ pub(in super::super) const EXTRA: [(usize, bool, [u8; 8], usize); 4] = [
         5,
     ),
     (
-        0x985ec0,
+        0x9862e0,
         true,
         [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b],
         6,
@@ -24,7 +24,7 @@ pub(in super::super) const EXTRA: [(usize, bool, [u8; 8], usize); 4] = [
         6,
     ),
     (
-        0x986060,
+        0x986480,
         true,
         [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 0x01],
         8,
@@ -544,7 +544,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                             && book[*i].w[6] == p.token
                             && book[*i].w[7] == 0
                     });
-                if saved.invocation.caller != h(8).load(Ordering::Acquire) + 0x985ef4
+                if saved.invocation.caller != h(8).load(Ordering::Acquire) + 0x986314
                     || saved.invocation.caller_rsp.checked_add(0x30) != Some(p.native_rsp)
                 {
                     fail(&mut saved.invocation, 0x800);
@@ -686,7 +686,7 @@ pub(super) extern "system" fn begin(raw: *mut Saved) {
                 }
                 let p = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
                 let table = u64::from_le_bytes(bytes[..8].try_into().unwrap());
-                if table != h(8).load(Ordering::Acquire) + 0x106b3c8 || p != b.w[1] {
+                if table != h(8).load(Ordering::Acquire) + 0x106c418 || p != b.w[1] {
                     fail(inv, 0x400);
                 }
                 if b.w[2] == 0 {

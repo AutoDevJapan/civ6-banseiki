@@ -6,9 +6,9 @@ pub mod observation;
 pub mod protocol;
 
 pub const VERSION: u32 = 0x0880_0003;
-pub const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
-pub const CORE_SHA: &str = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
-pub const MENU_CORE_SHA: &str = "d7ed520e1334947fc7b3be50b00c78eea55e69eb079583f24d87742e90f2a5c3";
+pub const EXE_SHA: &str = "d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe";
+pub const CORE_SHA: &str = "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
+pub const MENU_CORE_SHA: &str = "160875db284b825ec2711d23ba425dab99e10a386b7ad0cbd4a33e40e75bcc05";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -77,7 +77,7 @@ fn loader_return_action(
     caller: Option<u64>,
 ) -> Result<LoaderAction, &'static str> {
     if result & 0xff != 0
-        && caller == Some(0x24b52d)
+        && caller == Some(0x24a90d)
         && (entry.phase != phase
             || entry.generation != generation
             || entry.tid == 0
@@ -101,12 +101,12 @@ fn loader_action(
         return Ok(LoaderAction::Ignore);
     }
     match (phase, caller) {
-        (Phase::Closing | Phase::UnsupportedInlineExchange, Some(0x24b52d)) => {
+        (Phase::Closing | Phase::UnsupportedInlineExchange, Some(0x24a90d)) => {
             Err("target loader returned before the previous context transition completed")
         }
-        (Phase::Closed, Some(0x24b52d)) => Ok(LoaderAction::Rebuild),
+        (Phase::Closed, Some(0x24a90d)) => Ok(LoaderAction::Rebuild),
         (Phase::Closed, _) => Ok(LoaderAction::Ignore),
-        (Phase::Prepared, Some(0x24b52d)) => Ok(LoaderAction::Install),
+        (Phase::Prepared, Some(0x24a90d)) => Ok(LoaderAction::Install),
         (Phase::Prepared, _) => Err("initial loader caller differs before factory"),
         _ => Ok(LoaderAction::Ignore),
     }
@@ -138,7 +138,7 @@ fn rebuild_at_loader(
     if *phase != Phase::Closed || boundary.loader_result & 0xff == 0 {
         return Ok(None);
     }
-    if boundary.caller != 0x24b52d
+    if boundary.caller != 0x24a90d
         || boundary.close_tid == 0
         || boundary.current_tid != boundary.close_tid
         || boundary.pinned_core == 0
@@ -177,7 +177,7 @@ mod tests {
         // Symbolic test values; never passed to a native API or called receipts.
         ReloadBoundary {
             loader_result: 1,
-            caller: 0x24b52d,
+            caller: 0x24a90d,
             close_tid: 7,
             current_tid: 7,
             pinned_core: 8,
@@ -293,21 +293,21 @@ mod tests {
         }
         for phase in [Phase::Prepared, Phase::Closed] {
             assert_eq!(
-                loader_action(phase, 0x100, Some(0x24b52d)),
+                loader_action(phase, 0x100, Some(0x24a90d)),
                 Ok(LoaderAction::Ignore)
             );
         }
         assert_eq!(
-            loader_action(Phase::Closed, 1, Some(0x24b52d)),
+            loader_action(Phase::Closed, 1, Some(0x24a90d)),
             Ok(LoaderAction::Rebuild)
         );
         assert_eq!(
-            loader_action(Phase::Prepared, 1, Some(0x24b52d)),
+            loader_action(Phase::Prepared, 1, Some(0x24a90d)),
             Ok(LoaderAction::Install)
         );
         // Loader result re-entry after the first success cannot reopen again.
         assert_eq!(
-            loader_action(Phase::Open, 1, Some(0x24b52d)),
+            loader_action(Phase::Open, 1, Some(0x24a90d)),
             Ok(LoaderAction::Ignore)
         );
     }
@@ -318,7 +318,7 @@ mod tests {
             phase: Phase::Closed,
             generation: 7,
             tid: 9,
-            caller: Some(0x24b52d),
+            caller: Some(0x24a90d),
         };
         assert_eq!(
             loader_return_action(entry, Phase::Closed, 7, 9, 1, entry.caller),
@@ -348,9 +348,9 @@ mod tests {
         // loader may return while that original still holds the old Context.
         // It must not continue into a fresh factory with the runtime closed.
         for phase in [Phase::Closing, Phase::UnsupportedInlineExchange] {
-            assert!(loader_action(phase, 1, Some(0x24b52d)).is_err());
+            assert!(loader_action(phase, 1, Some(0x24a90d)).is_err());
             assert_eq!(
-                loader_action(phase, 0x100, Some(0x24b52d)),
+                loader_action(phase, 0x100, Some(0x24a90d)),
                 Ok(LoaderAction::Ignore)
             );
             for caller in [None, Some(0x245cea), Some(0x24b5d5)] {
@@ -358,7 +358,7 @@ mod tests {
             }
         }
         assert_eq!(
-            loader_action(Phase::Closed, 1, Some(0x24b52d)),
+            loader_action(Phase::Closed, 1, Some(0x24a90d)),
             Ok(LoaderAction::Rebuild)
         );
     }

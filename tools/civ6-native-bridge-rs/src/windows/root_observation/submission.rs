@@ -628,7 +628,7 @@ pub(super) fn verify_r8_flow(
 ) -> Result<(), &'static str> {
     for (file, base, rva, length) in [
         (&mut *core_file, core, 0x992210, 0x6c),
-        (&mut *exe_file, exe, 0x985b20, 0xca),
+        (&mut *exe_file, exe, 0x985f40, 0xca),
     ] {
         let source = disk(file, rva, length)?;
         for (n, b) in source.iter().enumerate() {
@@ -641,11 +641,11 @@ pub(super) fn verify_r8_flow(
     for (base, rva, bytes) in [
         (
             exe,
-            0x985b7e,
+            0x985f9e,
             &[0x4c, 0x8b, 0xc0, 0x48, 0x85, 0xc0, 0x74, 0x14][..],
         ),
-        (exe, 0x985b94, &[0x49, 0x89, 0x78, 8, 0xeb, 3][..]),
-        (exe, 0x986077, &[0x48, 0x83, 0xc4, 0x38, 0xc3][..]),
+        (exe, 0x985fb4, &[0x49, 0x89, 0x78, 8, 0xeb, 3][..]),
+        (exe, 0x986497, &[0x48, 0x83, 0xc4, 0x38, 0xc3][..]),
         (
             core,
             0x992267,
@@ -661,21 +661,21 @@ pub(super) fn verify_r8_flow(
             }
         }
     }
-    let prefix = disk(exe_file, 0x986060, 0x1c)?;
+    let prefix = disk(exe_file, 0x986480, 0x1c)?;
     for (n, b) in prefix.iter().enumerate() {
-        if copy_current::<1>((exe + 0x986060 + n) as u64) != Some([*b]) {
+        if copy_current::<1>((exe + 0x986480 + n) as u64) != Some([*b]) {
             return Err("complete host push export differs");
         }
     }
     if prefix[18] != 0xe8
-        || (0x986077usize)
+        || (0x986497usize)
             .checked_add_signed(i32::from_le_bytes(prefix[19..23].try_into().unwrap()) as isize)
-            != Some(0x985b20)
+            != Some(0x985f40)
     {
         return Err("R8 host direct-call target differs");
     }
     // This bit witnesses fixed forwarding BYTES only. Actual callee identity
-    // comes from the nested986060 entry/return for EACH accepted Push.
+    // comes from the nested986480 entry/return for EACH accepted Push.
     h(27).fetch_or(2, Ordering::Release);
     observed::verify(core_file, exe_file, core, exe)?;
     Ok(())
@@ -688,7 +688,7 @@ pub(super) unsafe fn restore_extra() -> Result<(), &'static str> {
 }
 #[cfg(test)]
 pub(super) fn r8_target_confirmed(target: Option<u64>, exe: usize) -> bool {
-    exe.checked_add(0x986060)
+    exe.checked_add(0x986480)
         .is_some_and(|expected| target == Some(expected as u64))
 }
 #[cfg(test)]
@@ -698,11 +698,12 @@ mod r8_actual_target_tests {
     fn same_code_bytes_with_wrong_or_zero_actual_target_do_not_certify_r8_as_t() {
         let base = 0x140000000usize;
         assert_eq!(WORDS[0], [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]);
-        assert!(r8_target_confirmed(Some(base as u64 + 0x986060), base));
+        assert!(r8_target_confirmed(Some(base as u64 + 0x986480), base));
         for target in [
             None,
             Some(0),
-            Some(base as u64 + 0x986080),
+            Some(base as u64 + 0x986060), // previous image's export is not this callee
+            Some(base as u64 + 0x9864a0),
             Some(0x180992210),
         ] {
             assert!(!r8_target_confirmed(target, base));

@@ -603,6 +603,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 b"BridgeRuntimeRebuild\0",
                 b"BridgeRuntimeStopObservation\0",
                 b"BRIDGE_RUNTIME_PROPERTY_LOG\0",
+                b"BRIDGE_RUNTIME_NATIVE_FRAME_TRACE\0",
             ],
         )?
     };
@@ -614,7 +615,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         .iter()
         .find(|m| same_path(&m.path, Path::new(GAME_EXE)))
         .ok_or("game EXE module missing")?;
-    let menu_context = pointer(&game, exe.base + 0x22d60c0)?;
+    let menu_context = pointer(&game, exe.base + 0x22d70c0)?;
     let loader = remote_load_library(req.pid)?;
     let file = fs::OpenOptions::new()
         .write(true)
@@ -842,6 +843,17 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             preserve(&req.output, extension, bytes)?;
         }
         let log = property_log_pair(&game, runtime.base + runtime_exports[4])?;
+        let mut pointer = [0u8; 8];
+        read_remote(&game, runtime.base + runtime_exports[5], &mut pointer)?;
+        let frame_address = usize::try_from(u64::from_le_bytes(pointer))
+            .map_err(|_| "native frame pointer overflow")?;
+        let mut frame_bytes = [0u8; 128];
+        read_remote(&game, frame_address, &mut frame_bytes)?;
+        preserve(&req.output, "native-frames.bin", &frame_bytes)?;
+        write_json(
+            &mut writer,
+            wire::native_frames(&frame_bytes, req.pid, req.created)?,
+        )?;
         for (extension, bytes) in [
             ("property-log-first.bin", &log.0),
             ("property-log-second.bin", &log.1),

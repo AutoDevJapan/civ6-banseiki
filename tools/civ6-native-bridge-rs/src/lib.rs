@@ -23,7 +23,7 @@ pub fn controller_capabilities() -> serde_json::Value {
 
 /// Identity used by both the Windows bridge and portable artifact validators.
 pub const PINNED_GAMECORE_SHA256: &str =
-    "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
+    "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
 
 pub mod appointment_glue;
 pub mod governor_payment;

@@ -328,11 +328,11 @@ fn real_loader_return_rejects_overlap_and_crossed_generation() {
     // Local process-owned memory for the actual E8 decoder/ReadProcessMemory.
     // The module override supplies only presence; any identity/path validation
     // would fail. Neither the real Core nor a fixture DLL is loaded or executed.
-    let mut image = vec![0u8; 0x24b532];
-    image[0x24b52d] = 0xe8;
-    image[0x24b52e..0x24b532].copy_from_slice(&(LOADER as i32 - 0x24b532i32).to_le_bytes());
+    let mut image = vec![0u8; 0x24a912];
+    image[0x24a90d] = 0xe8;
+    image[0x24a90e..0x24a912].copy_from_slice(&(LOADER as i32 - 0x24a912i32).to_le_bytes());
     let exe = image.as_ptr() as usize;
-    let ret = exe + 0x24b532;
+    let ret = exe + 0x24a912;
     *STATE.lock().unwrap() = Some(Resident {
         exe,
         core: 1,
@@ -358,7 +358,7 @@ fn real_loader_return_rejects_overlap_and_crossed_generation() {
     });
     CORE_MODULE_OVERRIDE.with(|value| value.set(Some(1)));
     let closing = loader_begin(ret).unwrap();
-    assert_eq!(closing.caller, Some(0x24b52d));
+    assert_eq!(closing.caller, Some(0x24a90d));
     let error = target_loader_return(1, ret, closing).unwrap_err();
     assert!(error.contains("previous context transition completed"));
     assert_eq!(API_CALLS.load(Ordering::Acquire), 0);

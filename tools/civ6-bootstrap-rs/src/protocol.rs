@@ -82,9 +82,9 @@ mod observed_submission_tests {
             (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
             (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
             (0x4a79b0, [0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83]),
-            (0x985ec0, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+            (0x9862e0, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
             (0x4a8530, [0x40, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
-            (0x986060, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1]),
+            (0x986480, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1]),
         ]
         .into_iter()
         .enumerate()
@@ -101,7 +101,7 @@ mod observed_submission_tests {
             (9, 3, 0xfd80, CORE + 0x992267, 3, 4),
             (5, 1, 0xffd0, CORE + 0x4a7a58, 6, 7),
             (7, 0, 0x201d0, EXE + 0x1000, 8, 11),
-            (8, 9, 0x1ffd0, EXE + 0x985ef4, 9, 10),
+            (8, 9, 0x1ffd0, EXE + 0x986314, 9, 10),
         ]
         .into_iter()
         .enumerate()
@@ -136,7 +136,7 @@ mod observed_submission_tests {
                     a[37] = T;
                     a[38] = 16;
                     a[39] = 1;
-                    a[40] = EXE + 0x106b3c8;
+                    a[40] = EXE + 0x106c418;
                     a[41] = P;
                 }
                 8 => {
@@ -211,6 +211,28 @@ mod observed_submission_tests {
         assert_eq!(v["complete_observed_p_t_execution_chains"], 1);
         assert_eq!(v["runtime_activated"], false);
         assert_eq!(v["world_permit_issued"], false);
+    }
+    #[test]
+    fn observed_previous_host_sites_table_and_caller_do_not_match_new_image() {
+        assert_eq!(
+            submission_trace(&fixture(), 23, 29).unwrap()["capture_complete"],
+            true
+        );
+        // Same trace shape and process identity cannot turn the previous
+        // image's sites or proxy table into evidence for the current image.
+        for (word, old) in [
+            (32 + 3 * 8, 0x985ec0),
+            (32 + 5 * 8, 0x986060),
+            (row_word(8, 40), EXE + 0x106b3c8),
+            (row_word(10, 8), EXE + 0x985ef4),
+        ] {
+            let mut b = fixture();
+            put(&mut b, word, old);
+            assert_eq!(
+                submission_trace(&b, 23, 29).unwrap()["capture_complete"],
+                false
+            );
+        }
     }
     #[test]
     fn actual_callee_missing_foreign_caller_identity_or_return_cannot_type_raw_r8() {
@@ -701,9 +723,9 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
         (0x992210, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c]),
         (0x992280, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
         (0x4a79b0, [0x48, 0x89, 0x74, 0x24, 0x18, 0x57, 0x48, 0x83]),
-        (0x985ec0, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
+        (0x9862e0, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
         (0x4a8530, [0x40, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b]),
-        (0x986060, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1]),
+        (0x986480, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1]),
     ]
     .into_iter()
     .enumerate()
@@ -890,7 +912,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             continue;
         };
         let Some((c, cr)) = pairs.get(&w[16]) else {
-            unknown.push("actual986060 callee pair missing".into());
+            unknown.push("actual986480 callee pair missing".into());
             continue;
         };
         let Some((u, ur)) = pairs.get(&w[5]) else {
@@ -954,7 +976,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             && h[37] == w[2]
             && h[38] == 16
             && h[39] == 1
-            && exe.checked_add(0x106b3c8) == Some(h[40])
+            && exe.checked_add(0x106c418) == Some(h[40])
             && h[41] == w[1]
             && (version < 6
                 || (h[42] == core.checked_add(0xa06648).unwrap_or(0)
@@ -965,7 +987,7 @@ fn submission_observed_trace(b: &[u8], pid: u32, created: u64) -> Result<Value, 
             && x[1] == 8
             && x[4] == h[3]
             && x[5..8] == h[5..8]
-            && exe.checked_add(0x985ef4) == Some(x[8])
+            && exe.checked_add(0x986314) == Some(x[8])
             && x[9].checked_add(0x30) == Some(h[29])
             && x[10] == w[1]
             && x[35] == w[0]
@@ -2194,6 +2216,62 @@ pub fn word(b: &[u8], offset: usize) -> Result<u64, String> {
             .try_into()
             .unwrap(),
     ))
+}
+
+/// Independent snapshot of resident synchronous-frame accounting. The
+/// counters keep running after observation stop and are never a job join.
+pub fn native_frames(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    if b.len() != 128
+        || word(b, 0)? != 1
+        || word(b, 8)? != 128
+        || word(b, 64)? != u64::from(pid)
+        || word(b, 72)? != created
+        || (14..16).any(|i| word(b, i * 8) != Ok(0))
+    {
+        return Err("native frame snapshot identity/version/size differs".into());
+    }
+    let w = |i: usize| word(b, i * 8);
+    Ok(
+        json!({"schema":"native-synchronous-frames-v1","pid":pid,"created_filetime":created,
+        "entered":w(2)?,"returned":w(3)?,"terminal_unwind":w(4)?,"active":w(5)?,
+        "failure":w(6)?,"installed_sites":w(7)?,"close_attempts":w(10)?,
+        "close_successes":w(11)?,"reopens":w(12)?,"failure_stage":w(13)?,
+        "boundary_order_proven":false,"product_acceptance":false,
+        "unestablished":["all outer entry coverage","native pending-list publication","same-set full join","native producer seal"]}),
+    )
+}
+
+#[cfg(test)]
+mod native_frame_tests {
+    use super::*;
+    #[test]
+    fn synchronous_zero_snapshot_keeps_native_certificate_false_and_checks_identity() {
+        let mut b = [0; 128];
+        for (i, v) in [
+            (0, 1u64),
+            (1, 128),
+            (2, 4),
+            (3, 3),
+            (4, 1),
+            (7, 7),
+            (8, 12),
+            (9, 34),
+            (10, 2),
+            (11, 2),
+            (12, 1),
+        ] {
+            b[i * 8..i * 8 + 8].copy_from_slice(&v.to_le_bytes());
+        }
+        let v = native_frames(&b, 12, 34).unwrap();
+        assert_eq!(v["active"], 0);
+        assert_eq!(v["boundary_order_proven"], false);
+        assert_eq!(v["product_acceptance"], false);
+        assert!(native_frames(&b, 13, 34).is_err());
+        assert!(native_frames(&b, 12, 35).is_err());
+        assert!(native_frames(&b[..127], 12, 34).is_err());
+        b[112] = 1;
+        assert!(native_frames(&b, 12, 34).is_err());
+    }
 }
 pub fn trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     if b.len() != TRACE_BYTES

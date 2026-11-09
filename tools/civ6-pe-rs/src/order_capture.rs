@@ -3,8 +3,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
-pub const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
-pub const CORE_SHA: &str = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
+pub const EXE_SHA: &str = "d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe";
+pub const CORE_SHA: &str = "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
 pub const SCHEMA: &str = "todo880-order-v1";
 
 #[path = "order_analysis.rs"]
@@ -157,29 +157,29 @@ pub const FRONT: [Site; 4] = [
     Site {
         image: Image::Exe,
         name: "loader_return",
-        rva: 0xf8577,
-        bytes: &[0x48, 0x89, 0x05, 0x5a, 0xdb, 0x1d, 2],
+        rva: 0xf7d37,
+        bytes: &[0x48, 0x89, 0x05, 0x9a, 0xf3, 0x1d, 2],
         next: Next::Sequential,
     },
     Site {
         image: Image::Exe,
         name: "context_factory_call",
-        rva: 0xf845d,
+        rva: 0xf7c1d,
         bytes: &[0xff, 0xd1],
         next: Next::Rcx,
     },
     Site {
         image: Image::Exe,
         name: "context_factory_return",
-        rva: 0xf845f,
-        bytes: &[0x48, 0x89, 0x05, 0x5a, 0xdc, 0x1d, 2],
+        rva: 0xf7c1f,
+        bytes: &[0x48, 0x89, 0x05, 0x9a, 0xf4, 0x1d, 2],
         next: Next::Sequential,
     },
-    // lua_newstate call is 0x972bb8 -> 0xdbd848. This is its return, not Gameplay identity.
+    // lua_newstate call is 0x973068 -> 0xdbdb78. This is its return, not Gameplay identity.
     Site {
         image: Image::Exe,
         name: "lua_newstate_return",
-        rva: 0x972bbd,
+        rva: 0x97306d,
         bytes: &[0x44, 0x8b, 0xc6],
         next: Next::Sequential,
     },
@@ -188,30 +188,30 @@ pub const LOAD: [Site; 4] = [
     Site {
         image: Image::Exe,
         name: "context_release",
-        rva: 0xf7110,
+        rva: 0xf68d0,
         bytes: &[0x40, 0x53],
         next: Next::Sequential,
     },
     Site {
         image: Image::Exe,
         name: "context_replace",
-        rva: 0xf7830,
+        rva: 0xf6ff0,
         bytes: &[0x48, 0x89, 0x5c, 0x24, 8],
         next: Next::Sequential,
     },
     Site {
         image: Image::Exe,
         name: "lua_close_call",
-        rva: 0x971b11,
-        bytes: &[0xe8, 0x26, 0xbd, 0x44, 0],
-        next: Next::Rva(0xdbd83c),
+        rva: 0x971fc1,
+        bytes: &[0xe8, 0xa6, 0xbb, 0x44, 0],
+        next: Next::Rva(0xdbdb6c),
     },
     Site {
         image: Image::Exe,
         name: "lua_close_deleting_call",
-        rva: 0x971cb7,
-        bytes: &[0xe8, 0x80, 0xbb, 0x44, 0],
-        next: Next::Rva(0xdbd83c),
+        rva: 0x972167,
+        bytes: &[0xe8, 0x00, 0xba, 0x44, 0],
+        next: Next::Rva(0xdbdb6c),
     },
 ];
 // CHAININFO joins 418427 -> 41841a -> 4182b0. Observe the real
@@ -563,7 +563,7 @@ mod tests {
             successor(FRONT[1], 0x140000000, 0x180752d50).unwrap(),
             0x180752d50
         );
-        assert_eq!(successor(LOAD[2], 0x140000000, 0).unwrap(), 0x140dbd83c);
+        assert_eq!(successor(LOAD[2], 0x140000000, 0).unwrap(), 0x140dbdb6c);
         assert!(successor(FRONT[1], 0, 0).is_err());
         assert!(verify_step(10, 11, 11, 1 << 14, 0, 1 << 8).is_err());
         assert!(verify_step(10, 10, 11, 1 << 14, 0, 1 << 8).is_err());

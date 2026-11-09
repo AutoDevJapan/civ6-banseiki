@@ -3,8 +3,8 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
-const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
-const CORE_SHA: &str = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
+const EXE_SHA: &str = "d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe";
+const CORE_SHA: &str = "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
 
 fn identity(bytes: &[u8], expected: &str) -> Result<(), String> {
     let actual = format!("{:x}", Sha256::digest(bytes));
@@ -63,19 +63,19 @@ fn edge(pe: &Pe<'_>, site: u32, opcode: u8, target: u32) -> Result<(), String> {
 fn verify(exe: &Pe<'_>, core: &Pe<'_>) -> Result<(), String> {
     // LoadLibraryW RCX=wide filename, RAX=HMODULE. The post-return site is
     // before GetProcAddress and before the lazy factory call in this thread.
-    edge(exe, 0xf8572, 0xe8, 0x989970)?;
-    exact(exe, 0x989970, &[0x48, 0xff, 0x25, 0xd1, 0xcf, 0x60, 0])?;
-    exact(exe, 0xf8577, &[0x48, 0x89, 0x05, 0x5a, 0xdb, 0x1d, 0x02])?;
-    edge(exe, 0xf858d, 0xe8, 0x9898f0)?;
-    exact(exe, 0xfba318, b"DllCreateGameContext\0")?;
-    exact(exe, 0xfba330, b"DllDestroyGameContext\0")?;
-    exact(exe, 0xf8451, &[0x48, 0x8b, 0x0d, 0x90, 0xe0, 0x1d, 0x02])?;
-    exact(exe, 0xf845d, &[0xff, 0xd1])?;
+    edge(exe, 0xf7d32, 0xe8, 0x989dc0)?;
+    exact(exe, 0x989dc0, &[0x48, 0xff, 0x25, 0x81, 0xdb, 0x60, 0])?;
+    exact(exe, 0xf7d37, &[0x48, 0x89, 0x05, 0x9a, 0xf3, 0x1d, 0x02])?;
+    edge(exe, 0xf7d4d, 0xe8, 0x989d40)?;
+    exact(exe, 0xfbb318, b"DllCreateGameContext\0")?;
+    exact(exe, 0xfbb330, b"DllDestroyGameContext\0")?;
+    exact(exe, 0xf7c11, &[0x48, 0x8b, 0x0d, 0xd0, 0xf8, 0x1d, 0x02])?;
+    exact(exe, 0xf7c1d, &[0xff, 0xd1])?;
     // Same caller: teardown -> DLL loader -> lazy factory -> virtual setup.
-    edge(exe, 0x24b523, 0xe8, 0xf8e30)?;
-    edge(exe, 0x24b52d, 0xe8, 0xf8510)?;
-    edge(exe, 0x24b545, 0xe8, 0xf8430)?;
-    exact(exe, 0x24b5bf, &[0x48, 0x8b, 0x01, 0xff, 0x50, 0x60])?;
+    edge(exe, 0x24a903, 0xe8, 0xf85f0)?;
+    edge(exe, 0x24a90d, 0xe8, 0xf7cd0)?;
+    edge(exe, 0x24a925, 0xe8, 0xf7bf0)?;
+    exact(exe, 0x24a99f, &[0x48, 0x8b, 0x01, 0xff, 0x50, 0x60])?;
     edge(core, 0x752d50, 0xe9, 0x58fc60)?;
     edge(core, 0x58fcbe, 0xe8, 0x58fb40)?;
     edge(core, 0x58fb91, 0xe8, 0x7503e0)?;
@@ -84,27 +84,27 @@ fn verify(exe: &Pe<'_>, core: &Pe<'_>) -> Result<(), String> {
     // Four real call sites share release before context destruction. This is
     // NOT a proof that the four user actions all reach these sites.
     for (release, destroy) in [
-        (0x245cea, 0x245cef),
-        (0x24b51e, 0x24b523),
-        (0x24cab6, 0x24cabb),
-        (0x24d1d2, 0x24d1d7),
+        (0x2450fa, 0x2450ff),
+        (0x24a8fe, 0x24a903),
+        (0x24be96, 0x24be9b),
+        (0x24c5b2, 0x24c5b7),
     ] {
-        edge(exe, release, 0xe8, 0xf7110)?;
-        edge(exe, destroy, 0xe8, 0xf8e30)?;
+        edge(exe, release, 0xe8, 0xf68d0)?;
+        edge(exe, destroy, 0xe8, 0xf85f0)?;
     }
-    exact(exe, 0xf7110, &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20])?;
-    exact(exe, 0xf7128, &[0x48, 0x8b, 0x8b, 0x50, 0x04, 0, 0])?;
-    exact(exe, 0xf7137, &[0x33, 0xd2, 0xff, 0x90, 0xa0, 1, 0, 0])?;
-    exact(exe, 0xf715e, &[0x48, 0xff, 0x60, 0x08])?;
+    exact(exe, 0xf68d0, &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20])?;
+    exact(exe, 0xf68e8, &[0x48, 0x8b, 0x8b, 0x50, 0x04, 0, 0])?;
+    exact(exe, 0xf68f7, &[0x33, 0xd2, 0xff, 0x90, 0xa0, 1, 0, 0])?;
+    exact(exe, 0xf691e, &[0x48, 0xff, 0x60, 0x08])?;
     // A second path has the SAME release body. Do not select f7110 as a
     // universal close hook merely because it has four direct callers.
-    exact(exe, 0xf7865, &[0x33, 0xd2, 0xff, 0x90, 0xa0, 1, 0, 0])?;
-    exact(exe, 0xf7887, &[0xff, 0x50, 0x08])?;
-    edge(exe, 0xf8e43, 0xe8, 0x29c2a0)?;
-    exact(exe, 0xf8e60, &[0xff, 0xd0])?;
-    edge(exe, 0x971b11, 0xe8, 0xdbd83c)?;
-    edge(exe, 0x971cb7, 0xe8, 0xdbd83c)?;
-    exact(exe, 0xdbd83c, &[0xff, 0x25, 0xae, 0x8a, 0x1d, 0])?;
+    exact(exe, 0xf7025, &[0x33, 0xd2, 0xff, 0x90, 0xa0, 1, 0, 0])?;
+    exact(exe, 0xf7047, &[0xff, 0x50, 0x08])?;
+    edge(exe, 0xf8603, 0xe8, 0x29ba90)?;
+    exact(exe, 0xf8620, &[0xff, 0xd0])?;
+    edge(exe, 0x971fc1, 0xe8, 0xdbdb6c)?;
+    edge(exe, 0x972167, 0xe8, 0xdbdb6c)?;
+    exact(exe, 0xdbdb6c, &[0xff, 0x25, 0x86, 0x97, 0x1d, 0])?;
     Ok(())
 }
 
@@ -117,13 +117,13 @@ pub(super) fn audit(exe_path: &Path, core_path: &Path) -> Result<(), String> {
     let core = Pe::parse(&core_bytes)?;
     verify(&exe, &core)?;
     println!("static_primary_checks=passed\nexe_sha256={EXE_SHA}\ngamecore_sha256={CORE_SHA}");
-    println!("selected_startup_candidate=exe_post_LoadLibraryW_RVA_0xf8577");
+    println!("selected_startup_candidate=exe_post_LoadLibraryW_RVA_0xf7d37");
     println!("startup_argument=RAX_loaded_HMODULE; factory_export_RVA_0x752d50_ignores_incoming_argument_registers");
     println!(
-        "preclose_candidates=exe_RVA_0xf7110_and_0xf7830; RCX_receiver_with_interface_at_0x450"
+        "preclose_candidates=exe_RVA_0xf68d0_and_0xf6ff0; RCX_receiver_with_interface_at_0x450"
     );
-    println!("context_destroy_is_later=exe_RVA_0xf8e60; RCX_context; core_RVA_0x752d60");
-    println!("lua_close_sites=exe_RVA_0x971b11_and_0x971cb7; RCX_lua_State_from_receiver_0x10");
+    println!("context_destroy_is_later=exe_RVA_0xf8620; RCX_context; core_RVA_0x752d60");
+    println!("lua_close_sites=exe_RVA_0x971fc1_and_0x972167; RCX_lua_State_from_receiver_0x10");
     println!("missing=resident_activation_before_loader; all_user_paths_to_preclose; gameplay_Lua_identity_and_thread_order; runtime_rearm_before_new_RESET");
     println!("execution_ready=false\nauto_enabled=false\nlive_start_count=0\nreal_hook_reload_normal_userpath_receipts=0");
     Ok(())
