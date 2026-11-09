@@ -108,6 +108,28 @@ pub(super) fn take_wait_receipt(set: u64, core_original_rsp: u64) -> Option<Wait
         .with(|r| r.borrow_mut().take())
         .filter(|r| r.set == set && core_original_rsp.checked_sub(0x40) == Some(r.host_rsp))
 }
+pub(super) fn require_wait_receipt() -> bool {
+    #[cfg(test)]
+    {
+        CORE.load(Ordering::Acquire) != 0
+    }
+    #[cfg(not(test))]
+    {
+        true
+    }
+}
+
+#[cfg(test)]
+pub(super) unsafe fn fixture_install(exe: usize, core: usize) -> Result<(), &'static str> {
+    EXE.store(exe as u64, Ordering::Release);
+    CORE.store(core as u64, Ordering::Release);
+    TEST_ARENA_CLASS.store(2, Ordering::Release);
+    unsafe { install_at(exe) }
+}
+#[cfg(test)]
+pub(super) fn fixture_current_arena() {
+    TEST_ARENA_CLASS.store(1, Ordering::Release);
+}
 
 extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };

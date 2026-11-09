@@ -157,6 +157,19 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             // Jobs are settled by their original execute/destructor wrappers.
             // Inert serialized nodes remain for later original 380B0 cleanup;
             // their presence is not an executing job and cannot block Wait.
+            let host_receipt = consumers::take_wait_receipt(
+                raw.invocation.manager + 0x400,
+                raw.invocation.native_rsp,
+            );
+            if consumers::require_wait_receipt() && host_receipt.is_none() {
+                #[cfg(test)]
+                if std::env::var_os("CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD").is_some() {
+                    println!("HOST_CURRENT_ARENA_RECEIPT_REFUSED");
+                    use std::io::Write;
+                    std::io::stdout().flush().unwrap();
+                }
+                fault();
+            }
             if FRAMES
                 .get()
                 .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
@@ -482,16 +495,55 @@ mod tests {
             );
             return;
         }
-        mixed_fixture(false);
+        mixed_fixture(false, false);
     }
     #[test]
     fn original_wait_joins_worker_through_six_full_gateways_before_cleanup() {
         if !child("original_wait_joins_worker_through_six_full_gateways_before_cleanup") {
             return;
         }
-        mixed_fixture(true);
+        mixed_fixture(true, false);
     }
-    fn mixed_fixture(parallel: bool) {
+    #[test]
+    fn real_host_wait_receipt_reaches_control_after_six_worker_frames_return() {
+        if !child("real_host_wait_receipt_reaches_control_after_six_worker_frames_return") {
+            return;
+        }
+        mixed_fixture(true, true);
+    }
+    #[test]
+    fn current_arena_normal_return_never_reaches_destructive_control_cleanup() {
+        const ENV: &str = "CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(ENV,"1").args([
+                    "--exact","windows::root_observation::native_frames::control::tests::current_arena_normal_return_never_reaches_destructive_control_cleanup","--nocapture"
+                ]).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            loop {
+                if p.try_wait().unwrap().is_some() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    let _ = p.kill();
+                    let _ = p.wait();
+                    panic!("current arena fixture timeout");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let out = p.wait_with_output().unwrap();
+            assert!(!out.status.success());
+            assert!(
+                String::from_utf8_lossy(&out.stdout).contains("HOST_CURRENT_ARENA_RECEIPT_REFUSED"),
+                "missing exact control refusal: {:?}",
+                out
+            );
+            return;
+        }
+        mixed_fixture(true, true);
+        panic!("current arena returned through destructive control cleanup");
+    }
+    fn mixed_fixture(parallel: bool, with_host: bool) {
         MIXED_PARALLEL.store(parallel, Ordering::Release);
         if parallel {
             SIX_STARTED.set(std::sync::Barrier::new(2)).unwrap();
@@ -500,7 +552,7 @@ mod tests {
         if !supports_atomic_promotion_fetch() {
             panic!("fixture needs atomic fetch support");
         }
-        let size = 0xa00000;
+        let size = if with_host { 0xe50000 } else { 0xa00000 };
         let base =
             unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
                 as usize;
@@ -592,6 +644,46 @@ mod tests {
             ]);
             put(0x9922ca, &wait_tail);
         }
+        if with_host {
+            unsafe {
+                ptr::write_bytes((base + 0x9922ca) as *mut u8, 0x90, 0x40);
+            }
+            call(0x9922fc, 0x986240);
+            put(
+                0x992301,
+                &[
+                    0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+                ],
+            );
+            for rva in [0xe417d0, 0xe41c00] {
+                put(rva, &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x74]);
+            }
+            unsafe {
+                ptr::write_bytes((base + 0x986240) as *mut u8, 0x90, 0x60);
+            }
+            put(
+                0x986240,
+                &[
+                    0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xf9,
+                    0x48, 0x8b, 0x49, 8,
+                ],
+            );
+            call(0x98626b, 0xe3eaf0);
+            put(
+                0x986270,
+                &[
+                    0x48, 0xc7, 0x47, 8, 0, 0, 0, 0, 0x48, 0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83,
+                    0xc4, 0x20, 0x5f, 0xc3,
+                ],
+            );
+            let mut arena = vec![
+                0x40, 0x55, 0x53, 0x56, 0x48, 0x8d, 0x6c, 0x24, 0xb9, 0x48, 0x83, 0xec, 0x20, 0x48,
+                0xb8,
+            ];
+            arena.extend((mixed_native_wait as *const () as u64).to_le_bytes());
+            arena.extend([0xff, 0xd0, 0x48, 0x83, 0xc4, 0x20, 0x5e, 0x5b, 0x5d, 0xc3]);
+            put(0xe3eaf0, &arena);
+        }
         put(0x471b0, &[0x48, 0x83, 0xec, 0x28]);
         unsafe {
             ptr::write_bytes((base + 0x471b4) as *mut u8, 0x90, 9);
@@ -605,9 +697,19 @@ mod tests {
         );
         unsafe { super::super::install(base) }.unwrap();
         unsafe { install(base) }.unwrap();
+        if with_host {
+            unsafe { consumers::fixture_install(base, base) }.unwrap();
+            if std::env::var_os("CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD").is_some() {
+                consumers::fixture_current_arena();
+            }
+        }
         runtime::fixture_invocation_runtime();
         let mut world = vec![0u64; 0x2b0 / 8];
         let mut manager = vec![0u64; 0x500 / 8];
+        let mut arena = 0u64;
+        if with_host {
+            manager[0x408 / 8] = &mut arena as *mut u64 as u64;
+        }
         world[0x250 / 8] = manager.as_mut_ptr() as u64;
         world[0x2a0 / 8] = 1u64 << 32;
         let invoke: unsafe extern "system" fn(*mut u64) =
@@ -629,6 +731,13 @@ mod tests {
             unsafe { control(world.as_mut_ptr()) };
             assert!(WAITED.load(Ordering::Acquire));
             assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+            if with_host {
+                assert_eq!(manager[0x408 / 8], 0);
+                assert!(
+                    consumers::take_wait_receipt(manager.as_ptr() as u64 + 0x400, 0).is_none(),
+                    "control must consume once"
+                );
+            }
             assert_eq!(super::super::counts(), [6, 6, 0, 0, 0]);
             assert_eq!(
                 runtime::BridgeRuntimeRebuild(null_mut()),

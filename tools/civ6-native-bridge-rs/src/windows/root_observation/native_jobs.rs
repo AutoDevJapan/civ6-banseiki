@@ -52,6 +52,7 @@ extern "system" fn begin(raw: *mut Saved) {
             }
             21 => {
                 let t = raw.gpr[0];
+                let _attached = consumers::attach_current(t);
                 let p = u64::from_le_bytes(
                     copy_current::<8>(t.checked_add(8).unwrap_or_else(|| fault()))
                         .unwrap_or_else(|| fault()),
@@ -66,6 +67,7 @@ extern "system" fn begin(raw: *mut Saved) {
                 (f.execute(t, p).unwrap_or_else(|_| fault()), t)
             }
             22 => {
+                let _attached = consumers::attach_current(raw.gpr[0]);
                 let Some(id) = f.retire_task(raw.gpr[0]).unwrap_or_else(|_| fault()) else {
                     return;
                 };
