@@ -29,6 +29,15 @@ static INVOCATIONS: crate::invocation_gate::InvocationGate =
     crate::invocation_gate::InvocationGate::new();
 static INVOCATION_FAILURE: AtomicBool = AtomicBool::new(false);
 const INVOCATION_REFUSED: u64 = 1 << 63;
+static NEXT_INVOCATION: AtomicU64 = AtomicU64::new(1);
+struct PendingInvocation {
+    cookie: u64,
+    generation: u32,
+    native_hold: Option<u64>,
+}
+thread_local! {
+    static PENDING_INVOCATIONS: std::cell::RefCell<Vec<PendingInvocation>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
 // 0 is a refused runtime call; 1 is the existing non-runtime diagnostic path.
 // Higher cookies hold a single generation until normal return or SEH cleanup.
@@ -42,9 +51,31 @@ pub(super) fn invocation_start() -> u64 {
     if root_observation::native_frames::unproven_input_active() {
         return 0;
     }
-    INVOCATIONS
-        .enter()
-        .map_or(0, |generation| u64::from(generation) + 1)
+    let Some(generation) = INVOCATIONS.enter() else {
+        return 0;
+    };
+    let Ok(native_hold) = root_observation::native_frames::enter_bridge() else {
+        let _ = INVOCATIONS.leave(generation);
+        return 0;
+    };
+    let cookie = NEXT_INVOCATION.fetch_update(Ordering::AcqRel, Ordering::Acquire, |id| {
+        id.checked_add(1).filter(|next| *next < INVOCATION_REFUSED)
+    });
+    let Ok(previous) = cookie else {
+        let _ = root_observation::native_frames::leave_bridge(native_hold);
+        let _ = INVOCATIONS.leave(generation);
+        INVOCATION_FAILURE.store(true, Ordering::Release);
+        return 0;
+    };
+    let cookie = previous + 1;
+    PENDING_INVOCATIONS.with(|pending| {
+        pending.borrow_mut().push(PendingInvocation {
+            cookie,
+            generation,
+            native_hold,
+        })
+    });
+    cookie
 }
 pub(super) fn invocation_admitted(cookie: u64) -> bool {
     cookie != 0
@@ -81,7 +112,20 @@ pub(super) unsafe fn invocation_finish(cookie: *const AtomicU64) {
         return;
     };
     let held = cookie.swap(0, Ordering::AcqRel) & !INVOCATION_REFUSED;
-    if held > 1 && !INVOCATIONS.leave((held - 1) as u32) {
+    if held <= 1 {
+        return;
+    }
+    let pending = PENDING_INVOCATIONS.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        let index = pending.iter().position(|call| call.cookie == held)?;
+        Some(pending.remove(index))
+    });
+    let success = pending.is_some_and(|call| {
+        let native = root_observation::native_frames::leave_bridge(call.native_hold);
+        let bridge = INVOCATIONS.leave(call.generation);
+        native && bridge
+    });
+    if !success {
         INVOCATION_FAILURE.store(true, Ordering::Release);
         INVOCATIONS.close();
         product_deactivate();

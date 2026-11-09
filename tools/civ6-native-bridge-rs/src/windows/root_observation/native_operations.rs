@@ -852,6 +852,16 @@ mod tests {
         unsafe {
             runtime::invocation_finish(&AtomicU64::new(outside));
         }
+        let before_unknown = runtime::invocation_start();
+        assert!(runtime::invocation_admitted(before_unknown));
+        sessions::fixture_unknown_input(|| {});
+        assert!(
+            !runtime::invocation_admitted(before_unknown),
+            "a bridge call that crossed unknown input must stay refused through its own return"
+        );
+        unsafe {
+            runtime::invocation_finish(&AtomicU64::new(before_unknown));
+        }
         sessions::fixture_unknown_input(|| {
             assert_eq!(runtime::invocation_start(), 0);
             assert!(!runtime::call_current(runtime::CallFence::default(), 0));

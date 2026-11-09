@@ -477,6 +477,24 @@ pub(in super::super) fn unproven_input_active() -> bool {
             .get()
             .is_some_and(NativeFrames::unproven_on_current_thread)
 }
+pub(in super::super) fn enter_bridge() -> Result<Option<u64>, ()> {
+    let Some(frames) = FRAMES.get() else {
+        #[cfg(test)]
+        return Ok(None);
+        #[cfg(not(test))]
+        return Err(());
+    };
+    let id = frames.enter().map_err(|_| ())?;
+    if frames.healthy() {
+        Ok(Some(id))
+    } else {
+        let _ = frames.leave(id);
+        Err(())
+    }
+}
+pub(in super::super) fn leave_bridge(hold: Option<u64>) -> bool {
+    hold.is_none_or(|id| FRAMES.get().is_some_and(|frames| frames.leave(id).is_ok()))
+}
 fn session_enter(epoch: u64) -> Result<u64, sessions::SessionError> {
     FRAMES
         .get()
