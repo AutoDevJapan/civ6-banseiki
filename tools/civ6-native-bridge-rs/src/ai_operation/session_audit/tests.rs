@@ -35,6 +35,7 @@ fn all_frames(dll: bool) -> Vec<&'static Frame> {
         result.extend(snapshot::fixed::FRAMES);
         result.extend(view_worker::fixed::FRAMES);
         result.extend(transport_birth::fixed::FRAMES);
+        result.extend(terminal::fixed::FRAMES);
     } else {
         result.extend(world::fixed::FRAMES);
     }
@@ -52,6 +53,7 @@ fn all_slots(dll: bool) -> Vec<(u32, u32)> {
         result.extend(snapshot::flow::SLOTS);
         result.extend(view_worker::flow::SLOTS);
         result.extend(transport_birth::flow::SLOTS);
+        result.extend(terminal::flow::SLOTS);
         result.sort_unstable();
     }
     result.dedup();
@@ -147,6 +149,9 @@ fn specimen(dll: bool) -> Vec<u8> {
         }
     }
     if !dll {
+        for v in terminal::flow::BLOCKS {
+            write_hex(&mut b, v.rva, v.hex, false);
+        }
         for v in transport_birth::flow::BLOCKS {
             write_hex(&mut b, v.rva, v.hex, false);
         }
@@ -249,6 +254,7 @@ fn valid(b: &[u8], dll: bool) -> Result<Value, String> {
         snapshot::inspect(&parse(b, dll)?)?;
         view_worker::inspect(&parse(b, dll)?)?;
         transport_birth::inspect(&parse(b, dll)?)?;
+        terminal::inspect(&parse(b, dll)?)?;
     } else {
         world::inspect(&parse(b, dll)?)?;
     }
@@ -1035,4 +1041,65 @@ fn transport_thread_creation_cannot_be_replaced_by_another_valid_named_api() {
         host[p..p + 8].copy_from_slice(&old);
     }
     transport_birth::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+#[test]
+fn terminal_remove_and_registry_destructor_keep_full_root_tombstone_contract() {
+    let b = specimen(false);
+    let r = terminal::inspect(&Pe::parse_host(&b).unwrap()).unwrap();
+    assert_eq!(r["remove"]["destructor_call"], 0x7f9298);
+    assert_eq!(r["remove"]["slot_clear"], 0x7f929a);
+    assert_eq!(r["remove"]["normal_return"], 0x7f9309);
+    assert_eq!(r["registry"]["body_full_end"], 0x7f8a62);
+    assert_eq!(r["typed_session"]["direct_transport_close"], 0x845bfe);
+    assert_eq!(
+        r["adapter_contract"]["typed_destructor_return_is_terminal"],
+        false
+    );
+    assert_eq!(r["certificate_issued"], false);
+}
+#[test]
+fn terminal_full_registry_frame_and_all_partitions_reject_mutation() {
+    let mut b = specimen(false);
+    terminal::inspect(&Pe::parse_host(&b).unwrap()).unwrap();
+    for f in terminal::fixed::FRAMES {
+        for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
+            let p = offset(rva, false);
+            b[p] ^= 1;
+            assert!(terminal::inspect(&Pe::parse_host(&b).unwrap()).is_err());
+            b[p] ^= 1;
+        }
+        for part in f.fragments {
+            for i in 0..part.hex.len() / 2 {
+                let p = offset(part.unwind, false) + i;
+                b[p] ^= 1;
+                assert!(terminal::inspect(&Pe::parse_host(&b).unwrap()).is_err());
+                b[p] ^= 1;
+            }
+        }
+    }
+}
+#[test]
+fn terminal_typed_receiver_clear_unlink_free_branch_and_call_mutations_reject() {
+    let mut b = specimen(false);
+    for block in terminal::flow::BLOCKS {
+        for i in 0..block.hex.len() / 2 {
+            let p = offset(block.rva, false) + i;
+            b[p] ^= 1;
+            assert!(
+                terminal::inspect(&Pe::parse_host(&b).unwrap()).is_err(),
+                "terminal flow{:x}+{i}",
+                block.rva
+            );
+            b[p] ^= 1;
+        }
+    }
+    for r in terminal::flow::REFERENCES {
+        for i in (0..r.prefix.len() / 2).chain(r.displacement..r.length) {
+            let p = offset(r.rva, false) + i;
+            b[p] ^= 1;
+            assert!(references(&Pe::parse_host(&b).unwrap(), terminal::flow::REFERENCES).is_err());
+            b[p] ^= 1;
+        }
+    }
+    terminal::inspect(&Pe::parse_host(&b).unwrap()).unwrap();
 }

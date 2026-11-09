@@ -10,6 +10,8 @@ mod lease;
 mod pe;
 #[path = "session_audit/snapshot.rs"]
 mod snapshot;
+#[path = "session_audit/terminal.rs"]
+mod terminal;
 #[path = "session_audit/transport_birth.rs"]
 mod transport_birth;
 #[path = "session_audit/view_worker.rs"]
@@ -206,6 +208,7 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
     let snapshot_stream = snapshot::inspect(host)?;
     let view_worker = view_worker::inspect(host)?;
     let transport_birth = transport_birth::inspect(host)?;
+    let terminal = terminal::inspect(host)?;
     let admission = json!({
         "context_table":0xa101e8,"context_constructor":0x58fb40,
         "enqueue":{"slot":0x230,"adapter":0x590810,"target":0x373e0},
@@ -268,6 +271,7 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
         "snapshot_stream":snapshot_stream,
         "view_worker":view_worker,
         "transport_birth":transport_birth,
+        "terminal":terminal,
         "not_established_by_this_audit":[
             "old packet/session identity across lookup, session replacement, reconnect and address reuse",
             "upstream network admission stop and same-session inflight join with native guarantees",
