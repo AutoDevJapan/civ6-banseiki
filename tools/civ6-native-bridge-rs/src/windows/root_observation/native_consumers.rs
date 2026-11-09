@@ -64,12 +64,16 @@ fn fault() -> ! {
 /// No native pointer is dereferenced here. A later loop iteration may attach
 /// its already-bound T even if this scheduler's first input was unrelated.
 pub(super) fn attach_current(task: u64) -> bool {
+    // Early Host preparation publishes consumer and dispatcher hooks before
+    // Core owns NativeFrames. Native tasks on those stacks stay unknown.
+    let Some(frames) = FRAMES.get() else {
+        return false;
+    };
     CONSUMERS.with(|stack| {
         let mut stack = stack.borrow_mut();
         if stack.is_empty() {
             return false;
         }
-        let frames = FRAMES.get().unwrap_or_else(|| fault());
         let mut attached = false;
         for scope in stack.iter_mut() {
             attached |= if let Some(hold) = scope.hold {
@@ -129,6 +133,13 @@ pub(super) unsafe fn fixture_install(exe: usize, core: usize) -> Result<(), &'st
 #[cfg(test)]
 pub(super) fn fixture_current_arena() {
     TEST_ARENA_CLASS.store(1, Ordering::Release);
+}
+#[cfg(test)]
+pub(super) fn fixture_early_worker(continuation: usize) -> usize {
+    assert!(FRAMES.get().is_none());
+    assert_eq!(CORE.load(Ordering::Acquire), 0);
+    NATIVE_CONSUMER_CONTINUE[0].store(continuation as u64, Ordering::Release);
+    native_consumer_first_gateway as *const () as usize
 }
 #[cfg(test)]
 pub(super) fn fixture_group_arena(continuation: usize, external: bool) -> usize {

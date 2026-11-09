@@ -10,6 +10,7 @@ static FLOW: AtomicBool = AtomicBool::new(false);
 static TASK: AtomicU64 = AtomicU64::new(0);
 static ACTION: AtomicU64 = AtomicU64::new(0);
 static OBSERVED: AtomicU64 = AtomicU64::new(0);
+static EARLY_DISPATCH: AtomicU64 = AtomicU64::new(0);
 pub(super) fn caller_override(rva: u64) -> Option<u64> {
     if !FLOW.load(Ordering::Acquire) {
         return None;
@@ -638,4 +639,56 @@ fn shared_jobs_allocator_gateway_binds_before_original_task_or_payload_publicati
         .unwrap();
     unsafe { jobs::restore() }.unwrap();
     assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+}
+
+global_asm!(
+    ".globl scheduler_early_worker_original",
+    ".seh_proc scheduler_early_worker_original",
+    "scheduler_early_worker_original:",
+    "mov [rsp+0x10],rbx",
+    ".seh_savereg rbx,0x10",
+    "sub rsp,0x28",
+    ".seh_stackalloc 0x28",
+    ".seh_endprologue",
+    "call qword ptr [rip+{dispatch}]",
+    "mov rbx,[rsp+0x38]",
+    "lea rsp,[rsp+0x28]",
+    "ret",
+    ".seh_endproc",
+    ".globl scheduler_early_dispatch_original",
+    ".seh_proc scheduler_early_dispatch_original",
+    "scheduler_early_dispatch_original:",
+    "mov [rsp+0x18],rbx",
+    ".seh_savereg rbx,0x18",
+    ".seh_endprologue",
+    "mov eax,0x112233",
+    "ret",
+    ".seh_endproc",
+    dispatch=sym EARLY_DISPATCH,
+);
+unsafe extern "system" {
+    fn scheduler_early_worker_original();
+    fn scheduler_early_dispatch_original();
+}
+#[test]
+fn early_coreless_full_worker_and_nested_dispatch_return_unknown_task_transparently() {
+    if !child("early_coreless_full_worker_and_nested_dispatch_return_unknown_task_transparently") {
+        return;
+    }
+    assert!(FRAMES.get().is_none());
+    NATIVE_SCHEDULER_CONTINUE[4].store(
+        scheduler_early_dispatch_original as *const () as u64 + 5,
+        Ordering::Release,
+    );
+    EARLY_DISPATCH.store(gateways()[4] as u64, Ordering::Release);
+    let target =
+        consumers::fixture_early_worker(scheduler_early_worker_original as *const () as usize + 5);
+    let invoke: unsafe extern "system" fn(u64, u64, u64, u64) -> u64 =
+        unsafe { std::mem::transmute(target) };
+    unsafe { SetLastError(0x880123) };
+    assert_eq!(unsafe { invoke(0, 0, 0, 0) }, 0x112233);
+    assert_eq!(unsafe { GetLastError() }, 0x880123);
+    assert!(FRAMES.get().is_none());
+    assert!(SCOPES.with(|s| s.borrow().is_empty()));
+    assert!(!FAILED.load(Ordering::Acquire));
 }
