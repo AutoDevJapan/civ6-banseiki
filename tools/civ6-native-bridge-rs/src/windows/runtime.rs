@@ -47,7 +47,9 @@ pub(super) fn invocation_start() -> u64 {
         .map_or(0, |generation| u64::from(generation) + 1)
 }
 pub(super) fn invocation_admitted(cookie: u64) -> bool {
-    cookie != 0 && cookie & INVOCATION_REFUSED == 0
+    cookie != 0
+        && cookie & INVOCATION_REFUSED == 0
+        && (!owned() || !root_observation::native_frames::unproven_input_active())
 }
 pub(super) unsafe fn invocation_refuse(cookie: *const AtomicU64) {
     if let Some(cookie) = unsafe { cookie.as_ref() } {

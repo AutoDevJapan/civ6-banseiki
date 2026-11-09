@@ -17,6 +17,7 @@ struct State {
     unresolved: bool,
     next: u64,
     frames: HashMap<u64, (u64, ThreadId)>,
+    frame_sources: HashMap<u64, Vec<u64>>,
     jobs: HashMap<u64, Job>,
 }
 struct Job {
@@ -30,6 +31,7 @@ struct Job {
     queue_parent: Option<u64>,
     retiring: bool,
     executing_thread: Option<ThreadId>,
+    source_frames: Vec<u64>,
 }
 
 /// Accounts only for installed full-frame gateways. It is not a producer seal,
@@ -55,6 +57,7 @@ impl NativeFrames {
                 unresolved: false,
                 next: 0,
                 frames: HashMap::new(),
+                frame_sources: HashMap::new(),
                 jobs: HashMap::new(),
             }),
             changed: Condvar::new(),
@@ -86,7 +89,9 @@ impl NativeFrames {
         } else {
             s.generation
         };
+        let sources = Self::lineage(&s, None);
         s.frames.insert(id, (generation, tid));
+        s.frame_sources.insert(id, sources);
         self.changed.notify_all();
         Ok(id)
     }
@@ -103,6 +108,7 @@ impl NativeFrames {
             return Err(Error::Stale);
         }
         s.frames.remove(&id);
+        s.frame_sources.remove(&id);
         self.changed.notify_all();
         Ok(())
     }
@@ -172,21 +178,75 @@ impl NativeFrames {
                 .any(|j| j.generation == 0 && j.executing_thread == Some(tid))
     }
     fn taint_thread(s: &mut State, tid: ThreadId) {
-        for (generation, owner) in s.frames.values_mut() {
-            if *owner == tid {
-                *generation = 0;
+        let mut sources = Vec::new();
+        let mut threads = vec![tid];
+        // Consumers may outlive a completed/removed task on another thread.
+        // Preserve its issuing-frame relation independently of that task.
+        loop {
+            let mut changed = false;
+            for (id, (generation, owner)) in &mut s.frames {
+                let inherited = s
+                    .frame_sources
+                    .get(id)
+                    .is_some_and(|lineage| lineage.iter().any(|source| sources.contains(source)));
+                if !sources.contains(id) && (threads.contains(owner) || inherited) {
+                    *generation = 0;
+                    sources.push(*id);
+                    if !threads.contains(owner) {
+                        threads.push(*owner);
+                    }
+                    changed = true;
+                }
             }
-        }
-        for job in s.jobs.values_mut() {
-            if job.executing_thread == Some(tid) {
-                job.generation = 0;
+            for job in s.jobs.values_mut() {
+                if job
+                    .executing_thread
+                    .is_some_and(|owner| threads.contains(&owner))
+                    || job.source_frames.iter().any(|id| sources.contains(id))
+                {
+                    job.generation = 0;
+                    if let Some(owner) = job.executing_thread {
+                        if !threads.contains(&owner) {
+                            threads.push(owner);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if !changed {
+                break;
             }
         }
     }
+    fn lineage(s: &State, source: Option<u64>) -> Vec<u64> {
+        let tid = thread::current().id();
+        let mut ids: Vec<_> = s
+            .frames
+            .iter()
+            .filter_map(|(id, (_, owner))| (*owner == tid).then_some(*id))
+            .collect();
+        for (id, (_, owner)) in &s.frames {
+            if *owner == tid {
+                if let Some(sources) = s.frame_sources.get(id) {
+                    ids.extend_from_slice(sources);
+                }
+            }
+        }
+        for job in s
+            .jobs
+            .values()
+            .filter(|j| j.executing_thread == Some(tid) || source == Some(j.task))
+        {
+            ids.extend_from_slice(&job.source_frames);
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    }
     pub fn unproven_on_current_thread(&self) -> bool {
-        self.state
-            .lock()
-            .map_or(true, |s| Self::unproven(&s, thread::current().id()))
+        self.state.lock().map_or(true, |s| {
+            s.unresolved || Self::unproven(&s, thread::current().id())
+        })
     }
 
     /// A Host consumer inherits only an already-issued T's generation. It
@@ -207,14 +267,19 @@ impl NativeFrames {
             s.unresolved = true;
             return Err(Error::Stale);
         }
+        let sources = job.source_frames.clone();
         let generation = if Self::unproven(&s, thread::current().id()) {
             0
         } else {
             job.generation
         };
+        if generation == 0 {
+            Self::taint_thread(&mut s, thread::current().id());
+        }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
         s.frames.insert(id, (generation, thread::current().id()));
+        s.frame_sources.insert(id, sources);
         Ok(Some(id))
     }
 
@@ -242,6 +307,8 @@ impl NativeFrames {
         if job.generation == 0 {
             Self::taint_thread(&mut s, thread::current().id());
         }
+        let sources = Self::lineage(&s, Some(task));
+        s.frame_sources.get_mut(&hold).unwrap().extend(sources);
         Ok(true)
     }
 
@@ -259,7 +326,9 @@ impl NativeFrames {
             let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
             s.next = id;
             let epoch = s.generation;
+            let sources = Self::lineage(&s, None);
             s.frames.insert(id, (epoch, thread::current().id()));
+            s.frame_sources.insert(id, sources);
             Ok((id, epoch))
         }
     }
@@ -275,7 +344,9 @@ impl NativeFrames {
         }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
+        let sources = Self::lineage(&s, None);
         s.frames.insert(id, (epoch, thread::current().id()));
+        s.frame_sources.insert(id, sources);
         Ok(id)
     }
 
@@ -339,6 +410,10 @@ impl NativeFrames {
         }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
+        if unproven {
+            Self::taint_thread(&mut s, thread::current().id());
+        }
+        let source_frames = Self::lineage(&s, None);
         let generation = if unproven || Self::unproven(&s, thread::current().id()) {
             0
         } else {
@@ -357,6 +432,7 @@ impl NativeFrames {
                 queue_parent: None,
                 retiring: false,
                 executing_thread: None,
+                source_frames,
             },
         );
         Ok(id)
@@ -432,6 +508,7 @@ impl NativeFrames {
         } else {
             s.generation
         };
+        let source_frames = Self::lineage(&s, None);
         s.jobs.insert(
             id,
             Job {
@@ -445,6 +522,7 @@ impl NativeFrames {
                 queue_parent: None,
                 retiring: false,
                 executing_thread: None,
+                source_frames,
             },
         );
         Ok(id)
@@ -475,7 +553,9 @@ impl NativeFrames {
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
         let generation = s.generation;
+        let sources = Self::lineage(&s, None);
         s.frames.insert(id, (generation, thread::current().id()));
+        s.frame_sources.insert(id, sources);
         Ok(id)
     }
 
@@ -527,6 +607,7 @@ impl NativeFrames {
         } else {
             s.generation
         };
+        let source_frames = Self::lineage(&s, source);
         s.jobs.insert(
             id,
             Job {
@@ -540,6 +621,7 @@ impl NativeFrames {
                 queue_parent: Some(producer),
                 retiring: false,
                 executing_thread: None,
+                source_frames,
             },
         );
         Ok(id)
@@ -563,6 +645,7 @@ impl NativeFrames {
             }
         });
         s.frames.remove(&producer);
+        s.frame_sources.remove(&producer);
         self.changed.notify_all();
         Ok(())
     }
@@ -654,8 +737,9 @@ impl NativeFrames {
             s.unresolved = true;
             return Err(Error::Unresolved);
         };
-        if s.jobs[&id].generation == 0 {
+        if s.jobs[&id].generation == 0 || Self::unproven(&s, thread::current().id()) {
             Self::taint_thread(&mut s, thread::current().id());
+            s.jobs.get_mut(&id).unwrap().generation = 0;
         }
         s.jobs.get_mut(&id).unwrap().execution = 1;
         s.jobs.get_mut(&id).unwrap().executing_thread = Some(thread::current().id());
@@ -679,8 +763,9 @@ impl NativeFrames {
             s.unresolved = true;
             return Err(Error::Unresolved);
         };
-        if s.jobs[&id].generation == 0 {
+        if s.jobs[&id].generation == 0 || Self::unproven(&s, thread::current().id()) {
             Self::taint_thread(&mut s, thread::current().id());
+            s.jobs.get_mut(&id).unwrap().generation = 0;
         }
         let j = s.jobs.get_mut(&id).unwrap();
         j.task = task;
@@ -1182,6 +1267,88 @@ mod tests {
         f.completed(execution).unwrap();
         let id = f.retire_queue(100).unwrap();
         f.queue_retired(id).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+    }
+    #[test]
+    fn unknown_consumer_taints_outer_return_and_prior_sibling_copies() {
+        let f = NativeFrames::new();
+        let outer = f.enter().unwrap();
+        let producer = f.begin_queue_producer().unwrap();
+        f.queue_allocated(producer, 100, None).unwrap();
+        let copy = f.begin_queue_producer().unwrap();
+        f.queue_allocated(copy, 200, Some(100)).unwrap();
+        f.queue_producer_returned(copy).unwrap();
+        let task = f.issue_on_set_with_provenance(300, 10, true).unwrap();
+        f.bind_before_publication(task, 400).unwrap();
+        f.pushed(task, 400).unwrap();
+        let consumer = f.consumer_enter(400).unwrap().unwrap();
+        let retired = f.retire_task(400).unwrap().unwrap();
+        f.task_retired(retired).unwrap();
+        f.consumer_exit(consumer).unwrap();
+        assert!(f.unproven_on_current_thread());
+        f.queue_producer_returned(producer).unwrap();
+        f.leave(outer).unwrap();
+        for node in [100, 200] {
+            let id = f.queue_execute(node).unwrap();
+            assert!(f.unproven_on_current_thread());
+            f.completed(id).unwrap();
+            let id = f.retire_queue(node).unwrap();
+            f.queue_retired(id).unwrap();
+        }
+        assert!(!f.unproven_on_current_thread());
+        f.mark_unresolved();
+        assert!(
+            f.unproven_on_current_thread(),
+            "terminal SEH cannot recover product permission"
+        );
+    }
+    #[test]
+    fn entering_unknown_consumer_keeps_existing_outer_unproven_until_return() {
+        let f = NativeFrames::new();
+        let task = f.issue_on_set_with_provenance(100, 10, true).unwrap();
+        f.bind_before_publication(task, 200).unwrap();
+        f.pushed(task, 200).unwrap();
+        let outer = f.enter().unwrap();
+        let consumer = f.consumer_enter(200).unwrap().unwrap();
+        let retired = f.retire_task(200).unwrap().unwrap();
+        f.task_retired(retired).unwrap();
+        f.consumer_exit(consumer).unwrap();
+        assert!(f.unproven_on_current_thread());
+        f.leave(outer).unwrap();
+        assert!(!f.unproven_on_current_thread());
+    }
+    #[test]
+    fn parent_taint_reaches_other_thread_after_task_completed_but_consumer_remains() {
+        let f = std::sync::Arc::new(NativeFrames::new());
+        let producer = f.enter().unwrap();
+        let task = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(task, 200).unwrap();
+        f.pushed(task, 200).unwrap();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (check_tx, check_rx) = std::sync::mpsc::channel();
+        let worker = f.clone();
+        let child = std::thread::spawn(move || {
+            let outer = worker.enter().unwrap();
+            let consumer = worker.consumer_enter(200).unwrap().unwrap();
+            worker.execute(200, 100).unwrap();
+            worker.completed(task).unwrap();
+            ready_tx.send(()).unwrap();
+            check_rx.recv().unwrap();
+            assert!(worker.unproven_on_current_thread());
+            worker.consumer_exit(consumer).unwrap();
+            assert!(
+                worker.unproven_on_current_thread(),
+                "remote outer retains inherited downgrade"
+            );
+            worker.leave(outer).unwrap();
+        });
+        ready_rx.recv().unwrap();
+        let unknown = f.enter_with_provenance(true).unwrap();
+        f.leave(unknown).unwrap();
+        check_tx.send(()).unwrap();
+        child.join().unwrap();
+        f.leave(producer).unwrap();
+        assert!(!f.unproven_on_current_thread());
         f.seal_and_wait(deadline()).unwrap();
     }
 }
