@@ -5,6 +5,9 @@ use std::cell::RefCell;
 static CLOSING: AtomicBool = AtomicBool::new(false);
 static WAITED: AtomicBool = AtomicBool::new(false);
 static SHUTDOWN_RETURNED: AtomicBool = AtomicBool::new(false);
+// Observed manager/list close evidence for the current World close. It is a
+// necessary condition for ready() and never a native seal by itself.
+static CLOSURE_COMPLETE: AtomicBool = AtomicBool::new(false);
 static WORLD: AtomicU64 = AtomicU64::new(0);
 static CORE: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
@@ -44,6 +47,7 @@ pub(super) fn ready() -> bool {
     native_coverage_complete()
         && WAITED.load(Ordering::Acquire)
         && SHUTDOWN_RETURNED.load(Ordering::Acquire)
+        && CLOSURE_COMPLETE.load(Ordering::Acquire)
 }
 fn native_coverage_complete() -> bool {
     false
@@ -52,12 +56,20 @@ pub(super) fn reopened() {
     CLOSING.store(false, Ordering::Release);
     WAITED.store(false, Ordering::Release);
     SHUTDOWN_RETURNED.store(false, Ordering::Release);
+    CLOSURE_COMPLETE.store(false, Ordering::Release);
     WORLD.store(0, Ordering::Release);
 }
 extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
+        if raw.invocation.kind == 31
+            && STACK.with(|s| s.borrow().last().is_none_or(|(kind, _, _)| *kind != 30))
+        {
+            // 4A1150 outside the tracked World close, such as a manager recycle
+            // at 63D443. Recorded only; never a closing certificate.
+            scheduler::closure::unowned_shutdown();
+        }
         if !CLOSING.load(Ordering::Acquire) {
             return;
         }
@@ -105,6 +117,11 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
                 raw.invocation.world = world;
                 raw.invocation.manager = raw.gpr[0];
+                let list = copy_current::<4>(raw.gpr[0] + 0x410)
+                    .map(u32::from_le_bytes)
+                    .unwrap_or_else(|| fault());
+                scheduler::closure::close_begin(world, raw.gpr[0], list)
+                    .unwrap_or_else(|v| scheduler::closure::fault(v));
             }
             32 => {
                 let Some((31, world, manager)) = parent else {
@@ -154,6 +171,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         TRACE.0[6].store(1, Ordering::Release);
         WAITED.store(false, Ordering::Release);
         SHUTDOWN_RETURNED.store(false, Ordering::Release);
+        CLOSURE_COMPLETE.store(false, Ordering::Release);
         return;
     }
     match raw.invocation.kind {
@@ -176,6 +194,8 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 }
                 fault();
             }
+            scheduler::closure::wait_returned(raw.invocation.manager)
+                .unwrap_or_else(|v| scheduler::closure::fault(v));
             if FRAMES
                 .get()
                 .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
@@ -191,6 +211,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             {
                 fault();
             }
+            let receipt = scheduler::closure::world_closed(raw.invocation.world)
+                .unwrap_or_else(|v| scheduler::closure::fault(v));
+            CLOSURE_COMPLETE.store(receipt.complete(), Ordering::Release);
             if let Some(birth) = worlds::birth(raw.invocation.world) {
                 sessions::retire_world(sessions::SessionWorldReceipt {
                     binding_id: birth.serial,
@@ -204,6 +227,8 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             if !WAITED.load(Ordering::Acquire) {
                 fault();
             }
+            scheduler::closure::close_end(raw.invocation.manager)
+                .unwrap_or_else(|v| scheduler::closure::fault(v));
         }
         _ => fault(),
     }
@@ -778,13 +803,15 @@ mod tests {
         assert!(!ready());
         request_close(); // No blocking seal before native shutdown.
         let mut world = vec![0u64; 0x2b0 / 8];
-        world[0x250 / 8] = 300;
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        world[0x250 / 8] = key;
         world[0x2a0 / 8] = 1u64 << 32;
         let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
         begin(&mut w);
-        let mut m = raw(31, 300, 0x18063e1d5);
+        let mut m = raw(31, key, 0x18063e1d5);
         begin(&mut m);
-        let mut wait = raw(32, 300 + 0x400, 0x1804a1196);
+        let mut wait = raw(32, key + 0x400, 0x1804a1196);
         begin(&mut wait);
         // Original natural Wait completes the already reserved native work.
         assert_eq!(f.execute(200, 100), Ok(job));
@@ -802,6 +829,32 @@ mod tests {
         assert!(!super::reopen());
     }
     #[test]
+    fn shutdown_outside_the_tracked_world_close_is_recorded_without_a_closing_certificate() {
+        if !child(
+            "shutdown_outside_the_tracked_world_close_is_recorded_without_a_closing_certificate",
+        ) {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        // 63D443 calls 4A1150 outside 63E160. It is seen before and after
+        // Close was requested, but never becomes a tracked close.
+        let mut before = raw(31, key, 0x18063d448);
+        begin(&mut before);
+        assert_eq!(scheduler::closure::unowned_count(), 1);
+        request_close();
+        let mut after = raw(31, key, 0x18063d448);
+        begin(&mut after);
+        assert_eq!(scheduler::closure::unowned_count(), 2);
+        finish(&mut after, false);
+        assert!(scheduler::closure::world_closed(0x1000).is_err());
+        assert!(!WAITED.load(Ordering::Acquire));
+        assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!ready());
+    }
+    #[test]
     fn inert_operation_storage_survives_wait_until_owned_original_cleanup() {
         if !child("inert_operation_storage_survives_wait_until_owned_original_cleanup") {
             return;
@@ -814,13 +867,15 @@ mod tests {
         f.queue_producer_returned(p).unwrap();
         request_close();
         let mut world = vec![0u64; 0x2b0 / 8];
-        world[0x250 / 8] = 300;
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        world[0x250 / 8] = key;
         world[0x2a0 / 8] = 1u64 << 32;
         let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
         begin(&mut w);
-        let mut m = raw(31, 300, 0x18063e1d5);
+        let mut m = raw(31, key, 0x18063e1d5);
         begin(&mut m);
-        let mut wait = raw(32, 300 + 0x400, 0x1804a1196);
+        let mut wait = raw(32, key + 0x400, 0x1804a1196);
         begin(&mut wait);
         finish(&mut wait, false);
         assert!(WAITED.load(Ordering::Acquire));
