@@ -34,6 +34,7 @@ fn all_frames(dll: bool) -> Vec<&'static Frame> {
         result.extend(lease::fixed::FRAMES);
         result.extend(snapshot::fixed::FRAMES);
         result.extend(view_worker::fixed::FRAMES);
+        result.extend(transport_birth::fixed::FRAMES);
     } else {
         result.extend(world::fixed::FRAMES);
     }
@@ -50,6 +51,7 @@ fn all_slots(dll: bool) -> Vec<(u32, u32)> {
     if !dll {
         result.extend(snapshot::flow::SLOTS);
         result.extend(view_worker::flow::SLOTS);
+        result.extend(transport_birth::flow::SLOTS);
         result.sort_unstable();
     }
     result.dedup();
@@ -145,6 +147,9 @@ fn specimen(dll: bool) -> Vec<u8> {
         }
     }
     if !dll {
+        for v in transport_birth::flow::BLOCKS {
+            write_hex(&mut b, v.rva, v.hex, false);
+        }
         for v in view_worker::flow::BLOCKS {
             write_hex(&mut b, v.rva, v.hex, false);
         }
@@ -185,6 +190,9 @@ fn specimen(dll: bool) -> Vec<u8> {
             (0xf97800, "WaitForSingleObjectEx"),
             (0xf97970, "CloseHandle"),
             (0xf97740, "SwitchToThread"),
+            (0xf97798, "ResetEvent"),
+            (0xf977a0, "CreateEventA"),
+            (0xf977a8, "CreateThread"),
         ]
         .into_iter()
         .enumerate()
@@ -240,6 +248,7 @@ fn valid(b: &[u8], dll: bool) -> Result<Value, String> {
         lease::inspect(&parse(b, dll)?)?;
         snapshot::inspect(&parse(b, dll)?)?;
         view_worker::inspect(&parse(b, dll)?)?;
+        transport_birth::inspect(&parse(b, dll)?)?;
     } else {
         world::inspect(&parse(b, dll)?)?;
     }
@@ -896,4 +905,134 @@ fn view_worker_tls_and_group_event_wait_named_imports_are_distinct() {
         host[p..p + 8].copy_from_slice(&old);
     }
     view_worker::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+
+#[test]
+fn transport_birth_joins_existing_session_before_pointer_publication_and_thread_start() {
+    let host = specimen(false);
+    let r = transport_birth::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    assert_eq!(r["factory"]["slot"], 0x408);
+    assert_eq!(
+        r["factory"]["before_session_publication"][2]["factory_return"],
+        0x83fc63
+    );
+    assert_eq!(
+        r["factory"]["before_session_publication"][2]["store"],
+        0x83fc72
+    );
+    assert_eq!(r["network"]["constructor_return"], 0x84e539);
+    assert_eq!(r["thread"]["constructor_return"], 0x98c0d1);
+    assert_eq!(r["thread"]["start_vcall"], 0x98c0f3);
+    assert_eq!(
+        r["thread"]["native_create_api"],
+        "KERNEL32.dll!CreateThread"
+    );
+    assert_eq!(r["native_events_before_callback"]["enqueue_call"], 0x8615f1);
+    assert_eq!(
+        r["native_events_before_callback"]["extract_copy_call"],
+        0x85741f
+    );
+    assert_eq!(
+        r["native_events_before_callback"]["transport_callback_call"],
+        0x84ee75
+    );
+    assert_eq!(r["certificate_issued"], false);
+}
+
+#[test]
+fn transport_birth_whole_frames_and_chained_unwind_reject_mutation() {
+    let mut host = specimen(false);
+    transport_birth::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    for f in transport_birth::fixed::FRAMES {
+        for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
+            let p = offset(rva, false);
+            host[p] ^= 1;
+            assert!(
+                transport_birth::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "transport body {rva:x}"
+            );
+            host[p] ^= 1;
+        }
+        for part in f.fragments {
+            for i in 0..part.hex.len() / 2 {
+                let p = offset(part.unwind, false) + i;
+                host[p] ^= 1;
+                assert!(
+                    transport_birth::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                    "transport unwind {:x}+{i}",
+                    part.unwind
+                );
+                host[p] ^= 1;
+            }
+        }
+    }
+}
+
+#[test]
+fn transport_birth_receiver_field_and_deep_copy_witnesses_reject_every_byte_mutation() {
+    let mut host = specimen(false);
+    for block in transport_birth::flow::BLOCKS {
+        for i in 0..block.hex.len() / 2 {
+            let p = offset(block.rva, false) + i;
+            host[p] ^= 1;
+            assert!(
+                transport_birth::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "transport field {:x}+{i}",
+                block.rva
+            );
+            host[p] ^= 1;
+        }
+    }
+    for &(slot, _) in transport_birth::flow::SLOTS {
+        let p = offset(slot, false);
+        host[p] ^= 1;
+        assert!(
+            transport_birth::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "transport table {slot:x}"
+        );
+        host[p] ^= 1;
+    }
+    transport_birth::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+
+#[test]
+fn transport_birth_relative_calls_and_failure_branches_are_independent() {
+    let mut host = specimen(false);
+    references(
+        &Pe::parse_host(&host).unwrap(),
+        transport_birth::flow::REFERENCES,
+    )
+    .unwrap();
+    for r in transport_birth::flow::REFERENCES {
+        for i in (0..r.prefix.len() / 2).chain(r.displacement..r.length) {
+            let p = offset(r.rva, false) + i;
+            host[p] ^= 1;
+            assert!(
+                references(
+                    &Pe::parse_host(&host).unwrap(),
+                    transport_birth::flow::REFERENCES
+                )
+                .is_err(),
+                "transport ref {:x}+{i}",
+                r.rva
+            );
+            host[p] ^= 1;
+        }
+    }
+}
+
+#[test]
+fn transport_thread_creation_cannot_be_replaced_by_another_valid_named_api() {
+    let mut host = specimen(false);
+    for i in 5..8 {
+        let p = offset(0x1100180 + i * 16, false);
+        let old = host[p..p + 8].to_vec();
+        w64(&mut host, p, 0x1100300);
+        assert!(
+            transport_birth::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "transport named API {i}"
+        );
+        host[p..p + 8].copy_from_slice(&old);
+    }
+    transport_birth::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
 }

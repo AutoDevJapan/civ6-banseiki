@@ -10,6 +10,8 @@ mod lease;
 mod pe;
 #[path = "session_audit/snapshot.rs"]
 mod snapshot;
+#[path = "session_audit/transport_birth.rs"]
+mod transport_birth;
 #[path = "session_audit/view_worker.rs"]
 mod view_worker;
 #[path = "session_audit/world.rs"]
@@ -203,6 +205,7 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
     let world_records = world::inspect(core)?;
     let snapshot_stream = snapshot::inspect(host)?;
     let view_worker = view_worker::inspect(host)?;
+    let transport_birth = transport_birth::inspect(host)?;
     let admission = json!({
         "context_table":0xa101e8,"context_constructor":0x58fb40,
         "enqueue":{"slot":0x230,"adapter":0x590810,"target":0x373e0},
@@ -258,12 +261,13 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
         "required_cut":"session/message/producer inflight and every active prototype reader/execute must be resolved BEFORE original380B0; cleanup-return storage drain alone is too late to protect380E3",
         "limits":"flags2A4/2A6, normal manager Wait and storage-free normal returns are distinct facts; none independently seals every producer"});
     Ok(
-        json!({"schema":"native-session-boundary-static-v5","image_revision":"steam-26407122",
+        json!({"schema":"native-session-boundary-static-v6","image_revision":"steam-26407122",
         "core_sha256":CORE_SHA,"host_sha256":HOST_SHA,"core_evidence":c,"host_evidence":h,
         "context_admission":admission,"message_lifetime":message,"transport":transport,
         "shutdown_order":shutdown,"adapter_contract":adapter_contract(),"native_lease":native_lease,"world_records":world_records,
         "snapshot_stream":snapshot_stream,
         "view_worker":view_worker,
+        "transport_birth":transport_birth,
         "not_established_by_this_audit":[
             "old packet/session identity across lookup, session replacement, reconnect and address reuse",
             "upstream network admission stop and same-session inflight join with native guarantees",
