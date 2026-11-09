@@ -89,6 +89,7 @@ static DECODED: AtomicU64 = AtomicU64::new(0);
 static ENQUEUE_COUNT: AtomicUsize = AtomicUsize::new(0);
 static FREE_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ADMISSION_WORLD: Mutex<Option<SessionWorldReceipt>> = Mutex::new(None);
+static ADMISSION_PACKET: Mutex<Option<PacketReceipt>> = Mutex::new(None);
 static FULL_HOLD: AtomicBool = AtomicBool::new(false);
 static BEFORE_PUBLISH: AtomicBool = AtomicBool::new(false);
 static GROW_MAP: AtomicU64 = AtomicU64::new(0);
@@ -103,6 +104,7 @@ extern "system" fn before_publication(queue: u64) {
 extern "system" fn admission_body(session: u64, message: u64) {
     let _native_inputs = (session, message);
     *ADMISSION_WORLD.lock().unwrap() = super::super::NativeSessionApi::current_world();
+    *ADMISSION_PACKET.lock().unwrap() = super::super::current_packet();
     FULL_HOLD.store(
         FRAMES
             .get()
@@ -299,6 +301,7 @@ impl Fixture {
             native_transport: false,
             thread: 0,
             unproven_hold: None,
+            packet: None,
         };
         super::super::CALLS.with(|s| s.borrow_mut().push(c));
         unsafe {
@@ -705,6 +708,7 @@ fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
         native_transport: false,
         thread: 0,
         unproven_hold: None,
+        packet: None,
     };
     super::super::CALLS.with(|s| s.borrow_mut().push(c));
     assert_eq!(f.pump(), 0x8811);
@@ -723,6 +727,51 @@ fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
     assert!(!FRAMES.get().unwrap().unproven_on_current_thread());
     assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
     assert_eq!(pending(), Ok(0));
+}
+#[test]
+fn unknown_packet_identity_survives_native_serialization_free_and_delayed_dispatch() {
+    if !child("unknown_packet_identity_survives_native_serialization_free_and_delayed_dispatch") {
+        return;
+    }
+    let mut f = Fixture::new();
+    state().dispatched(f.message).unwrap();
+    let packet = PacketReceipt {
+        serial: 991,
+        lease: f.lease,
+        transport: state().transport(f.lease).unwrap().incarnation,
+        world: None,
+    };
+    let call = super::super::Call {
+        serial: 1,
+        kind: 73,
+        lease: None,
+        hold: None,
+        message: None,
+        registry: 0,
+        owner: 0,
+        id: 0,
+        transport: None,
+        native_transport: false,
+        thread: 0,
+        unproven_hold: None,
+        packet: Some(packet),
+    };
+    super::super::CALLS.with(|calls| calls.borrow_mut().push(call));
+    unsafe {
+        queue_fixture_enqueue_caller(f.session.as_ptr() as u64 + 0xd8, f.source.as_ptr() as u64);
+    }
+    super::super::CALLS.with(|calls| {
+        calls.borrow_mut().pop();
+    });
+    f.session[31] = 1;
+    assert_eq!(pending(), Ok(1));
+    assert_eq!(f.pump(), 0x8811);
+    assert_eq!(*ADMISSION_WORLD.lock().unwrap(), None);
+    assert_eq!(*ADMISSION_PACKET.lock().unwrap(), Some(packet));
+    assert!(FULL_HOLD.load(Ordering::Acquire));
+    assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
+    assert_eq!(pending(), Ok(0));
+    assert!(!super::super::unproven_input_active());
 }
 
 static CAS_HITS: AtomicUsize = AtomicUsize::new(0);

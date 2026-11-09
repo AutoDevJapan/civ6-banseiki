@@ -96,10 +96,15 @@ fn capture(message: u64, session: u64, serial: u64) -> Option<Snapshot> {
     if start == 0 || end <= start || length == 0 || u64::from(length) > end - start {
         return None;
     }
+    let packet = sessions::current_packet();
+    let issued_world = sessions::admitted_source_world(session)
+        .filter(|world| packet.is_none_or(|packet| packet.world == Some(*world)));
+    let relation = sessions::snapshot_owner(owner, session)
+        .filter(|(_, previous)| previous.is_some() && *previous == issued_world);
     Some(Snapshot {
         serial,
-        packet: sessions::current_packet(),
-        session: sessions::snapshot_owner(owner, session),
+        packet,
+        session: relation,
         header: header.try_into().ok()?,
         owner,
         payload: start,

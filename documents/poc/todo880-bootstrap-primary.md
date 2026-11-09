@@ -37,6 +37,8 @@ NetSnapshot `80F230`からsnapshot ownerへの実呼出しは、元messageの値
 
 受信時のWorldが不明でも、出生済みtransportのpacketには独立した識別を保持する。元eventのコピー・拡張・解放を通して、製品用ticketが不明であることとpacket自体が同じであることを分けて保存し、typed callbackからSnapshotへ渡す。旧アドレスへ新packetが割り当てられた場合は別の識別とし、不明なticketを現在のWorldから補完しない。
 
+packetの識別は、遅延serializeされたslotにも元の値で保存し、decode後の元storage解放が正常復帰してからdispatchへ渡す。不明な入力の呼出し全体も排出待ちへ含める。wire SnapshotからSessionへWorld関係を渡すには、同じ受信・dispatchで既に発行されたWorld ticketが必要で、live Sessionの現在値だけを代用しない。ticketのないSnapshotは観測値と元ロード処理を保持し、その入力に新World資格を発行しない。
+
 ライセンス済みローカルのEXE/Coreを必要とする一次照合は、配布可能な所有fixtureのCIと分け、Windowsの実機作業先で明示実行する。`cargo nextest run --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs -E 'test(native_frames::)' --run-ignored only`で一次照合を選び、対象件数と実結果を保持する。通常CIで省略されることを、これらの合格とは扱わない。
 
 遅延受信は、既にadmitされたmessageの保存内容を再serializeする `847510`→move `527440`と、pump `83D570`→decode `7F9C30`→元storage freeの正常return→元session dispatchを区別する。slotの再利用、map growth、未実行取消、storage free中の例外でも元packetの識別を保持する。合成経路では共有session gatewayも経由してこの対応を確認している。これは最初のOS受信queue全体の出生や停止を証明するものではない。

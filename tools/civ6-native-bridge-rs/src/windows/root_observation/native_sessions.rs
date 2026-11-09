@@ -27,9 +27,53 @@ pub(super) struct PacketReceipt {
     pub serial: u64,
     pub lease: SessionLease,
     pub transport: u64,
+    pub world: Option<SessionWorldReceipt>,
+}
+pub(super) fn admitted_source_world(session: u64) -> Option<SessionWorldReceipt> {
+    CALLS
+        .with(|calls| {
+            calls
+                .borrow()
+                .iter()
+                .rev()
+                .find(|call| matches!(call.kind, 72 | 73))
+                .and_then(|call| call.message)
+        })
+        .and_then(|message| {
+            let state = state();
+            (state.message_session(message).ok()? == session)
+                .then(|| state.message_world(message).ok())
+                .flatten()
+        })
+}
+#[cfg(test)]
+pub(super) fn fixture_snapshot_session(owner: u64, session: u64) -> SessionLease {
+    let mut state = state();
+    let lease = state.birth(1, Some(1), owner, 2).unwrap();
+    state.factory(lease, 7, owner, session, 9).unwrap();
+    state.published(lease, 7).unwrap();
+    state
+        .bind_world(
+            lease,
+            SessionWorldReceipt {
+                binding_id: 10,
+                epoch: 3,
+            },
+        )
+        .unwrap();
+    lease
 }
 pub(super) fn current_packet() -> Option<PacketReceipt> {
-    input::current_packet()
+    CALLS
+        .with(|calls| {
+            calls
+                .borrow()
+                .iter()
+                .rev()
+                .find(|call| matches!(call.kind, 72 | 73))
+                .map(|call| call.packet)
+        })
+        .unwrap_or_else(input::current_packet)
 }
 
 static EXE: AtomicU64 = AtomicU64::new(0);
@@ -211,6 +255,7 @@ struct Call {
     native_transport: bool,
     thread: u64,
     unproven_hold: Option<u64>,
+    packet: Option<PacketReceipt>,
 }
 thread_local! {
     static REGISTRY:RefCell<Vec<(u64,u64)>>=const {RefCell::new(Vec::new())};
@@ -418,6 +463,7 @@ extern "system" fn begin(raw: *mut Saved) {
             native_transport: false,
             thread: 0,
             unproven_hold: None,
+            packet: None,
         };
         match c.kind {
             70 => {
@@ -465,6 +511,7 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
             }
             72 => {
+                c.packet = input::current_packet();
                 // The explicit input ticket is acquired BEFORE ID lookup.
                 // Missing upstream provenance stays unknown, even if a raw
                 // callback address happens to name a newly bound session.
@@ -508,6 +555,16 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
             }
             73 => {
+                c.packet = deferred::packet(raw).unwrap_or_else(|| {
+                    CALLS.with(|calls| {
+                        calls
+                            .borrow()
+                            .iter()
+                            .rev()
+                            .find(|call| call.kind == 72)
+                            .and_then(|call| call.packet)
+                    })
+                });
                 let parent = deferred::admission(raw).unwrap_or_else(|| {
                     CALLS.with(|s| {
                         s.borrow()

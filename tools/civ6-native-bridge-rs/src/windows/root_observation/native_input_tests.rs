@@ -379,6 +379,7 @@ fn typed_callback_enters_shared_incoming_with_saved_input() {
     let known = OBSERVED_PACKET.lock().unwrap().unwrap();
     assert_eq!(known.lease, l);
     assert_eq!(known.transport, t.incarnation);
+    assert_eq!(known.world, Some(world));
     let id = retire(p).unwrap();
     release(vec![id]);
     assert_eq!(pending(), Ok(0));
@@ -403,6 +404,7 @@ fn typed_callback_enters_shared_incoming_with_saved_input() {
     assert_ne!(unknown.serial, known.serial);
     assert_eq!(unknown.lease, known.lease);
     assert_eq!(unknown.transport, known.transport);
+    assert_eq!(unknown.world, None);
     assert!(super::super::NativeSessionApi::current_world().is_none());
     let id = retire(p).unwrap();
     release(vec![id]);

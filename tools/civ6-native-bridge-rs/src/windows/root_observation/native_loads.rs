@@ -420,9 +420,17 @@ extern "system" fn begin(raw: *mut Saved) {
                 let owner = raw.gpr[0];
                 if value(owner) == exe(0xfd35c8) && value(exe(0xfd36b0)) == exe(0x273f40) {
                     let session = value(owner + 8);
+                    let wire = wire::request(raw);
+                    let relation = match wire {
+                        Some(snapshot) => snapshot.session,
+                        None if !super::unproven_input_active() => {
+                            sessions::snapshot_owner(owner, session)
+                        }
+                        None => None,
+                    };
                     c.source = Some(Source {
-                        session: sessions::snapshot_owner(owner, session),
-                        wire: wire::request(raw),
+                        session: relation,
+                        wire,
                     });
                     if c.source
                         .and_then(|source| source.wire)

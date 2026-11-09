@@ -9,14 +9,14 @@ mod slots;
 static QUEUE_EXE: AtomicU64 = AtomicU64::new(0);
 static QUEUE_NEXT: AtomicU64 = AtomicU64::new(0);
 static QUEUE_HOOKS: Mutex<Vec<super::super::OwnedHook>> = Mutex::new(Vec::new());
-static SLOTS: OnceLock<Mutex<slots::Ledger<Message>>> = OnceLock::new();
+static SLOTS: OnceLock<Mutex<slots::Ledger<Receipt>>> = OnceLock::new();
 #[unsafe(no_mangle)]
 static NATIVE_SESSION_QUEUE_CONTINUE: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
 
 struct Flight {
     id: u64,
-    message: Message,
-    hold: u64,
+    receipt: Receipt,
+    hold: Option<Hold>,
     slot: u64,
     buffer: u64,
     decoded: u64,
@@ -31,13 +31,54 @@ struct QueueCall {
     slot: u64,
     parent: u64,
     current: u64,
-    hold: Option<u64>,
+    hold: Option<Hold>,
     flights: Vec<Flight>,
     ids: Vec<u64>,
     addresses: Vec<u64>,
 }
 thread_local! {static QUEUE_CALLS:RefCell<Vec<QueueCall>>=const {RefCell::new(Vec::new())};}
-fn slots() -> std::sync::MutexGuard<'static, slots::Ledger<Message>> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Receipt {
+    message: Option<Message>,
+    packet: Option<PacketReceipt>,
+}
+enum Hold {
+    Bound(u64),
+    Unknown(u64),
+}
+fn enter(receipt: Receipt) -> Option<Hold> {
+    if let Some(message) = receipt.message {
+        return Some(Hold::Bound(
+            enter_scope(message).unwrap_or_else(|_| fault()),
+        ));
+    }
+    FRAMES.get().map(|frames| {
+        let hold = frames
+            .enter_with_provenance(true)
+            .unwrap_or_else(|_| fault());
+        if !frames.healthy() {
+            fault();
+        }
+        Hold::Unknown(hold)
+    })
+}
+fn leave(hold: Option<Hold>, exceptional: bool) {
+    match hold {
+        Some(Hold::Bound(id)) => {
+            (SCOPE.get().unwrap_or_else(|| fault()).leave)(id, exceptional)
+                .unwrap_or_else(|_| fault());
+        }
+        Some(Hold::Unknown(id)) => {
+            let frames = FRAMES.get().unwrap_or_else(|| fault());
+            if exceptional {
+                frames.mark_unresolved();
+            }
+            frames.leave(id).unwrap_or_else(|_| fault());
+        }
+        None => {}
+    }
+}
+fn slots() -> std::sync::MutexGuard<'static, slots::Ledger<Receipt>> {
     SLOTS
         .get_or_init(|| Mutex::new(slots::Ledger::new()))
         .lock()
@@ -69,15 +110,23 @@ fn caller(raw: &Saved, rva: u64) -> bool {
     }
     raw.invocation.caller == QUEUE_EXE.load(Ordering::Acquire) + rva
 }
-fn admitted_message(queue: u64) -> Option<Message> {
-    let message = super::CALLS.with(|s| {
+fn admitted_receipt(queue: u64) -> Option<Receipt> {
+    let receipt = super::CALLS.with(|s| {
         s.borrow()
             .iter()
             .rev()
             .find(|c| c.kind == 73)
-            .and_then(|c| c.message)
+            .map(|c| Receipt {
+                message: c.message,
+                packet: c.packet,
+            })
     })?;
-    (state().message_session(message).ok()?.checked_add(0xd8) == Some(queue)).then_some(message)
+    let session = if let Some(message) = receipt.message {
+        state().message_session(message).ok()?
+    } else {
+        state().snapshot(receipt.packet?.lease).ok()?.0
+    };
+    (session.checked_add(0xd8) == Some(queue)).then_some(receipt)
 }
 /// Some(None) is an exact deferred caller with an unrecorded slot. Do not
 /// fall back to an unrelated outer incoming/current-World scope in that case.
@@ -101,8 +150,30 @@ pub(super) fn admission(raw: &Saved) -> Option<Option<(Lease, Message)>> {
         if !slots().storage_ready(f.id) {
             fault();
         }
-        let lease = state().message_lease(f.message).unwrap_or_else(|_| fault());
-        Some(Some((lease, f.message)))
+        let Some(message) = f.receipt.message else {
+            return Some(None);
+        };
+        let lease = state().message_lease(message).unwrap_or_else(|_| fault());
+        Some(Some((lease, message)))
+    })
+}
+pub(super) fn packet(raw: &Saved) -> Option<Option<PacketReceipt>> {
+    if !caller(raw, 0x83d888) {
+        return None;
+    }
+    QUEUE_CALLS.with(|calls| {
+        let calls = calls.borrow();
+        let pump = calls.iter().rev().find(|call| call.kind == 82)?;
+        if pump.session != raw.gpr[0] {
+            fault();
+        }
+        let flight = pump.flights.iter().find(|flight| {
+            flight.id == pump.current && flight.decoded == raw.gpr[1] && flight.decoded != 0
+        });
+        if flight.is_some_and(|flight| !slots().storage_ready(flight.id)) {
+            fault();
+        }
+        Some(flight.and_then(|flight| flight.receipt.packet))
     })
 }
 /// Local pending accounting only; not an upstream producer seal or certificate.
@@ -152,9 +223,19 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
                 c.queue = raw.gpr[0];
                 c.source = raw.gpr[1];
-                if let Some(parent) = admitted_message(c.queue) {
-                    let child = state().fork_message(parent).unwrap_or_else(|_| fault());
-                    c.id = slots().reserve(c.queue, child).unwrap_or_else(|_| fault());
+                if let Some(parent) = admitted_receipt(c.queue) {
+                    let message = parent
+                        .message
+                        .map(|message| state().fork_message(message).unwrap_or_else(|_| fault()));
+                    c.id = slots()
+                        .reserve(
+                            c.queue,
+                            Receipt {
+                                message,
+                                packet: parent.packet,
+                            },
+                        )
+                        .unwrap_or_else(|_| fault());
                 }
             }
             81 => {
@@ -200,13 +281,15 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
                 c.parent = parent;
                 c.slot = raw.invocation.entry_rbx;
-                if let Some((id, message)) =
+                if let Some((id, receipt)) =
                     slots().retain(queue, c.slot).unwrap_or_else(|_| fault())
                 {
-                    state()
-                        .dispatch_deferred(message, session)
-                        .unwrap_or_else(|_| fault());
-                    let hold = enter_scope(message).unwrap_or_else(|_| fault());
+                    if let Some(message) = receipt.message {
+                        state()
+                            .dispatch_deferred(message, session)
+                            .unwrap_or_else(|_| fault());
+                    }
+                    let hold = enter(receipt);
                     let buffer = read64(c.slot).unwrap_or_else(|_| fault());
                     c.id = id;
                     QUEUE_CALLS.with(|s| {
@@ -218,7 +301,7 @@ extern "system" fn begin(raw: *mut Saved) {
                             .flights
                             .push(Flight {
                                 id,
-                                message,
+                                receipt,
                                 hold,
                                 slot: c.slot,
                                 buffer,
@@ -276,7 +359,7 @@ extern "system" fn begin(raw: *mut Saved) {
             85 => {
                 c.queue = raw.gpr[0];
                 if let Some(message) = slots().queue_message(c.queue) {
-                    c.hold = Some(enter_scope(message).unwrap_or_else(|_| fault()));
+                    c.hold = enter(message);
                 }
                 c.ids = slots().clear_begin(c.queue).unwrap_or_else(|_| fault());
             }
@@ -284,7 +367,7 @@ extern "system" fn begin(raw: *mut Saved) {
                 c.queue = raw.gpr[0];
                 c.addresses = slots().queued_addresses(c.queue);
                 if let Some(message) = slots().queue_message(c.queue) {
-                    c.hold = Some(enter_scope(message).unwrap_or_else(|_| fault()));
+                    c.hold = enter(message);
                 }
             }
             _ => fault(),
@@ -337,15 +420,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             poison();
         }
         for f in c.flights {
-            if (SCOPE.get().unwrap_or_else(|| fault()).leave)(f.hold, true).is_err() {
-                fault();
-            }
+            leave(f.hold, true);
         }
-        if let Some(hold) = c.hold {
-            if (SCOPE.get().unwrap_or_else(|| fault()).leave)(hold, true).is_err() {
-                fault();
-            }
-        }
+        leave(c.hold, true);
         return;
     }
     match c.kind {
@@ -359,10 +436,10 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         82 => {
             for f in c.flights {
                 let message = slots().executed(f.id).unwrap_or_else(|_| fault());
-                state().dispatched(message).unwrap_or_else(|_| fault());
-                if (SCOPE.get().unwrap_or_else(|| fault()).leave)(f.hold, false).is_err() {
-                    fault();
+                if let Some(message) = message.message {
+                    state().dispatched(message).unwrap_or_else(|_| fault());
                 }
+                leave(f.hold, false);
             }
         }
         83 if c.id != 0 => {
@@ -389,23 +466,17 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         84 if c.id != 0 => slots().free_returned(c.id).unwrap_or_else(|_| fault()),
         85 => {
             for message in slots().clear_returned(&c.ids).unwrap_or_else(|_| fault()) {
-                state()
-                    .cancel_before_dispatch(message)
-                    .unwrap_or_else(|_| fault());
-            }
-            if let Some(hold) = c.hold {
-                if (SCOPE.get().unwrap_or_else(|| fault()).leave)(hold, false).is_err() {
-                    fault();
+                if let Some(message) = message.message {
+                    state()
+                        .cancel_before_dispatch(message)
+                        .unwrap_or_else(|_| fault());
                 }
             }
+            leave(c.hold, false);
         }
         86 => {
             verify_growth(c.queue, &c.addresses).unwrap_or_else(|_| fault());
-            if let Some(hold) = c.hold {
-                if (SCOPE.get().unwrap_or_else(|| fault()).leave)(hold, false).is_err() {
-                    fault();
-                }
-            }
+            leave(c.hold, false);
         }
         80 | 81 | 83 | 84 => {}
         _ => fault(),

@@ -180,6 +180,25 @@ fn unknown_snapshot_is_transparent_and_known_terminal_unwind_is_unresolved() {
     assert!(FAILED.load(Ordering::Acquire));
     assert!(CALLS.with(|s| s.borrow().is_empty()));
 }
+#[test]
+fn unknown_snapshot_cannot_borrow_a_live_sessions_current_world() {
+    if !child("unknown_snapshot_cannot_borrow_a_live_sessions_current_world") {
+        return;
+    }
+    let f = Fixture::new();
+    let lease =
+        sessions::fixture_snapshot_session(f.owner.as_ptr() as u64, f.session.as_ptr() as u64);
+    assert_eq!(
+        sessions::snapshot_owner(f.owner.as_ptr() as u64, f.session.as_ptr() as u64)
+            .unwrap()
+            .0,
+        lease
+    );
+    let snapshot = capture(f.message.as_ptr() as u64, f.session.as_ptr() as u64, 1).unwrap();
+    assert_eq!(snapshot.session, None);
+    assert_eq!(snapshot.packet, None);
+    assert!(snapshot.matches_session(None));
+}
 global_asm!(
     ".globl wire_owned_original",
     ".seh_proc wire_owned_original",

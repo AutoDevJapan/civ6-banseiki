@@ -183,6 +183,9 @@ pub(super) fn current_packet() -> Option<super::PacketReceipt> {
             serial: input.0,
             lease: ticket.lease,
             transport: ticket.transport.incarnation,
+            world: ticket
+                .message
+                .map(|message| state().message_world(message).unwrap_or_else(|_| fault())),
         })
     })
 }
