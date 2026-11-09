@@ -4,6 +4,17 @@ use sha2::{Digest, Sha256};
 
 const HOST_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
 
+/// Complete synchronous caller evidence, without enabling a runtime adapter.
+/// Keep the legacy audit result unchanged; this is a separate opt-in result.
+pub fn audit_outer_frames(core: &[u8], host: &[u8]) -> Result<Value, String> {
+    let base = audit(core, host)?; // both pinned buffers before ABI interpretation
+    Ok(
+        json!({"schema":"native-outer-frames-static-v1", "base_audit":base,
+        "outer_frame_slice":worker_payload::inspect_outer_frames(core)?,
+        "certificate_issued":false,"product_acceptance":false}),
+    )
+}
+
 /// Opt-in slice. The old audit and every value it returns are preserved.
 /// Hashes refer to these borrowed file buffers, never a later path reread.
 pub fn audit_worker_payload(core: &[u8], host: &[u8]) -> Result<Value, String> {
@@ -452,6 +463,482 @@ mod worker_payload {
     pub(super) fn inspect_pending(host: &[u8]) -> Result<Value, String> {
         pending_publication::inspect(&Pe::parse_executable(host)?)
     }
+
+    pub(super) fn inspect_outer_frames(core: &[u8]) -> Result<Value, String> {
+        outer_frames::inspect(&Pe::parse(core)?)
+    }
+
+    mod outer_frames {
+        use super::*;
+
+        struct Frame {
+            begin: u32,
+            end: u32,
+            sha: &'static str,
+            fragments: &'static [(u32, u32, u32, &'static str)],
+        }
+
+        // Each partition includes the epilogues, not just the first pdata row.
+        const FRAMES: &[Frame] = &[
+            Frame {
+                begin: 0x35f70,
+                end: 0x35fd3,
+                sha: "22cf132e7f44201dec040a64f8450ff52f6ce7362230e717226ed0b9a5bc60b6",
+                fragments: &[(0x35f70, 0x35fd3, 0xb45024, "0106020006320230")],
+            },
+            Frame {
+                begin: 0x36180,
+                end: 0x363ca,
+                sha: "6371ece2fe74720ed1efb9b9a9550abc872d5fe120dda9e970f6139e4cc884a3",
+                fragments: &[
+                    (
+                        0x36180,
+                        0x36271,
+                        0xac3884,
+                        "010b05000b0152000470035002300000",
+                    ),
+                    (
+                        0x36271,
+                        0x3632d,
+                        0xac3894,
+                        "210802000864580080610300716203008438ac00",
+                    ),
+                    (
+                        0x3632d,
+                        0x363ca,
+                        0xac38a8,
+                        "2100000080610300716203008438ac00",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0x39920,
+                end: 0x39dee,
+                sha: "7284aae0f8821587b27cff4f6f7cb0926373eaf6ed158156ab78b1deeb569593",
+                fragments: &[
+                    (0x39920, 0x39942, 0xac3bfc, "011304001301550004e00250"),
+                    (
+                        0x39942,
+                        0x3995b,
+                        0xac3c08,
+                        "2108020008345a002099030042990300fc3bac00",
+                    ),
+                    (
+                        0x3995b,
+                        0x39ddb,
+                        0xac3c1c,
+                        "2120080020f4520018c453001074540008645b00429903005b990300083cac00",
+                    ),
+                    (
+                        0x39ddb,
+                        0x39de3,
+                        0xac3c3c,
+                        "21000000429903005b990300083cac00",
+                    ),
+                    (
+                        0x39de3,
+                        0x39dee,
+                        0xac3c4c,
+                        "210000002099030042990300fc3bac00",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0x4182b0,
+                end: 0x418860,
+                sha: "1facbb5c67cf9290a51cb8be4fe67b1f7c73e906e57cc6b9d0c8165b66396991",
+                fragments: &[
+                    (0x4182b0, 0x4182f3, 0xaff1f8, "010a04000a011b0003700230"),
+                    (
+                        0x4182f3,
+                        0x41841a,
+                        0xaff204,
+                        "2108020008d41800b0824100f3824100f8f1af00",
+                    ),
+                    (
+                        0x41841a,
+                        0x418427,
+                        0xaff218,
+                        "2100020000d41800b0824100f3824100f8f1af00",
+                    ),
+                    (
+                        0x418427,
+                        0x41884e,
+                        0xaff22c,
+                        "21280a0028f4160020e4170018c4190010641a0008541f001a8441002784410018f2af00",
+                    ),
+                    (
+                        0x41884e,
+                        0x418856,
+                        0xaff250,
+                        "210000001a8441002784410018f2af00",
+                    ),
+                    (
+                        0x418856,
+                        0x418860,
+                        0xaff260,
+                        "21000000b0824100f3824100f8f1af00",
+                    ),
+                ],
+            },
+            Frame {
+                begin: 0x4afc0,
+                end: 0x4b87b,
+                sha: "0b50e7656ea4ce7be5eb3fbe950b25116fa14f7514932fc360a3fbd39f636867",
+                fragments: &[(
+                    0x4afc0,
+                    0x4b87b,
+                    0xac4ddc,
+                    "011f0b001f3492001f01880010f00ee00cd00ac00870076006500000",
+                )],
+            },
+        ];
+
+        // All instructions are position-independent push, sub rsp or mov/lea
+        // using rsp. Lengths cover E9 + three NOPs, not merely its first 5 bytes.
+        type Prefix = (
+            u32,
+            &'static [u8],
+            &'static [usize],
+            &'static [&'static str],
+        );
+        const PREFIXES: &[Prefix] = &[
+            (
+                0x35f70,
+                &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xd9],
+                &[2, 4, 3],
+                &["RCX"],
+            ),
+            (
+                0x36180,
+                &[0x40, 0x53, 0x55, 0x57, 0x48, 0x81, 0xec, 0x90, 2, 0, 0],
+                &[2, 1, 1, 7],
+                &["RCX"],
+            ),
+            (
+                0x39920,
+                &[
+                    0x40, 0x55, 0x41, 0x56, 0x48, 0x8d, 0xac, 0x24, 0x58, 0xfe, 0xff, 0xff,
+                ],
+                &[2, 2, 8],
+                &["RCX"],
+            ),
+            (
+                0x4182b0,
+                &[0x40, 0x53, 0x57, 0x48, 0x81, 0xec, 0xd8, 0, 0, 0],
+                &[2, 1, 7],
+                &["RCX", "EDX"],
+            ),
+        ];
+        fn hex(b: &[u8]) -> String {
+            b.iter().map(|x| format!("{x:02x}")).collect()
+        }
+        fn frame(pe: &Pe<'_>, spec: &Frame) -> Result<Value, String> {
+            let length = spec
+                .end
+                .checked_sub(spec.begin)
+                .filter(|n| *n > 0)
+                .ok_or("outer empty/reversed frame")?;
+            let mut next = spec.begin;
+            let mut fragments = Vec::new();
+            for &(begin, end, unwind, expected) in spec.fragments {
+                if begin != next || end <= begin || end > spec.end {
+                    return Err("outer incomplete fragment partition".into());
+                }
+                let f = Function { begin, end, unwind };
+                if pe.function(begin) != Some(f) || pe.function(end - 1) != Some(f) {
+                    return Err("outer pdata range differs".into());
+                }
+                let chain = pe.chain(f)?;
+                if chain.last().is_none_or(|f| f.begin != spec.begin)
+                    || chain.iter().any(|f| {
+                        !spec.fragments.iter().any(|&(a, z, u, _)| {
+                            *f == (Function {
+                                begin: a,
+                                end: z,
+                                unwind: u,
+                            })
+                        })
+                    })
+                {
+                    return Err("outer CHAININFO owner differs".into());
+                }
+                let h = pe.span(unwind, 4, false)?;
+                let aligned = 4 + ((usize::from(h[2]) + 1) & !1) * 2;
+                let flags = h[0] >> 3;
+                let size = aligned
+                    + if flags & 4 != 0 {
+                        12
+                    } else if flags & 3 != 0 {
+                        4
+                    } else {
+                        0
+                    };
+                let raw = pe.span(unwind, size, false)?;
+                if hex(raw) != expected || u32::from(h[1]) > end - begin {
+                    return Err("outer unwind bytes differ".into());
+                }
+                fragments.push(json!({"begin":begin,"end":end,"unwind":unwind,
+                    "unwind_bytes_hex":hex(raw),
+                    "chain":chain.iter().map(|f|json!({"begin":f.begin,"end":f.end,"unwind":f.unwind})).collect::<Vec<_>>()}));
+                next = end;
+            }
+            if next != spec.end {
+                return Err("outer incomplete frame end".into());
+            }
+            let body = pe.span(spec.begin, length as usize, true)?;
+            if format!("{:x}", Sha256::digest(body)) != spec.sha {
+                return Err("outer complete frame SHA differs".into());
+            }
+            Ok(json!({"entry_rva":spec.begin,"end_rva":spec.end,
+                "span_sha256":spec.sha,"fragments":fragments,
+                "scope":"complete fixed disk interval and unwind ownership; not all incoming edges or execution"}))
+        }
+        fn prefix(
+            pe: &Pe<'_>,
+            entry: u32,
+            expected: &[u8],
+            lengths: &[usize],
+        ) -> Result<Value, String> {
+            if entry & 7 != 0
+                || lengths.is_empty()
+                || lengths.contains(&0)
+                || lengths.iter().sum::<usize>() != expected.len()
+                || expected.len() < 8
+            {
+                return Err("outer CAS8 prefix alignment/instruction partition".into());
+            }
+            let actual = pe.span(entry, expected.len(), true)?;
+            if actual != expected {
+                return Err("outer complete relocated prefix differs".into());
+            }
+            let mut end = 0;
+            let boundaries = lengths
+                .iter()
+                .map(|len| {
+                    end += len;
+                    end
+                })
+                .collect::<Vec<_>>();
+            Ok(
+                json!({"entry_rva":entry,"cas_word_bytes_hex":hex(&actual[..8]),
+                "stolen_bytes_hex":hex(actual),"stolen_length":actual.len(),
+                "instruction_end_offsets":boundaries,"relative_relocations":[],
+                "patch_scope":"aligned CAS8 E9+NOP3; validate whole stolen span; concurrent instruction safety and trampoline unwind require separate validation"}),
+            )
+        }
+        fn witnesses(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
+            let mut out = Vec::new();
+            for (r, op, target) in [
+                (0x35fad, 0xe8, 0x63e2e0),
+                (0x35fc8, 0xe9, 0x63e2e0),
+                (0x363a0, 0xe8, 0x63e2e0),
+                (0x39da0, 0xe8, 0x63e2e0),
+                (0x39db6, 0xe8, 0x63e2e0),
+                (0x418599, 0xe8, 0x34840),
+                (0x41877e, 0xe8, 0x34840),
+                (0x63e2e4, 0xe8, 0x4afc0),
+                (0x4b16d, 0xe8, 0x5e2d0),
+            ] {
+                let target_actual = rel_target(r, pe.span(r, 5, true)?, op, 5, 1)?;
+                if target_actual != target {
+                    return Err("outer branch target differs".into());
+                }
+                out.push(
+                    json!({"rva":r,"kind":if op==0xe8 {"call"} else {"tail"},"target_rva":target}),
+                );
+            }
+            for (r, b) in [
+                (0x363c3, &[0x48, 0xff, 0xa0, 0x18, 1, 0, 0][..]),
+                (0x35fd2, &[0xc3][..]),
+                (0x39ded, &[0xc3][..]),
+                (0x418419, &[0xc3][..]),
+                (0x41885f, &[0xc3][..]),
+                (0x4b87a, &[0xc3][..]),
+                (
+                    0x4b172,
+                    &[0x8b, 0x8d, 0xb0, 0, 0, 0, 0x48, 0x83, 0xc7, 4][..],
+                ),
+            ] {
+                out.push(pe.witness(r, b, false)?);
+            }
+            Ok(out)
+        }
+        pub(super) fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
+            let frames = FRAMES
+                .iter()
+                .map(|f| frame(pe, f))
+                .collect::<Result<Vec<_>, _>>()?;
+            let prefixes=PREFIXES.iter().map(|&(entry,bytes,lengths,args)| {
+                let mut value=prefix(pe,entry,bytes,lengths)?;
+                value["consumed_integer_inputs"]=json!(args);
+                value["incoming_stack_argument_count"]=json!(0);
+                value["abi_scope"]=json!("manual instruction/dataflow inspection of this hashed interval; no source-language signature or callee behavior inferred");
+                Ok(value)
+            }).collect::<Result<Vec<_>,String>>()?;
+            Ok(json!({"schema":"native-synchronous-outer-slice-v1",
+                "frames":frames,"gateway_prefixes":prefixes,"call_and_exit_witnesses":witnesses(pe)?,
+                "callsite_owners":[{"call_rva":0x363a0,"entry_rva":0x36180},
+                    {"call_rva":0x39da0,"entry_rva":0x39920},{"call_rva":0x39db6,"entry_rva":0x39920},
+                    {"call_rva":0x418599,"entry_rva":0x4182b0},{"call_rva":0x41877e,"entry_rva":0x4182b0}],
+                "stack_basis":[{"entry_rva":0x36180,"body_rsp_below_entry":0x2a8,"home_local_offsets":[0x2b0,0x2b8,0x2c0]},
+                    {"entry_rva":0x39920,"body_rsp_below_entry":0x2b8,"rbp_below_entry":0x1b8,"home_save_offsets":[0x2d0,0x2d8]},
+                    {"entry_rva":0x4182b0,"body_rsp_below_entry":0xe8,"home_local_offsets":[0xf0,0xf8,0x100,0x108]}],
+                "return_contract":"retain through original normal return and SEH, including35FC8 direct tail and363C3 indirect tail; preserve GPR/XMM/FLAGS/LastError and native return bits",
+                "adapter_contract":["count every native entry independently of telemetry, including after seal; never skip original execution",
+                    "nested entry inherits the tracked outer generation; a new outer after seal makes closure sticky unresolved",
+                    "serialize late entry, finalization and rebuild on the same generation; original release SEH is not normal-return finalization",
+                    "do not use WorldFlights dispatch as a native dispatch/birth-epoch receipt"],
+                "limits":["only four named synchronous entry groups; not all publishers or queued native workers",
+                    "4AFC0 calls5E2D0 then continues iteration and subsequent work; inner Wait return is not outer return",
+                    "no all-domain natural producer seal, pending publication, cancellation or same-set full join proof",
+                    "entry observation cannot attribute a delayed dispatch to its original world without a birth receipt"],
+                "certificate_issued":false,"all_domain_proven":false,"product_acceptance":false}))
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+            const FIXTURE: Frame = Frame {
+                begin: 0x1000,
+                end: 0x1010,
+                sha: "2f2bc2159a8d8994a7c15c44d2e60bb6db71fed09be7b8f169f02be96baae01a",
+                fragments: &[
+                    (0x1000, 0x1008, 0x3000, "01000000"),
+                    (0x1008, 0x1010, 0x3010, "21000000001000000810000000300000"),
+                ],
+            };
+            fn image() -> Vec<u8> {
+                let mut b = vec![0; 0x2000];
+                b[..15].fill(0x90);
+                b[15] = 0xc3;
+                b[0x1000..0x1004].copy_from_slice(&[1, 0, 0, 0]);
+                b[0x1010..0x1020]
+                    .copy_from_slice(&[0x21, 0, 0, 0, 0, 0x10, 0, 0, 8, 0x10, 0, 0, 0, 0x30, 0, 0]);
+                b
+            }
+            fn pe(b: &[u8]) -> Pe<'_> {
+                Pe {
+                    image: b,
+                    base: 0x180000000,
+                    sections: vec![
+                        Section {
+                            name: *b".text\0\0\0",
+                            rva: 0x1000,
+                            virtual_size: 0x1000,
+                            raw: 0,
+                            size: 0x1000,
+                            flags: 0x60000020,
+                        },
+                        Section {
+                            name: *b".rdata\0\0",
+                            rva: 0x3000,
+                            virtual_size: 0x1000,
+                            raw: 0x1000,
+                            size: 0x1000,
+                            flags: 0x40000040,
+                        },
+                    ],
+                    functions: vec![
+                        Function {
+                            begin: 0x1000,
+                            end: 0x1008,
+                            unwind: 0x3000,
+                        },
+                        Function {
+                            begin: 0x1008,
+                            end: 0x1010,
+                            unwind: 0x3010,
+                        },
+                    ],
+                    relocations: Default::default(),
+                }
+            }
+            fn prefix_pe(b: &[u8], entry: u32) -> Pe<'_> {
+                Pe {
+                    image: b,
+                    base: 0x180000000,
+                    sections: vec![Section {
+                        name: *b".text\0\0\0",
+                        rva: entry,
+                        virtual_size: b.len() as u32,
+                        raw: 0,
+                        size: b.len(),
+                        flags: 0x60000020,
+                    }],
+                    functions: vec![],
+                    relocations: Default::default(),
+                }
+            }
+            #[test]
+            fn outer_complete_frame_rejects_body_unwind_and_parent_mutations() {
+                let mut b = image();
+                let v = frame(&pe(&b), &FIXTURE).unwrap();
+                assert_eq!(v["fragments"].as_array().unwrap().len(), 2);
+                for offset in [1, 8, 15, 0x1000, 0x1010, 0x1014, 0x1018, 0x101c] {
+                    b[offset] ^= 1;
+                    assert!(frame(&pe(&b), &FIXTURE).is_err(), "offset {offset:x}");
+                    b[offset] ^= 1;
+                }
+            }
+            #[test]
+            fn outer_fragment_entry_missing_epilogue_and_wrong_code_section_reject() {
+                let b = image();
+                frame(&pe(&b), &FIXTURE).unwrap();
+                let mut p = pe(&b);
+                p.functions[1].begin += 1;
+                assert!(frame(&p, &FIXTURE).is_err());
+                let mut p = pe(&b);
+                p.functions.pop();
+                assert!(frame(&p, &FIXTURE).is_err());
+                let missing = Frame {
+                    fragments: &FIXTURE.fragments[..1],
+                    ..FIXTURE
+                };
+                assert!(frame(&pe(&b), &missing).is_err());
+                let fragment = Frame {
+                    begin: 0x1008,
+                    fragments: &FIXTURE.fragments[1..],
+                    ..FIXTURE
+                };
+                assert!(frame(&pe(&b), &fragment).is_err());
+                let mut p = pe(&b);
+                p.sections[0].flags &= !0x20000000;
+                assert!(frame(&p, &FIXTURE).is_err());
+            }
+            #[test]
+            fn outer_cas8_prefix_checks_bytes_beyond_atomic_word_and_whole_instructions() {
+                for &(entry, bytes, lengths, _) in PREFIXES {
+                    let mut b = vec![0; bytes.len()];
+                    b.copy_from_slice(bytes);
+                    let v = prefix(&prefix_pe(&b, entry), entry, bytes, lengths).unwrap();
+                    assert_eq!(v["stolen_length"], bytes.len());
+                    assert!(prefix(&prefix_pe(&b, entry), entry, bytes, &[8]).is_err());
+                    for i in 0..bytes.len() {
+                        b[i] ^= 1;
+                        assert!(
+                            prefix(&prefix_pe(&b, entry), entry, bytes, lengths).is_err(),
+                            "{entry:x}+{i}"
+                        );
+                        b[i] ^= 1;
+                    }
+                    assert!(prefix(&prefix_pe(&b[..8], entry), entry, bytes, lengths).is_err());
+                    assert!(prefix(&prefix_pe(&b, entry), entry + 1, bytes, lengths).is_err());
+                }
+                assert_eq!(
+                    PREFIXES.iter().map(|p| p.1.len()).collect::<Vec<_>>(),
+                    [9, 11, 12, 10]
+                );
+            }
+            #[test]
+            fn outer_both_file_hashes_gate_new_interpretation() {
+                assert!(audit_outer_frames(b"MZ", b"PE")
+                    .unwrap_err()
+                    .contains("pinned"));
+            }
+        }
+    }
+
     mod pending_publication {
         use super::*;
         struct Frame {
