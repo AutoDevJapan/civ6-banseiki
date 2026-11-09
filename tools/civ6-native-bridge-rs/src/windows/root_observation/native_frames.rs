@@ -442,6 +442,12 @@ pub(in super::super) fn close(deadline: Instant) -> bool {
     }
     success
 }
+pub(super) fn close_executions(deadline: Instant) -> bool {
+    !FAILED.load(Ordering::Acquire)
+        && FRAMES
+            .get()
+            .is_some_and(|f| f.seal_executions_and_wait(deadline).is_ok())
+}
 pub(in super::super) fn request_close() -> bool {
     #[cfg(test)]
     if FRAMES.get().is_none() {

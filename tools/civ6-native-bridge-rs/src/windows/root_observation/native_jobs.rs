@@ -599,4 +599,47 @@ mod tests {
         assert_eq!(f.pending_on_set(10), Ok(0));
         assert_eq!(STACK.with(|s| s.borrow_mut().pop()), Some((20, id, 0)));
     }
+
+    global_asm!(
+        ".p2align 4", ".globl native_jobs_fixture_null_native_tail",
+        ".seh_proc native_jobs_fixture_null_native_tail", "native_jobs_fixture_null_native_tail:",
+        ".seh_endprologue",
+        // Exact pinned caller985F9E..985FC5. The remainder only supplies the
+        // still reached985FD6/985FEB null-derived store, with no game data.
+        ".byte 0x4c,0x8b,0xc0,0x48,0x85,0xc0,0x74,0x14,0xc6,0x40,0xf5,0x01,0x48,0x8d,0x05,0x67,0x64,0x6e,0x00,0x49,0x89,0x00,0x49,0x89,0x78,0x08,0xeb,0x03,0x45,0x33,0xc0",
+        "lea rcx,[r8-8]", "mov qword ptr [rcx],0", "ret", ".seh_endproc",
+        ".p2align 4", ".globl native_jobs_fixture_null_native_entry",
+        ".seh_proc native_jobs_fixture_null_native_entry", "native_jobs_fixture_null_native_entry:",
+        ".seh_endprologue", "xor eax,eax", "jmp native_jobs_fixture_null_native_tail", ".seh_endproc",
+    );
+    unsafe extern "system" {
+        fn native_jobs_fixture_null_native_entry();
+    }
+    #[test]
+    fn pinned_allocator_null_branch_still_reaches_native_invalid_store() {
+        const ENV: &str = "CIV6_NATIVE_PINNED_NULL_CALLER_CHILD";
+        if std::env::var_os(ENV).is_some() {
+            // A fixed leaf supplies RAX=0, without compiler-selected call
+            // registers aliasing the allocation-result register.
+            unsafe { native_jobs_fixture_null_native_entry() };
+            unreachable!("the fixed native null path cannot return normally");
+        }
+        let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000).env(ENV,"1").args([
+                "--exact","windows::root_observation::native_frames::jobs::tests::pinned_allocator_null_branch_still_reaches_native_invalid_store","--nocapture"
+            ]).spawn().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(s) = p.try_wait().unwrap() {
+                assert_eq!(s.code().map(|x| x as u32), Some(0xc0000005));
+                break;
+            }
+            if Instant::now() >= deadline {
+                let _ = p.kill();
+                let _ = p.wait();
+                panic!("owned null caller timeout");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 }

@@ -20,6 +20,19 @@ fn fault() -> ! {
 pub(super) fn request_close() {
     CLOSING.store(true, Ordering::Release);
 }
+pub(super) fn owns_operation_cleanup(caller: u64) -> bool {
+    if !CLOSING.load(Ordering::Acquire)
+        || !WAITED.load(Ordering::Acquire)
+        || caller != CORE.load(Ordering::Acquire) + 0x63e239
+    {
+        return false;
+    }
+    STACK.with(|s| {
+        s.borrow()
+            .last()
+            .is_some_and(|(kind, world, _)| *kind == 30 && *world == WORLD.load(Ordering::Acquire))
+    })
+}
 pub(super) fn ready() -> bool {
     #[cfg(test)]
     if CORE.load(Ordering::Acquire) == 0 {
@@ -141,19 +154,22 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         32 => {
             // Native shutdown progressed through its own Wait. This gate is
             // BEFORE returning to4A1196 and its subsequent cleanup calls.
-            // Jobs are settled by their original execute/destructor wrappers,
-            // never by assuming that an empty set or this return is a join.
+            // Jobs are settled by their original execute/destructor wrappers.
+            // Inert serialized nodes remain for later original 380B0 cleanup;
+            // their presence is not an executing job and cannot block Wait.
             if FRAMES
                 .get()
                 .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
-                || !super::close(Instant::now() + Duration::from_secs(2))
+                || !super::close_executions(Instant::now() + Duration::from_secs(2))
             {
                 fault();
             }
             WAITED.store(true, Ordering::Release);
         }
         30 => {
-            if !WAITED.load(Ordering::Acquire) {
+            if !WAITED.load(Ordering::Acquire)
+                || !super::close(Instant::now() + Duration::from_secs(2))
+            {
                 fault();
             }
             SHUTDOWN_RETURNED.store(true, Ordering::Release);
@@ -441,6 +457,41 @@ mod tests {
             "one native path must not certify all publisher/copy/cancel domains"
         );
         assert!(!super::reopen());
+    }
+    #[test]
+    fn inert_operation_storage_survives_wait_until_owned_original_cleanup() {
+        if !child("inert_operation_storage_survives_wait_until_owned_original_cleanup") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let f = FRAMES.get().unwrap();
+        let p = f.begin_queue_producer().unwrap();
+        f.queue_allocated(p, 123, None).unwrap();
+        f.queue_producer_returned(p).unwrap();
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        world[0x250 / 8] = 300;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
+        begin(&mut w);
+        let mut m = raw(31, 300, 0x18063e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, 300 + 0x400, 0x1804a1196);
+        begin(&mut wait);
+        finish(&mut wait, false);
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(f.contains_task(123));
+        finish(&mut m, false);
+        assert!(!owns_operation_cleanup(0x180036fef));
+        assert!(owns_operation_cleanup(0x18063e239));
+        let cleanup = f.begin_native_cleanup().unwrap();
+        let node = f.retire_queue(123).unwrap();
+        f.queue_retired(node).unwrap();
+        f.leave(cleanup).unwrap();
+        finish(&mut w, false);
+        assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!ready(), "local drain is not all producer coverage");
     }
     global_asm!(
         ".p2align 4",

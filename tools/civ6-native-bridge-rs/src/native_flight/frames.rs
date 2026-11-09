@@ -13,6 +13,7 @@ use std::{
 struct State {
     generation: u64,
     sealed: bool,
+    executions_drained: bool,
     unresolved: bool,
     next: u64,
     frames: HashMap<u64, (u64, ThreadId)>,
@@ -25,6 +26,9 @@ struct Job {
     push_returned: bool,
     execution: u8,
     set: u64,
+    queue_parent: Option<u64>,
+    retiring: bool,
+    executing_thread: Option<ThreadId>,
 }
 
 /// Accounts only for installed full-frame gateways. It is not a producer seal,
@@ -46,6 +50,7 @@ impl NativeFrames {
             state: Mutex::new(State {
                 generation: 1,
                 sealed: false,
+                executions_drained: false,
                 unresolved: false,
                 next: 0,
                 frames: HashMap::new(),
@@ -60,7 +65,7 @@ impl NativeFrames {
     pub fn enter(&self) -> Result<u64, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let tid = thread::current().id();
-        let inherited = s.frames.values().any(|(_, thread)| *thread == tid);
+        let inherited = Self::inherited(&s, tid);
         if s.sealed && !inherited {
             s.unresolved = true;
         }
@@ -87,6 +92,17 @@ impl NativeFrames {
     }
 
     pub fn seal_and_wait(&self, deadline: Instant) -> Result<(), Error> {
+        self.seal_and_wait_for(deadline, true)
+    }
+
+    /// Before destructive native cleanup, wait for every executing frame and
+    /// Host job. Inert serialized nodes must survive until that original
+    /// cleanup cancels/frees them. This is not a storage-drained receipt.
+    pub fn seal_executions_and_wait(&self, deadline: Instant) -> Result<(), Error> {
+        self.seal_and_wait_for(deadline, false)
+    }
+
+    fn seal_and_wait_for(&self, deadline: Instant, include_storage: bool) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         s.sealed = true;
         loop {
@@ -103,7 +119,17 @@ impl NativeFrames {
                 .checked_duration_since(Instant::now())
                 .filter(|d| !d.is_zero())
                 .ok_or(Error::Timeout)?;
-            if s.frames.is_empty() && s.jobs.is_empty() {
+            let jobs_drained = s.jobs.values().all(|j| {
+                !include_storage
+                    && j.set == u64::MAX
+                    && j.execution != 1
+                    && !j.retiring
+                    && j.push_returned
+            });
+            if s.frames.is_empty() && jobs_drained {
+                if !include_storage {
+                    s.executions_drained = true;
+                }
                 return Ok(());
             }
             let (next, timeout) = self
@@ -117,6 +143,11 @@ impl NativeFrames {
         }
     }
 
+    fn inherited(s: &State, tid: ThreadId) -> bool {
+        s.frames.values().any(|(_, t)| *t == tid)
+            || s.jobs.values().any(|j| j.executing_thread == Some(tid))
+    }
+
     pub fn reopen(&self) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.unresolved {
@@ -127,6 +158,7 @@ impl NativeFrames {
         }
         s.generation = s.generation.checked_add(1).ok_or(Error::Exhausted)?;
         s.sealed = false;
+        s.executions_drained = false;
         Ok(())
     }
 
@@ -156,7 +188,12 @@ impl NativeFrames {
     }
     pub fn issue_on_set(&self, payload: u64, set: u64) -> Result<u64, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
-        if payload == 0 || set == 0 || s.sealed || s.jobs.values().any(|j| j.payload == payload) {
+        if payload == 0
+            || set == 0
+            || s.unresolved
+            || (s.sealed && !Self::inherited(&s, thread::current().id()))
+            || s.jobs.values().any(|j| j.payload == payload)
+        {
             s.unresolved = true;
             return Err(Error::Unresolved);
         }
@@ -172,6 +209,9 @@ impl NativeFrames {
                 push_returned: false,
                 execution: 0,
                 set,
+                queue_parent: None,
+                retiring: false,
+                executing_thread: None,
             },
         );
         Ok(id)
@@ -203,7 +243,7 @@ impl NativeFrames {
         let j = s.jobs.get_mut(&id).unwrap();
         j.task = task;
         j.push_returned = true;
-        if j.execution == 2 || j.execution == 3 {
+        if (j.execution == 2 && j.set != u64::MAX) || (j.execution == 3 && !j.retiring) {
             s.jobs.remove(&id);
         }
         self.changed.notify_all();
@@ -243,9 +283,149 @@ impl NativeFrames {
                 push_returned: false,
                 execution: 0,
                 set: u64::MAX,
+                queue_parent: None,
+                retiring: false,
+                executing_thread: None,
             },
         );
         Ok(id)
+    }
+
+    /// One complete native producer may allocate multiple nodes. Its frame
+    /// holds every child until the producer's original normal return.
+    pub fn begin_queue_producer(&self) -> Result<u64, Error> {
+        let id = self.enter()?;
+        if self.healthy() {
+            Ok(id)
+        } else {
+            Err(Error::Unresolved)
+        }
+    }
+
+    /// The verified shutdown control frame owns this original destructive
+    /// cleanup. It may free inert storage after execution admission closes,
+    /// while its own lifetime must still block the final drain.
+    pub fn begin_native_cleanup(&self) -> Result<u64, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.unresolved || !s.executions_drained {
+            return Err(Error::Unresolved);
+        }
+        let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+        s.next = id;
+        let generation = s.generation;
+        s.frames.insert(id, (generation, thread::current().id()));
+        Ok(id)
+    }
+
+    /// Called at the allocator return, before initialization or shared links.
+    /// Copies inherit the recorded source node; they never acquire a fresh
+    /// epoch at the later dequeue. Both addresses remain opaque keys.
+    pub fn queue_allocated(
+        &self,
+        producer: u64,
+        task: u64,
+        source: Option<u64>,
+    ) -> Result<u64, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        let valid_source = source.is_none_or(|node| {
+            s.jobs.values().any(|j| {
+                j.task == node
+                    && node != 0
+                    && j.generation == s.generation
+                    && j.set == u64::MAX
+                    && !j.retiring
+            })
+        });
+        if s.unresolved
+            || s.frames.get(&producer) != Some(&(s.generation, thread::current().id()))
+            || task == 0
+            || !valid_source
+            || s.jobs.values().any(|j| j.task == task)
+        {
+            s.unresolved = true;
+            self.changed.notify_all();
+            return Err(Error::Unresolved);
+        }
+        let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+        s.next = id;
+        let generation = s.generation;
+        s.jobs.insert(
+            id,
+            Job {
+                generation,
+                payload: 0,
+                task,
+                push_returned: false,
+                execution: 0,
+                set: u64::MAX,
+                queue_parent: Some(producer),
+                retiring: false,
+                executing_thread: None,
+            },
+        );
+        Ok(id)
+    }
+
+    pub fn queue_producer_returned(&self, producer: u64) -> Result<(), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.frames.get(&producer) != Some(&(s.generation, thread::current().id())) {
+            s.unresolved = true;
+            return Err(Error::Stale);
+        }
+        s.jobs.retain(|_, j| {
+            if j.queue_parent == Some(producer) {
+                j.queue_parent = None;
+                j.push_returned = true;
+                j.execution != 3 || j.retiring
+            } else {
+                true
+            }
+        });
+        s.frames.remove(&producer);
+        self.changed.notify_all();
+        Ok(())
+    }
+
+    /// The original node-free call owns the address until it frees it. Release
+    /// its lookup key at entry, but retain the reservation through normal
+    /// return. An allocator may reuse the address before this callback returns.
+    pub fn retire_queue(&self, task: u64) -> Result<u64, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        let id = s.jobs.iter().find_map(|(id, j)| {
+            (j.task == task
+                && task != 0
+                && j.set == u64::MAX
+                && j.generation == s.generation
+                && !j.retiring
+                && j.execution != 1)
+                .then_some(*id)
+        });
+        let Some(id) = id else {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        };
+        let j = s.jobs.get_mut(&id).unwrap();
+        j.task = 0;
+        j.retiring = true;
+        Ok(id)
+    }
+
+    pub fn queue_retired(&self, id: u64) -> Result<(), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.jobs.get(&id).is_none_or(|j| {
+            j.generation != s.generation || j.set != u64::MAX || !j.retiring || j.execution == 1
+        }) {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
+        let j = s.jobs.get_mut(&id).unwrap();
+        j.retiring = false;
+        j.execution = 3;
+        if j.push_returned {
+            s.jobs.remove(&id);
+        }
+        self.changed.notify_all();
+        Ok(())
     }
     pub fn finish_unpublished_queue(&self, id: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
@@ -273,6 +453,10 @@ impl NativeFrames {
     }
     pub fn queue_execute(&self, task: u64) -> Result<u64, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.executions_drained {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
         let id = s.jobs.iter().find_map(|(id, j)| {
             (j.task == task
                 && task != 0
@@ -286,6 +470,7 @@ impl NativeFrames {
             return Err(Error::Unresolved);
         };
         s.jobs.get_mut(&id).unwrap().execution = 1;
+        s.jobs.get_mut(&id).unwrap().executing_thread = Some(thread::current().id());
         Ok(id)
     }
 
@@ -308,20 +493,23 @@ impl NativeFrames {
         let j = s.jobs.get_mut(&id).unwrap();
         j.task = task;
         j.execution = 1;
+        j.executing_thread = Some(thread::current().id());
         Ok(id)
     }
     pub fn completed(&self, id: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
-        if s.jobs
-            .get(&id)
-            .is_none_or(|j| j.execution != 1 || j.generation != s.generation)
-        {
+        if s.jobs.get(&id).is_none_or(|j| {
+            j.execution != 1
+                || j.generation != s.generation
+                || j.executing_thread != Some(thread::current().id())
+        }) {
             s.unresolved = true;
             return Err(Error::Unresolved);
         }
         let j = s.jobs.get_mut(&id).unwrap();
         j.execution = 2;
-        if j.push_returned {
+        j.executing_thread = None;
+        if j.push_returned && j.set != u64::MAX {
             s.jobs.remove(&id);
         }
         self.changed.notify_all();
@@ -335,7 +523,7 @@ impl NativeFrames {
         if let Some(id) = s
             .jobs
             .iter()
-            .find_map(|(id, j)| (j.task == task && task != 0).then_some(*id))
+            .find_map(|(id, j)| (j.task == task && task != 0 && j.set != u64::MAX).then_some(*id))
         {
             let j = &s.jobs[&id];
             if j.execution != 0 {
@@ -474,9 +662,103 @@ mod tests {
         assert_eq!(f.reopen(), Err(Error::Busy));
         assert_eq!(f.queue_execute(123), Ok(id));
         f.completed(id).unwrap();
+        let retiring = f.retire_queue(123).unwrap();
+        assert_eq!(retiring, id);
+        f.queue_retired(retiring).unwrap();
         f.seal_and_wait(deadline()).unwrap();
         f.reopen().unwrap();
         assert_eq!(f.queue_execute(123), Err(Error::Unresolved));
+    }
+
+    #[test]
+    fn serialized_execution_return_alone_does_not_retire_native_queue_node() {
+        let f = NativeFrames::new();
+        let id = f.reserve_queue().unwrap();
+        f.bind_before_publication(id, 123).unwrap();
+        f.queue_published(id).unwrap();
+        assert_eq!(f.queue_execute(123), Ok(id));
+        f.completed(id).unwrap();
+        assert!(f.contains_task(123));
+        assert_eq!(f.seal_and_wait(Instant::now()), Err(Error::Timeout));
+        assert_eq!(f.reopen(), Err(Error::Busy));
+    }
+
+    #[test]
+    fn producer_retains_multiple_nodes_and_early_retirement_until_its_return() {
+        let f = NativeFrames::new();
+        let producer = f.begin_queue_producer().unwrap();
+        let first = f.queue_allocated(producer, 123, None).unwrap();
+        let second = f.queue_allocated(producer, 456, Some(123)).unwrap();
+        assert_eq!(f.retire_queue(123), Ok(first));
+        f.queue_retired(first).unwrap();
+        assert_eq!(f.retire_queue(456), Ok(second));
+        f.queue_retired(second).unwrap();
+        assert_eq!(f.seal_and_wait(deadline()), Err(Error::Reentrant));
+        f.queue_producer_returned(producer).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert_eq!(f.queue_execute(123), Err(Error::Unresolved));
+    }
+
+    #[test]
+    fn allocator_reuse_during_old_free_keeps_two_distinct_reservations() {
+        let f = NativeFrames::new();
+        let first_producer = f.begin_queue_producer().unwrap();
+        let old = f.queue_allocated(first_producer, 123, None).unwrap();
+        f.queue_producer_returned(first_producer).unwrap();
+        assert_eq!(f.retire_queue(123), Ok(old));
+        let next_producer = f.begin_queue_producer().unwrap();
+        let new = f.queue_allocated(next_producer, 123, None).unwrap();
+        assert_ne!(old, new);
+        f.queue_producer_returned(next_producer).unwrap();
+        f.queue_retired(old).unwrap();
+        assert!(f.contains_task(123));
+        assert_eq!(f.queue_execute(123), Ok(new));
+        f.completed(new).unwrap();
+        assert_eq!(f.retire_queue(123), Ok(new));
+        f.queue_retired(new).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+    }
+
+    #[test]
+    fn unknown_copy_source_never_receives_the_current_epoch() {
+        let f = NativeFrames::new();
+        let producer = f.begin_queue_producer().unwrap();
+        assert_eq!(
+            f.queue_allocated(producer, 456, Some(123)),
+            Err(Error::Unresolved)
+        );
+        f.queue_producer_returned(producer).unwrap();
+        assert_eq!(f.seal_and_wait(deadline()), Err(Error::Unresolved));
+        assert_eq!(f.reopen(), Err(Error::Unresolved));
+    }
+
+    #[test]
+    fn execution_drain_keeps_archive_for_original_cleanup_and_final_drain() {
+        let f = NativeFrames::new();
+        let p = f.begin_queue_producer().unwrap();
+        f.queue_allocated(p, 123, None).unwrap();
+        f.queue_producer_returned(p).unwrap();
+        f.seal_executions_and_wait(deadline()).unwrap();
+        assert_eq!(f.reopen(), Err(Error::Busy));
+        let cleanup = f.begin_native_cleanup().unwrap();
+        let r = f.retire_queue(123).unwrap();
+        f.queue_retired(r).unwrap();
+        assert_eq!(f.seal_and_wait(deadline()), Err(Error::Reentrant));
+        f.leave(cleanup).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+    }
+
+    #[test]
+    fn completed_execution_phase_never_allows_archived_work_to_start() {
+        let f = NativeFrames::new();
+        let p = f.begin_queue_producer().unwrap();
+        f.queue_allocated(p, 123, None).unwrap();
+        f.queue_producer_returned(p).unwrap();
+        f.seal_executions_and_wait(deadline()).unwrap();
+        assert_eq!(f.queue_execute(123), Err(Error::Unresolved));
+        assert_eq!(f.reopen(), Err(Error::Unresolved));
     }
 
     #[test]
