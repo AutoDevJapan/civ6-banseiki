@@ -287,6 +287,111 @@ pub trait Backend: Send {
 }
 
 #[cfg(test)]
+mod controlled_lua_deadline_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct TestClock(Mutex<f64>);
+    impl Clock for TestClock {
+        fn now(&self) -> f64 {
+            *self.0.lock().unwrap()
+        }
+        fn sleep(&self, seconds: f64) {
+            *self.0.lock().unwrap() += seconds;
+        }
+    }
+    type Sends = Arc<Mutex<Vec<(f64, f64)>>>;
+    struct Probe {
+        clock: Arc<TestClock>,
+        authorization_cost: f64,
+        authorization_error: Option<ErrorKind>,
+        sends: Sends,
+    }
+    impl Backend for Probe {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["FrontEnd".into()])
+        }
+        fn authorize_game_control(&mut self, _: Option<crate::startup::GameProcess>) -> Result<()> {
+            self.clock.sleep(self.authorization_cost);
+            self.authorization_error.map_or(Ok(()), |kind| {
+                Err(Error::new(kind, "authorization refused"))
+            })
+        }
+        fn run_lua(&mut self, _: &str, _: &str, timeout: f64) -> Result<String> {
+            self.sends.lock().unwrap().push((self.clock.now(), timeout));
+            Ok("true".into())
+        }
+    }
+    fn runner(cost: f64, error: Option<ErrorKind>) -> (Runner, Sends) {
+        let clock = Arc::new(TestClock::default());
+        let sends = Sends::default();
+        let runner = Runner::with_backend(
+            json!({}),
+            PathBuf::new(),
+            PathBuf::new(),
+            PathBuf::new(),
+            4318,
+            Box::new(Probe {
+                clock: Arc::clone(&clock),
+                authorization_cost: cost,
+                authorization_error: error,
+                sends: Arc::clone(&sends),
+            }),
+            clock,
+        );
+        (runner, sends)
+    }
+    fn controlled_lua(runner: &mut Runner) -> Result<String> {
+        runner.lua_with_control(
+            "FrontEnd",
+            "Events.UserConfirmedClose()\nreturn true",
+            5.0,
+            Some(crate::startup::GameProcess {
+                pid: 7,
+                started: 1.0,
+            }),
+        )
+    }
+    #[test]
+    fn expired_authorization_sends_no_controlled_lua() {
+        let _exclusive = crate::time::INTERRUPT_TEST_LOCK.lock().unwrap();
+        for cost in [5.0, 6.0] {
+            let (mut runner, sends) = runner(cost, None);
+            let result = controlled_lua(&mut runner);
+            assert!(sends.lock().unwrap().is_empty());
+            let error = result.unwrap_err();
+            assert_eq!(error.kind, ErrorKind::Tuner);
+            assert!(error.message.contains("未送信"));
+        }
+    }
+    #[test]
+    fn successful_authorization_reduces_the_controlled_lua_budget() {
+        let _exclusive = crate::time::INTERRUPT_TEST_LOCK.lock().unwrap();
+        for cost in [0.0, 1.0, 4.0] {
+            let (mut runner, sends) = runner(cost, None);
+            assert_eq!(controlled_lua(&mut runner).unwrap(), "true");
+            assert_eq!(*sends.lock().unwrap(), [(cost, 5.0 - cost)]);
+        }
+    }
+    #[test]
+    fn authorization_refusal_preserves_interruption_and_lease_errors() {
+        let _exclusive = crate::time::INTERRUPT_TEST_LOCK.lock().unwrap();
+        for (cause, expected) in [
+            (ErrorKind::Interrupted, ErrorKind::Interrupted),
+            (ErrorKind::Input, ErrorKind::LiveLease),
+        ] {
+            let (mut runner, sends) = runner(6.0, Some(cause));
+            assert_eq!(controlled_lua(&mut runner).unwrap_err().kind, expected);
+            assert!(sends.lock().unwrap().is_empty());
+        }
+    }
+}
+
+#[cfg(test)]
 mod native_trace_step_tests {
     use super::*;
     use std::sync::Mutex;
@@ -1601,7 +1706,7 @@ impl Runner {
         self.backend.connect(self.port, remaining)?;
         // Connecting can consume the last budget; never mutate after it expired.
         let remaining = self.remaining_unsent(deadline, unsent)?;
-        if let Some(game) = game {
+        let remaining = if let Some(game) = game {
             self.backend
                 .authorize_game_control(Some(game))
                 .map_err(|e| {
@@ -1611,7 +1716,12 @@ impl Runner {
                         Error::new(ErrorKind::LiveLease, e.to_string())
                     }
                 })?;
-        }
+            // Ownership inspection may block. Its elapsed time belongs to
+            // this same deadline, including the final unsent boundary.
+            self.remaining_unsent(deadline, unsent)?
+        } else {
+            remaining
+        };
         self.backend.run_lua(state, code, remaining)
     }
     fn captive_session_read(
