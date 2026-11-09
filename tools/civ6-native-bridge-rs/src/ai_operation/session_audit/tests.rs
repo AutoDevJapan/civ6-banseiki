@@ -32,6 +32,7 @@ fn all_frames(dll: bool) -> Vec<&'static Frame> {
     let mut result: Vec<_> = frames(dll).iter().collect();
     if !dll {
         result.extend(lease::fixed::FRAMES);
+        result.extend(snapshot::fixed::FRAMES);
     } else {
         result.extend(world::fixed::FRAMES);
     }
@@ -45,6 +46,10 @@ fn all_slots(dll: bool) -> Vec<(u32, u32)> {
         lease::flow::SLOTS
     });
     result.sort_unstable();
+    if !dll {
+        result.extend(snapshot::flow::SLOTS);
+        result.sort_unstable();
+    }
     result.dedup();
     result
 }
@@ -138,6 +143,13 @@ fn specimen(dll: bool) -> Vec<u8> {
         }
     }
     if !dll {
+        for v in snapshot::flow::BLOCKS {
+            write_hex(&mut b, v.rva, v.hex, false);
+        }
+        let p = offset(0xfd3cc0, false);
+        for (i, value) in [2, 0, 4, 0].into_iter().enumerate() {
+            w32(&mut b, p + i * 4, value);
+        }
         for v in lease::flow::BLOCKS {
             write_hex(&mut b, v.rva, v.hex, false);
         }
@@ -201,6 +213,7 @@ fn valid(b: &[u8], dll: bool) -> Result<Value, String> {
     )?;
     if !dll {
         lease::inspect(&parse(b, dll)?)?;
+        snapshot::inspect(&parse(b, dll)?)?;
     } else {
         world::inspect(&parse(b, dll)?)?;
     }
@@ -565,4 +578,141 @@ fn session_global_addresses_allow_zero_filled_data_but_reject_code_or_outside_im
     assert!(p.virtual_data_address(u32::MAX, 8).is_err());
     assert!(p.virtual_data_address(0x3700000, 8).is_err());
     references(&p, flow::HOST_REFERENCES).unwrap();
+}
+
+#[test]
+fn snapshot_preserves_request_outcome_and_existing_message_before_deferred_bytes() {
+    let host = specimen(false);
+    let r = snapshot::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    assert_eq!(r["snapshot_admission"]["request_return"], 0x16c938);
+    assert_eq!(r["accepted_request"]["busy_reject"], 0x16bd74);
+    assert_eq!(r["accepted_request"]["possible_producer_call"], 0x16bd68);
+    assert_eq!(r["accepted_request"]["success_set"], 0x16bd6d);
+    assert_eq!(r["owned_stream"]["object_publish"], 0x166bda);
+    assert_eq!(r["owned_stream"]["copy_call"], 0x166c4b);
+    assert_eq!(r["owned_stream"]["selection_entry"], 0x16d280);
+    assert_eq!(r["deferred_queue"]["move_normal_return"], 0x8475b2);
+    assert_eq!(r["deferred_queue"]["count_publish"], 0x8475c5);
+    assert_eq!(r["deferred_queue"]["decode_call"], 0x83d819);
+    assert_eq!(r["deferred_queue"]["byte_free"], 0x83d850);
+    assert_eq!(r["deferred_queue"]["layout"]["session_queue"], 0xd8);
+    assert_eq!(r["certificate_issued"], false);
+}
+
+#[test]
+fn snapshot_complete_bodies_and_all_unwind_partitions_reject_mutation() {
+    let mut host = specimen(false);
+    snapshot::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    for f in snapshot::fixed::FRAMES {
+        for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
+            let p = offset(rva, false);
+            host[p] ^= 1;
+            assert!(
+                snapshot::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "frame {rva:x}"
+            );
+            host[p] ^= 1;
+        }
+        for part in f.fragments {
+            for i in 0..part.hex.len() / 2 {
+                let p = offset(part.unwind, false) + i;
+                host[p] ^= 1;
+                assert!(
+                    snapshot::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                    "unwind {:x}+{i}",
+                    part.unwind
+                );
+                host[p] ^= 1;
+            }
+        }
+    }
+    snapshot::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+
+#[test]
+fn snapshot_busy_branch_copy_move_and_decode_references_are_independently_decoded() {
+    let mut host = specimen(false);
+    references(&Pe::parse_host(&host).unwrap(), snapshot::flow::REFERENCES).unwrap();
+    for r in snapshot::flow::REFERENCES {
+        for i in (0..r.prefix.len() / 2).chain(r.displacement..r.length) {
+            let p = offset(r.rva, false) + i;
+            host[p] ^= 1;
+            assert!(
+                references(&Pe::parse_host(&host).unwrap(), snapshot::flow::REFERENCES).is_err(),
+                "reference {:x}+{i}",
+                r.rva
+            );
+            host[p] ^= 1;
+        }
+    }
+    // Invert an original busy/reject branch while preserving its target.
+    for rva in [0x273f7b, 0x16b5f6, 0x16b7da, 0x16bd66, 0x842450, 0x84245b] {
+        let p = offset(rva, false);
+        host[p] ^= 1;
+        assert!(
+            snapshot::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "branch {rva:x}"
+        );
+        host[p] ^= 1;
+    }
+}
+
+#[test]
+fn snapshot_queue_receiver_and_scalar_move_cannot_be_reinterpreted_as_fresh_receive() {
+    let mut host = specimen(false);
+    snapshot::queue_layout(&Pe::parse_host(&host).unwrap()).unwrap();
+    // A different queue with the same element count does not establish identity.
+    for (rva, replacement) in [
+        (0x842574, 0xa8),
+        (0x83d7d2, 0xa8),
+        (0x83d82b, 0xe8),
+        (0x83d821, 0xe0),
+        (0x83d7f1, 0xf8),
+        (0x83d858, 0xf0),
+    ] {
+        let p = offset(rva, false);
+        let old = host[p..p + 4].to_vec();
+        w32(&mut host, p, replacement);
+        assert!(
+            snapshot::queue_layout(&Pe::parse_host(&host).unwrap()).is_err(),
+            "receiver {rva:x}"
+        );
+        host[p..p + 4].copy_from_slice(&old);
+    }
+    for rva in [
+        0x52747d, 0x527480, 0x52748b, 0x52749b, 0x8475b2, 0x8475b8, 0x8475be, 0x8475c5, 0x83d7f5,
+        0x83d87a,
+    ] {
+        let p = offset(rva, false);
+        host[p] ^= 1;
+        assert!(
+            snapshot::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "ownership {rva:x}"
+        );
+        host[p] ^= 1;
+    }
+}
+
+#[test]
+fn snapshot_descriptor_leaf_and_independent_owned_stream_global_mutations_reject() {
+    let mut host = specimen(false);
+    for rva in [
+        0x168b90, 0x168b97, 0x168b99, 0x168ba0, 0x168ba5, 0x168bba, 0xfd3cc0, 0xfd3cc8, 0xfd36b0,
+        0x16d280, 0x16d285, 0x16d297, 0x16d29b, 0x16d2a1, 0x16d2a7, 0x166bda, 0x166c11, 0x166c4e,
+    ] {
+        let p = offset(rva, false);
+        host[p] ^= 1;
+        assert!(
+            snapshot::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "snapshot identity {rva:x}"
+        );
+        host[p] ^= 1;
+    }
+    // Preserve a well-formed RIP load while selecting a different global stream.
+    let p = offset(0x16d285 + 3, false);
+    let old = host[p..p + 4].to_vec();
+    w32(&mut host, p, (0x22d8d20_i64 - (0x16d285 + 7)) as u32);
+    assert!(references(&Pe::parse_host(&host).unwrap(), snapshot::flow::REFERENCES).is_err());
+    host[p..p + 4].copy_from_slice(&old);
+    snapshot::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
 }
