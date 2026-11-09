@@ -28,6 +28,13 @@ fn frames(dll: bool) -> &'static [Frame] {
         fixed::HOST_FRAMES
     }
 }
+fn all_frames(dll: bool) -> Vec<&'static Frame> {
+    let mut result: Vec<_> = frames(dll).iter().collect();
+    if !dll {
+        result.extend(lease::fixed::FRAMES);
+    }
+    result
+}
 fn blocks(dll: bool) -> &'static [Block] {
     if dll {
         flow::CORE_BLOCKS
@@ -65,7 +72,7 @@ fn specimen(dll: bool) -> Vec<u8> {
     let base = if dll { 0x180000000 } else { 0x140000000 };
     w64(&mut b, opt + 24, base);
     w32(&mut b, opt + 108, 16);
-    let mut rows: Vec<_> = frames(dll).iter().flat_map(|f| f.fragments).collect();
+    let mut rows: Vec<_> = all_frames(dll).iter().flat_map(|f| f.fragments).collect();
     rows.sort_by_key(|f| f.begin);
     w32(&mut b, opt + 112 + 3 * 8, PDATA as u32);
     w32(&mut b, opt + 116 + 3 * 8, (rows.len() * 12) as u32);
@@ -95,7 +102,7 @@ fn specimen(dll: bool) -> Vec<u8> {
         w32(&mut b, PDATA + i * 12 + 8, f.unwind);
         write_hex(&mut b, f.unwind, f.hex, dll);
     }
-    for f in frames(dll) {
+    for f in all_frames(dll) {
         write_hex(&mut b, f.begin, f.specimen, dll);
     }
     for v in blocks(dll) {
@@ -103,6 +110,32 @@ fn specimen(dll: bool) -> Vec<u8> {
     }
     for &(slot, target) in slots(dll) {
         w64(&mut b, offset(slot, dll), base + u64::from(target));
+    }
+    if !dll {
+        for v in lease::flow::BLOCKS {
+            write_hex(&mut b, v.rva, v.hex, false);
+        }
+        for &(slot, target) in lease::flow::SLOTS {
+            w64(&mut b, offset(slot, false), base + u64::from(target));
+        }
+        // Named imports are independent witnesses of the indirect API calls.
+        w32(&mut b, opt + 112 + 8, 0x1100000);
+        w32(&mut b, offset(0x1100000, false), 0x1100100);
+        w32(&mut b, offset(0x110000c, false), 0x1100200);
+        w32(&mut b, offset(0x1100010, false), 0xf97750);
+        for (rva, value) in [
+            (0x1100200, &b"KERNEL32.dll\0"[..]),
+            (0x1100302, &b"WaitForSingleObject\0"[..]),
+            (0x1100342, &b"GetLastError\0"[..]),
+        ] {
+            let p = offset(rva, false);
+            b[p..p + value.len()].copy_from_slice(value);
+        }
+        w64(&mut b, offset(0x1100100, false), 0x1100300);
+        w32(&mut b, offset(0x1100014, false), 0x1100140);
+        w32(&mut b, offset(0x1100020, false), 0x1100200);
+        w32(&mut b, offset(0x1100024, false), 0xf979e8);
+        w64(&mut b, offset(0x1100140, false), 0x1100340);
     }
     if dll {
         let mut groups = std::collections::BTreeMap::<u32, Vec<u32>>::new();
@@ -132,14 +165,18 @@ fn parse(b: &[u8], dll: bool) -> Result<Pe<'_>, String> {
     }
 }
 fn valid(b: &[u8], dll: bool) -> Result<Value, String> {
-    inspect_image(
+    let report = inspect_image(
         &parse(b, dll)?,
         frames(dll),
         blocks(dll),
         refs(dll),
         slots(dll),
         dll,
-    )
+    )?;
+    if !dll {
+        lease::inspect(&parse(b, dll)?)?;
+    }
+    Ok(report)
 }
 
 #[test]
@@ -164,6 +201,111 @@ fn session_complete_synthetic_pair_exercises_message_context_and_shutdown() {
 }
 
 #[test]
+fn session_native_lease_contract_requires_existing_birth_and_successful_native_join() {
+    let report = lease::inspect(&Pe::parse_host(&specimen(false)).unwrap()).unwrap();
+    assert_eq!(report["registration"]["factory_return"], 0x7f8cf5);
+    assert_eq!(report["registration"]["owner_publish"], 0x7f8d06);
+    assert_eq!(report["registration"]["registry_publish"], 0x7f8d6c);
+    assert_eq!(report["connection"]["table"], 0x10494a8);
+    assert_eq!(report["dispatch"]["entry"], 0x842030);
+    assert_eq!(report["local_thread_join"]["join_return"], 0x8573c9);
+    assert_eq!(
+        report["local_thread_join"]["wait_api"],
+        "KERNEL32.dll!WaitForSingleObject"
+    );
+    assert_eq!(report["certificate_issued"], false);
+}
+
+#[test]
+fn session_native_lease_body_unwind_and_table_mutations_reject() {
+    let mut host = specimen(false);
+    lease::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    for f in lease::fixed::FRAMES {
+        for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
+            let p = offset(rva, false);
+            host[p] ^= 1;
+            assert!(
+                lease::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "lease frame {rva:x}"
+            );
+            host[p] ^= 1;
+        }
+        for part in f.fragments {
+            let p = offset(part.unwind, false);
+            host[p] ^= 1;
+            assert!(
+                lease::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "lease unwind {:x}",
+                part.unwind
+            );
+            host[p] ^= 1;
+        }
+    }
+    for &(slot, _) in lease::flow::SLOTS {
+        let p = offset(slot, false);
+        host[p] ^= 1;
+        assert!(
+            lease::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "lease slot {slot:x}"
+        );
+        host[p] ^= 1;
+    }
+}
+
+#[test]
+fn session_native_lease_publication_receiver_stop_and_join_branch_mutations_reject() {
+    let mut host = specimen(false);
+    for b in lease::flow::BLOCKS {
+        for i in 0..b.hex.len() / 2 {
+            let p = offset(b.rva, false) + i;
+            host[p] ^= 1;
+            assert!(
+                lease::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "lease flow {:x}+{i}",
+                b.rva
+            );
+            host[p] ^= 1;
+        }
+    }
+    for r in lease::flow::REFERENCES {
+        let p = offset(r.rva, false) + r.displacement;
+        host[p] ^= 1;
+        assert!(
+            references(&Pe::parse_host(&host).unwrap(), lease::flow::REFERENCES).is_err(),
+            "lease ref {:x}",
+            r.rva
+        );
+        host[p] ^= 1;
+    }
+    lease::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+
+#[test]
+fn session_native_join_named_api_rejects_wrong_import_thunk_dll_and_name() {
+    let mut host = specimen(false);
+    let named = |b: &[u8]| {
+        Pe::parse_host(b)
+            .unwrap()
+            .import(0xf97750, "KERNEL32.dll", "WaitForSingleObject")
+    };
+    named(&host).unwrap();
+    for rva in [
+        0x1100000, 0x110000c, 0x1100010, 0x1100100, 0x1100200, 0x1100302,
+    ] {
+        let p = offset(rva, false);
+        host[p] ^= 1;
+        assert!(named(&host).is_err(), "named import {rva:x}");
+        host[p] ^= 1;
+    }
+    let p = offset(0x1100100, false);
+    host[p + 7] = 0x80;
+    assert!(named(&host).is_err(), "ordinal thunk");
+    host[p + 7] = 0;
+    w32(&mut host, 0x98 + 112 + 8, 0);
+    assert!(named(&host).is_err(), "missing import directory");
+}
+
+#[test]
 fn session_full_frames_reject_body_and_epilogue_mutations() {
     for dll in [true, false] {
         let mut b = specimen(dll);
@@ -185,7 +327,7 @@ fn session_all_pdata_and_chain_unwind_fields_are_required() {
     for dll in [true, false] {
         let mut b = specimen(dll);
         valid(&b, dll).unwrap();
-        let mut rows: Vec<_> = frames(dll).iter().flat_map(|f| f.fragments).collect();
+        let mut rows: Vec<_> = all_frames(dll).iter().flat_map(|f| f.fragments).collect();
         rows.sort_by_key(|f| f.begin);
         for (i, f) in rows.into_iter().enumerate() {
             for p in [PDATA + i * 12, PDATA + i * 12 + 4, PDATA + i * 12 + 8] {
