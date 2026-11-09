@@ -22,6 +22,12 @@ extern "system" fn begin(raw: *mut Saved) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
         let f = FRAMES.get().unwrap_or_else(|| fault());
+        if matches!(raw.invocation.kind, 40 | 42 | 43)
+            && sessions::NativeSessionApi::admission_active()
+            && sessions::NativeSessionApi::current_world().is_none()
+        {
+            fault();
+        }
         let core = CORE.load(Ordering::Acquire);
         let id = match raw.invocation.kind {
             48 if control::owns_operation_cleanup(raw.invocation.caller) => {

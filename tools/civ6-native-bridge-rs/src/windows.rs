@@ -36,6 +36,10 @@ mod property_log;
 mod runtime;
 #[path = "windows/trace_init.rs"]
 mod trace_init;
+pub use root_observation::native_frames::sessions::{
+    NativeSessionApi, SessionError, SessionLease, SessionMessage, SessionScopeHooks,
+    SessionTransport, SessionWorldReceipt,
+};
 pub use runtime::RUNTIME_CONFIG_VERSION;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;

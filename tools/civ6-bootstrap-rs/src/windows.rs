@@ -909,6 +909,11 @@ fn prepare_profile(
     } else {
         api(bridge, b"BridgeRuntimeRebuild\0")?
     };
+    let prepare_host = if root_only {
+        None
+    } else {
+        Some(api(bridge, b"BridgeRuntimePrepareHost\0")?)
+    };
     let log_export = if root_only {
         0
     } else {
@@ -1006,6 +1011,14 @@ fn prepare_profile(
         0,
     );
     let s = lock.as_mut().unwrap();
+    // Capture native Host session births while still in MainMenu, before the
+    // original game-start path can load Core or publish a new Context.
+    if let Some(prepare) = prepare_host {
+        let status = unsafe { prepare((&mut s.config as *mut RuntimeConfig).cast()) };
+        if status != 0 {
+            return Err("native Host birth preparation failed".into());
+        }
+    }
     for (i, hook) in s._hooks.iter().enumerate() {
         stage(16 + i as u64);
         hook.publish()?;

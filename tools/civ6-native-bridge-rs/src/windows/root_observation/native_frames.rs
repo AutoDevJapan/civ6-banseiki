@@ -22,6 +22,8 @@ mod control;
 mod jobs;
 #[path = "native_operations.rs"]
 mod operations;
+#[path = "native_sessions.rs"]
+pub(crate) mod sessions;
 #[path = "native_worlds.rs"]
 mod worlds;
 const SITES: [(usize, &[u8], usize); 6] = [
@@ -463,6 +465,34 @@ pub(super) fn close_executions(deadline: Instant) -> bool {
         std::io::stdout().flush().unwrap();
     }
     !FAILED.load(Ordering::Acquire) && result.is_ok()
+}
+fn session_enter(epoch: u64) -> Result<u64, sessions::SessionError> {
+    FRAMES
+        .get()
+        .ok_or(sessions::SessionError::Unbound)?
+        .enter_existing_epoch(epoch)
+        .map_err(|_| sessions::SessionError::Stale)
+}
+fn session_leave(hold: u64, exceptional: bool) -> Result<(), sessions::SessionError> {
+    let f = FRAMES.get().ok_or(sessions::SessionError::Unbound)?;
+    if exceptional {
+        f.mark_unresolved();
+    }
+    f.leave(hold)
+        .map_err(|_| sessions::SessionError::Unresolved)
+}
+pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    unsafe { sessions::NativeSessionApi::prepare_host(exe) }
+}
+pub(in super::super) fn bind_host(core: usize) -> bool {
+    sessions::NativeSessionApi::bind_core(
+        core as u64,
+        sessions::SessionScopeHooks {
+            enter_existing_epoch: session_enter,
+            leave: session_leave,
+        },
+    )
+    .is_ok()
 }
 pub(in super::super) fn request_close() -> bool {
     #[cfg(test)]
