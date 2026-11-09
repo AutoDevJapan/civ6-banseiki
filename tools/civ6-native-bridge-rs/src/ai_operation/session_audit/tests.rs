@@ -33,6 +33,7 @@ fn all_frames(dll: bool) -> Vec<&'static Frame> {
     if !dll {
         result.extend(lease::fixed::FRAMES);
         result.extend(snapshot::fixed::FRAMES);
+        result.extend(view_worker::fixed::FRAMES);
     } else {
         result.extend(world::fixed::FRAMES);
     }
@@ -48,6 +49,7 @@ fn all_slots(dll: bool) -> Vec<(u32, u32)> {
     result.sort_unstable();
     if !dll {
         result.extend(snapshot::flow::SLOTS);
+        result.extend(view_worker::flow::SLOTS);
         result.sort_unstable();
     }
     result.dedup();
@@ -143,6 +145,9 @@ fn specimen(dll: bool) -> Vec<u8> {
         }
     }
     if !dll {
+        for v in view_worker::flow::BLOCKS {
+            write_hex(&mut b, v.rva, v.hex, false);
+        }
         for v in snapshot::flow::BLOCKS {
             write_hex(&mut b, v.rva, v.hex, false);
         }
@@ -174,6 +179,26 @@ fn specimen(dll: bool) -> Vec<u8> {
         w32(&mut b, offset(0x1100020, false), 0x1100200);
         w32(&mut b, offset(0x1100024, false), 0xf979e8);
         w64(&mut b, offset(0x1100140, false), 0x1100340);
+        for (i, (cell, name)) in [
+            (0xf977d0, "TlsGetValue"),
+            (0xf97840, "CreateEventW"),
+            (0xf97800, "WaitForSingleObjectEx"),
+            (0xf97970, "CloseHandle"),
+            (0xf97740, "SwitchToThread"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let row = 0x1100028 + i as u32 * 20;
+            let lookup = 0x1100180 + i as u32 * 16;
+            let hint = 0x1100400 + i as u32 * 64;
+            w32(&mut b, offset(row, false), lookup);
+            w32(&mut b, offset(row + 12, false), 0x1100200);
+            w32(&mut b, offset(row + 16, false), cell);
+            w64(&mut b, offset(lookup, false), u64::from(hint));
+            let p = offset(hint + 2, false);
+            b[p..p + name.len()].copy_from_slice(name.as_bytes());
+        }
     }
     if dll {
         let mut groups = std::collections::BTreeMap::<u32, Vec<u32>>::new();
@@ -214,6 +239,7 @@ fn valid(b: &[u8], dll: bool) -> Result<Value, String> {
     if !dll {
         lease::inspect(&parse(b, dll)?)?;
         snapshot::inspect(&parse(b, dll)?)?;
+        view_worker::inspect(&parse(b, dll)?)?;
     } else {
         world::inspect(&parse(b, dll)?)?;
     }
@@ -715,4 +741,159 @@ fn snapshot_descriptor_leaf_and_independent_owned_stream_global_mutations_reject
     assert!(references(&Pe::parse_host(&host).unwrap(), snapshot::flow::REFERENCES).is_err());
     host[p..p + 4].copy_from_slice(&old);
     snapshot::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+
+#[test]
+fn view_worker_same_heap_requires_task_birth_and_classified_group_wait() {
+    let host = specimen(false);
+    let r = view_worker::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    assert_eq!(r["layout"]["payload_in_view"], 0x248);
+    assert_eq!(r["layout"]["set_in_view"], 0x278);
+    assert_eq!(r["layout"]["active_group_in_view"], 0x280);
+    assert_eq!(r["layout"]["saved_owner_in_view"], 0x290);
+    assert_eq!(r["layout"]["saved_callback_in_view"], 0x298);
+    assert_eq!(r["payload_type"]["payload_table"], 0x106c390);
+    assert_eq!(r["payload_type"]["payload_execute"], 0x985b50);
+    assert_eq!(r["payload_type"]["state_execute"], 0x83450);
+    assert_eq!(r["publication"]["allocate_return"], 0x985904);
+    assert_eq!(r["publication"]["task_payload_store"], 0x98591a);
+    assert_eq!(r["publication"]["publish_tail"], 0x985962);
+    assert_eq!(r["execution"]["worker"], 0x82da0);
+    assert_eq!(r["execution"]["tls_api"], "KERNEL32.dll!TlsGetValue");
+    assert_eq!(r["finish_and_join"]["group_wait_return"], 0x985bb0);
+    assert_eq!(r["finish_and_join"]["early_return_epilogue"], 0xe3ee30);
+    assert_eq!(r["certificate_issued"], false);
+}
+
+#[test]
+fn view_worker_complete_prolog_body_epilogue_and_unwind_mutations_reject() {
+    let mut host = specimen(false);
+    view_worker::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    for f in view_worker::fixed::FRAMES {
+        for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
+            let p = offset(rva, false);
+            host[p] ^= 1;
+            assert!(
+                view_worker::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                "View frame {rva:x}"
+            );
+            host[p] ^= 1;
+        }
+        for part in f.fragments {
+            for i in 0..part.hex.len() / 2 {
+                let p = offset(part.unwind, false) + i;
+                host[p] ^= 1;
+                assert!(
+                    view_worker::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+                    "View unwind {:x}+{i}",
+                    part.unwind
+                );
+                host[p] ^= 1;
+            }
+        }
+    }
+    view_worker::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+}
+
+#[test]
+fn view_worker_state_payload_and_group_fields_have_independent_identity() {
+    let mut host = specimen(false);
+    view_worker::layout(&Pe::parse_host(&host).unwrap()).unwrap();
+    for rva in [
+        0x8313b, 0x98617a, 0x98616a, 0x985b5c, 0x83456, 0x8345a, 0x985b8d,
+    ] {
+        let p = offset(rva, false);
+        host[p] ^= 8;
+        assert!(
+            view_worker::layout(&Pe::parse_host(&host).unwrap()).is_err(),
+            "View field {rva:x}"
+        );
+        host[p] ^= 8;
+    }
+    for &(slot, _) in view_worker::flow::SLOTS {
+        let p = offset(slot, false);
+        host[p] ^= 1;
+        assert!(
+            view_worker::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "View type {slot:x}"
+        );
+        host[p] ^= 1;
+    }
+}
+
+#[test]
+fn view_worker_prepublication_callback_and_early_wait_branches_reject_mutation() {
+    let mut host = specimen(false);
+    references(
+        &Pe::parse_host(&host).unwrap(),
+        view_worker::flow::REFERENCES,
+    )
+    .unwrap();
+    for r in view_worker::flow::REFERENCES {
+        for i in (0..r.prefix.len() / 2).chain(r.displacement..r.length) {
+            let p = offset(r.rva, false) + i;
+            host[p] ^= 1;
+            assert!(
+                references(
+                    &Pe::parse_host(&host).unwrap(),
+                    view_worker::flow::REFERENCES
+                )
+                .is_err(),
+                "View ref {:x}+{i}",
+                r.rva
+            );
+            host[p] ^= 1;
+        }
+    }
+    // Same targets with inverted skip/early-return conditions must not certify.
+    for rva in [
+        0x8310e, 0x88d77, 0x985b94, 0xe3eb2f, 0xe3eb3a, 0xe3eb49, 0xe3ee0b,
+    ] {
+        let p = offset(rva, false);
+        host[p] ^= 1;
+        assert!(
+            view_worker::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "View branch {rva:x}"
+        );
+        host[p] ^= 1;
+    }
+    for rva in [
+        0x98591a, 0x98592b, 0x98592f, 0x9862ef, 0x9862f7, 0x98630b, 0x985b60, 0x985b69, 0x83457,
+        0x985bb0,
+    ] {
+        let p = offset(rva, false);
+        host[p] ^= 1;
+        assert!(
+            view_worker::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "View carrier {rva:x}"
+        );
+        host[p] ^= 1;
+    }
+}
+
+#[test]
+fn view_worker_tls_and_group_event_wait_named_imports_are_distinct() {
+    let mut host = specimen(false);
+    view_worker::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
+    // Switch TLS, event wait, and close to another otherwise valid named API.
+    for (i, _) in [
+        "TlsGetValue",
+        "CreateEventW",
+        "WaitForSingleObjectEx",
+        "CloseHandle",
+        "SwitchToThread",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let p = offset(0x1100180 + i as u32 * 16, false);
+        let old = host[p..p + 8].to_vec();
+        w64(&mut host, p, 0x1100300);
+        assert!(
+            view_worker::inspect(&Pe::parse_host(&host).unwrap()).is_err(),
+            "View import {i}"
+        );
+        host[p..p + 8].copy_from_slice(&old);
+    }
+    view_worker::inspect(&Pe::parse_host(&host).unwrap()).unwrap();
 }
