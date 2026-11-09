@@ -61,11 +61,10 @@ fn deadline() -> Instant {
 static BODY_HITS: AtomicUsize = AtomicUsize::new(0);
 static INNER_DONE: AtomicBool = AtomicBool::new(false);
 static NEXT_TASK: AtomicU64 = AtomicU64::new(0);
-#[test]
-fn retained_host_rejects_foreign_targets_with_matching_patches() {
+fn retained_host_fixture() -> (Vec<u64>, Vec<OwnedHook>) {
     let len = SITES.iter().map(|(rva, _, _)| rva / 8 + 1).max().unwrap();
     let mut words = vec![0u64; len];
-    let mut owners: Vec<_> = SITES
+    let owners = SITES
         .iter()
         .enumerate()
         .map(|(index, (rva, _, _))| {
@@ -84,8 +83,37 @@ fn retained_host_rejects_foreign_targets_with_matching_patches() {
             }
         })
         .collect();
+    (words, owners)
+}
+#[test]
+fn retained_host_rejects_foreign_targets_with_matching_patches() {
+    let (mut words, mut owners) = retained_host_fixture();
     let exe = words.as_ptr() as u64;
     assert!(retained_host_matches(exe, &owners));
+    assert!(
+        !retained_host_matches(0, &owners),
+        "zero retained Host base was accepted"
+    );
+    for len in 0..owners.len() {
+        assert!(
+            !retained_host_matches(exe, &owners[..len]),
+            "short retained Host table was accepted with {len} entries"
+        );
+    }
+    for (index, (rva, _, _)) in SITES.iter().enumerate() {
+        let original = words[rva / 8];
+        words[rva / 8] ^= 1;
+        assert_ne!(
+            copy_current::<8>(owners[index].hook.target as u64),
+            Some(owners[index].hook.patched)
+        );
+        assert!(
+            !retained_host_matches(exe, &owners),
+            "mismatched patch bytes were accepted at site {index}"
+        );
+        words[rva / 8] = original;
+        assert!(retained_host_matches(exe, &owners));
+    }
     for index in 0..owners.len() {
         let original = owners[index].hook.target;
         let mut other = u64::from_le_bytes(owners[index].hook.patched);
@@ -107,6 +135,62 @@ fn retained_host_rejects_foreign_targets_with_matching_patches() {
         !retained_host_matches(exe + 8, &owners),
         "wrong retained Host base was accepted"
     );
+}
+#[test]
+fn failed_host_binding_does_not_activate_a_core() {
+    if !child("failed_host_binding_does_not_activate_a_core") {
+        return;
+    }
+    // These are owned data records, never published or executed native hooks.
+    let (words, owners) = retained_host_fixture();
+    let exe = words.as_ptr() as u64;
+    EXE.store(exe, Ordering::Release);
+    *HOOKS.lock().unwrap() = owners;
+    assert_eq!(CORE.load(Ordering::Acquire), 0);
+    for (index, (rva, _, _)) in SITES.iter().enumerate() {
+        let mut hooks = HOOKS.lock().unwrap();
+        assert!(retained_host_matches(exe, &hooks));
+        let original = hooks[index].hook.target;
+        let mut other = u64::from_le_bytes(hooks[index].hook.patched);
+        hooks[index].hook.target = (&mut other as *mut u64).cast();
+        assert_ne!(hooks[index].hook.target as u64, exe + *rva as u64);
+        assert_eq!(hooks.len(), SITES.len());
+        assert!(hooks.iter().all(|owned| {
+            copy_current::<8>(owned.hook.target as u64) == Some(owned.hook.patched)
+        }));
+        let before: Vec<_> = hooks
+            .iter()
+            .map(|owned| (owned.hook.target, owned.hook.patched))
+            .collect();
+        drop(hooks);
+        let result = unsafe { install(0x180000000) };
+        assert_eq!(
+            result,
+            Err("consumer early installation differs"),
+            "foreign target was accepted by Core binding at site {index}"
+        );
+        assert_eq!(
+            CORE.load(Ordering::Acquire),
+            0,
+            "failed binding activated native Core accounting"
+        );
+        assert_eq!(EXE.load(Ordering::Acquire), exe);
+        let mut hooks = HOOKS.lock().unwrap();
+        let after: Vec<_> = hooks
+            .iter()
+            .map(|owned| (owned.hook.target, owned.hook.patched))
+            .collect();
+        assert_eq!(after, before, "binding refusal changed retained records");
+        assert!(hooks.iter().all(|owned| {
+            copy_current::<8>(owned.hook.target as u64) == Some(owned.hook.patched)
+        }));
+        hooks[index].hook.target = original;
+    }
+    assert_eq!(unsafe { install(0x180000000) }, Ok(()));
+    assert_eq!(CORE.load(Ordering::Acquire), 0x180000000);
+    HOOKS.lock().unwrap().clear();
+    CORE.store(0, Ordering::Release);
+    EXE.store(0, Ordering::Release);
 }
 extern "system" fn body(task: u64, stage: u64) -> u64 {
     assert_eq!(unsafe { GetLastError() }, 0x1234);

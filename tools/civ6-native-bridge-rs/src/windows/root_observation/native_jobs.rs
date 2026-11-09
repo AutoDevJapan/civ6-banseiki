@@ -469,6 +469,30 @@ mod tests {
             .collect();
         let exe = words.as_ptr() as u64;
         assert!(retained_host_matches(exe, &owners));
+        assert!(
+            !retained_host_matches(0, &owners),
+            "zero retained Host base was accepted"
+        );
+        for len in 0..owners.len() {
+            assert!(
+                !retained_host_matches(exe, &owners[..len]),
+                "short retained Host table was accepted with {len} entries"
+            );
+        }
+        for (index, (rva, _, _)) in SITES.iter().enumerate() {
+            let original = words[rva / 8];
+            words[rva / 8] ^= 1;
+            assert_ne!(
+                copy_current::<8>(owners[index].hook.target as u64),
+                Some(owners[index].hook.patched)
+            );
+            assert!(
+                !retained_host_matches(exe, &owners),
+                "mismatched patch bytes were accepted at site {index}"
+            );
+            words[rva / 8] = original;
+            assert!(retained_host_matches(exe, &owners));
+        }
         for index in 0..owners.len() {
             let original = owners[index].hook.target;
             let mut other = u64::from_le_bytes(owners[index].hook.patched);
