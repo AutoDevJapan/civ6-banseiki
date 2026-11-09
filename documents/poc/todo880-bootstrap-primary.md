@@ -67,6 +67,8 @@ list解放は元の戻り番地と、元shutdownがRBXに保持するmanagerを�
 
 この方針の単体テストは、制御した終了の事実と所有条件を与えたもので、本番設置を通る肯定受入ではありません。全hook所有と実World終了を結んだ実ゲームでの復帰は、変更後にはまだ確認していません。
 
+設置の一次テストでは、所有コピーのHostとCoreへ、本番と同じ `prepare_host` → `install` → `bind_host` を通します。15所有domainが揃った状態と、各domainの入口を1つずつ変えた15拒否を確認します。従来のテスト専用の設置省略は、明示的なframe単独fixtureへ分け、本番関数内では使いません。Hostの所有元は準備時の検証済みアドレスを保持し、Coreの有効化はその所有確認の成功後に行います。設置だけではWorld終了やRebuildを許可しないことも確認します。これはG1の必要条件であり、World出生・停止・全domain受入の肯定結果ではありません。
+
 現在の接続は全producerの自然停止、全scheduler domain、コピー・再発行・取消の全alias、OS受信済みqueueやremote送信元の世代切替を証明していません。`native_coverage_complete()`はfalseのまま、Rebuildを拒否します。正常Waitや追跡件数0だけを全域の許可へ変換しません。
 
 ## 確認方法と結果の範囲

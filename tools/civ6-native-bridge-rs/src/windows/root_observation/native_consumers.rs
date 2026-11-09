@@ -519,22 +519,25 @@ pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
     }
 }
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
-    let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
     if HOOKS
         .lock()
         .map_err(|_| "consumer hook owner poisoned")?
         .is_empty()
     {
         unsafe {
-            prepare_host(exe)?;
+            prepare_host(GetModuleHandleW(null_mut()) as usize)?;
         }
     }
+    // Retain the identity validated before publication, including across the
+    // later Core binding. A global module lookup does not replace its owner.
+    let exe = EXE.load(Ordering::Acquire);
     let hooks = HOOKS.lock().map_err(|_| "consumer hook owner poisoned")?;
-    if hooks.len() != 4
-        || EXE.load(Ordering::Acquire) != exe as u64
-        || hooks
-            .iter()
-            .any(|o| copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched))
+    if exe == 0
+        || hooks.len() != SITES.len()
+        || hooks.iter().zip(SITES).any(|(o, (rva, _, _))| {
+            o.hook.target as u64 != exe + rva as u64
+                || copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched)
+        })
     {
         return Err("consumer early installation differs");
     }

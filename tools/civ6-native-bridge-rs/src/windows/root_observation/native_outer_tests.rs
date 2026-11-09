@@ -553,12 +553,72 @@ fn primary_five_complete_outer_bodies_unwind_mutations_and_eleven_owned_entries(
             image.replace_byte(address, original);
         }
     }
-    unsafe { install(image.base) }.unwrap();
+    let host = super::primary_image::Image::new(GAME_EXE, civ6_bootstrap_rs::EXE_SHA);
+    unsafe { prepare_host(host.base) }.unwrap();
+    let installed = unsafe { install(image.base) };
+    if let Err(error) = installed {
+        let restored = unsafe { restore() };
+        panic!("production native install: {error}; restore={restored:?}");
+    }
+    assert!(bind_host(image.base));
     assert_eq!(TRACE.0[7].load(Ordering::Acquire), (1 << SITES.len()) - 1);
     assert!(owns_hook_entries(&HOOKS, SITES.len()));
+    let every_domain_owned = all_hook_entries_owned();
+    assert!(
+        every_domain_owned,
+        "production install omitted a native ownership domain"
+    );
+    assert!(
+        !control::ready(),
+        "installation alone cannot prove a World shutdown"
+    );
+    assert!(
+        !reopen(),
+        "G1 ownership alone cannot authorize a product rebuild"
+    );
+    assert!(
+        !resume_unqualified_observation(),
+        "an unstarted World has no retirement receipt"
+    );
+    assert!(runtime::fixture_product_inactive());
+    assert_eq!(TRACE.0[12].load(Ordering::Acquire), 0);
+    // Each negative uses one retained, patched entry from a different table.
+    // This proves ownership collection only, not World/producer quiescence.
+    for (name, is_core, rva) in [
+        ("frames", true, 0x35f70usize),
+        ("jobs", false, 0x986480),
+        ("consumers", false, 0xe417d0),
+        ("worlds", true, 0x58fb40),
+        ("control", true, 0x63e160),
+        ("operations", true, 0x373e0),
+        ("sessions", false, 0x7f8cd0),
+        ("loads", false, 0x273f40),
+        ("wire", false, 0x80f230),
+        ("scheduler", false, 0x9858b0),
+        ("closure", true, 0x49c7c0),
+        ("registry", false, 0x7f9220),
+        ("transport", false, 0x81b330),
+        ("input", false, 0xc66350),
+        ("deferred", false, 0x847510),
+    ] {
+        let owned = if is_core { &image } else { &host };
+        let original = copy_current::<1>((owned.base + rva) as u64).unwrap()[0];
+        owned.replace_byte(rva, original ^ 1);
+        let rejected = !all_hook_entries_owned();
+        owned.replace_byte(rva, original);
+        assert!(rejected, "changed {name} entry was accepted");
+        assert!(
+            all_hook_entries_owned(),
+            "restored owned {name} entry was not recognized"
+        );
+    }
     // Only metadata and entry publication run; original game bodies do not.
     assert_eq!(counts(), [0; 5]);
     unsafe { restore() }.unwrap();
+    assert!(
+        !all_hook_entries_owned(),
+        "a restored installation no longer owns its entries"
+    );
     unsafe { scheduler::verify_frames(image.base, outer_fixed::FRAMES) }.unwrap();
-    println!("PRIMARY_OUTER_COMPLETE_BODIES=5 UNWIND_PARTITIONS=11 OWNED_FRAME_ENTRIES=11; native game bodies not executed");
+    println!("PRIMARY_OUTER_COMPLETE_BODIES=5 UNWIND_PARTITIONS=11 OWNED_FRAME_ENTRIES=11 OWNED_DOMAINS=15 OWNERSHIP_KNOCKOUTS=15; native game bodies not executed");
 }

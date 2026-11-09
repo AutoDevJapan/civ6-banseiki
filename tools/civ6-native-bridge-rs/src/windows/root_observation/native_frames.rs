@@ -522,14 +522,14 @@ fn gateways() -> [usize; 11] {
 pub(in super::super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     unsafe {
         scheduler::verify_frames(core, outer_fixed::FRAMES)?;
-        install_at(core)
+        install_at(core, true)
     }
 }
 #[cfg(test)]
 pub(super) unsafe fn fixture_install(core: usize) -> Result<(), &'static str> {
-    unsafe { install_at(core) }
+    unsafe { install_at(core, false) }
 }
-unsafe fn install_at(core: usize) -> Result<(), &'static str> {
+unsafe fn install_at(core: usize, dependencies: bool) -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "native frame owner poisoned")?;
     if !hooks.is_empty() || FRAMES.set(NativeFrames::new()).is_err() {
         return Err("native frames already owned");
@@ -539,14 +539,15 @@ unsafe fn install_at(core: usize) -> Result<(), &'static str> {
         current_created_filetime().ok_or("native frame process identity")?,
         Ordering::Release,
     );
-    #[cfg(not(test))]
-    unsafe {
-        scheduler::bind_core(core)?;
-        jobs::install(core)?;
-        consumers::install(core)?;
-        worlds::install(core)?;
-        control::install(core)?;
-        operations::install(core)?;
+    if dependencies {
+        unsafe {
+            scheduler::bind_core(core)?;
+            jobs::install(core)?;
+            consumers::install(core)?;
+            worlds::install(core)?;
+            control::install(core)?;
+            operations::install(core)?;
+        }
     }
     for (rva, expected, _) in SITES {
         if !expected

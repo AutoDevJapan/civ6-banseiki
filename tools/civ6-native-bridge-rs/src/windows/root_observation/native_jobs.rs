@@ -284,23 +284,30 @@ gateway!(
 );
 
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
-    CORE.store(core as u64, Ordering::Release);
-    let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
-    EXE.store(exe as u64, Ordering::Release);
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
     let prepared = HOOKS.lock().map_err(|_| "native job owner poisoned")?;
     if !prepared.is_empty() {
-        if prepared.len() != 4
-            || prepared
-                .iter()
-                .any(|o| copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched))
+        let exe = EXE.load(Ordering::Acquire);
+        if exe == 0
+            || prepared.len() != SITES.len()
+            || prepared.iter().zip(SITES).any(|(o, (rva, _, _))| {
+                o.hook.target as u64 != exe + rva as u64
+                    || copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched)
+            })
         {
             return Err("native job early installation differs");
         }
+        CORE.store(core as u64, Ordering::Release);
         return Ok(());
     }
     drop(prepared);
-    unsafe { install_at(exe) }
+    let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
+    EXE.store(exe as u64, Ordering::Release);
+    unsafe {
+        install_at(exe)?;
+    }
+    CORE.store(core as u64, Ordering::Release);
+    Ok(())
 }
 pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
     diagnostic(1100);
@@ -435,6 +442,36 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn failed_host_binding_does_not_activate_a_core() {
+        if !child("failed_host_binding_does_not_activate_a_core") {
+            return;
+        }
+        let mut words = vec![0u64; SITES.len()];
+        EXE.store(0x140000000, Ordering::Release);
+        *HOOKS.lock().unwrap() = words
+            .iter_mut()
+            .map(|word| OwnedHook {
+                hook: Hook {
+                    target: (word as *mut u64).cast(),
+                    original: 0u64.to_le_bytes(),
+                    patched: 1u64.to_le_bytes(),
+                    prefix: None,
+                    _code: null_mut(),
+                },
+                protection: PAGE_READWRITE,
+            })
+            .collect();
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        let result = unsafe { install(0x180000000) };
+        assert!(result.is_err(), "invalid Host ownership was accepted");
+        assert_eq!(
+            CORE.load(Ordering::Acquire),
+            0,
+            "failed binding activated native Core accounting"
+        );
+        HOOKS.lock().unwrap().clear();
+    }
     fn child(name: &str) -> bool {
         const ENV: &str = "CIV6_NATIVE_JOBS_OWNED_CHILD";
         if std::env::var_os(ENV).is_some() {
