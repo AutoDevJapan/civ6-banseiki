@@ -1,4 +1,7 @@
 [package]
+# Test fixtures include game-derived data without confirmed redistribution rights.
+publish = false
+license = "MIT"
 name = "civ6-assets-rs"
 version = "0.1.0"
 edition = "2021"

@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - name: Select Rust and required components
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
       - name: Check formatting
