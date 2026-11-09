@@ -29,6 +29,11 @@ pub mod appointment_glue;
 pub mod governor_payment;
 pub mod invocation_gate;
 pub mod native_flight;
+#[cfg(windows)]
+pub use windows::{
+    NativeSessionApi, SessionError, SessionLease, SessionMessage, SessionScopeHooks,
+    SessionTransport, SessionWorldReceipt,
+};
 pub mod paid_artifact;
 pub mod paid_catalog;
 pub mod paid_glue;

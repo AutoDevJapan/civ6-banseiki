@@ -20,6 +20,19 @@ fn fault() -> ! {
 pub(super) fn request_close() {
     CLOSING.store(true, Ordering::Release);
 }
+pub(super) fn owns_operation_cleanup(caller: u64) -> bool {
+    if !CLOSING.load(Ordering::Acquire)
+        || !WAITED.load(Ordering::Acquire)
+        || caller != CORE.load(Ordering::Acquire) + 0x63e239
+    {
+        return false;
+    }
+    STACK.with(|s| {
+        s.borrow()
+            .last()
+            .is_some_and(|(kind, world, _)| *kind == 30 && *world == WORLD.load(Ordering::Acquire))
+    })
+}
 pub(super) fn ready() -> bool {
     #[cfg(test)]
     if CORE.load(Ordering::Acquire) == 0 {
@@ -65,6 +78,12 @@ extern "system" fn begin(raw: *mut Saved) {
                     return;
                 }
                 raw.invocation.world = raw.gpr[0];
+                if worlds::installed() {
+                    let birth = worlds::birth(raw.gpr[0]);
+                    if birth != worlds::closing(raw.gpr[0]) || birth.is_none() {
+                        fault();
+                    }
+                }
                 if raw.gpr[0] == 0 {
                     fault();
                 }
@@ -141,20 +160,43 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         32 => {
             // Native shutdown progressed through its own Wait. This gate is
             // BEFORE returning to4A1196 and its subsequent cleanup calls.
-            // Jobs are settled by their original execute/destructor wrappers,
-            // never by assuming that an empty set or this return is a join.
+            // Jobs are settled by their original execute/destructor wrappers.
+            // Inert serialized nodes remain for later original 380B0 cleanup;
+            // their presence is not an executing job and cannot block Wait.
+            let host_receipt = consumers::take_wait_receipt(
+                raw.invocation.manager + 0x400,
+                raw.invocation.native_rsp,
+            );
+            if consumers::require_wait_receipt() && host_receipt.is_none() {
+                #[cfg(test)]
+                if std::env::var_os("CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD").is_some() {
+                    println!("HOST_CURRENT_ARENA_RECEIPT_REFUSED");
+                    use std::io::Write;
+                    std::io::stdout().flush().unwrap();
+                }
+                fault();
+            }
             if FRAMES
                 .get()
                 .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
-                || !super::close(Instant::now() + Duration::from_secs(2))
+                || !super::close_executions(Instant::now() + Duration::from_secs(2))
             {
                 fault();
             }
             WAITED.store(true, Ordering::Release);
         }
         30 => {
-            if !WAITED.load(Ordering::Acquire) {
+            if !WAITED.load(Ordering::Acquire)
+                || !super::close(Instant::now() + Duration::from_secs(2))
+            {
                 fault();
+            }
+            if let Some(birth) = worlds::birth(raw.invocation.world) {
+                sessions::retire_world(sessions::SessionWorldReceipt {
+                    binding_id: birth.serial,
+                    epoch: birth.epoch,
+                })
+                .unwrap_or_else(|_| fault());
             }
             SHUTDOWN_RETURNED.store(true, Ordering::Release);
         }
@@ -405,6 +447,323 @@ mod tests {
         raw.invocation.caller = caller;
         raw
     }
+    static MIXED_BASE: AtomicU64 = AtomicU64::new(0);
+    static MIXED_PARALLEL: AtomicBool = AtomicBool::new(false);
+    static SIX_STARTED: std::sync::OnceLock<std::sync::Barrier> = std::sync::OnceLock::new();
+    static SIX_RELEASE: std::sync::OnceLock<std::sync::Barrier> = std::sync::OnceLock::new();
+    static SIX_WORKER: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+    extern "system" fn mixed_outer_control(world: *mut u64) {
+        assert_eq!(super::super::counts()[3], 6);
+        if MIXED_PARALLEL.load(Ordering::Acquire) {
+            SIX_STARTED.get().unwrap().wait();
+            SIX_RELEASE.get().unwrap().wait();
+            return;
+        }
+        println!("SIX_NATIVE_OUTER_ACTIVE_BEFORE_CONTROL");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+        let invoke: unsafe extern "system" fn(*mut u64) =
+            unsafe { std::mem::transmute((MIXED_BASE.load(Ordering::Acquire) + 0x471b0) as usize) };
+        unsafe { invoke(world) };
+    }
+    extern "system" fn mixed_native_wait() {
+        assert_eq!(super::super::counts()[3], 6);
+        SIX_RELEASE.get().unwrap().wait();
+        SIX_WORKER.lock().unwrap().take().unwrap().join().unwrap();
+        assert_eq!(super::super::counts()[3], 0);
+    }
+    #[test]
+    fn same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return() {
+        const ENV: &str = "CIV6_NATIVE_CONTROL_SIX_STACK_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(ENV,"1").args([
+                    "--exact","windows::root_observation::native_frames::control::tests::same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return","--nocapture"
+                ]).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            loop {
+                if p.try_wait().unwrap().is_some() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    let _ = p.kill();
+                    let _ = p.wait();
+                    panic!("mixed control child timeout");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let out = p.wait_with_output().unwrap();
+            assert!(!out.status.success());
+            assert!(
+                String::from_utf8_lossy(&out.stdout)
+                    .contains("SIX_NATIVE_OUTER_ACTIVE_BEFORE_CONTROL"),
+                "did not reach six live original gateways: {:?}",
+                out
+            );
+            assert!(
+                String::from_utf8_lossy(&out.stdout)
+                    .contains("SIX_NATIVE_FRAMES_REENTRANT_AT_WAIT"),
+                "original control chain did not reach the expected Wait drain: {:?}",
+                out
+            );
+            return;
+        }
+        mixed_fixture(false, false);
+    }
+    #[test]
+    fn original_wait_joins_worker_through_six_full_gateways_before_cleanup() {
+        if !child("original_wait_joins_worker_through_six_full_gateways_before_cleanup") {
+            return;
+        }
+        mixed_fixture(true, false);
+    }
+    #[test]
+    fn real_host_wait_receipt_reaches_control_after_six_worker_frames_return() {
+        if !child("real_host_wait_receipt_reaches_control_after_six_worker_frames_return") {
+            return;
+        }
+        mixed_fixture(true, true);
+    }
+    #[test]
+    fn current_arena_normal_return_never_reaches_destructive_control_cleanup() {
+        const ENV: &str = "CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(ENV,"1").args([
+                    "--exact","windows::root_observation::native_frames::control::tests::current_arena_normal_return_never_reaches_destructive_control_cleanup","--nocapture"
+                ]).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            loop {
+                if p.try_wait().unwrap().is_some() {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    let _ = p.kill();
+                    let _ = p.wait();
+                    panic!("current arena fixture timeout");
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let out = p.wait_with_output().unwrap();
+            assert!(!out.status.success());
+            assert!(
+                String::from_utf8_lossy(&out.stdout).contains("HOST_CURRENT_ARENA_RECEIPT_REFUSED"),
+                "missing exact control refusal: {:?}",
+                out
+            );
+            return;
+        }
+        mixed_fixture(true, true);
+        panic!("current arena returned through destructive control cleanup");
+    }
+    fn mixed_fixture(parallel: bool, with_host: bool) {
+        MIXED_PARALLEL.store(parallel, Ordering::Release);
+        if parallel {
+            SIX_STARTED.set(std::sync::Barrier::new(2)).unwrap();
+            SIX_RELEASE.set(std::sync::Barrier::new(2)).unwrap();
+        }
+        if !supports_atomic_promotion_fetch() {
+            panic!("fixture needs atomic fetch support");
+        }
+        let size = if with_host { 0xe50000 } else { 0xa00000 };
+        let base =
+            unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
+                as usize;
+        assert_ne!(base, 0);
+        MIXED_BASE.store(base as u64, Ordering::Release);
+        let put = |rva: usize, bytes: &[u8]| unsafe {
+            ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, bytes.len())
+        };
+        let call = |rva: usize, target: usize| {
+            let mut b = [0xe8u8; 5];
+            b[1..].copy_from_slice(&((target as i64 - rva as i64 - 5) as i32).to_le_bytes());
+            put(rva, &b);
+        };
+        let extensions: [&[u8]; 6] = [
+            &[0x48, 0x8b, 0xd9],
+            &[0x48, 0x8b, 0xf1],
+            &[0x55, 0x56, 0x57, 0x48, 0x83, 0xec, 0x20],
+            &[],
+            &[0x48, 0x83, 0xec, 0x28],
+            &[],
+        ];
+        let tails: [&[u8]; 6] = [
+            &[0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3],
+            &[0x48, 0x83, 0xc4, 0x50, 0x5e, 0xc3],
+            &[
+                0x48, 0x83, 0xc4, 0x20, 0x5f, 0x5e, 0x5d, 0x48, 0x8b, 0x5c, 0x24, 0x18, 0xc3,
+            ],
+            &[0x48, 0x81, 0xc4, 0x90, 2, 0, 0, 0x5f, 0x5d, 0x5b, 0xc3],
+            &[0x48, 0x83, 0xc4, 0x28, 0x41, 0x5e, 0x5d, 0xc3],
+            &[0x48, 0x81, 0xc4, 0xd8, 0, 0, 0, 0x5f, 0x5b, 0xc3],
+        ];
+        for (i, (rva, prefix, n)) in super::super::SITES.into_iter().enumerate() {
+            let mut code = prefix[..n].to_vec();
+            code.extend(extensions[i]);
+            if i < 5 {
+                let pos = rva + code.len();
+                code.push(0xe8);
+                code.extend(
+                    ((super::super::SITES[i + 1].0 as i64 - pos as i64 - 5) as i32).to_le_bytes(),
+                );
+            } else {
+                code.extend([0x48, 0xb8]);
+                code.extend((mixed_outer_control as *const () as u64).to_le_bytes());
+                code.extend([0xff, 0xd0]);
+            }
+            code.extend(tails[i]);
+            put(rva, &code);
+        }
+        unsafe {
+            ptr::write_bytes((base + 0x63e160) as *mut u8, 0x90, 0x200);
+            ptr::write_bytes((base + 0x4a1150) as *mut u8, 0x90, 0x80);
+        }
+        put(
+            0x63e160,
+            &[
+                0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xa4, 2, 0, 0, 0, 0x48, 0x8b, 0xd9,
+            ],
+        );
+        put(0x63e1c9, &[0x48, 0x8b, 0x8b, 0x50, 2, 0, 0]);
+        call(0x63e1d0, 0x4a1150);
+        put(0x63e1d5, &[0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3]);
+        put(
+            0x4a1150,
+            &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(0x4a117f, &[0x48, 0x81, 0xc1, 0, 4, 0, 0]);
+        call(0x4a1191, 0x9922c0);
+        put(
+            0x4a1196,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x48, 0x48, 0x83, 0xc4, 0x30, 0x5e, 0xc3,
+            ],
+        );
+        put(
+            0x9922c0,
+            &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(
+            0x9922ca,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ],
+        );
+        if parallel {
+            let mut wait_tail = vec![0x48, 0xb8];
+            wait_tail.extend((mixed_native_wait as *const () as u64).to_le_bytes());
+            wait_tail.extend([
+                0xff, 0xd0, 0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ]);
+            put(0x9922ca, &wait_tail);
+        }
+        if with_host {
+            unsafe {
+                ptr::write_bytes((base + 0x9922ca) as *mut u8, 0x90, 0x40);
+            }
+            call(0x9922fc, 0x986240);
+            put(
+                0x992301,
+                &[
+                    0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+                ],
+            );
+            for rva in [0xe417d0, 0xe41c00] {
+                put(rva, &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x74]);
+            }
+            unsafe {
+                ptr::write_bytes((base + 0x986240) as *mut u8, 0x90, 0x60);
+            }
+            put(
+                0x986240,
+                &[
+                    0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xf9,
+                    0x48, 0x8b, 0x49, 8,
+                ],
+            );
+            call(0x98626b, 0xe3eaf0);
+            put(
+                0x986270,
+                &[
+                    0x48, 0xc7, 0x47, 8, 0, 0, 0, 0, 0x48, 0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83,
+                    0xc4, 0x20, 0x5f, 0xc3,
+                ],
+            );
+            let mut arena = vec![
+                0x40, 0x55, 0x53, 0x56, 0x48, 0x8d, 0x6c, 0x24, 0xb9, 0x48, 0x83, 0xec, 0x20, 0x48,
+                0xb8,
+            ];
+            arena.extend((mixed_native_wait as *const () as u64).to_le_bytes());
+            arena.extend([0xff, 0xd0, 0x48, 0x83, 0xc4, 0x20, 0x5e, 0x5b, 0x5d, 0xc3]);
+            put(0xe3eaf0, &arena);
+        }
+        put(0x471b0, &[0x48, 0x83, 0xec, 0x28]);
+        unsafe {
+            ptr::write_bytes((base + 0x471b4) as *mut u8, 0x90, 9);
+        }
+        call(0x471bd, 0x63e160);
+        put(0x471c2, &[0x48, 0x83, 0xc4, 0x28, 0xc3]);
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        unsafe { super::super::install(base) }.unwrap();
+        unsafe { install(base) }.unwrap();
+        if with_host {
+            unsafe { consumers::fixture_install(base, base) }.unwrap();
+            if std::env::var_os("CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD").is_some() {
+                consumers::fixture_current_arena();
+            }
+        }
+        runtime::fixture_invocation_runtime();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let mut manager = vec![0u64; 0x500 / 8];
+        let mut arena = 0u64;
+        if with_host {
+            manager[0x408 / 8] = &mut arena as *mut u64 as u64;
+        }
+        world[0x250 / 8] = manager.as_mut_ptr() as u64;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let invoke: unsafe extern "system" fn(*mut u64) =
+            unsafe { std::mem::transmute(base + super::super::SITES[0].0) };
+        if parallel {
+            let raw_world = world.as_mut_ptr() as usize;
+            *SIX_WORKER.lock().unwrap() = Some(std::thread::spawn(move || unsafe {
+                invoke(raw_world as *mut u64)
+            }));
+            SIX_STARTED.get().unwrap().wait();
+        }
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        if parallel {
+            let control: unsafe extern "system" fn(*mut u64) =
+                unsafe { std::mem::transmute(base + 0x471b0) };
+            unsafe { control(world.as_mut_ptr()) };
+            assert!(WAITED.load(Ordering::Acquire));
+            assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+            if with_host {
+                assert_eq!(manager[0x408 / 8], 0);
+                assert!(
+                    consumers::take_wait_receipt(manager.as_ptr() as u64 + 0x400, 0).is_none(),
+                    "control must consume once"
+                );
+            }
+            assert_eq!(super::super::counts(), [6, 6, 0, 0, 0]);
+            assert_eq!(
+                runtime::BridgeRuntimeRebuild(null_mut()),
+                BridgeStatus::Critical as u32
+            );
+            unsafe { restore() }.unwrap();
+            unsafe { super::super::restore() }.unwrap();
+            assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+            return;
+        }
+        unsafe { invoke(world.as_mut_ptr()) };
+        panic!("destructive Wait returned while original outer frames were still active");
+    }
     #[test]
     fn native_shutdown_progresses_after_grant_close_and_gates_before_cleanup() {
         if !child("native_shutdown_progresses_after_grant_close_and_gates_before_cleanup") {
@@ -441,6 +800,41 @@ mod tests {
             "one native path must not certify all publisher/copy/cancel domains"
         );
         assert!(!super::reopen());
+    }
+    #[test]
+    fn inert_operation_storage_survives_wait_until_owned_original_cleanup() {
+        if !child("inert_operation_storage_survives_wait_until_owned_original_cleanup") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let f = FRAMES.get().unwrap();
+        let p = f.begin_queue_producer().unwrap();
+        f.queue_allocated(p, 123, None).unwrap();
+        f.queue_producer_returned(p).unwrap();
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        world[0x250 / 8] = 300;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
+        begin(&mut w);
+        let mut m = raw(31, 300, 0x18063e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, 300 + 0x400, 0x1804a1196);
+        begin(&mut wait);
+        finish(&mut wait, false);
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(f.contains_task(123));
+        finish(&mut m, false);
+        assert!(!owns_operation_cleanup(0x180036fef));
+        assert!(owns_operation_cleanup(0x18063e239));
+        let cleanup = f.begin_native_cleanup().unwrap();
+        let node = f.retire_queue(123).unwrap();
+        f.queue_retired(node).unwrap();
+        f.leave(cleanup).unwrap();
+        finish(&mut w, false);
+        assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!ready(), "local drain is not all producer coverage");
     }
     global_asm!(
         ".p2align 4",

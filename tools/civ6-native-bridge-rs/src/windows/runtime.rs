@@ -563,6 +563,49 @@ pub(super) fn state_for_authority(owner: usize) -> u128 {
     STATE[owner].load()
 }
 
+/// Cold Host preparation precedes Core/Context creation. It captures native
+/// session birth; it does not activate gameplay policy or create World proof.
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeRuntimePrepareHost(input: *mut c_void) -> u32 {
+    if !committed_range(
+        input as usize,
+        std::mem::size_of::<BridgeConfig>(),
+        std::mem::align_of::<BridgeConfig>(),
+        false,
+    ) {
+        return BridgeStatus::InvalidInput as u32;
+    }
+    let config = unsafe { ptr::read(input.cast::<BridgeConfig>()) };
+    if config.version != RUNTIME_CONFIG_VERSION
+        || config.size as usize != std::mem::size_of::<BridgeConfig>()
+        || config.mode != BridgeMode::ProductionAdmission as u32
+        || config.trace_address != 0
+        || config.trace_size != 0
+        || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
+        || config.game_pid != unsafe { GetCurrentProcessId() }
+        || current_created_filetime() != Some(config.created_filetime)
+        || !module_path(null_mut()).is_some_and(|path| same_file(&path, GAME_EXE))
+        || !unsafe { GetModuleHandleW(wide("GameCore_XP2_FinalRelease.dll").as_ptr()) }.is_null()
+    {
+        return BridgeStatus::InvalidInput as u32;
+    }
+    let Ok(_guard) = INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    if owned() {
+        return BridgeStatus::HookFailure as u32;
+    }
+    match std::panic::catch_unwind(|| unsafe {
+        root_observation::native_frames::prepare_host(GetModuleHandleW(null_mut()) as usize)
+    }) {
+        Ok(Ok(())) => BridgeStatus::Ok as u32,
+        _ => {
+            product_deactivate();
+            BridgeStatus::Critical as u32
+        }
+    }
+}
+
 /// Config is also a receipt: success returns the game-owned trace address.
 /// Neither an external mapping nor a saved GameCore pointer becomes authority.
 #[unsafe(no_mangle)]
@@ -670,6 +713,10 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             } else {
                 BridgeStatus::Critical
             } as u32;
+        }
+        if !root_observation::native_frames::bind_host(gamecore as usize) {
+            product_deactivate();
+            return BridgeStatus::Critical as u32;
         }
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;

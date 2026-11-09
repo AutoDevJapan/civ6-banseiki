@@ -33,7 +33,16 @@ extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
-        let f = FRAMES.get().unwrap_or_else(|| fault());
+        loads::job_begin(raw);
+        // Host load jobs can be published before the first Core is loaded.
+        // Their separate load carrier is retained above; Core accounting is
+        // activated only when its original runtime owner binds the Core.
+        let Some(f) = FRAMES.get() else {
+            return;
+        };
+        if CORE.load(Ordering::Acquire) == 0 {
+            return;
+        }
         let (id, task) = match raw.invocation.kind {
             20 => {
                 let core = CORE.load(Ordering::Acquire);
@@ -52,6 +61,7 @@ extern "system" fn begin(raw: *mut Saved) {
             }
             21 => {
                 let t = raw.gpr[0];
+                let _attached = consumers::attach_current(t);
                 let p = u64::from_le_bytes(
                     copy_current::<8>(t.checked_add(8).unwrap_or_else(|| fault()))
                         .unwrap_or_else(|| fault()),
@@ -66,10 +76,11 @@ extern "system" fn begin(raw: *mut Saved) {
                 (f.execute(t, p).unwrap_or_else(|_| fault()), t)
             }
             22 => {
-                if !f.contains_task(raw.gpr[0]) {
+                let _attached = consumers::attach_current(raw.gpr[0]);
+                let Some(id) = f.retire_task(raw.gpr[0]).unwrap_or_else(|_| fault()) else {
                     return;
-                }
-                (0, raw.gpr[0])
+                };
+                (id, raw.gpr[0])
             }
             23 => {
                 if raw.invocation.caller != EXE.load(Ordering::Acquire) + 0x985f9e {
@@ -94,6 +105,7 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    loads::job_finish(raw, exceptional);
     if raw.invocation.cookie != COOKIE {
         return;
     }
@@ -122,7 +134,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             .completed(raw.invocation.token)
             .unwrap_or_else(|_| fault()),
         22 => f
-            .cancelled(raw.invocation.world)
+            .task_retired(raw.invocation.token)
             .unwrap_or_else(|_| fault()),
         23 => f
             .bind_before_publication(raw.invocation.token, raw.gpr[4])
@@ -257,6 +269,23 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
     EXE.store(exe as u64, Ordering::Release);
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
+    let prepared = HOOKS.lock().map_err(|_| "native job owner poisoned")?;
+    if !prepared.is_empty() {
+        if prepared.len() != 4
+            || prepared
+                .iter()
+                .any(|o| copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched))
+        {
+            return Err("native job early installation differs");
+        }
+        return Ok(());
+    }
+    drop(prepared);
+    unsafe { install_at(exe) }
+}
+pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
+    EXE.store(exe as u64, Ordering::Release);
     unsafe { install_at(exe) }
 }
 unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
@@ -584,6 +613,7 @@ mod tests {
         }
         let f = FRAMES.get_or_init(NativeFrames::new);
         EXE.store(0x140000000, Ordering::Release);
+        CORE.store(0x180000000, Ordering::Release);
         let id = f.issue_on_set(100, 10).unwrap();
         STACK.with(|s| s.borrow_mut().push((20, id, 0)));
         let mut allocation: Saved = unsafe { std::mem::zeroed() };
@@ -598,5 +628,74 @@ mod tests {
         f.pushed(id, 200).unwrap();
         assert_eq!(f.pending_on_set(10), Ok(0));
         assert_eq!(STACK.with(|s| s.borrow_mut().pop()), Some((20, id, 0)));
+    }
+
+    #[test]
+    fn destructor_callback_keeps_original_id_when_native_free_reuses_t() {
+        if !child("destructor_callback_keeps_original_id_when_native_free_reuses_t") {
+            return;
+        }
+        let f = FRAMES.get_or_init(NativeFrames::new);
+        CORE.store(0x180000000, Ordering::Release);
+        let old = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(old, 123).unwrap();
+        f.pushed(old, 123).unwrap();
+        let mut destroy: Saved = unsafe { std::mem::zeroed() };
+        destroy.invocation.kind = 22;
+        destroy.gpr[0] = 123;
+        begin(&mut destroy);
+        assert_eq!(destroy.invocation.token, old);
+        let new = f.issue_on_set(200, 10).unwrap();
+        f.bind_before_publication(new, 123).unwrap();
+        f.pushed(new, 123).unwrap();
+        finish(&mut destroy, false);
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        assert_eq!(f.execute(123, 200), Ok(new));
+        f.completed(new).unwrap();
+        f.seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+    }
+
+    global_asm!(
+        ".p2align 4", ".globl native_jobs_fixture_null_native_tail",
+        ".seh_proc native_jobs_fixture_null_native_tail", "native_jobs_fixture_null_native_tail:",
+        ".seh_endprologue",
+        // Exact pinned caller985F9E..985FC5. The remainder only supplies the
+        // still reached985FD6/985FEB null-derived store, with no game data.
+        ".byte 0x4c,0x8b,0xc0,0x48,0x85,0xc0,0x74,0x14,0xc6,0x40,0xf5,0x01,0x48,0x8d,0x05,0x67,0x64,0x6e,0x00,0x49,0x89,0x00,0x49,0x89,0x78,0x08,0xeb,0x03,0x45,0x33,0xc0",
+        "lea rcx,[r8-8]", "mov qword ptr [rcx],0", "ret", ".seh_endproc",
+        ".p2align 4", ".globl native_jobs_fixture_null_native_entry",
+        ".seh_proc native_jobs_fixture_null_native_entry", "native_jobs_fixture_null_native_entry:",
+        ".seh_endprologue", "xor eax,eax", "jmp native_jobs_fixture_null_native_tail", ".seh_endproc",
+    );
+    unsafe extern "system" {
+        fn native_jobs_fixture_null_native_entry();
+    }
+    #[test]
+    fn pinned_allocator_null_branch_still_reaches_native_invalid_store() {
+        const ENV: &str = "CIV6_NATIVE_PINNED_NULL_CALLER_CHILD";
+        if std::env::var_os(ENV).is_some() {
+            // A fixed leaf supplies RAX=0, without compiler-selected call
+            // registers aliasing the allocation-result register.
+            unsafe { native_jobs_fixture_null_native_entry() };
+            unreachable!("the fixed native null path cannot return normally");
+        }
+        let mut p=std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000).env(ENV,"1").args([
+                "--exact","windows::root_observation::native_frames::jobs::tests::pinned_allocator_null_branch_still_reaches_native_invalid_store","--nocapture"
+            ]).spawn().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(s) = p.try_wait().unwrap() {
+                assert_eq!(s.code().map(|x| x as u32), Some(0xc0000005));
+                break;
+            }
+            if Instant::now() >= deadline {
+                let _ = p.kill();
+                let _ = p.wait();
+                panic!("owned null caller timeout");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
 }

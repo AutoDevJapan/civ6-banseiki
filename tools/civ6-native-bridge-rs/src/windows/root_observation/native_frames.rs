@@ -14,12 +14,20 @@ struct OwnedHook {
 }
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 static FAILED: AtomicBool = AtomicBool::new(false);
+#[path = "native_consumers.rs"]
+mod consumers;
 #[path = "native_control.rs"]
 mod control;
 #[path = "native_jobs.rs"]
 mod jobs;
+#[path = "native_loads.rs"]
+mod loads;
 #[path = "native_operations.rs"]
 mod operations;
+#[path = "native_sessions.rs"]
+pub(crate) mod sessions;
+#[path = "native_worlds.rs"]
+mod worlds;
 const SITES: [(usize, &[u8], usize); 6] = [
     (
         0x35f70,
@@ -348,6 +356,8 @@ pub(in super::super) unsafe fn install(core: usize) -> Result<(), &'static str> 
     #[cfg(not(test))]
     unsafe {
         jobs::install(core)?;
+        consumers::install(core)?;
+        worlds::install(core)?;
         control::install(core)?;
         operations::install(core)?;
     }
@@ -442,6 +452,54 @@ pub(in super::super) fn close(deadline: Instant) -> bool {
     }
     success
 }
+pub(super) fn close_executions(deadline: Instant) -> bool {
+    if FAILED.load(Ordering::Acquire) {
+        return false;
+    }
+    let Some(frames) = FRAMES.get() else {
+        return false;
+    };
+    let result = frames.seal_executions_and_wait(deadline);
+    #[cfg(test)]
+    if result == Err(crate::native_flight::Error::Reentrant) && counts()[3] == 6 {
+        println!("SIX_NATIVE_FRAMES_REENTRANT_AT_WAIT");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+    }
+    !FAILED.load(Ordering::Acquire) && result.is_ok()
+}
+fn session_enter(epoch: u64) -> Result<u64, sessions::SessionError> {
+    FRAMES
+        .get()
+        .ok_or(sessions::SessionError::Unbound)?
+        .enter_existing_epoch(epoch)
+        .map_err(|_| sessions::SessionError::Stale)
+}
+fn session_leave(hold: u64, exceptional: bool) -> Result<(), sessions::SessionError> {
+    let f = FRAMES.get().ok_or(sessions::SessionError::Unbound)?;
+    if exceptional {
+        f.mark_unresolved();
+    }
+    f.leave(hold)
+        .map_err(|_| sessions::SessionError::Unresolved)
+}
+pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    unsafe {
+        sessions::NativeSessionApi::prepare_host(exe)?;
+        loads::prepare_host(exe)?;
+        jobs::prepare_host(exe)
+    }
+}
+pub(in super::super) fn bind_host(core: usize) -> bool {
+    sessions::NativeSessionApi::bind_core(
+        core as u64,
+        sessions::SessionScopeHooks {
+            enter_existing_epoch: session_enter,
+            leave: session_leave,
+        },
+    )
+    .is_ok()
+}
 pub(in super::super) fn request_close() -> bool {
     #[cfg(test)]
     if FRAMES.get().is_none() {
@@ -481,8 +539,12 @@ pub(super) fn counts() -> [u64; 5] {
 pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "native frame owner poisoned")?;
     let mut failed = unsafe { jobs::restore() }.is_err();
+    failed |= unsafe { consumers::restore() }.is_err();
+    failed |= unsafe { worlds::restore() }.is_err();
     failed |= unsafe { control::restore() }.is_err();
     failed |= unsafe { operations::restore() }.is_err();
+    failed |= unsafe { loads::restore() }.is_err();
+    failed |= unsafe { sessions::NativeSessionApi::restore() }.is_err();
     hooks.retain(|owned| {
         let hook = &owned.hook;
         let current = copy_current::<8>(hook.target as u64);
