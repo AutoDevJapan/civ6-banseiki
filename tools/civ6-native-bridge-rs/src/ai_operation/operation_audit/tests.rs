@@ -40,7 +40,7 @@ fn specimen() -> Vec<u8> {
     w16(&mut b, opt, 0x20b);
     w64(&mut b, opt + 24, 0x180000000);
     w32(&mut b, opt + 108, 16);
-    let mut rows: Vec<_> = fixed::FRAMES.iter().flat_map(|f| f.fragments).collect();
+    let mut rows: Vec<_> = all_frames().flat_map(|f| f.fragments).collect();
     rows.sort_by_key(|f| f.begin);
     w32(&mut b, opt + 112 + 3 * 8, PDATA as u32);
     w32(&mut b, opt + 116 + 3 * 8, (rows.len() * 12) as u32);
@@ -69,13 +69,16 @@ fn specimen() -> Vec<u8> {
         w32(&mut b, PDATA + i * 12 + 8, f.unwind);
         code(&mut b, f.unwind, f.hex);
     }
-    for f in fixed::FRAMES {
+    for f in all_frames() {
         code(&mut b, f.begin, f.specimen);
     }
-    for l in fixed::LEAVES {
+    for l in all_leaves() {
         code(&mut b, l.rva, l.hex);
     }
     for &(rva, hex) in BLOCKS {
+        code(&mut b, rva, hex);
+    }
+    for &(rva, hex) in secondary::blocks() {
         code(&mut b, rva, hex);
     }
     w32(&mut b, RELOC, 0x9be000);
@@ -115,7 +118,7 @@ fn complete_synthetic_pe_exercises_real_consumer_queue_and_factory_witnesses() {
     );
     assert_eq!(
         report["whole_frames"].as_array().unwrap().len(),
-        fixed::FRAMES.len()
+        all_frames().count()
     );
     assert_eq!(
         report["relocated_vtable_slots"].as_array().unwrap().len(),
@@ -127,7 +130,7 @@ fn complete_synthetic_pe_exercises_real_consumer_queue_and_factory_witnesses() {
 fn complete_frames_reject_intervening_code_and_epilogue_changes() {
     let mut b = specimen();
     assert!(valid(&b).is_ok());
-    for f in fixed::FRAMES {
+    for f in all_frames() {
         for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
             let p = offset(rva);
             b[p] ^= 1;
@@ -178,13 +181,13 @@ fn vtable_targets_and_each_dir64_relocation_are_required() {
 fn pdata_partition_and_every_unwind_record_are_checked() {
     let mut b = specimen();
     assert!(valid(&b).is_ok());
-    for f in fixed::FRAMES.iter().flat_map(|f| f.fragments) {
+    for f in all_frames().flat_map(|f| f.fragments) {
         let p = offset(f.unwind);
         b[p + 1] ^= 1;
         assert!(valid(&b).is_err(), "unwind {:#x}", f.unwind);
         b[p + 1] ^= 1;
     }
-    let mut rows: Vec<_> = fixed::FRAMES.iter().flat_map(|f| f.fragments).collect();
+    let mut rows: Vec<_> = all_frames().flat_map(|f| f.fragments).collect();
     rows.sort_by_key(|f| f.begin);
     for i in 0..rows.len() {
         for field in [0, 4, 8] {
@@ -217,5 +220,88 @@ fn public_entry_rejects_unpinned_and_truncated_files_before_abi_interpretation()
     let b = specimen();
     for end in [0, 2, 0x80, 0x84, 0x98, 0x100, PDATA + 11, RELOC + 51] {
         assert!(Pe::parse(&b[..end]).is_err(), "truncation {end:x}");
+    }
+}
+
+#[test]
+fn secondary_report_distinguishes_original_source_copy_payload_and_first_destruction() {
+    let b = specimen();
+    let report = valid(&b).unwrap();
+    let s = &report["secondary_queue"];
+    assert_eq!(report["schema"], "native-operation-domain-static-v2");
+    assert_eq!(s["frames"].as_array().unwrap().len(), 4);
+    assert_eq!(s["enqueue_second"]["allocator_return_rva"], 0x374ce);
+    assert_eq!(s["transfer_copy"]["node_allocator_return_rva"], 0x3657d);
+    assert_eq!(s["transfer_copy"]["payload_allocator_return_rva"], 0x365b7);
+    assert_eq!(s["transfer_copy"]["first_shared_link_store_rva"], 0x365fa);
+    assert_eq!(s["transfer_copy"]["source_node_free_call_rva"], 0x3801f);
+    assert_eq!(
+        s["serialized_ingestion"]["node_allocations"][0]["return_rva"],
+        0x377aa
+    );
+    assert_eq!(
+        s["serialized_ingestion"]["node_allocations"][1]["return_rva"],
+        0x37980
+    );
+    assert_eq!(s["cleanup"]["first_prototype_delete_call_rva"], 0x380e3);
+    assert_eq!(s["cleanup"]["first_queue"]["node_free_call_rva"], 0x3819f);
+    assert_eq!(s["cleanup"]["second_queue"]["node_free_call_rva"], 0x381ff);
+    assert_eq!(s["certificate_issued"], false);
+    assert_eq!(s["frames"][1]["unwind_declared_prolog_length"], 164);
+}
+
+#[test]
+fn secondary_field_flow_source_binding_publication_free_and_branches_reject_mutations() {
+    let mut b = specimen();
+    assert!(secondary::inspect(&Pe::parse(&b).unwrap()).is_ok());
+    for rva in [
+        0x374af, 0x374ce, 0x37506, 0x37509, 0x3752f, 0x3652a, 0x36530, 0x36533, 0x36539, 0x36560,
+        0x3657d, 0x3658b, 0x365b7, 0x365de, 0x365fa, 0x365fd, 0x36607, 0x377aa, 0x377fb, 0x377fe,
+        0x37814, 0x3792c, 0x37980, 0x379d1, 0x379d4, 0x379ea, 0x37b02, 0x37f7c, 0x37f8a, 0x37fa9,
+        0x37fd1, 0x3800a, 0x3801f, 0x380d2, 0x380e3, 0x38124, 0x3814f, 0x38170, 0x3818a, 0x3819f,
+        0x381d0, 0x381ea, 0x381ff, 0x38228, 0x3823d, 0x36e21, 0x590733,
+    ] {
+        let p = offset(rva);
+        b[p] ^= 1;
+        assert!(
+            secondary::inspect(&Pe::parse(&b).unwrap()).is_err(),
+            "secondary mutation {rva:#x}"
+        );
+        b[p] ^= 1;
+    }
+    assert!(secondary::inspect(&Pe::parse(&b).unwrap()).is_ok());
+}
+
+#[test]
+fn secondary_exact_blocks_are_backed_by_whole_frames_or_bounded_leaves() {
+    let b = specimen();
+    let pe = Pe::parse(&b).unwrap();
+    assert!(valid(&b).is_ok());
+    for &(rva, hex) in secondary::blocks() {
+        let end = rva + (hex.len() / 2) as u32;
+        let whole = all_frames().any(|f| rva >= f.begin && end <= f.end);
+        let leaf = all_leaves().any(|l| l.rva == rva && l.hex == hex);
+        assert!(whole || leaf, "unanchored block {rva:#x}");
+        assert_eq!(
+            pe.span(rva, hex.len() / 2, true).unwrap(),
+            unhex(hex).unwrap()
+        );
+    }
+}
+
+#[test]
+fn signed_short_version_branch_and_complete_secondary_unwind_intervals_are_checked() {
+    let b = specimen();
+    let pe = Pe::parse(&b).unwrap();
+    relative(&pe, 0x376e7, 2, 1, 0x376f8).unwrap();
+    assert!(relative(&pe, 0x376e7, 2, 1, 0x376e9).is_err());
+    for f in secondary_fixed::FRAMES {
+        let prolog = usize::from(pe.span(f.fragments[0].unwind, 4, false).unwrap()[1]);
+        assert!(prolog > 0 && prolog <= (f.end - f.begin) as usize);
+        assert_eq!(
+            pe.span(f.begin, prolog, true).unwrap(),
+            &unhex(f.specimen).unwrap()[..prolog]
+        );
+        complete_frame(&pe, f).unwrap();
     }
 }

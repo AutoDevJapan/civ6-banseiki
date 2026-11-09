@@ -4,6 +4,10 @@
 mod fixed;
 #[path = "operation_audit/pe.rs"]
 mod pe;
+#[path = "operation_audit/secondary.rs"]
+mod secondary;
+#[path = "operation_audit/secondary_fixed.rs"]
+mod secondary_fixed;
 use pe::{Function, Pe};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -28,6 +32,12 @@ struct Frame {
 struct Leaf {
     rva: u32,
     hex: &'static str,
+}
+fn all_frames() -> impl Iterator<Item = &'static Frame> {
+    fixed::FRAMES.iter().chain(secondary_fixed::FRAMES)
+}
+fn all_leaves() -> impl Iterator<Item = &'static Leaf> {
+    fixed::LEAVES.iter().chain(secondary_fixed::LEAVES)
 }
 fn unhex(s: &str) -> Result<Vec<u8>, String> {
     if !s.len().is_multiple_of(2) || !s.is_ascii() {
@@ -98,7 +108,11 @@ fn relative(
     target: u32,
 ) -> Result<Value, String> {
     let b = pe.span(rva, len, true)?;
-    let d = i32::from_le_bytes(pe::at(b, displacement, 4)?.try_into().unwrap());
+    let d = if len == 2 && displacement == 1 {
+        i32::from(b[1] as i8)
+    } else {
+        i32::from_le_bytes(pe::at(b, displacement, 4)?.try_into().unwrap())
+    };
     let computed = i64::from(rva) + len as i64 + i64::from(d);
     if computed != i64::from(target) {
         return Err(format!("operation relative target differs at {rva:#x}"));
@@ -135,11 +149,10 @@ pub fn audit(core: &[u8]) -> Result<Value, String> {
 }
 
 fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
-    let frames = fixed::FRAMES
-        .iter()
+    let frames = all_frames()
         .map(|f| complete_frame(pe, f))
         .collect::<Result<Vec<_>, _>>()?;
-    for leaf in fixed::LEAVES {
+    for leaf in all_leaves() {
         exact(pe, leaf.rva, leaf.hex)?;
         let end = leaf.rva + (leaf.hex.len() / 2) as u32;
         if pe
@@ -166,6 +179,7 @@ fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
         .iter()
         .map(|&(rva, len, offset, target)| relative(pe, rva, len, offset, target))
         .collect::<Result<Vec<_>, _>>()?;
+    let secondary_queue = secondary::inspect(pe)?;
     let registry = json!({
         "register_entry_rva":0x37e90,"lookup_root_global_rva":0xb8a9d0,
         "sentinel_rva":0xb8a9c0,"node_type_id_offset":0x20,"node_instance_offset":0x28,
@@ -206,7 +220,7 @@ fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
         "publication_precedes_payload_copy":true,
         "reservation_frontier":"reserve at enqueue entry before native calls; bind allocation RAX at caller3743A before any shared link; do not wait for enqueue return",
         "source_epoch":"carry actual issuing epoch with the queue-node reservation into dequeue and full consumer/SEH; no current-generation snapshot at prototype factory or execute entry",
-        "second_list_limit":"second allocation is a distinct record; whether it is replay/history or another execution source is not established here"
+            "second_list_limit":"second allocation is a distinct record; see secondary_queue for checked copy/serialized-ingestion/free paths; runtime World epoch and completeness remain unestablished"
     });
     let immediate_path = json!({
         "adapter_rva":0x590820,"target_rva":0x37b50,
@@ -221,15 +235,16 @@ fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
         "implemented_by_this_audit":false
     });
     Ok(json!({
-        "schema":"native-operation-domain-static-v1","image_revision":"steam-26407122",
+        "schema":"native-operation-domain-static-v2","image_revision":"steam-26407122",
         "core_sha256":CORE_SHA,"whole_frames":frames,"relocated_vtable_slots":slots,
         "computed_references":references,"registry":registry,"execute_consumer":execute_consumer,
         "queued_path":queued_path,"immediate_path":immediate_path,
         "allocator_adapter_contract":allocator_adapter_contract,
+        "secondary_queue":secondary_queue,
         "not_established_by_this_audit":[
             "executed operation table/registry identity and equality between deserialize and execute reloads",
             "World epoch for any constructor, prototype registration, player scalar or stream payload",
-            "all enqueue/immediate/copy/replay paths or all indirect consumers",
+            "all enqueue/immediate/copy/replay paths or all indirect consumers; checked secondary paths are a partial static slice",
             "producer seal, native pending count, cancel/reissue/ABA settlement or all-domain join",
             "safety of queue publication before payload copy under concurrency",
             "6-argument allocator gateway ABI/SEH and runtime reservation installation",
