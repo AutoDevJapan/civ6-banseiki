@@ -130,6 +130,8 @@ fn prepare_diagnostic_sample(
         17 => "set hotpatch publication",
         18 => "loader hotpatch publication",
         19 => "prepared before GO",
+        20 => "native Host preparation entered",
+        21 => "native Host preparation returned",
         _ => "unknown stage",
     };
     json!({"schema":"todo880-bootstrap-prepare-diagnostic-v1","valid":valid,"raw":words,
@@ -686,7 +688,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             },
             |status| {
                 diagnostic_address.map(|address| {
-                    prepare_diagnostic_sample(
+                    let mut diagnosis = prepare_diagnostic_sample(
                         status,
                         req.pid,
                         req.created,
@@ -710,7 +712,24 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                             (copied, error)
                         },
                         |bytes| preserve(&req.output, "bootstrap-prepare-diagnostic.bin", bytes),
-                    )
+                    );
+                    if status != Some(0) && !req.root_only {
+                        diagnosis["native_host"] = match pointer(&game, runtime.base + runtime_exports[5]) {
+                            Ok(address) => {
+                                let mut bytes=[0u8;128];
+                                match read_remote(&game,address,&mut bytes) {
+                                    Ok(()) => match preserve(&req.output,"host-prepare-native-frame.bin",&bytes) {
+                                        Ok(()) => wire::native_frames(&bytes,req.pid,req.created)
+                                            .unwrap_or_else(|error| json!({"status":"invalid snapshot","error":error})),
+                                        Err(error) => json!({"status":"preservation failed","error":error}),
+                                    },
+                                    Err(error) => json!({"status":"read failed","error":error}),
+                                }
+                            }
+                            Err(error)=>json!({"status":"pointer unavailable","error":error}),
+                        };
+                    }
+                    diagnosis
                 })
             },
             |row| write_json(&mut writer, row),
@@ -960,6 +979,30 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bootstrap_prepare_host_substages_do_not_turn_unknown_response_into_success() {
+        for (stage, label) in [
+            (20, "native Host preparation entered"),
+            (21, "native Host preparation returned"),
+        ] {
+            let mut bytes = prepare_fixture_diagnostic(1);
+            bytes[24..32].copy_from_slice(&(stage as u64).to_le_bytes());
+            let row = super::prepare_diagnostic_sample(
+                None,
+                23,
+                29,
+                wire::SUBMISSION_PREPARE_VERSION,
+                |out| {
+                    out.copy_from_slice(&bytes);
+                    (64, None)
+                },
+                |_| Ok(()),
+            );
+            assert_eq!(row["stage_name"], label);
+            assert_eq!(row["call_result_known"], false);
+            assert_eq!(row["valid"], false);
+        }
+    }
     fn prepare_fixture_diagnostic(status: u64) -> [u8; 64] {
         let mut bytes = [0; 64];
         for (i, w) in [

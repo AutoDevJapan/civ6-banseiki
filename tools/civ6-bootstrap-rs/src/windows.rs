@@ -1014,7 +1014,9 @@ fn prepare_profile(
     // Capture native Host session births while still in MainMenu, before the
     // original game-start path can load Core or publish a new Context.
     if let Some(prepare) = prepare_host {
+        stage(20);
         let status = unsafe { prepare((&mut s.config as *mut RuntimeConfig).cast()) };
+        stage(21);
         if status != 0 {
             return Err("native Host birth preparation failed".into());
         }

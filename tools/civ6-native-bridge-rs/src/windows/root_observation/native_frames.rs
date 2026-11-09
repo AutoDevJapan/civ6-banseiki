@@ -516,14 +516,26 @@ fn session_leave(hold: u64, exceptional: bool) -> Result<(), sessions::SessionEr
         .map_err(|_| sessions::SessionError::Unresolved)
 }
 pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    TRACE.0[8].store(unsafe { GetCurrentProcessId() } as u64, Ordering::Release);
+    TRACE.0[9].store(
+        current_created_filetime().ok_or("native Host process identity")?,
+        Ordering::Release,
+    );
     unsafe {
+        diagnostic(1001);
         sessions::NativeSessionApi::prepare_host(exe)?;
+        diagnostic(1002);
         loads::prepare_host(exe)?;
+        diagnostic(1003);
         wire::prepare_host(exe)?;
+        diagnostic(1004);
         jobs::prepare_host(exe)?;
+        diagnostic(1005);
         consumers::prepare_host(exe)?;
+        diagnostic(1006);
         scheduler::prepare_host(exe)?;
     }
+    diagnostic(1007);
     HOST_PREPARED.store(true, Ordering::Release);
     Ok(())
 }
