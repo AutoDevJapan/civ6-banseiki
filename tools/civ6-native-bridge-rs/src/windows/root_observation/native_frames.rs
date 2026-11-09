@@ -443,10 +443,20 @@ pub(in super::super) fn close(deadline: Instant) -> bool {
     success
 }
 pub(super) fn close_executions(deadline: Instant) -> bool {
-    !FAILED.load(Ordering::Acquire)
-        && FRAMES
-            .get()
-            .is_some_and(|f| f.seal_executions_and_wait(deadline).is_ok())
+    if FAILED.load(Ordering::Acquire) {
+        return false;
+    }
+    let Some(frames) = FRAMES.get() else {
+        return false;
+    };
+    let result = frames.seal_executions_and_wait(deadline);
+    #[cfg(test)]
+    if result == Err(crate::native_flight::Error::Reentrant) && counts()[3] == 6 {
+        println!("SIX_NATIVE_FRAMES_REENTRANT_AT_WAIT");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+    }
+    !FAILED.load(Ordering::Acquire) && result.is_ok()
 }
 pub(in super::super) fn request_close() -> bool {
     #[cfg(test)]

@@ -15,7 +15,11 @@
 
 CoreがHostのPushを呼ぶ前に、payloadとjob-setに対応する世代付き予約を保持する候補を追加した。元Pushが返すT、元execute wrapperの実行完了、未実行Tの元destructorによる取消を別々に精算する。Push復帰より早い実行完了でも予約を消さず、未実行・実行中・発行未復帰が残る限り新世代へ進めない。T/Pの値は不透明な識別子として保持し、nativeポインタの読取りは現在の実invocation内に限る。
 
-Closeは資格と橋の新受付を失効させ、nativeの自然shutdownを先に進める。World `63E160`→manager `4A1150`→同setのWait `9922C0`という実呼出しのreceiver・callerを照合し、Waitの元正常returnから`4A1196`へ戻す前に予約と同期frameの排出を確認する。現在のshutdown/manager/Waitを自己待ちに含めず、正常shutdown復帰が未確認ならRebuildを拒否する。SEHを正常returnや取消と扱わない。
+serialized operationは、enqueue `373E0`、保存データの再読込 `37690`、保存用ノードを複製する `36520`、実行と解放を行う `372F0`、複製元を片付ける `37F70`、終了時の `380B0` を完全な呼出し単位で追跡する。第一・第二ノードと複製先を別々の予約へ結び、allocator `994970` が元のノードを返してから共有リストへリンクする前に識別子を保存する。複製は保存済みの元ノードの世代を継承する。実行 `37B50` の戻りだけでは予約を消さず、元のノード解放 `36E20` が正常復帰するまで保持する。解放中に同じアドレスが再利用されても、新旧の予約を区別する。例外を解放成功にしない。
+
+Closeは資格と橋の新受付を失効させ、nativeの自然shutdownを先に進める。World `63E160`→manager `4A1150`→同setのWait `9922C0`という実呼出しのreceiver・callerを照合し、Waitの元正常returnから`4A1196`へ戻す前に実行中の仕事と同期frameを排出する。この段階では実行されていない保存用ノードを保持し、Worldから`63E239`へ戻る `380B0` の元の後処理で解放する。Worldの正常復帰時には保存用ノードを含む最終排出を確認する。現在のshutdown/manager/Waitを自己待ちに含めず、正常shutdown復帰が未確認ならRebuildを拒否する。SEHを正常returnや取消と扱わない。
+
+所有する合成命令のOS試験では、操作キュー9入口の実パッチ設置・復元、複製と解放、相対比較命令の移設後のflags保持を確認した。同期6入口を同じworker stackへ積み、元Waitがそのworkerの終了を待ってから後処理へ進む試験も成功した。同じ制御stackに外側6frameが残る負例では、Wait境界の自己待ちを検出し、破壊処理への復帰を拒否する。これらは合成経路の確認であり、そのscheduleが実ゲームで発生した証明や全域停止の許可ではない。
 
 全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。現在は未確立の全域被覆を理由にRebuildを拒否し、同process再読込を新候補の合格としていない。
 
