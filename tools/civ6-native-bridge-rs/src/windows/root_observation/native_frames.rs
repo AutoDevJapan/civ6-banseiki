@@ -912,10 +912,11 @@ mod tests {
             }
             return;
         }
-        if !supports_atomic_promotion_fetch() {
-            println!("eleven native frame entries NOT EXECUTED: unsupported CPU vendor");
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "eleven_real_entry_exchanges_restore_original_bytes_and_keep_frame_ownership",
+        ) else {
             return;
-        }
+        };
         let base = unsafe {
             VirtualAlloc(
                 null_mut(),

@@ -56,9 +56,7 @@ fn child(name: &str) -> bool {
                     && stdout.contains("test result: ok. 1 passed; 0 failed; 0 ignored;"),
                 "outer exact test was not executed: {stdout}\n{stderr}"
             );
-            if name.starts_with("primary_") {
-                print!("{stdout}");
-            }
+            print!("{stdout}");
             return false;
         }
         if Instant::now() >= deadline {
@@ -181,10 +179,11 @@ fn five_outer_callers_keep_the_original_once_and_hold_the_complete_native_body()
     if !child("five_outer_callers_keep_the_original_once_and_hold_the_complete_native_body") {
         return;
     }
-    if !supports_atomic_promotion_fetch() {
-        println!("native outer gateway fixture NOT EXECUTED: unsupported CPU vendor");
+    let Some(_fixture) = crate::windows::atomic_fixture::require(
+        "five_outer_callers_keep_the_original_once_and_hold_the_complete_native_body",
+    ) else {
         return;
-    }
+    };
     let base = unsafe {
         VirtualAlloc(
             null_mut(),
@@ -457,14 +456,13 @@ fn outer_41a400_actual_seh_settles_without_native_return() {
     );
 }
 
-fn blocking_outer(name: &str, rva: usize) {
+fn blocking_outer(name: &'static str, rva: usize) {
     if !child(name) {
         return;
     }
-    if !supports_atomic_promotion_fetch() {
-        println!("native blocking outer fixture NOT EXECUTED: unsupported CPU vendor");
+    let Some(_fixture) = crate::windows::atomic_fixture::require(name) else {
         return;
-    }
+    };
     let base = unsafe {
         VirtualAlloc(
             null_mut(),
@@ -535,10 +533,11 @@ fn primary_five_complete_outer_bodies_unwind_mutations_and_eleven_owned_entries(
     if !child("primary_five_complete_outer_bodies_unwind_mutations_and_eleven_owned_entries") {
         return;
     }
-    if !supports_atomic_promotion_fetch() {
-        println!("primary outer entry publication NOT EXECUTED: unsupported CPU vendor");
+    let Some(_fixture) = crate::windows::atomic_fixture::require(
+        "primary_five_complete_outer_bodies_unwind_mutations_and_eleven_owned_entries",
+    ) else {
         return;
-    }
+    };
     let image = super::primary_image::Image::new(GAMECORE, civ6_bootstrap_rs::CORE_SHA);
     for frame in outer_fixed::FRAMES {
         let address = frame.begin as usize + 16;
