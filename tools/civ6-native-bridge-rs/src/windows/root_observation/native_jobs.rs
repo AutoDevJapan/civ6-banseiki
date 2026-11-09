@@ -283,18 +283,20 @@ gateway!(
     unwind
 );
 
+fn retained_host_matches(exe: u64, owners: &[OwnedHook]) -> bool {
+    exe != 0
+        && owners.len() == SITES.len()
+        && owners.iter().zip(SITES).all(|(owner, (rva, _, _))| {
+            owner.hook.target as u64 == exe + rva as u64
+                && copy_current::<8>(owner.hook.target as u64) == Some(owner.hook.patched)
+        })
+}
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
     let prepared = HOOKS.lock().map_err(|_| "native job owner poisoned")?;
     if !prepared.is_empty() {
         let exe = EXE.load(Ordering::Acquire);
-        if exe == 0
-            || prepared.len() != SITES.len()
-            || prepared.iter().zip(SITES).any(|(o, (rva, _, _))| {
-                o.hook.target as u64 != exe + rva as u64
-                    || copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched)
-            })
-        {
+        if !retained_host_matches(exe, &prepared) {
             return Err("native job early installation differs");
         }
         CORE.store(core as u64, Ordering::Release);
@@ -442,6 +444,53 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn retained_host_rejects_foreign_targets_with_matching_patches() {
+        let len = SITES.iter().map(|(rva, _, _)| rva / 8 + 1).max().unwrap();
+        let mut words = vec![0u64; len];
+        let mut owners: Vec<_> = SITES
+            .iter()
+            .enumerate()
+            .map(|(index, (rva, _, _))| {
+                assert!(rva.is_multiple_of(8));
+                let patch = index as u64 + 1;
+                words[rva / 8] = patch;
+                OwnedHook {
+                    hook: Hook {
+                        target: unsafe { words.as_mut_ptr().cast::<u8>().add(*rva) },
+                        original: [0; 8],
+                        patched: patch.to_le_bytes(),
+                        prefix: None,
+                        _code: null_mut(),
+                    },
+                    protection: PAGE_READWRITE,
+                }
+            })
+            .collect();
+        let exe = words.as_ptr() as u64;
+        assert!(retained_host_matches(exe, &owners));
+        for index in 0..owners.len() {
+            let original = owners[index].hook.target;
+            let mut other = u64::from_le_bytes(owners[index].hook.patched);
+            owners[index].hook.target = (&mut other as *mut u64).cast();
+            assert!(
+                owners.iter().all(|owner| {
+                    copy_current::<8>(owner.hook.target as u64) == Some(owner.hook.patched)
+                }),
+                "fixture patches must all match"
+            );
+            assert!(
+                !retained_host_matches(exe, &owners),
+                "foreign target with matching patches was accepted at site {index}"
+            );
+            owners[index].hook.target = original;
+            assert!(retained_host_matches(exe, &owners));
+        }
+        assert!(
+            !retained_host_matches(exe + 8, &owners),
+            "wrong retained Host base was accepted"
+        );
+    }
     #[test]
     fn failed_host_binding_does_not_activate_a_core() {
         if !child("failed_host_binding_does_not_activate_a_core") {

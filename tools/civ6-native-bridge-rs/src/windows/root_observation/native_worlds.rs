@@ -479,60 +479,95 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     }
     unsafe { install_at(core) }
 }
+fn entry_protection(core: usize, rva: usize, expected: [u8; 8]) -> Result<u32, &'static str> {
+    let entry = (core + rva) as *mut u8;
+    if copy_current::<8>(entry as u64) != Some(expected) {
+        return Err("World birth entry differs");
+    }
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+    if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+        || !entry.addr().is_multiple_of(8)
+        || info.State != MEM_COMMIT
+        || info.Protect & PAGE_GUARD != 0
+        || info.Protect & 0xff != PAGE_EXECUTE_READ
+    {
+        return Err("World entry protection");
+    }
+    Ok(info.Protect)
+}
 unsafe fn install_at(core: usize) -> Result<(), &'static str> {
-    CORE.store(core as u64, Ordering::Release);
     let callbacks = [
         native_world_context_gateway as *const () as usize,
         native_world_factory_gateway as *const () as usize,
         native_world_close_gateway as *const () as usize,
     ];
     let mut hooks = HOOKS.lock().map_err(|_| "World hook owner")?;
-    for (i, (rva, expected)) in SITES.into_iter().enumerate() {
-        let p = (core + rva) as *mut u8;
-        if copy_current::<8>(p as u64) != Some(expected) {
-            return Err("World birth entry differs");
-        }
-        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-        if unsafe { VirtualQuery(p.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
-            || info.Protect & 0xff != PAGE_EXECUTE_READ
-        {
-            return Err("World entry protection");
-        }
-        let code = unsafe { executable_near(p as usize, p as usize, 6) }.ok_or("World relay")?;
-        let mut unpublished = Unpublished(code);
-        unsafe {
-            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
-            ptr::copy_nonoverlapping((callbacks[i] as u64).to_le_bytes().as_ptr(), code.add(6), 8);
-        }
-        let mut old = 0;
-        if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
-            || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
-        {
-            return Err("World relay publication");
-        }
-        let mut patch = expected;
-        patch[..5]
-            .copy_from_slice(&rel32_jump(p as usize, code as usize).ok_or("World relay range")?);
-        patch[5] = 0x90;
-        NATIVE_WORLD_CONTINUE[i].store((core + rva + 6) as u64, Ordering::Release);
-        hooks.push(OwnedHook {
-            hook: Hook {
-                target: p,
-                original: expected,
-                patched: patch,
-                prefix: None,
-                _code: code,
-            },
-            protection: info.Protect,
-        });
-        unpublished.0 = null_mut();
-        let r =
-            unsafe { exchange_entry(p, u64::from_le_bytes(expected), u64::from_le_bytes(patch)) }?;
-        if !r.exchanged || !r.cache_flushed || !r.protection_restored {
-            return Err("critical: World hook publication");
-        }
+    if !hooks.is_empty() {
+        return Err("World hooks already installed");
     }
-    Ok(())
+    for (rva, expected) in SITES {
+        entry_protection(core, rva, expected)?;
+    }
+    // Every callback needs Core before its first entry can be published.
+    // Preflight refusals above have changed neither Core nor native code.
+    let previous_core = CORE.swap(core as u64, Ordering::AcqRel);
+    let result = (|| -> Result<(), &'static str> {
+        for (i, (rva, expected)) in SITES.into_iter().enumerate() {
+            #[cfg(test)]
+            tests::before_publication(core, i);
+            let p = (core + rva) as *mut u8;
+            let protection = entry_protection(core, rva, expected)?;
+            let code =
+                unsafe { executable_near(p as usize, p as usize, 6) }.ok_or("World relay")?;
+            let mut unpublished = Unpublished(code);
+            unsafe {
+                ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
+                ptr::copy_nonoverlapping(
+                    (callbacks[i] as u64).to_le_bytes().as_ptr(),
+                    code.add(6),
+                    8,
+                );
+            }
+            let mut old = 0;
+            if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
+                || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
+            {
+                return Err("World relay publication");
+            }
+            let mut patch = expected;
+            patch[..5].copy_from_slice(
+                &rel32_jump(p as usize, code as usize).ok_or("World relay range")?,
+            );
+            patch[5] = 0x90;
+            NATIVE_WORLD_CONTINUE[i].store((core + rva + 6) as u64, Ordering::Release);
+            hooks.push(OwnedHook {
+                hook: Hook {
+                    target: p,
+                    original: expected,
+                    patched: patch,
+                    prefix: None,
+                    _code: code,
+                },
+                protection,
+            });
+            unpublished.0 = null_mut();
+            #[cfg(test)]
+            tests::before_exchange(core, i);
+            let r = unsafe {
+                exchange_entry(p, u64::from_le_bytes(expected), u64::from_le_bytes(patch))
+            }?;
+            if !r.exchanged || !r.cache_flushed || !r.protection_restored {
+                return Err("critical: World hook publication");
+            }
+        }
+        Ok(())
+    })();
+    // A retained owner may already have been fetched, even when publication
+    // verification failed. Keep its Core and ordinary restore responsibility.
+    if result.is_err() && hooks.is_empty() {
+        CORE.store(previous_core, Ordering::Release);
+    }
+    result
 }
 pub(super) unsafe fn restore() -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "World hook owner")?;
@@ -560,9 +595,137 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
 }
 
 #[cfg(test)]
+#[path = "native_install_fixture.rs"]
+pub(super) mod install_fixture;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    static FAIL_SITE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(usize::MAX);
+    static FAIL_CAS_SITE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(usize::MAX);
+    pub(super) fn before_publication(core: usize, index: usize) {
+        let failed = FAIL_SITE.load(Ordering::Acquire);
+        if failed != usize::MAX || FAIL_CAS_SITE.load(Ordering::Acquire) != usize::MAX {
+            assert_eq!(
+                CORE.load(Ordering::Acquire),
+                core as u64,
+                "Core must be initialized before the first World CAS"
+            );
+            if index == failed {
+                let (rva, mut bytes) = SITES[index];
+                bytes[0] ^= 1;
+                unsafe { install_fixture::write_at(core + rva, &bytes) };
+            }
+        }
+    }
+    pub(super) fn before_exchange(core: usize, index: usize) {
+        if FAIL_CAS_SITE.load(Ordering::Acquire) == index {
+            let (rva, mut bytes) = SITES[index];
+            bytes[0] ^= 1;
+            unsafe { install_fixture::write_at(core + rva, &bytes) };
+        }
+    }
+    #[test]
+    fn failed_world_cas_retains_core_and_all_published_owners() {
+        if !child("failed_world_cas_retains_core_and_all_published_owners") {
+            return;
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "failed_world_cas_retains_core_and_all_published_owners",
+        ) else {
+            return;
+        };
+        let memory = install_fixture::Memory::new(&SITES);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        FAIL_CAS_SITE.store(1, Ordering::Release);
+        let result = unsafe { install_at(memory.base) };
+        FAIL_CAS_SITE.store(usize::MAX, Ordering::Release);
+        assert_eq!(result, Err("critical: World hook publication"));
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(HOOKS.lock().unwrap().len(), 2);
+        assert_ne!(memory.bytes(SITES[0].0), SITES[0].1);
+        // Repair only the test's intervening write. Both retained records
+        // still go through normal restore, including the failed CAS record.
+        memory.write(SITES[1].0, &SITES[1].1);
+        unsafe { restore() }.unwrap();
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(memory.bytes(SITES[0].0), SITES[0].1);
+    }
+    #[test]
+    fn partial_world_publication_keeps_initialized_core_until_restore() {
+        if !child("partial_world_publication_keeps_initialized_core_until_restore") {
+            return;
+        }
+        // A first recheck can fail after a successful preflight. No retained
+        // entry means callback state can still return to its previous value.
+        {
+            let refused = install_fixture::Memory::new(&SITES);
+            refused.protect_all(PAGE_EXECUTE_READ);
+            FAIL_SITE.store(0, Ordering::Release);
+            let result = unsafe { install_at(refused.base) };
+            FAIL_SITE.store(usize::MAX, Ordering::Release);
+            assert_eq!(result, Err("World birth entry differs"));
+            assert_eq!(CORE.load(Ordering::Acquire), 0);
+            assert!(HOOKS.lock().unwrap().is_empty());
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "partial_world_publication_keeps_initialized_core_until_restore",
+        ) else {
+            return;
+        };
+        let memory = install_fixture::Memory::new(&SITES);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        FAIL_SITE.store(1, Ordering::Release);
+        let result = unsafe { install_at(memory.base) };
+        FAIL_SITE.store(usize::MAX, Ordering::Release);
+        assert_eq!(result, Err("World birth entry differs"));
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(HOOKS.lock().unwrap().len(), 1);
+        assert_ne!(memory.bytes(SITES[0].0), SITES[0].1);
+        assert_eq!(
+            unsafe { install_at(1) },
+            Err("World hooks already installed")
+        );
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        unsafe { restore() }.unwrap();
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(memory.bytes(SITES[0].0), SITES[0].1);
+    }
+    #[test]
+    fn preflight_rejection_keeps_world_core_and_entries_unchanged() {
+        if !child("preflight_rejection_keeps_world_core_and_entries_unchanged") {
+            return;
+        }
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        for (index, corrupted) in SITES.into_iter().map(Some).chain([None]).enumerate() {
+            let memory = install_fixture::Memory::new(&SITES);
+            if let Some((rva, mut expected)) = corrupted {
+                expected[0] ^= 1;
+                memory.write(rva, &expected);
+            }
+            memory.protect_all(PAGE_EXECUTE_READ);
+            if corrupted.is_none() {
+                memory.protect(SITES[1].0, PAGE_READWRITE);
+            }
+            let before = SITES.map(|(rva, _)| memory.bytes(rva));
+            let result = unsafe { install_at(memory.base) };
+            let core = CORE.load(Ordering::Acquire);
+            let owners = HOOKS.lock().unwrap().len();
+            let after = SITES.map(|(rva, _)| memory.bytes(rva));
+            unsafe { restore() }.unwrap();
+            CORE.store(0, Ordering::Release);
+            assert!(result.is_err());
+            assert_eq!(
+                core, 0,
+                "World preflight refusal published Core at case {index}"
+            );
+            assert_eq!(owners, 0, "World preflight refusal retained an entry");
+            assert_eq!(after, before, "World preflight refusal patched an entry");
+        }
+    }
     #[test]
     fn session_birth_windows_name_only_the_next_unpublished_world() {
         let mut b = Bindings::default();

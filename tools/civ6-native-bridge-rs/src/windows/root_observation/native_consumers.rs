@@ -518,6 +518,14 @@ pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
         install_at(exe)
     }
 }
+fn retained_host_matches(exe: u64, owners: &[OwnedHook]) -> bool {
+    exe != 0
+        && owners.len() == SITES.len()
+        && owners.iter().zip(SITES).all(|(owner, (rva, _, _))| {
+            owner.hook.target as u64 == exe + rva as u64
+                && copy_current::<8>(owner.hook.target as u64) == Some(owner.hook.patched)
+        })
+}
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     if HOOKS
         .lock()
@@ -532,13 +540,7 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     // later Core binding. A global module lookup does not replace its owner.
     let exe = EXE.load(Ordering::Acquire);
     let hooks = HOOKS.lock().map_err(|_| "consumer hook owner poisoned")?;
-    if exe == 0
-        || hooks.len() != SITES.len()
-        || hooks.iter().zip(SITES).any(|(o, (rva, _, _))| {
-            o.hook.target as u64 != exe + rva as u64
-                || copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched)
-        })
-    {
+    if !retained_host_matches(exe, &hooks) {
         return Err("consumer early installation differs");
     }
     CORE.store(core as u64, Ordering::Release);

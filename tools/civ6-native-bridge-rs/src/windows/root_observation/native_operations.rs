@@ -496,65 +496,98 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
         install_at(core)
     }
 }
-unsafe fn install_at(core: usize) -> Result<(), &'static str> {
-    CORE.store(core as u64, Ordering::Release);
-    NATIVE_OPERATION_FLAG.store((core + 0xb8aa1a) as u64, Ordering::Release);
+fn entry_protection(core: usize, rva: usize, expected: [u8; 8]) -> Result<u32, &'static str> {
+    let entry = (core + rva) as *mut u8;
+    if copy_current::<8>(entry as u64) != Some(expected) {
+        return Err("operation entry differs");
+    }
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+    if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+        || !entry.addr().is_multiple_of(8)
+        || info.State != MEM_COMMIT
+        || info.Protect & PAGE_GUARD != 0
+        || info.Protect & 0xff != PAGE_EXECUTE_READ
+    {
+        return Err("operation protection");
+    }
+    Ok(info.Protect)
+}
+fn verify_transfer(core: usize) -> Result<(), &'static str> {
     if copy_current::<10>((core + 0x37f70) as u64)
         != Some([0x48, 0x83, 0xec, 0x48, 0x3a, 0x0d, 0xa0, 0x2a, 0xb5, 0])
     {
         return Err("operation transfer comparison differs");
     }
-    let mut o = HOOKS.lock().map_err(|_| "operation owner poisoned")?;
-    for (i, (rva, expected, n, gateway)) in sites().into_iter().enumerate() {
-        let p = (core + rva) as *mut u8;
-        if copy_current::<8>(p as u64) != Some(expected) {
-            return Err("operation entry differs");
-        }
-        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-        if unsafe { VirtualQuery(p.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
-            || info.Protect & 0xff != PAGE_EXECUTE_READ
-        {
-            return Err("operation protection");
-        }
-        let code = unsafe { executable_near(p as usize, p as usize, n) }
-            .ok_or("operation relay unavailable")?;
-        let mut unpublished = Unpublished(code);
-        unsafe {
-            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
-            ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), code.add(6), 8);
-        }
-        let mut old = 0;
-        if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
-            || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
-        {
-            return Err("operation relay publication");
-        }
-        let mut patch = expected;
-        patch[..5]
-            .copy_from_slice(&rel32_jump(p as usize, code as usize).ok_or("operation range")?);
-        patch[5..n.min(8)].fill(0x90);
-        NATIVE_OPERATION_CONTINUE[i].store(
-            (core + if i == 5 { 0x9908f0 } else { rva + n }) as u64,
-            Ordering::Release,
-        );
-        o.push(OwnedHook {
-            hook: Hook {
-                target: p,
-                original: expected,
-                patched: patch,
-                prefix: None,
-                _code: code,
-            },
-            protection: info.Protect,
-        });
-        unpublished.0 = null_mut();
-        let r =
-            unsafe { exchange_entry(p, u64::from_le_bytes(expected), u64::from_le_bytes(patch)) }?;
-        if !r.exchanged || !r.cache_flushed || !r.protection_restored {
-            return Err("critical: operation publication");
-        }
-    }
     Ok(())
+}
+unsafe fn install_at(core: usize) -> Result<(), &'static str> {
+    let mut o = HOOKS.lock().map_err(|_| "operation owner poisoned")?;
+    if !o.is_empty() {
+        return Err("operations already installed");
+    }
+    verify_transfer(core)?;
+    for (rva, expected, _, _) in sites() {
+        entry_protection(core, rva, expected)?;
+    }
+    // Initialize callback state after preflight, before any CAS publication.
+    let previous_core = CORE.swap(core as u64, Ordering::AcqRel);
+    let previous_flag = NATIVE_OPERATION_FLAG.swap((core + 0xb8aa1a) as u64, Ordering::AcqRel);
+    let result = (|| -> Result<(), &'static str> {
+        verify_transfer(core)?;
+        for (i, (rva, expected, n, gateway)) in sites().into_iter().enumerate() {
+            #[cfg(test)]
+            tests::before_publication(core, i);
+            let p = (core + rva) as *mut u8;
+            let protection = entry_protection(core, rva, expected)?;
+            let code = unsafe { executable_near(p as usize, p as usize, n) }
+                .ok_or("operation relay unavailable")?;
+            let mut unpublished = Unpublished(code);
+            unsafe {
+                ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
+                ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), code.add(6), 8);
+            }
+            let mut old = 0;
+            if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
+                || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
+            {
+                return Err("operation relay publication");
+            }
+            let mut patch = expected;
+            patch[..5]
+                .copy_from_slice(&rel32_jump(p as usize, code as usize).ok_or("operation range")?);
+            patch[5..n.min(8)].fill(0x90);
+            NATIVE_OPERATION_CONTINUE[i].store(
+                (core + if i == 5 { 0x9908f0 } else { rva + n }) as u64,
+                Ordering::Release,
+            );
+            o.push(OwnedHook {
+                hook: Hook {
+                    target: p,
+                    original: expected,
+                    patched: patch,
+                    prefix: None,
+                    _code: code,
+                },
+                protection,
+            });
+            unpublished.0 = null_mut();
+            #[cfg(test)]
+            tests::before_exchange(core, i);
+            let r = unsafe {
+                exchange_entry(p, u64::from_le_bytes(expected), u64::from_le_bytes(patch))
+            }?;
+            if !r.exchanged || !r.cache_flushed || !r.protection_restored {
+                return Err("critical: operation publication");
+            }
+        }
+        Ok(())
+    })();
+    // With a retained entry, preserve the callback state until normal restore.
+    if result.is_err() && o.is_empty() {
+        NATIVE_OPERATION_FLAG.store(previous_flag, Ordering::Release);
+        CORE.store(previous_core, Ordering::Release);
+    }
+    result
 }
 pub(super) unsafe fn restore() -> Result<(), &'static str> {
     let mut o = HOOKS.lock().map_err(|_| "operation owner poisoned")?;
@@ -582,9 +615,168 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
 }
 
 #[cfg(test)]
+use super::worlds::install_fixture;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    static FAIL_SITE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(usize::MAX);
+    static FAIL_CAS_SITE: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(usize::MAX);
+    pub(super) fn before_publication(core: usize, index: usize) {
+        let failed = FAIL_SITE.load(Ordering::Acquire);
+        if failed != usize::MAX || FAIL_CAS_SITE.load(Ordering::Acquire) != usize::MAX {
+            assert_eq!(
+                CORE.load(Ordering::Acquire),
+                core as u64,
+                "Core must be initialized before the first operation CAS"
+            );
+            assert_eq!(
+                NATIVE_OPERATION_FLAG.load(Ordering::Acquire),
+                (core + 0xb8aa1a) as u64
+            );
+            if index == failed {
+                let (rva, mut bytes, _, _) = sites()[index];
+                bytes[0] ^= 1;
+                unsafe { install_fixture::write_at(core + rva, &bytes) };
+            }
+        }
+    }
+    pub(super) fn before_exchange(core: usize, index: usize) {
+        if FAIL_CAS_SITE.load(Ordering::Acquire) == index {
+            let (rva, mut bytes, _, _) = sites()[index];
+            bytes[0] ^= 1;
+            unsafe { install_fixture::write_at(core + rva, &bytes) };
+        }
+    }
+    #[test]
+    fn failed_operation_cas_retains_core_and_all_published_owners() {
+        if !child("failed_operation_cas_retains_core_and_all_published_owners") {
+            return;
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "failed_operation_cas_retains_core_and_all_published_owners",
+        ) else {
+            return;
+        };
+        let entries = sites().map(|(rva, expected, _, _)| (rva, expected));
+        let memory = install_fixture::Memory::new(&entries);
+        memory.write(0x37f78, &[0xb5, 0]);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        FAIL_CAS_SITE.store(1, Ordering::Release);
+        let result = unsafe { install_at(memory.base) };
+        FAIL_CAS_SITE.store(usize::MAX, Ordering::Release);
+        assert_eq!(result, Err("critical: operation publication"));
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(
+            NATIVE_OPERATION_FLAG.load(Ordering::Acquire),
+            (memory.base + 0xb8aa1a) as u64
+        );
+        assert_eq!(HOOKS.lock().unwrap().len(), 2);
+        assert_ne!(memory.bytes(entries[0].0), entries[0].1);
+        memory.write(entries[1].0, &entries[1].1);
+        unsafe { restore() }.unwrap();
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(memory.bytes(entries[0].0), entries[0].1);
+    }
+    #[test]
+    fn partial_operation_publication_keeps_initialized_core_until_restore() {
+        if !child("partial_operation_publication_keeps_initialized_core_until_restore") {
+            return;
+        }
+        {
+            let entries = sites().map(|(rva, expected, _, _)| (rva, expected));
+            let refused = install_fixture::Memory::new(&entries);
+            refused.write(0x37f78, &[0xb5, 0]);
+            refused.protect_all(PAGE_EXECUTE_READ);
+            FAIL_SITE.store(0, Ordering::Release);
+            let result = unsafe { install_at(refused.base) };
+            FAIL_SITE.store(usize::MAX, Ordering::Release);
+            assert_eq!(result, Err("operation entry differs"));
+            assert_eq!(CORE.load(Ordering::Acquire), 0);
+            assert_eq!(NATIVE_OPERATION_FLAG.load(Ordering::Acquire), 0);
+            assert!(HOOKS.lock().unwrap().is_empty());
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "partial_operation_publication_keeps_initialized_core_until_restore",
+        ) else {
+            return;
+        };
+        let entries = sites().map(|(rva, expected, _, _)| (rva, expected));
+        let memory = install_fixture::Memory::new(&entries);
+        memory.write(0x37f78, &[0xb5, 0]);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        FAIL_SITE.store(1, Ordering::Release);
+        let result = unsafe { install_at(memory.base) };
+        FAIL_SITE.store(usize::MAX, Ordering::Release);
+        assert_eq!(result, Err("operation entry differs"));
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(
+            NATIVE_OPERATION_FLAG.load(Ordering::Acquire),
+            (memory.base + 0xb8aa1a) as u64
+        );
+        assert_eq!(HOOKS.lock().unwrap().len(), 1);
+        assert_ne!(memory.bytes(entries[0].0), entries[0].1);
+        assert_eq!(
+            unsafe { install_at(1) },
+            Err("operations already installed")
+        );
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        unsafe { restore() }.unwrap();
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(memory.bytes(entries[0].0), entries[0].1);
+    }
+    #[test]
+    fn preflight_rejection_keeps_operation_core_and_entries_unchanged() {
+        if !child("preflight_rejection_keeps_operation_core_and_entries_unchanged") {
+            return;
+        }
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        assert_eq!(NATIVE_OPERATION_FLAG.load(Ordering::Acquire), 0);
+        let entries = sites().map(|(rva, expected, _, _)| (rva, expected));
+        for (index, corrupted) in entries
+            .into_iter()
+            .map(Some)
+            .chain([None, None])
+            .enumerate()
+        {
+            let memory = install_fixture::Memory::new(&entries);
+            memory.write(0x37f78, &[0xb5, 0]);
+            if let Some((rva, mut expected)) = corrupted {
+                expected[0] ^= 1;
+                memory.write(rva, &expected);
+            }
+            if index == entries.len() + 1 {
+                memory.write(0x37f78, &[0xb4, 0]);
+            }
+            memory.protect_all(PAGE_EXECUTE_READ);
+            if index == entries.len() {
+                memory.protect(entries[4].0, PAGE_READWRITE);
+            }
+            let before = entries.map(|(rva, _)| memory.bytes(rva));
+            let result = unsafe { install_at(memory.base) };
+            let core = CORE.load(Ordering::Acquire);
+            let flag = NATIVE_OPERATION_FLAG.load(Ordering::Acquire);
+            let owners = HOOKS.lock().unwrap().len();
+            let after = entries.map(|(rva, _)| memory.bytes(rva));
+            unsafe { restore() }.unwrap();
+            CORE.store(0, Ordering::Release);
+            NATIVE_OPERATION_FLAG.store(0, Ordering::Release);
+            assert!(result.is_err());
+            assert_eq!(
+                (core, flag),
+                (0, 0),
+                "operation preflight refusal changed Core or flag at case {index}"
+            );
+            assert_eq!(owners, 0, "operation preflight refusal retained an entry");
+            assert_eq!(
+                after, before,
+                "operation preflight refusal patched an entry"
+            );
+        }
+    }
     fn child(name: &str) -> bool {
         const ENV: &str = "CIV6_NATIVE_OPERATION_OWNED_CHILD";
         if std::env::var_os(ENV).is_some() {
