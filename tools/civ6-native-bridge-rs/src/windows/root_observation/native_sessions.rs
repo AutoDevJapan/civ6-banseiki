@@ -9,6 +9,8 @@ mod deferred;
 mod fixed;
 #[path = "native_sessions_ledger.rs"]
 mod ledger;
+#[path = "native_transport.rs"]
+pub(super) mod transports;
 #[cfg(test)]
 use ledger::WorldReceipt;
 use ledger::{Error, Lease, Ledger, Message, Transport};
@@ -47,6 +49,7 @@ impl NativeSessionApi {
         let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
         unsafe {
             verify_loaded(exe)?;
+            transports::prepare_host(exe)?;
             deferred::install(exe)?;
             install_at(exe)
         }
@@ -138,9 +141,10 @@ impl NativeSessionApi {
     /// The caller must own the installed entries and ensure all native callers
     /// have exited before invoking restoration. Published relays stay resident.
     pub unsafe fn restore() -> Result<(), &'static str> {
+        let transport = unsafe { transports::restore() };
         let queued = unsafe { deferred::restore() };
         let session = unsafe { restore() };
-        queued.and(session)
+        transport.and(queued).and(session)
     }
 }
 struct RegistryGuard;
@@ -169,6 +173,7 @@ struct Call {
     owner: u64,
     id: u32,
     transport: Option<Transport>,
+    native_transport: bool,
     thread: u64,
 }
 thread_local! {
@@ -202,6 +207,37 @@ pub(super) fn retire_world(world: SessionWorldReceipt) -> Result<(), SessionErro
         return Err(Error::Busy);
     }
     state().retire_world(world)
+}
+pub(super) fn existing_transport_owner(
+    session: u64,
+    callback: u64,
+) -> Result<Option<SessionLease>, SessionError> {
+    state().existing_transport_owner(session, callback)
+}
+pub(super) fn publish_transport(
+    lease: SessionLease,
+    incarnation: u64,
+    pointer: u64,
+    network: u64,
+    thread: u64,
+) -> Result<SessionTransport, SessionError> {
+    state().publish_transport(lease, incarnation, pointer, network, thread)
+}
+pub(super) fn transport_disconnect_begin(
+    lease: SessionLease,
+) -> Result<Option<SessionTransport>, SessionError> {
+    state().transport_disconnect_begin(lease)
+}
+pub(super) fn transport_join_result(
+    lease: SessionLease,
+    transport: SessionTransport,
+    thread: u64,
+    al: u8,
+) -> Result<(), SessionError> {
+    state().transport_join_result(lease, transport, thread, al)
+}
+pub(super) fn transport_disconnect_end(lease: SessionLease) -> Result<(), SessionError> {
+    state().transport_disconnect_end(lease)
 }
 fn unresolved(lease: Option<Lease>) {
     // An error can be reported while the failing ledger guard is still live.
@@ -312,6 +348,7 @@ extern "system" fn begin(raw: *mut Saved) {
             owner: 0,
             id: 0,
             transport: None,
+            native_transport: false,
             thread: 0,
         };
         match c.kind {
@@ -363,15 +400,10 @@ extern "system" fn begin(raw: *mut Saved) {
                 // The explicit input ticket is acquired BEFORE ID lookup.
                 // Missing upstream provenance stays unknown, even if a raw
                 // callback address happens to name a newly bound session.
-                let supplied = INPUT.with(|s| s.borrow().last().copied());
-                let message = if let Some(message) = supplied {
-                    Some(message)
-                } else {
-                    let id = read32(raw.gpr[0] + 8).unwrap_or_else(|_| fault());
-                    state()
-                        .reserve_incoming(raw.gpr[0], id)
-                        .unwrap_or_else(|_| fault())
-                };
+                // The real receive queue must retain the packet's original
+                // receipt before this callback. A registry/callback match
+                // proves the Session incarnation, never the input's World.
+                let message = INPUT.with(|s| s.borrow().last().copied());
                 if let Some(message) = message {
                     let id = read32(raw.gpr[0] + 8).unwrap_or_else(|_| fault());
                     let lease = state()
@@ -429,13 +461,26 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
             }
             74 => {
-                let lease = state().session(raw.gpr[0]);
-                if let Some(lease) = lease {
-                    // Unbound and alternate transports have no product authority.
-                    if state().world(lease).is_ok() {
-                        snapshot_transport(lease).unwrap_or_else(|_| fault());
-                        c.transport = state().close(lease).unwrap_or_else(|_| fault());
-                        c.lease = Some(lease);
+                if let Some((lease, transport)) =
+                    transports::disconnect_begin(raw.gpr[0]).unwrap_or_else(|_| fault())
+                {
+                    snapshot_transport(lease).unwrap_or_else(|_| fault());
+                    c.lease = Some(lease);
+                    c.transport = Some(transport);
+                    c.native_transport = true;
+                }
+                // Synthetic callers may exercise the public manual API. The
+                // production transport close never terminally closes Session.
+                #[cfg(test)]
+                if !c.native_transport {
+                    let lease = state().session(raw.gpr[0]);
+                    if let Some(lease) = lease {
+                        // Unbound and alternate transports have no product authority.
+                        if state().world(lease).is_ok() {
+                            snapshot_transport(lease).unwrap_or_else(|_| fault());
+                            c.transport = state().close(lease).unwrap_or_else(|_| fault());
+                            c.lease = Some(lease);
+                        }
                     }
                 }
             }
@@ -454,6 +499,13 @@ extern "system" fn begin(raw: *mut Saved) {
                     c.lease = Some(lease);
                     c.transport = Some(transport);
                     c.thread = raw.gpr[0];
+                    c.native_transport = CALLS.with(|s| {
+                        s.borrow()
+                            .iter()
+                            .rev()
+                            .find(|c| c.kind == 74)
+                            .is_some_and(|c| c.native_transport)
+                    });
                 }
             }
             71 | 75 => {}
@@ -483,6 +535,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     if exceptional {
         if c.lease.is_some() {
             unresolved(c.lease);
+        }
+        if c.kind == 74 && c.native_transport {
+            let _ = transports::disconnect_end(c.lease.unwrap(), c.transport.unwrap(), true);
         }
     } else if c.kind == 76 {
         if raw.gpr[4] != c.registry
@@ -517,7 +572,16 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             }
             72 => state().dispatched(c.message.unwrap_or_else(|| fault())),
             73 => state().admission_returned(lease),
+            74 if c.native_transport => {
+                transports::disconnect_end(lease, c.transport.unwrap_or_else(|| fault()), false)
+            }
             74 => state().closed(lease),
+            75 if c.native_transport => transports::join_returned(
+                lease,
+                c.transport.unwrap_or_else(|| fault()),
+                c.thread,
+                raw.gpr[4] as u8,
+            ),
             75 => state().join(
                 lease,
                 c.transport.unwrap_or_else(|| fault()),

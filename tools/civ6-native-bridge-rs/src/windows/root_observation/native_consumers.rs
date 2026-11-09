@@ -132,9 +132,37 @@ pub(super) fn fixture_current_arena() {
 }
 #[cfg(test)]
 pub(super) fn fixture_group_arena(continuation: usize, external: bool) -> usize {
+    assert!(
+        FRAMES.get().is_none(),
+        "early arena must precede Core frame ownership"
+    );
+    assert_eq!(CORE.load(Ordering::Acquire), 0);
+    let base = unsafe {
+        VirtualAlloc(
+            null_mut(),
+            0xe50000,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        )
+    } as usize;
+    assert_ne!(base, 0);
+    for (rva, prefix, _) in SITES {
+        unsafe {
+            ptr::copy_nonoverlapping(prefix.as_ptr(), (base + rva) as *mut u8, 8);
+        }
+    }
+    unsafe {
+        *((base + 0xe3eaf8) as *mut u8) = 0xb9;
+    }
+    let mut old = 0;
+    assert_ne!(
+        unsafe { VirtualProtect(base as _, 0xe50000, PAGE_EXECUTE_READ, &mut old) },
+        0
+    );
+    unsafe { install_at(base) }.unwrap();
     NATIVE_CONSUMER_CONTINUE[3].store(continuation as u64, Ordering::Release);
     TEST_ARENA_CLASS.store(if external { 2 } else { 1 }, Ordering::Release);
-    gateways()[3]
+    base + 0xe3eaf0
 }
 
 extern "system" fn begin(raw: *mut Saved) {
@@ -147,9 +175,7 @@ extern "system" fn begin(raw: *mut Saved) {
             50 | 51 => {
                 let hold = FRAMES
                     .get()
-                    .unwrap_or_else(|| fault())
-                    .consumer_enter(raw.gpr[2])
-                    .unwrap_or_else(|_| fault());
+                    .and_then(|f| f.consumer_enter(raw.gpr[2]).unwrap_or_else(|_| fault()));
                 CONSUMERS.with(|s| {
                     s.borrow_mut().push(Consumer {
                         serial: raw.invocation.token,
@@ -462,7 +488,37 @@ fn gateways() -> [usize; 4] {
         native_consumer_arena_gateway as *const () as usize,
     ]
 }
+pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
+    unsafe {
+        verify_host(exe)?;
+        install_at(exe)
+    }
+}
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
+    let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
+    if HOOKS
+        .lock()
+        .map_err(|_| "consumer hook owner poisoned")?
+        .is_empty()
+    {
+        unsafe {
+            prepare_host(exe)?;
+        }
+    }
+    let hooks = HOOKS.lock().map_err(|_| "consumer hook owner poisoned")?;
+    if hooks.len() != 4
+        || EXE.load(Ordering::Acquire) != exe as u64
+        || hooks
+            .iter()
+            .any(|o| copy_current::<8>(o.hook.target as u64) != Some(o.hook.patched))
+    {
+        return Err("consumer early installation differs");
+    }
+    CORE.store(core as u64, Ordering::Release);
+    Ok(())
+}
+unsafe fn verify_host(exe: usize) -> Result<(), &'static str> {
     if !HOOKS
         .lock()
         .map_err(|_| "consumer hook owner poisoned")?
@@ -470,8 +526,6 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     {
         return Err("consumer already installed");
     }
-    let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
-    let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
     // Both complete consumer bodies, prologues and pinned unwind metadata
     // must match loaded memory before any relay is published.
     for (rva, len, hash) in [
@@ -554,8 +608,7 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
         }
     }
     EXE.store(exe as u64, Ordering::Release);
-    CORE.store(core as u64, Ordering::Release);
-    unsafe { install_at(exe) }
+    Ok(())
 }
 fn complete_code_matches(code: &[u8], sha: &str) -> bool {
     code.starts_with(PROLOGUE) && format!("{:x}", Sha256::digest(code)) == sha

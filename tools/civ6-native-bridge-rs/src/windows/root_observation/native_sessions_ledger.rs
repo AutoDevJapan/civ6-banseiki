@@ -43,6 +43,9 @@ struct Record {
     phase: Phase,
     active: usize,
     joined: bool,
+    transport_closing: bool,
+    transport_closed: bool,
+    transport_joined: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Transport {
@@ -66,6 +69,7 @@ pub(super) struct Ledger {
     keys: HashMap<(u64, u32), Lease>,
     packets: HashMap<u64, Packet>,
     retired_worlds: HashSet<(u64, u64)>,
+    transport_ids: HashSet<u64>,
     unresolved: bool,
 }
 impl Ledger {
@@ -102,6 +106,9 @@ impl Ledger {
                 phase: Phase::Birth,
                 active: 0,
                 joined: false,
+                transport_closing: false,
+                transport_closed: true,
+                transport_joined: false,
             },
         );
         Ok(Lease(id))
@@ -187,6 +194,108 @@ impl Ledger {
     pub fn session(&self, session: u64) -> Option<Lease> {
         self.sessions.get(&session).copied()
     }
+    pub fn existing_transport_owner(
+        &self,
+        session: u64,
+        callback: u64,
+    ) -> Result<Option<Lease>, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let Some(lease) = self.session(session) else {
+            return Ok(None);
+        };
+        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if r.session != session
+            || r.callback != callback
+            || r.registry_lifetime.is_none()
+            || r.phase != Phase::Open
+            || self.callbacks.get(&callback) != Some(&lease)
+        {
+            return Ok(None);
+        }
+        Ok(Some(lease))
+    }
+    pub fn publish_transport(
+        &mut self,
+        lease: Lease,
+        incarnation: u64,
+        pointer: u64,
+        network: u64,
+        thread: u64,
+    ) -> Result<Transport, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if r.phase != Phase::Open
+            || r.kind == 4
+            || r.transport_closing
+            || !r.transport_closed
+            || incarnation == 0
+            || pointer == 0
+            || network == 0
+            || thread == 0
+            || self.transport_ids.contains(&incarnation)
+            || self.packets.values().any(|p| p.lease == lease)
+        {
+            return Err(Error::Stale);
+        }
+        let transport = Transport {
+            incarnation,
+            pointer,
+            network,
+            thread,
+        };
+        self.transport_ids.insert(incarnation);
+        let r = self.records.get_mut(&lease.0).unwrap();
+        r.transport = Some(transport);
+        r.transport_closed = false;
+        r.transport_joined = false;
+        Ok(transport)
+    }
+    pub fn transport_disconnect_begin(&mut self, lease: Lease) -> Result<Option<Transport>, Error> {
+        let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
+        if r.phase != Phase::Open || r.transport_closing {
+            return Err(Error::Stale);
+        }
+        if r.transport_closed {
+            return Ok(None);
+        }
+        r.transport_closing = true;
+        r.transport_joined = false;
+        Ok(r.transport)
+    }
+    pub fn transport_join_result(
+        &mut self,
+        lease: Lease,
+        transport: Transport,
+        thread: u64,
+        al: u8,
+    ) -> Result<(), Error> {
+        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if !r.transport_closing || r.transport != Some(transport) || transport.thread != thread {
+            return Err(Error::Stale);
+        }
+        if al != 1 {
+            return Err(Error::NotJoined);
+        }
+        if r.active != 0 || self.packets.values().any(|p| p.lease == lease) {
+            return Err(Error::Busy);
+        }
+        self.records.get_mut(&lease.0).unwrap().transport_joined = true;
+        Ok(())
+    }
+    pub fn transport_disconnect_end(&mut self, lease: Lease) -> Result<(), Error> {
+        let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
+        if !r.transport_closing || !r.transport_joined || r.active != 0 {
+            return Err(Error::NotJoined);
+        }
+        r.transport_closed = true;
+        r.transport_closing = false;
+        r.transport_joined = false;
+        Ok(())
+    }
     pub fn snapshot_owner(&self, owner: u64, session: u64) -> Option<Lease> {
         let lease = self.session(session)?;
         self.records
@@ -247,19 +356,6 @@ impl Ledger {
         }
         self.retired_worlds.insert((world.binding_id, world.epoch));
         Ok(())
-    }
-    pub fn reserve_incoming(&mut self, callback: u64, id: u32) -> Result<Option<Message>, Error> {
-        let Some(lease) = self.callbacks.get(&callback).copied() else {
-            return Ok(None);
-        };
-        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
-        if r.native_id != Some(id) {
-            return Err(Error::Stale);
-        }
-        if r.world.is_none() || r.registry_lifetime.is_none() || r.transport.is_none() {
-            return Ok(None);
-        }
-        self.reserve(lease).map(Some)
     }
     pub fn born(&self, registry: u64, lifetime: u64, id: u32) -> Option<Lease> {
         let l = *self.keys.get(&(registry, id))?;
@@ -323,6 +419,7 @@ impl Ledger {
             thread,
         };
         self.records.get_mut(&lease.0).unwrap().transport = Some(transport);
+        self.records.get_mut(&lease.0).unwrap().transport_closed = false;
         Ok(transport)
     }
     pub fn transport(&self, lease: Lease) -> Result<Transport, Error> {
@@ -348,6 +445,9 @@ impl Ledger {
             return Err(Error::Closed);
         }
         let transport = r.transport.ok_or(Error::Unbound)?.incarnation;
+        if r.transport_closing || r.transport_closed {
+            return Err(Error::Closed);
+        }
         let id = self.id()?;
         self.packets.insert(
             id,
@@ -428,6 +528,7 @@ impl Ledger {
             || r.callback != callback
             || r.native_id != Some(id)
             || r.transport.map(|t| t.incarnation) != Some(p.transport)
+            || r.transport_closed
             || self.callbacks.get(&callback) != Some(&p.lease)
         {
             return Err(Error::Stale);
@@ -471,6 +572,7 @@ impl Ledger {
         self.packets.remove(&message.0);
         Ok(())
     }
+    #[cfg(test)]
     pub fn close(&mut self, lease: Lease) -> Result<Option<Transport>, Error> {
         let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
         if r.phase != Phase::Open {

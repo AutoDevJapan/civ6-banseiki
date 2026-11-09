@@ -487,7 +487,8 @@ pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static s
     unsafe {
         sessions::NativeSessionApi::prepare_host(exe)?;
         loads::prepare_host(exe)?;
-        jobs::prepare_host(exe)
+        jobs::prepare_host(exe)?;
+        consumers::prepare_host(exe)
     }
 }
 pub(in super::super) fn bind_host(core: usize) -> bool {

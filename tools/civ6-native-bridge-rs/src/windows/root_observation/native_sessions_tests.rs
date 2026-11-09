@@ -930,8 +930,8 @@ unsafe extern "system" {
     fn session_fixture_registry_birth();
 }
 #[test]
-fn actual_native_registry_birth_and_automatic_incoming_need_no_manual_ticket_scope() {
-    if !child("actual_native_registry_birth_and_automatic_incoming_need_no_manual_ticket_scope") {
+fn actual_registry_birth_does_not_assign_world_to_unrecorded_incoming_bytes() {
+    if !child("actual_registry_birth_does_not_assign_world_to_unrecorded_incoming_bytes") {
         return;
     }
     let mut x = Fixture::new();
@@ -968,8 +968,8 @@ fn actual_native_registry_birth_and_automatic_incoming_need_no_manual_ticket_sco
     assert_eq!(ADMISSION_HITS.load(Ordering::Acquire), 1);
     assert_eq!(
         ADMISSION_OBSERVED.load(Ordering::Acquire),
-        7,
-        "native auto-reserve must preserve original epoch"
+        0,
+        "unrecorded bytes cannot obtain the current World's epoch"
     );
     x.close();
     assert_eq!(
@@ -1030,6 +1030,53 @@ fn same_native_session_load_requires_old_world_retirement_and_preserves_issued_p
         Err(Error::Stale),
         "pending is not an executing parent"
     );
+}
+#[test]
+fn native_transport_disconnect_preserves_session_and_replacement_incarnation() {
+    let mut s = Ledger::default();
+    let lease = s.birth(10, Some(11), 20, 2).unwrap();
+    s.factory(lease, 17, 20, 30, 40).unwrap();
+    s.published(lease, 17).unwrap();
+    let world = WorldReceipt {
+        binding_id: 8,
+        epoch: 1,
+    };
+    s.bind_world(lease, world).unwrap();
+    assert_eq!(s.existing_transport_owner(30, 41), Ok(None));
+    assert_eq!(s.existing_transport_owner(30, 40), Ok(Some(lease)));
+    let old = s.publish_transport(lease, 100, 50, 60, 70).unwrap();
+    let input = s.reserve(lease).unwrap();
+    assert_eq!(s.transport_disconnect_begin(lease), Ok(Some(old)));
+    assert_eq!(s.reserve(lease), Err(Error::Closed));
+    assert_eq!(s.transport_join_result(lease, old, 70, 1), Err(Error::Busy));
+    s.cancel_before_dispatch(input).unwrap();
+    assert_eq!(
+        s.transport_join_result(lease, old, 71, 1),
+        Err(Error::Stale)
+    );
+    assert_eq!(
+        s.transport_join_result(lease, old, 70, 0),
+        Err(Error::NotJoined)
+    );
+    s.transport_join_result(lease, old, 70, 1).unwrap();
+    s.transport_disconnect_end(lease).unwrap();
+    assert_eq!(
+        s.born(10, 11, 17),
+        Some(lease),
+        "the registry session remains published"
+    );
+    assert_eq!(
+        s.publish_transport(lease, 100, 50, 60, 70),
+        Err(Error::Stale)
+    );
+    let new = s.publish_transport(lease, 101, 50, 60, 70).unwrap();
+    assert_ne!(old, new);
+    assert_eq!(
+        s.transport_join_result(lease, old, 70, 1),
+        Err(Error::Stale)
+    );
+    let next = s.reserve(lease).unwrap();
+    assert_eq!(s.message_world(next), Ok(world));
 }
 #[test]
 fn actual_fixed_join_body_waits_on_owned_os_handle_before_disconnect_receipt() {

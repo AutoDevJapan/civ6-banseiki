@@ -296,6 +296,7 @@ impl Fixture {
             owner: 0,
             id: 0,
             transport: None,
+            native_transport: false,
             thread: 0,
         };
         super::super::CALLS.with(|s| s.borrow_mut().push(c));
@@ -700,6 +701,7 @@ fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
         owner: 0,
         id: 0,
         transport: None,
+        native_transport: false,
         thread: 0,
     };
     super::super::CALLS.with(|s| s.borrow_mut().push(c));
