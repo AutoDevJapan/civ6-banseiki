@@ -22,6 +22,15 @@ pub use ledger::{
     Error as SessionError, Lease as SessionLease, Message as SessionMessage,
     Transport as SessionTransport, WorldReceipt as SessionWorldReceipt,
 };
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PacketReceipt {
+    pub serial: u64,
+    pub lease: SessionLease,
+    pub transport: u64,
+}
+pub(super) fn current_packet() -> Option<PacketReceipt> {
+    input::current_packet()
+}
 
 static EXE: AtomicU64 = AtomicU64::new(0);
 static CORE: AtomicU64 = AtomicU64::new(0);

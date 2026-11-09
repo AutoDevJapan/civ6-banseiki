@@ -27,6 +27,7 @@ static NATIVE_WIRE_CONTINUE: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Snapshot {
     serial: u64,
+    packet: Option<sessions::PacketReceipt>,
     pub session: Option<(
         sessions::SessionLease,
         Option<sessions::SessionWorldReceipt>,
@@ -46,7 +47,14 @@ impl Snapshot {
             Option<sessions::SessionWorldReceipt>,
         )>,
     ) -> bool {
-        self.serial != 0 && self.header[0] == 0x4e8 && self.session == source
+        self.serial != 0
+            && self.header[0] == 0x4e8
+            && self.session == source
+            && self.packet.is_none_or(|packet| {
+                packet.serial != 0
+                    && packet.transport != 0
+                    && source.is_none_or(|(lease, _)| lease == packet.lease)
+            })
     }
 }
 struct Call {
@@ -90,6 +98,7 @@ fn capture(message: u64, session: u64, serial: u64) -> Option<Snapshot> {
     }
     Some(Snapshot {
         serial,
+        packet: sessions::current_packet(),
         session: sessions::snapshot_owner(owner, session),
         header: header.try_into().ok()?,
         owner,

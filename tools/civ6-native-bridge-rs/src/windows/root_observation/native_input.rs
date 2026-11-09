@@ -16,7 +16,7 @@ static RECORDS: std::sync::LazyLock<Mutex<records::Ledger<Ticket>>> =
 static NATIVE_INPUT_CONTINUE: [AtomicU64; 11] = [const { AtomicU64::new(0) }; 11];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Ticket {
-    message: Message,
+    message: Option<Message>,
     lease: Lease,
     transport: Transport,
 }
@@ -89,9 +89,7 @@ fn receiver() -> Option<(u64, u64)> {
     transports::current_receiver()
 }
 fn after_callback(message: Option<Message>) {
-    if let Some(m) = message {
-        cancel(m);
-    }
+    cancel(message);
 }
 fn network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
     #[cfg(test)]
@@ -108,13 +106,15 @@ fn reserve(lease: Lease, t: Transport) -> Result<Option<Message>, Error> {
         result => result,
     }
 }
-fn fork(message: Message) -> Result<Message, Error> {
-    super::fork_input(message)
+fn fork(message: Option<Message>) -> Result<Option<Message>, Error> {
+    message.map(super::fork_input).transpose()
 }
-fn cancel(message: Message) {
-    state()
-        .cancel_before_dispatch(message)
-        .unwrap_or_else(|_| fault());
+fn cancel(message: Option<Message>) {
+    if let Some(message) = message {
+        state()
+            .cancel_before_dispatch(message)
+            .unwrap_or_else(|_| fault());
+    }
 }
 fn collect(input: Input) {
     let receipt = records().collected(input).unwrap_or_else(|_| fault());
@@ -168,6 +168,22 @@ pub(super) fn incoming(raw: &Saved) -> Option<Option<Message>> {
         }
         c.taken = true;
         Some(c.message.take())
+    })
+}
+pub(super) fn current_packet() -> Option<super::PacketReceipt> {
+    INPUT_CALLS.with(|calls| {
+        let calls = calls.borrow();
+        let call = calls
+            .iter()
+            .rev()
+            .find(|call| call.kind == 120 && call.selected)?;
+        let ticket = call.ticket?;
+        let input = call.holds.first()?;
+        Some(super::PacketReceipt {
+            serial: input.0,
+            lease: ticket.lease,
+            transport: ticket.transport.incarnation,
+        })
     })
 }
 /// Called by the existing A51F90 owner; never installs a competing free hook.
@@ -251,13 +267,12 @@ extern "system" fn begin(raw: *mut Saved) {
                         fault();
                     }
                     if let Some((lease, t)) = network(net).unwrap_or_else(|_| fault()) {
-                        if let Some(message) = reserve(lease, t).unwrap_or_else(|_| fault()) {
-                            c.ticket = Some(Ticket {
-                                message,
-                                lease,
-                                transport: t,
-                            });
-                        }
+                        let message = reserve(lease, t).unwrap_or_else(|_| fault());
+                        c.ticket = Some(Ticket {
+                            message,
+                            lease,
+                            transport: t,
+                        });
                     }
                 }
             }
@@ -388,7 +403,7 @@ extern "system" fn begin(raw: *mut Saved) {
                         fault();
                     }
                     c.ticket = Some(ticket);
-                    c.message = Some(fork(ticket.message).unwrap_or_else(|_| fault()));
+                    c.message = fork(ticket.message).unwrap_or_else(|_| fault());
                 }
             }
             110 | 111 | 120 => {}

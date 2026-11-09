@@ -98,7 +98,9 @@ extern "system" fn callback_body(transport: u64, _: u64, _: u64, _: u64, _: u64)
     state().cancel_before_dispatch(m).unwrap();
 }
 static ACTUAL_INCOMING: AtomicBool = AtomicBool::new(false);
+static OBSERVED_PACKET: Mutex<Option<super::super::PacketReceipt>> = Mutex::new(None);
 extern "system" fn incoming_body() -> u64 {
+    *OBSERVED_PACKET.lock().unwrap() = current_packet();
     let message = super::super::CALLS.with(|s| {
         s.borrow()
             .iter()
@@ -179,7 +181,7 @@ fn fixture_ticket() -> Ticket {
     let t = s.publish_transport(lease, 1, 5, 6, 7).unwrap();
     let message = s.reserve_input(lease, t).unwrap().unwrap();
     Ticket {
-        message,
+        message: Some(message),
         lease,
         transport: t,
     }
@@ -191,7 +193,7 @@ fn pending_input_uses_fixed_birth_world_and_unknown_never_mints() {
     }
     let t = fixture_ticket();
     let copied = fork(t.message).unwrap();
-    assert_eq!(state().message_world(copied).unwrap().epoch, 1);
+    assert_eq!(state().message_world(copied.unwrap()).unwrap().epoch, 1);
     cancel(copied);
     cancel(t.message);
     let mut raw: Saved = unsafe { std::mem::zeroed() };
@@ -332,7 +334,7 @@ fn typed_callback_enters_shared_incoming_with_saved_input() {
     let m = s.reserve_input(l, t).unwrap().unwrap();
     drop(s);
     let ticket = Ticket {
-        message: m,
+        message: Some(m),
         lease: l,
         transport: t,
     };
@@ -374,6 +376,34 @@ fn typed_callback_enters_shared_incoming_with_saved_input() {
         fixture_callback_driver(tr.as_ptr() as u64, 7, record[1], 7, p, 0);
     }
     assert_eq!(OBSERVED.load(Ordering::Acquire), 1);
+    let known = OBSERVED_PACKET.lock().unwrap().unwrap();
+    assert_eq!(known.lease, l);
+    assert_eq!(known.transport, t.incarnation);
+    let id = retire(p).unwrap();
+    release(vec![id]);
+    assert_eq!(pending(), Ok(0));
+    let next = records()
+        .issued(
+            Receipt {
+                message: Ticket {
+                    message: None,
+                    ..ticket
+                },
+                transport: t.incarnation,
+            },
+            p,
+        )
+        .unwrap();
+    unsafe {
+        fixture_callback_driver(tr.as_ptr() as u64, 7, record[1], 7, p, 0);
+    }
+    assert_eq!(OBSERVED.load(Ordering::Acquire), 0);
+    let unknown = OBSERVED_PACKET.lock().unwrap().unwrap();
+    assert_eq!(unknown.serial, next.0);
+    assert_ne!(unknown.serial, known.serial);
+    assert_eq!(unknown.lease, known.lease);
+    assert_eq!(unknown.transport, known.transport);
+    assert!(super::super::NativeSessionApi::current_world().is_none());
     let id = retire(p).unwrap();
     release(vec![id]);
     assert_eq!(pending(), Ok(0));
@@ -496,7 +526,7 @@ fn actual_poll_reserves_before_body_and_binds_ctor_before_publication() {
     unsafe {
         assert_eq!(fixture_poll_driver(0x1234, poll.as_mut_ptr() as u64, 0), 1);
     }
-    let message = POLLED.with(|s| s.borrow().unwrap().ticket.message);
+    let message = POLLED.with(|s| s.borrow().unwrap().ticket.message.unwrap());
     assert_eq!(state().message_world(message).unwrap().epoch, 1);
     unsafe {
         fixture_ctor_driver(record.as_mut_ptr() as u64, 4, 7, 0x5000, 9, 0x35);
@@ -523,7 +553,26 @@ fn actual_poll_reserves_before_body_and_binds_ctor_before_publication() {
         fixture_ctor_driver(record.as_mut_ptr() as u64, 4, 7, 0x5000, 9, 0x35);
     }
     assert!(POLLED.with(|s| s.borrow().is_none()));
-    assert!(records().at(record.as_ptr() as u64).is_none());
+    let unknown = records().at(record.as_ptr() as u64).unwrap();
+    assert_eq!(unknown.1.message.message, None);
+    assert_eq!(pending(), Ok(1));
+    NATIVE_INPUT_CONTINUE[2].store(
+        fixture_copy_original as *const () as u64 + 5,
+        Ordering::Release,
+    );
+    let mut copy = [0u64; 8];
+    unsafe {
+        fixture_copy_driver(
+            copy.as_mut_ptr().add(1) as u64,
+            record.as_ptr().add(1) as u64,
+        );
+    }
+    assert_eq!(records().at(copy.as_ptr() as u64).unwrap().0, unknown.0);
+    let id = retire(record.as_ptr() as u64).unwrap();
+    release(vec![id]);
+    assert_eq!(pending(), Ok(1));
+    let id = retire(copy.as_ptr() as u64).unwrap();
+    release(vec![id]);
     assert_eq!(pending(), Ok(0));
     assert_eq!(state().reserve_input(l, t), Err(Error::Closed));
 }
@@ -824,7 +873,10 @@ fn timeout_null_and_receiver_end_cancel_pending_without_new_authority() {
     assert!(POLLED.with(|s| s.borrow().is_some()));
     receiver_returned(6, 7, false);
     assert!(POLLED.with(|s| s.borrow().is_none()));
-    assert_eq!(state().message_world(ticket.message), Err(Error::Unknown));
+    assert_eq!(
+        state().message_world(ticket.message.unwrap()),
+        Err(Error::Unknown)
+    );
     let mut raw: Saved = unsafe { std::mem::zeroed() };
     raw.invocation.kind = 111;
     raw.gpr[0] = 0;
