@@ -38,6 +38,8 @@ struct Scope {
     // FreeJobList list id and native return address for the closure ledger.
     arg: u64,
     caller: u64,
+    // RBX at the Host FreeJobList entry: the manager at the 4A1209 call.
+    receiver: u64,
 }
 thread_local! {static SCOPES:RefCell<Vec<Scope>>=const{RefCell::new(Vec::new())};}
 fn unresolved() {
@@ -155,6 +157,7 @@ extern "system" fn begin(raw: *mut Saved) {
             allocated: false,
             arg: 0,
             caller: 0,
+            receiver: 0,
         };
         // Host Add/Push set, Spawn list and FreeJobList identity are observed
         // before the original runs. The ledger is empty until a manager is seen.
@@ -165,6 +168,7 @@ extern "system" fn begin(raw: *mut Saved) {
             137 => {
                 c.arg = raw.gpr[0];
                 c.caller = raw.invocation.caller;
+                c.receiver = raw.gpr[7];
                 Ok(())
             }
             _ => Ok(()),
@@ -234,7 +238,8 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         if exceptional {
             closure::unwound();
         } else {
-            closure::list_released(c.arg as u32, c.caller).unwrap_or_else(|v| closure::fault(v));
+            closure::list_released(c.arg as u32, c.caller, c.receiver)
+                .unwrap_or_else(|v| closure::fault(v));
         }
     }
     if exceptional && (c.hold.is_some() || c.job.is_some()) {

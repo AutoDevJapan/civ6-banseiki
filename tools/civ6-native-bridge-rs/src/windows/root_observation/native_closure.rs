@@ -45,6 +45,7 @@ pub(in super::super) enum Violation {
     Unwound,
     Exhausted,
     Poisoned,
+    ReleaseList,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Manager {
@@ -224,12 +225,15 @@ impl Ledger {
             return Ok(());
         }
         // Only a list that the manager still owns can be attributed. A freed
-        // id may already belong to another subsystem.
+        // id may already belong to another subsystem, so a released lease no
+        // longer matches.
         let Some(m) = self
             .managers
             .iter_mut()
             .filter(|m| {
-                m.list == list && matches!(m.phase, Phase::Open | Phase::Closing | Phase::Waited)
+                m.list == list
+                    && !m.released
+                    && matches!(m.phase, Phase::Open | Phase::Closing | Phase::Waited)
             })
             .max_by_key(|m| priority(m))
         else {
@@ -258,37 +262,63 @@ impl Ledger {
             _ => Err(Violation::WaitOutOfOrder),
         }
     }
-    /// `owner_caller` is true only for the return address after 4A1209.
-    fn list_released(&mut self, list: u32, owner_caller: bool) -> Result<bool, Violation> {
+    /// `owner_caller` is true only for the return address after 4A1209 and
+    /// `receiver` is the manager that 4A1150 keeps in RBX from 4A1175 to its
+    /// return (the 9921D0 thunk restores RBX before its tail jump). The owner
+    /// identity is that pair. A bare list id is attributed only while the
+    /// manager's lease is live, never after it was released and may have been
+    /// recycled by another domain.
+    fn list_released(
+        &mut self,
+        list: u32,
+        owner_caller: bool,
+        receiver: u64,
+    ) -> Result<bool, Violation> {
         if list == 0 {
             return Ok(false);
+        }
+        if owner_caller {
+            let Some(m) = self.managers.iter_mut().find(|m| m.manager == receiver) else {
+                // Unknown native receiver: no attribution and no credit.
+                return Ok(false);
+            };
+            return match m.phase {
+                // 4A1150 outside the tracked World close. Observed, not certified.
+                Phase::Open => {
+                    if m.list == list {
+                        m.list = 0;
+                        self.unowned = self.unowned.saturating_add(1);
+                    }
+                    Ok(false)
+                }
+                Phase::Closing => Err(Violation::ReleaseOutOfOrder),
+                Phase::Waited if m.released => Err(Violation::DoubleRelease),
+                Phase::Waited if m.list != list => Err(Violation::ReleaseList),
+                Phase::Waited => {
+                    m.released = true;
+                    Ok(true)
+                }
+                // No tracked close owns a shutdown after the close ended.
+                Phase::Returned | Phase::Closed => Ok(false),
+            };
         }
         let Some(m) = self
             .managers
             .iter_mut()
             .filter(|m| {
-                m.list == list && matches!(m.phase, Phase::Open | Phase::Closing | Phase::Waited)
+                m.list == list
+                    && !m.released
+                    && matches!(m.phase, Phase::Open | Phase::Closing | Phase::Waited)
             })
             .max_by_key(|m| priority(m))
         else {
             return Ok(false);
         };
-        match (m.phase, owner_caller) {
-            // 4A1150 outside the tracked World close. Observed, not certified.
-            (Phase::Open, true) => {
-                m.list = 0;
-                self.unowned = self.unowned.saturating_add(1);
-                Ok(false)
-            }
+        match m.phase {
             // The id may be stale after an unobserved release.
-            (Phase::Open, false) => Ok(false),
-            (Phase::Closing, _) => Err(Violation::ReleaseOutOfOrder),
-            (_, false) => Err(Violation::ReleaseCaller),
-            (_, true) if m.released => Err(Violation::DoubleRelease),
-            (_, true) => {
-                m.released = true;
-                Ok(true)
-            }
+            Phase::Open => Ok(false),
+            Phase::Closing => Err(Violation::ReleaseOutOfOrder),
+            _ => Err(Violation::ReleaseCaller),
         }
     }
     fn close_end(&mut self, manager: u64) -> Result<(), Violation> {
@@ -374,12 +404,17 @@ pub(in super::super) fn spawn(list: u32) -> Result<(), Violation> {
 pub(in super::super) fn wait_returned(manager: u64) -> Result<(), Violation> {
     ledger()?.wait_returned(manager)
 }
-/// Host FreeJobList normal return and its native return address.
-pub(in super::super) fn list_released(list: u32, caller: u64) -> Result<bool, Violation> {
+/// Host FreeJobList normal return, its native return address and the RBX it
+/// was entered with. At 4A1209 that RBX is the manager being shut down.
+pub(in super::super) fn list_released(
+    list: u32,
+    caller: u64,
+    receiver: u64,
+) -> Result<bool, Violation> {
     if ACTIVE.load(Ordering::Acquire) == 0 {
         return Ok(false);
     }
-    ledger()?.list_released(list, release_caller(caller))
+    ledger()?.list_released(list, release_caller(caller), receiver)
 }
 pub(in super::super) fn close_end(manager: u64) -> Result<(), Violation> {
     ledger()?.close_end(manager)

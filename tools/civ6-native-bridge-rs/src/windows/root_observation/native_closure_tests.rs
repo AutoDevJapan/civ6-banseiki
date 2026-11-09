@@ -41,7 +41,7 @@ fn closed_manager_is_a_tombstone_until_a_real_new_initialization() {
     assert_eq!(l.submit(SET), Ok(()));
     assert_eq!(l.spawn(LIST), Ok(()));
     l.wait_returned(MANAGER).unwrap();
-    assert_eq!(l.list_released(LIST, true), Ok(true));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
     l.close_end(MANAGER).unwrap();
     let receipt = l.world_closed(WORLD).unwrap();
     assert_eq!(
@@ -89,21 +89,27 @@ fn out_of_order_close_events_are_violations_not_receipts() {
         Err(Violation::InitDuringClose)
     );
     assert_eq!(
-        l.list_released(LIST, true),
+        l.list_released(LIST, true, MANAGER),
         Err(Violation::ReleaseOutOfOrder)
     );
     assert_eq!(l.close_end(MANAGER), Err(Violation::CloseOutOfOrder));
     l.wait_returned(MANAGER).unwrap();
     assert_eq!(l.wait_returned(MANAGER), Err(Violation::WaitOutOfOrder));
-    assert_eq!(l.list_released(LIST, false), Err(Violation::ReleaseCaller));
+    assert_eq!(
+        l.list_released(LIST, false, 0),
+        Err(Violation::ReleaseCaller)
+    );
     assert_eq!(l.close_end(MANAGER), Err(Violation::ListNotReleased));
     assert_eq!(l.world_closed(WORLD), Err(Violation::WorldNotReturned));
-    assert_eq!(l.list_released(LIST, true), Ok(true));
-    assert_eq!(l.list_released(LIST, true), Err(Violation::DoubleRelease));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
+    assert_eq!(
+        l.list_released(LIST, true, MANAGER),
+        Err(Violation::DoubleRelease)
+    );
     assert_eq!(l.world_closed(0), Err(Violation::WorldNotReturned));
     l.close_end(MANAGER).unwrap();
     // After Returned, a released id is no longer attributed to this manager.
-    assert_eq!(l.list_released(LIST, true), Ok(false));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(false));
     assert_eq!(l.spawn(LIST), Ok(()));
     assert_eq!(l.submit(SET), Err(Violation::LateSubmit));
     assert!(l.world_closed(WORLD).unwrap().complete());
@@ -120,8 +126,8 @@ fn late_submit_after_wait_is_rejected_and_late_spawn_makes_the_receipt_incomplet
     assert_eq!(l.submit(SET + 0x4000), Ok(()));
     assert_eq!(l.spawn(LIST + 1), Ok(()));
     assert_eq!(l.spawn(0), Ok(()));
-    assert_eq!(l.list_released(LIST + 1, true), Ok(false));
-    assert_eq!(l.list_released(LIST, true), Ok(true));
+    assert_eq!(l.list_released(LIST + 1, true, 0x7000), Ok(false));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
     l.close_end(MANAGER).unwrap();
     assert!(!l.world_closed(WORLD).unwrap().complete());
 }
@@ -152,16 +158,16 @@ fn shutdown_outside_the_tracked_world_close_is_recorded_only() {
     let mut l = Ledger::new();
     l.init_returned(MANAGER, LIST).unwrap();
     // 4A1150 reached by another caller frees the list outside close_begin.
-    assert_eq!(l.list_released(LIST, true), Ok(false));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(false));
     assert_eq!(l.unowned, 1);
     assert!(l.last.is_none());
     assert_eq!(l.submit(SET), Ok(()));
     // The stale id is now another owner's id and is ignored.
-    assert_eq!(l.list_released(LIST, false), Ok(false));
+    assert_eq!(l.list_released(LIST, false, 0), Ok(false));
     assert_eq!(l.spawn(LIST), Ok(()));
     let again = l.init_returned(MANAGER, 6).unwrap();
     assert!(again > 1);
-    assert_eq!(l.list_released(6, false), Ok(false));
+    assert_eq!(l.list_released(6, false, 0), Ok(false));
 }
 
 #[test]
@@ -174,10 +180,71 @@ fn a_closing_list_wins_when_a_stale_open_record_has_the_same_id() {
     assert_eq!(l.spawn(LIST), Ok(()));
     // The Waited record owns the id. The stale Open record is not attributed.
     assert!(!l.managers[0].late_spawn && l.managers[1].late_spawn);
-    assert_eq!(l.list_released(LIST, true), Ok(true));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
     l.close_end(MANAGER).unwrap();
     let receipt = l.world_closed(WORLD).unwrap();
     assert!(receipt.list_released && receipt.late_spawn && !receipt.complete());
+}
+
+#[test]
+fn a_released_lease_is_not_attributed_to_the_old_manager_when_the_id_is_recycled() {
+    let mut l = Ledger::new();
+    waited(&mut l);
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
+    // Another domain recycles the id before 4A1150 has returned.
+    assert_eq!(l.list_released(LIST, false, 0), Ok(false));
+    assert_eq!(l.spawn(LIST), Ok(()));
+    assert!(!l.managers[0].late_spawn);
+    // The native owner identity still catches a second release.
+    assert_eq!(
+        l.list_released(LIST, true, MANAGER),
+        Err(Violation::DoubleRelease)
+    );
+    l.close_end(MANAGER).unwrap();
+    assert!(l.world_closed(WORLD).unwrap().complete());
+}
+
+#[test]
+fn the_same_call_site_for_a_recycled_id_belongs_to_the_manager_in_rbx() {
+    const OTHER: u64 = 0x6000;
+    let mut l = Ledger::new();
+    waited(&mut l);
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
+    l.init_returned(OTHER, LIST).unwrap();
+    assert_eq!(l.list_released(LIST, true, OTHER), Ok(false));
+    assert_eq!((l.managers[1].list, l.unowned), (0, 1));
+    assert!(l.managers[0].released);
+    l.close_end(MANAGER).unwrap();
+    assert!(l.world_closed(WORLD).unwrap().complete());
+}
+
+#[test]
+fn a_nested_shutdown_of_another_manager_never_touches_the_closing_lease() {
+    const OTHER: u64 = 0x6000;
+    let mut l = Ledger::new();
+    l.init_returned(OTHER, 9).unwrap();
+    waited(&mut l);
+    assert_eq!(l.list_released(9, true, OTHER), Ok(false));
+    assert_eq!((l.unowned, l.managers[0].list), (1, 0));
+    assert!(!l.managers[1].released);
+    // An unknown native receiver is neither attributed nor credited.
+    assert_eq!(l.list_released(LIST, true, 0x7000), Ok(false));
+    assert_eq!(l.close_end(MANAGER), Err(Violation::ListNotReleased));
+    assert_eq!(l.list_released(LIST, true, MANAGER), Ok(true));
+    l.close_end(MANAGER).unwrap();
+    assert!(l.world_closed(WORLD).unwrap().complete());
+}
+
+#[test]
+fn the_closing_manager_releasing_a_different_id_is_a_violation_without_credit() {
+    let mut l = Ledger::new();
+    waited(&mut l);
+    assert_eq!(
+        l.list_released(LIST + 1, true, MANAGER),
+        Err(Violation::ReleaseList)
+    );
+    assert!(!l.managers[0].released);
+    assert_eq!(l.close_end(MANAGER), Err(Violation::ListNotReleased));
 }
 
 #[test]
@@ -239,13 +306,18 @@ global_asm!(
     ".globl closure_free_driver",
     ".seh_proc closure_free_driver",
     "closure_free_driver:",
-    "sub rsp,0x28",
-    ".seh_stackalloc 0x28",
+    "push rbx",
+    ".seh_pushreg rbx",
+    "sub rsp,0x20",
+    ".seh_stackalloc 0x20",
     ".seh_endprologue",
+    // 4A1150 keeps its manager in RBX across the FreeJobList call at 4A1209.
+    "mov rbx,rdx",
     "call {free}",
     ".globl closure_free_return",
     "closure_free_return:",
-    "lea rsp,[rsp+0x28]",
+    "add rsp,0x20",
+    "pop rbx",
     "ret",
     ".seh_endproc",
     ".globl closure_free_other_driver",
@@ -348,7 +420,7 @@ global_asm!(
 );
 unsafe extern "system" {
     fn closure_free_tail();
-    fn closure_free_driver(list: u64, b: u64, c: u64, d: u64) -> u64;
+    fn closure_free_driver(list: u64, receiver: u64, c: u64, d: u64) -> u64;
     fn closure_free_return();
     fn closure_free_other_driver(list: u64, b: u64, c: u64, d: u64) -> u64;
     fn closure_home_tail();
@@ -385,7 +457,7 @@ fn manager_release_return_is_credited_through_the_real_free_job_list_gateway() {
     wait_returned(MANAGER).unwrap();
     unsafe { SetLastError(0x880123) };
     assert_eq!(
-        unsafe { closure_free_driver(u64::from(LIST), 0, 0, 0) },
+        unsafe { closure_free_driver(u64::from(LIST), MANAGER, 0, 0) },
         0x7777
     );
     assert_eq!(unsafe { GetLastError() }, 0x880123);
@@ -411,6 +483,99 @@ fn free_job_list_from_another_return_address_aborts_while_the_manager_owns_the_i
     close_begin(WORLD, MANAGER, LIST).unwrap();
     wait_returned(MANAGER).unwrap();
     unsafe { closure_free_other_driver(u64::from(LIST), 0, 0, 0) };
+    unreachable!();
+}
+
+#[test]
+fn foreign_reuse_of_a_released_list_id_is_transparent_and_keeps_the_receipt_complete() {
+    if !child(
+        "foreign_reuse_of_a_released_list_id_is_transparent_and_keeps_the_receipt_complete",
+        false,
+        "",
+    ) {
+        return;
+    }
+    bind_core((closure_free_return as *const () as usize as u64) - RELEASE_RETURN);
+    route(7, closure_free_tail);
+    route(2, closure_spawn_tail);
+    init_returned(MANAGER, LIST).unwrap();
+    close_begin(WORLD, MANAGER, LIST).unwrap();
+    wait_returned(MANAGER).unwrap();
+    assert_eq!(
+        unsafe { closure_free_driver(u64::from(LIST), MANAGER, 0, 0) },
+        0x7777
+    );
+    assert!(managers()[0].released);
+    // The id is free again. Another Host domain may take it, spawn on it and
+    // release it from its own call site before 4A1150 has returned.
+    assert_eq!(
+        unsafe { closure_spawn_driver(u64::from(LIST), 0, 0, 0) },
+        0x6262
+    );
+    assert_eq!(
+        unsafe { closure_free_other_driver(u64::from(LIST), 0, 0, 0) },
+        0x7777
+    );
+    assert!(!managers()[0].late_spawn);
+    assert!(!FAILED.load(Ordering::Acquire));
+    close_end(MANAGER).unwrap();
+    let receipt = world_closed(WORLD).unwrap();
+    assert!(receipt.list_released && !receipt.late_spawn && receipt.complete());
+}
+
+#[test]
+fn the_same_native_return_address_for_another_manager_is_not_a_double_release() {
+    if !child(
+        "the_same_native_return_address_for_another_manager_is_not_a_double_release",
+        false,
+        "",
+    ) {
+        return;
+    }
+    const OTHER: u64 = 0x6000;
+    bind_core((closure_free_return as *const () as usize as u64) - RELEASE_RETURN);
+    route(7, closure_free_tail);
+    init_returned(MANAGER, LIST).unwrap();
+    close_begin(WORLD, MANAGER, LIST).unwrap();
+    wait_returned(MANAGER).unwrap();
+    assert_eq!(
+        unsafe { closure_free_driver(u64::from(LIST), MANAGER, 0, 0) },
+        0x7777
+    );
+    // Another manager is initialized with the recycled id and is shut down
+    // outside this World close through the very same native call site.
+    init_returned(OTHER, LIST).unwrap();
+    assert_eq!(
+        unsafe { closure_free_driver(u64::from(LIST), OTHER, 0, 0) },
+        0x7777
+    );
+    let all = managers();
+    assert!(all[0].released && all[0].phase == Phase::Waited);
+    assert_eq!((all[1].manager, all[1].list), (OTHER, 0));
+    assert!(!FAILED.load(Ordering::Acquire));
+    close_end(MANAGER).unwrap();
+    assert!(world_closed(WORLD).unwrap().complete());
+}
+
+#[test]
+fn a_second_owned_release_by_the_same_manager_still_aborts() {
+    if !child(
+        "a_second_owned_release_by_the_same_manager_still_aborts",
+        true,
+        "CLOSURE_VIOLATION=DoubleRelease",
+    ) {
+        return;
+    }
+    bind_core((closure_free_return as *const () as usize as u64) - RELEASE_RETURN);
+    route(7, closure_free_tail);
+    init_returned(MANAGER, LIST).unwrap();
+    close_begin(WORLD, MANAGER, LIST).unwrap();
+    wait_returned(MANAGER).unwrap();
+    assert_eq!(
+        unsafe { closure_free_driver(u64::from(LIST), MANAGER, 0, 0) },
+        0x7777
+    );
+    unsafe { closure_free_driver(u64::from(LIST), MANAGER, 0, 0) };
     unreachable!();
 }
 
@@ -483,7 +648,10 @@ fn spawn_after_wait_marks_the_receipt_incomplete_without_aborting() {
     );
     assert!(managers()[0].late_spawn);
     assert!(!FAILED.load(Ordering::Acquire));
-    assert_eq!(LEDGER.lock().unwrap().list_released(LIST, true), Ok(true));
+    assert_eq!(
+        LEDGER.lock().unwrap().list_released(LIST, true, MANAGER),
+        Ok(true)
+    );
     close_end(MANAGER).unwrap();
     let receipt = world_closed(WORLD).unwrap();
     assert!(receipt.late_spawn && receipt.list_released);
@@ -571,7 +739,11 @@ fn init_gateway_runs_original_once_publishes_new_incarnations_and_restores() {
     close_begin(WORLD, address, 7).unwrap();
     wait_returned(address).unwrap();
     // The gateway frees nothing here; this fixture releases through the ledger.
-    LEDGER.lock().unwrap().list_released(7, true).unwrap();
+    LEDGER
+        .lock()
+        .unwrap()
+        .list_released(7, true, address)
+        .unwrap();
     close_end(address).unwrap();
     world_closed(WORLD).unwrap();
     assert_eq!(submit(address + 0x400), Err(Violation::LateSubmit));
@@ -728,4 +900,31 @@ fn init_frame_matches_the_primary_core_and_rejects_mutations() {
     let target = 0x4a1209i64 + 5 + i64::from(i32::from_le_bytes(bytes[1..].try_into().unwrap()));
     assert_eq!((bytes[0], target), (0xe8, 0x9921d0));
     assert_eq!(0x4a1209 + 5, RELEASE_RETURN);
+    // Owner identity of that release: 4A1150 moves its manager from RCX to RBX
+    // at 4A1175 and from then on only reads through RBX up to the call, and the
+    // Core thunk restores the caller's RBX before its tail jump to the Host.
+    // These are exact image bytes, not a decoder result.
+    let manager_to_rbx = file_offset(&mut file, 0x4a1175);
+    let thunk = file_offset(&mut file, 0x9921d0);
+    for (at, hex) in [
+        (
+            manager_to_rbx,
+            "488bd933f648897424284881c1000400000f28442420660f7f442420e82a114f004088b3ac3800004038b3ad380000740d488b0dd3986e00488b01ff5040488d8b800100004088b3ad380000e84a460800488d8bc8020000e8ae27fbff488d8b68030000e8a227fbff488d8b90030000e89627fbff488d8b40030000e88a27fbff488d8bf0020000e8ae27fbff488b8b10040000e8c20f4f00",
+        ),
+        (
+            thunk,
+            "40534883ec20488b05c3e41f00488bd94885c07513488d0d7cb91200e85f130000488905a8e41f00488bcb4883c4205b48ffe0",
+        ),
+    ] {
+        let wanted: Vec<_> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        let mut data = vec![0; wanted.len()];
+        file.seek(SeekFrom::Start(at)).unwrap();
+        file.read_exact(&mut data).unwrap();
+        assert_eq!(data, wanted);
+    }
+    assert_eq!(0x4a1175 + 0x99, 0x4a120e);
+    assert_eq!(0x9921d0 + 0x33, 0x992203);
 }
