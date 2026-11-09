@@ -355,7 +355,6 @@ gateway!(
     unwind
 );
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
-    CORE.store(core as u64, Ordering::Release);
     let sites = [
         (
             0x63e160,
@@ -377,6 +376,22 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
         ),
     ];
     let mut owners = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
+    // Refuse invalid bindings before publishing a Core identity. Initialize
+    // before the first entry exchange so concurrent callbacks never see zero;
+    // each exchange still rechecks its bytes and protection below.
+    for (rva, expected, _, _) in sites {
+        let entry = (core + rva) as *const u8;
+        if copy_current::<8>(entry as u64) != Some(expected) {
+            return Err("native control entry differs");
+        }
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+            || info.Protect & 0xff != PAGE_EXECUTE_READ
+        {
+            return Err("native control protection");
+        }
+    }
+    CORE.store(core as u64, Ordering::Release);
     for (i, (rva, expected, n, gateway)) in sites.into_iter().enumerate() {
         let entry = (core + rva) as *mut u8;
         if copy_current::<8>(entry as u64) != Some(expected) {
@@ -457,6 +472,11 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
 }
 
 #[cfg(test)]
+pub(super) fn fixture_observation_resume_guards(resume: fn() -> bool, complete: fn() -> bool) {
+    tests::observation_resume_guards(resume, complete);
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
@@ -496,6 +516,60 @@ mod tests {
         raw.invocation.kind = kind;
         raw.invocation.caller = caller;
         raw
+    }
+    #[test]
+    fn failed_control_binding_does_not_activate_a_core() {
+        if !child("failed_control_binding_does_not_activate_a_core") {
+            return;
+        }
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        assert_eq!(
+            unsafe { install(0x1000) },
+            Err("native control entry differs")
+        );
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        assert!(!observed_shutdown_complete());
+    }
+    #[test]
+    fn later_control_entry_failure_publishes_no_early_hook_or_core() {
+        if !child("later_control_entry_failure_publishes_no_early_hook_or_core") {
+            return;
+        }
+        // The last entry is deliberately invalid. This must return before
+        // any entry exchange, including on CPUs that cannot run the fixture.
+        let size = 0x9a0000;
+        let base =
+            unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
+                as usize;
+        assert_ne!(base, 0);
+        let entries = [
+            (0x63e160, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9]),
+            (0x4a1150, [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83]),
+        ];
+        for (rva, bytes) in entries {
+            unsafe {
+                ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, bytes.len())
+            };
+        }
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        let result = unsafe { install(base) };
+        let core = CORE.load(Ordering::Acquire);
+        let no_owners = HOOKS.lock().unwrap().is_empty();
+        let unchanged = entries
+            .into_iter()
+            .all(|(rva, original)| copy_current::<8>((base + rva) as u64) == Some(original));
+        if !no_owners {
+            unsafe { restore() }.unwrap();
+        }
+        assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+        assert_eq!(result, Err("native control entry differs"));
+        assert_eq!(core, 0);
+        assert!(no_owners && unchanged);
     }
     static MIXED_BASE: AtomicU64 = AtomicU64::new(0);
     static MIXED_PARALLEL: AtomicBool = AtomicBool::new(false);
@@ -1023,11 +1097,21 @@ mod tests {
         if !child("observation_resume_requires_the_exact_closed_world_and_settled_uses_without_product_grants") {
             return;
         }
-        // Policy unit fixture: these controlled lifetime facts are not a
-        // production install/coverage acceptance or a native join proof.
         FRAMES.set(NativeFrames::new()).ok().unwrap();
-        runtime::fixture_invocation_runtime();
         CORE.store(0x180000000, Ordering::Release);
+        assert!(!super::super::resume_unqualified_observation());
+        // Policy unit fixture: ownership alone is injected. The licensed
+        // integration fixture runs the same guards with real installed tables.
+        fixture_observation_resume_guards(
+            || super::super::resume_observation_with_owned_entries(true),
+            || super::super::resume_observation_with_owned_entries(true),
+        );
+    }
+
+    pub(super) fn observation_resume_guards(resume: fn() -> bool, complete: fn() -> bool) {
+        assert_ne!(CORE.load(Ordering::Acquire), 0);
+        let frames = FRAMES.get().unwrap();
+        runtime::fixture_invocation_runtime();
         let birth = worlds::fixture_world_birth();
         *WORLD_BIRTH.lock().unwrap() = Some(birth);
         WORLD.store(birth.world, Ordering::Release);
@@ -1035,31 +1119,108 @@ mod tests {
         WAITED.store(true, Ordering::Release);
         SHUTDOWN_RETURNED.store(true, Ordering::Release);
         CLOSURE_COMPLETE.store(true, Ordering::Release);
-        assert!(
-            !observed_shutdown_complete(),
-            "World's outer return is still absent"
+        // Make every other premise true before removing one. A false ownership
+        // table must not short-circuit the condition being tested.
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
         );
-        assert!(!super::super::resume_unqualified_observation());
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        let state = || {
+            (
+                frames.observation_state_for_test(),
+                census::observation_resumes_for_test(),
+                TRACE.0[12].load(Ordering::Acquire),
+                *WORLD_BIRTH.lock().unwrap(),
+                WORLD.load(Ordering::Acquire),
+                [
+                    CLOSING.load(Ordering::Acquire),
+                    WAITED.load(Ordering::Acquire),
+                    SHUTDOWN_RETURNED.load(Ordering::Acquire),
+                    CLOSURE_COMPLETE.load(Ordering::Acquire),
+                ],
+                (
+                    runtime::fixture_product_inactive(),
+                    runtime::fixture_invocation_closed(),
+                ),
+            )
+        };
+        let rejected = |reason: &str| {
+            let before = state();
+            assert!(!resume(), "{reason}");
+            assert_eq!(
+                state(),
+                before,
+                "refusal changed retirement state: {reason}"
+            );
+        };
+        assert!(!observed_shutdown_complete());
+        rejected("World's outer return is still absent");
         worlds::fixture_world_close(birth);
         assert!(observed_shutdown_complete());
         for flag in [&CLOSING, &WAITED, &SHUTDOWN_RETURNED, &CLOSURE_COMPLETE] {
             flag.store(false, Ordering::Release);
-            assert!(!observed_shutdown_complete());
+            rejected("one shutdown receipt is absent");
             flag.store(true, Ordering::Release);
         }
         *WORLD_BIRTH.lock().unwrap() = Some(worlds::WorldLease {
             serial: birth.serial + 1,
             ..birth
         });
-        assert!(
-            !observed_shutdown_complete(),
-            "an address alias cannot finish the saved World"
-        );
+        rejected("an address alias cannot finish the saved World");
         *WORLD_BIRTH.lock().unwrap() = Some(birth);
-        assert!(
-            !super::super::resume_unqualified_observation(),
-            "product permission is still open"
+        FAILED.store(true, Ordering::Release);
+        rejected("a prior native failure remains latched");
+        assert!(FAILED.load(Ordering::Acquire));
+        FAILED.store(false, Ordering::Release);
+        // Open the runtime while the native frame ledger is fully settled, so
+        // its own reopen guard cannot mask the product-permission premise.
+        runtime::fixture_invocation_runtime();
+        rejected("product permission is still open");
+        assert!(!runtime::fixture_product_inactive());
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
         );
+        assert!(!super::super::resume_observation_with_owned_entries(false));
+        let (frame_state, observation_resumes, qualified_reopens, ..) = state();
+        assert!(complete());
+        assert!(runtime::fixture_product_inactive());
+        assert!(runtime::fixture_invocation_closed());
+        assert_eq!(runtime::invocation_start(), 0);
+        assert_eq!(frames.observation_state_for_test().0, frame_state.0 + 1);
+        assert_eq!(
+            census::observation_resumes_for_test(),
+            observation_resumes + 1
+        );
+        assert_eq!(TRACE.0[12].load(Ordering::Acquire), qualified_reopens);
+        assert_eq!(*WORLD_BIRTH.lock().unwrap(), None);
+        let next = frames.enter().unwrap();
+        assert!(
+            frames.healthy(),
+            "ordinary native work can execute after the settled boundary"
+        );
+        frames.leave(next).unwrap();
+        rejected("one close receipt cannot be replayed");
+    }
+
+    #[test]
+    fn observation_resume_keeps_a_live_frame_and_its_retirement_state() {
+        if !child("observation_resume_keeps_a_live_frame_and_its_retirement_state") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        runtime::fixture_invocation_runtime();
+        CORE.store(0x180000000, Ordering::Release);
+        let birth = worlds::fixture_world_birth();
+        worlds::fixture_world_close(birth);
+        *WORLD_BIRTH.lock().unwrap() = Some(birth);
+        WORLD.store(birth.world, Ordering::Release);
+        WAITED.store(true, Ordering::Release);
+        SHUTDOWN_RETURNED.store(true, Ordering::Release);
+        CLOSURE_COMPLETE.store(true, Ordering::Release);
         let frames = FRAMES.get().unwrap();
         let pending = frames.enter().unwrap();
         assert_eq!(
@@ -1067,45 +1228,22 @@ mod tests {
             BridgeStatus::Ok as u32
         );
         assert_eq!(
-            frames.seal_and_wait(Instant::now() + Duration::from_secs(1)),
+            frames.seal_and_wait(Instant::now()),
             Err(crate::native_flight::Error::Reentrant)
         );
-        assert!(
-            !super::super::resume_unqualified_observation(),
-            "a retained native use is still live"
-        );
+        let before = frames.observation_state_for_test();
+        let resumed = census::observation_resumes_for_test();
+        let certified = TRACE.0[12].load(Ordering::Acquire);
+        assert!(!super::super::resume_observation_with_owned_entries(true));
+        assert_eq!(frames.observation_state_for_test(), before);
+        assert_eq!(census::observation_resumes_for_test(), resumed);
+        assert_eq!(TRACE.0[12].load(Ordering::Acquire), certified);
+        assert_eq!(*WORLD_BIRTH.lock().unwrap(), Some(birth));
         frames.leave(pending).unwrap();
         frames
             .seal_and_wait(Instant::now() + Duration::from_secs(1))
             .unwrap();
-        assert_eq!(
-            runtime::BridgeRuntimeRebuild(null_mut()),
-            BridgeStatus::Critical as u32,
-            "this policy unit fixture did not install native entry owners"
-        );
-        assert!(!super::super::resume_observation_with_owned_entries(false));
-        // Exercise the policy only with an injected ownership fact. The
-        // production wrapper above rejects this incomplete installation.
         assert!(super::super::resume_observation_with_owned_entries(true));
-        assert!(runtime::fixture_product_inactive());
-        assert!(runtime::fixture_invocation_closed());
-        assert_eq!(runtime::invocation_start(), 0);
-        assert_eq!(
-            TRACE.0[12].load(Ordering::Acquire),
-            0,
-            "no qualified reopen was certified"
-        );
-        let next = frames.enter().unwrap();
-        assert!(
-            frames.healthy(),
-            "ordinary native work can execute after the settled boundary"
-        );
-        frames.leave(next).unwrap();
-        assert!(
-            !observed_shutdown_complete(),
-            "one close receipt cannot be replayed"
-        );
-        assert!(!super::super::resume_unqualified_observation());
     }
 
     #[test]

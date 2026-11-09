@@ -121,6 +121,10 @@ pub(in super::super) fn restored() {
 pub(in super::super) fn observation_resumed() {
     DATA.header[12].fetch_add(1, Ordering::Relaxed);
 }
+#[cfg(test)]
+pub(super) fn observation_resumes_for_test() -> u64 {
+    DATA.header[12].load(Ordering::Acquire)
+}
 fn row(module: usize, kind: u64) -> Option<&'static Counters> {
     if module == 0 || module >= MODULES || kind >= KINDS as u64 {
         return None;

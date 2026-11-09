@@ -953,6 +953,10 @@ mod tests {
             originals.push(bytes);
         }
         super::outer_tests::seed_extra(base);
+        let entries: Vec<_> = SITES
+            .iter()
+            .map(|(rva, _, _)| copy_current::<8>((base + rva) as u64).unwrap())
+            .collect();
         let mut old = 0;
         assert_ne!(
             unsafe { VirtualProtect(base as _, 0x420000, PAGE_EXECUTE_READ, &mut old) },
@@ -975,6 +979,9 @@ mod tests {
         assert!(close(Instant::now() + Duration::from_secs(2)));
         assert!(reopen());
         unsafe { restore() }.unwrap();
+        for ((rva, _, _), original) in SITES.iter().zip(entries) {
+            assert_eq!(copy_current::<8>((base + rva) as u64), Some(original));
+        }
         for (i, (rva, _, _)) in SITES.into_iter().take(6).enumerate() {
             let restored = unsafe {
                 std::slice::from_raw_parts((base + rva) as *const u8, originals[i].len())

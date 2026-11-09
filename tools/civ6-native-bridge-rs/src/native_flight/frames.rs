@@ -419,6 +419,11 @@ impl NativeFrames {
     pub fn healthy(&self) -> bool {
         self.state.lock().is_ok_and(|s| !s.unresolved)
     }
+    #[cfg(test)]
+    pub(crate) fn observation_state_for_test(&self) -> (u64, bool, usize, usize) {
+        let s = self.state.lock().unwrap();
+        (s.generation, s.sealed, s.frames.len(), s.jobs.len())
+    }
     pub fn mark_unresolved(&self) {
         let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
         s.unresolved = true;

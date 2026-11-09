@@ -612,6 +612,13 @@ fn primary_five_complete_outer_bodies_unwind_mutations_and_eleven_owned_entries(
             "restored owned {name} entry was not recognized"
         );
     }
+    control::fixture_observation_resume_guards(resume_unqualified_observation, || {
+        runtime::BridgeRuntimeRebuild(null_mut()) == BridgeStatus::BoundaryUnproven as u32
+    });
+    assert!(
+        !control::ready(),
+        "observer resumption never certifies full coverage"
+    );
     // Only metadata and entry publication run; original game bodies do not.
     assert_eq!(counts(), [0; 5]);
     unsafe { restore() }.unwrap();
@@ -620,5 +627,5 @@ fn primary_five_complete_outer_bodies_unwind_mutations_and_eleven_owned_entries(
         "a restored installation no longer owns its entries"
     );
     unsafe { scheduler::verify_frames(image.base, outer_fixed::FRAMES) }.unwrap();
-    println!("PRIMARY_OUTER_COMPLETE_BODIES=5 UNWIND_PARTITIONS=11 OWNED_FRAME_ENTRIES=11 OWNED_DOMAINS=15 OWNERSHIP_KNOCKOUTS=15; native game bodies not executed");
+    println!("PRIMARY_OUTER_COMPLETE_BODIES=5 UNWIND_PARTITIONS=11 OWNED_FRAME_ENTRIES=11 OWNED_DOMAINS=15 OWNERSHIP_KNOCKOUTS=15 OBSERVER_REBUILD_STATUS=7; controlled lifetime facts, native game bodies not executed");
 }

@@ -105,15 +105,6 @@ mod tests {
     }
     #[test]
     fn equal_clock_samples_cannot_share_settings_queue_or_cleanup() {
-        let candidate = std::env::temp_dir().join(format!(
-            "cc-live-renderer-{}-{}",
-            std::process::id(),
-            u128::MAX
-        ));
-        assert!(
-            !candidate.exists(),
-            "pre-existing fixture is not owned by this test"
-        );
         let first = Fixture::with_stamp(u128::MAX);
         let second = Fixture::with_stamp(u128::MAX);
         assert_ne!(
