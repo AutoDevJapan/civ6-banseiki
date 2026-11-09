@@ -2,10 +2,23 @@
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-const HOST_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
+// Explicit audit revision, independent of runtime admission pins. Both complete
+// file buffers must match this pair before any fixed RVA is interpreted.
+const IMAGE_REVISION: &str = "steam-26407122";
+const CORE_SHA: &str = "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
+const HOST_SHA: &str = "d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe";
+
+fn require_image_pair(core_sha: &str, host_sha: &str) -> Result<(), String> {
+    if core_sha != CORE_SHA || host_sha != HOST_SHA {
+        return Err(
+            "not both pinned primary files for steam-26407122; no ABI interpretation".into(),
+        );
+    }
+    Ok(())
+}
 
 /// Complete synchronous caller evidence, without enabling a runtime adapter.
-/// Keep the legacy audit result unchanged; this is a separate opt-in result.
+/// The selected revision's base audit is also returned without enabling hooks.
 pub fn audit_outer_frames(core: &[u8], host: &[u8]) -> Result<Value, String> {
     let base = audit(core, host)?; // both pinned buffers before ABI interpretation
     Ok(
@@ -15,12 +28,12 @@ pub fn audit_outer_frames(core: &[u8], host: &[u8]) -> Result<Value, String> {
     )
 }
 
-/// Opt-in slice. The old audit and every value it returns are preserved.
+/// Opt-in slice for the selected image revision; no runtime activation.
 /// Hashes refer to these borrowed file buffers, never a later path reread.
 pub fn audit_worker_payload(core: &[u8], host: &[u8]) -> Result<Value, String> {
     let base = audit(core, host)?; // includes BOTH hash gates before interpreting ABI
     let payload = worker_payload::inspect(core)?;
-    Ok(json!({"schema":"todo880-native-worker-payload-static-v1",
+    Ok(json!({"schema":"todo880-native-worker-payload-static-v2",
         "base_audit":base,"payload_slice":payload,
         "pending_publication_slice":worker_payload::inspect_pending(host)?,
         "structural_declarations":{"process_open_calls":0,"dll_load_calls":0,
@@ -949,222 +962,222 @@ mod worker_payload {
         }
         const FRAMES: &[Frame] = &[
             Frame {
-                begin: 0x985b20,
-                end: 0x985bea,
-                sha: "481ba8890a6cc4d13d60b7a9259ea2e047b7a382e33cd4a20f42d62c882cf19b",
+                begin: 0x985f40,
+                end: 0x98600a,
+                sha: "800bcfe9adbff77b1009377e5a1060c5d04d48244d28e2862236aa8b7627e905",
                 fragments: &[(
-                    0x985b20,
-                    0x985bea,
-                    0x11bebb8,
+                    0x985f40,
+                    0x98600a,
+                    0x11c3150,
                     "0114080014640b0014540a001434090014521070",
                 )],
             },
             Frame {
-                begin: 0x985bf0,
-                end: 0x985d2e,
-                sha: "e7135e3ce4cf7ceff41370c84158ffe040234184417e9c0a5d15652da4eb6af5",
+                begin: 0x986010,
+                end: 0x98614e,
+                sha: "950be5fcf473da61ba436dce055ab6c17f5ba71f8bfaf51c5212f56c635ea10b",
                 fragments: &[
-                    (0x985bf0, 0x985c28, 0x11bed18, "0106020006520230"),
+                    (0x986010, 0x986048, 0x1198528, "0106020006520230"),
                     (
-                        0x985c28,
-                        0x985cfd,
-                        0x11d9fe4,
-                        "2177060077e40a007264080005740900f05b9800285c980018ed1b01",
+                        0x986048,
+                        0x98611d,
+                        0x11db110,
+                        "2177060077e40a007264080005740900106098004860980028851901",
                     ),
                     (
-                        0x985cfd,
-                        0x985d28,
-                        0x11da000,
-                        "2100020000740900f05b9800285c980018ed1b01",
+                        0x98611d,
+                        0x986148,
+                        0x11db12c,
+                        "2100020000740900106098004860980028851901",
                     ),
                     (
-                        0x985d28,
-                        0x985d2e,
-                        0x11da014,
-                        "21000000f05b9800285c980018ed1b01",
+                        0x986148,
+                        0x98614e,
+                        0x11db140,
+                        "21000000106098004860980028851901",
                     ),
                 ],
             },
             Frame {
-                begin: 0xe3e840,
-                end: 0xe3ea09,
-                sha: "265978cf803c133d6c7b2805aec21bd197471c58841ba23a1734499ef7d925f7",
+                begin: 0xe3e8c0,
+                end: 0xe3ea89,
+                sha: "0b62d0a082ab63428ccd939968ea57bef27c8178c24f7afaf84861a43a091c88",
                 fragments: &[(
-                    0xe3e840,
-                    0xe3ea09,
-                    0x11bfb58,
+                    0xe3e8c0,
+                    0xe3ea89,
+                    0x11c0cfc,
                     "011709001764170017541600173415001701120010700000",
                 )],
             },
             Frame {
-                begin: 0xe41320,
-                end: 0xe41675,
-                sha: "8354d68617936e26369fada1e002ef30a76f03097e3f8e35b9dced42b4129d87",
+                begin: 0xe413a0,
+                end: 0xe416f5,
+                sha: "f1e08affb621f79c16e464b3b265371b0211fa52e866cf2b5be3600a23c781d7",
                 fragments: &[
-                    (0xe41320, 0xe4132e, 0x12397cc, "010e02000e016100"),
+                    (0xe413a0, 0xe413ae, 0x123a7a0, "010e02000e016100"),
                     (
-                        0xe4132e,
-                        0xe4139a,
-                        0x12397d4,
-                        "210f06000ff45a0008745e00043465002013e4002e13e400cc972301",
+                        0xe413ae,
+                        0xe4141a,
+                        0x123a7a8,
+                        "210f06000ff45a0008745e0004346500a013e400ae13e400a0a72301",
                     ),
                     (
-                        0xe4139a,
-                        0xe413b7,
-                        0x12397f0,
-                        "211a06001ac45d0010645f00085460002e13e4009a13e400d4972301",
+                        0xe4141a,
+                        0xe41437,
+                        0x123a7c4,
+                        "211a06001ac45d0010645f0008546000ae13e4001a14e400a8a72301",
                     ),
                     (
-                        0xe413b7,
-                        0xe41530,
-                        0x123980c,
-                        "2118040018e45b0008d45c009a13e400b713e400f0972301",
+                        0xe41437,
+                        0xe415b0,
+                        0x123a7e0,
+                        "2118040018e45b0008d45c001a14e4003714e400c4a72301",
                     ),
                     (
-                        0xe41530,
-                        0xe41578,
-                        0x1239824,
-                        "2100020000e45b009a13e400b713e400f0972301",
+                        0xe415b0,
+                        0xe415f8,
+                        0x123a7f8,
+                        "2100020000e45b001a14e4003714e400c4a72301",
                     ),
                     (
-                        0xe41578,
-                        0xe415bc,
-                        0x1239838,
-                        "2100020000645f002e13e4009a13e400d4972301",
+                        0xe415f8,
+                        0xe4163c,
+                        0x123a80c,
+                        "2100020000645f00ae13e4001a14e400a8a72301",
                     ),
                     (
-                        0xe415bc,
-                        0xe415d7,
-                        0x123984c,
-                        "210000002e13e4009a13e400d4972301",
+                        0xe4163c,
+                        0xe41657,
+                        0x123a820,
+                        "21000000ae13e4001a14e400a8a72301",
                     ),
                     (
-                        0xe415d7,
-                        0xe41610,
-                        0x123985c,
-                        "2100020000f45a002013e4002e13e400cc972301",
+                        0xe41657,
+                        0xe41690,
+                        0x123a830,
+                        "2100020000f45a00a013e400ae13e400a0a72301",
                     ),
                     (
-                        0xe41610,
-                        0xe41675,
-                        0x1239870,
-                        "210000002013e4002e13e400cc972301",
+                        0xe41690,
+                        0xe416f5,
+                        0x123a844,
+                        "21000000a013e400ae13e400a0a72301",
                     ),
                 ],
             },
             Frame {
-                begin: 0xe3e3b0,
-                end: 0xe3e46a,
-                sha: "2f3917b1b36e65ca2eb9a1c24cdd10e69a783455dc936ae891fc1b3b579b965f",
+                begin: 0xe3e430,
+                end: 0xe3e4ea,
+                sha: "db0b1e3ded67b7265ab5ec13824bb1dc8edd0be4ef54233a1c02081469d634f8",
                 fragments: &[
                     (
-                        0xe3e3b0,
-                        0xe3e40b,
-                        0x1169990,
+                        0xe3e430,
+                        0xe3e48b,
+                        0x11c7038,
                         "010c06000c340a000c32087007600650",
                     ),
                     (
-                        0xe3e40b,
-                        0xe3e456,
-                        0x123941c,
-                        "210a04000af4090005e40800b0e3e3000be4e30090991601",
+                        0xe3e48b,
+                        0xe3e4d6,
+                        0x123a3f0,
+                        "210a04000af4090005e4080030e4e3008be4e30038701c01",
                     ),
                     (
-                        0xe3e456,
-                        0xe3e46a,
-                        0x1239434,
-                        "21000000b0e3e3000be4e30090991601",
+                        0xe3e4d6,
+                        0xe3e4ea,
+                        0x123a408,
+                        "2100000030e4e3008be4e30038701c01",
                     ),
                 ],
             },
             Frame {
-                begin: 0xe42150,
-                end: 0xe42284,
-                sha: "7b9f9af7e7b0662b85930ed21d29f082c3bebb513c62392ea42f7cf2fcf0bd12",
+                begin: 0xe421d0,
+                end: 0xe42304,
+                sha: "858db66268a26bb553d9142b81b2308d86c3d9dd28c2b7a8b0b9845f97acdb05",
                 fragments: &[
                     (
-                        0xe42150,
-                        0xe42180,
-                        0x11d639c,
+                        0xe421d0,
+                        0xe42200,
+                        0x117f4ac,
                         "010f06000f6409000f5408000f320b70",
                     ),
                     (
-                        0xe42180,
-                        0xe42271,
-                        0x12396fc,
-                        "210e04000ee40700053406005021e4008021e4009c631d01",
+                        0xe42200,
+                        0xe422f1,
+                        0x123a6d0,
+                        "210e04000ee4070005340600d021e4000022e400acf41701",
                     ),
                     (
-                        0xe42271,
-                        0xe42284,
-                        0x1239714,
-                        "210000005021e4008021e4009c631d01",
+                        0xe422f1,
+                        0xe42304,
+                        0x123a6e8,
+                        "21000000d021e4000022e400acf41701",
                     ),
                 ],
             },
             Frame {
-                begin: 0xe3f200,
-                end: 0xe3f2b6,
+                begin: 0xe3f280,
+                end: 0xe3f336,
                 sha: "6db2982005e701b2e2914b537f2c9bbfbc777ec26ca18d60e7acd94c31fa0835",
                 fragments: &[(
-                    0xe3f200,
-                    0xe3f2b6,
-                    0x12393cc,
+                    0xe3f280,
+                    0xe3f336,
+                    0x123a3a0,
                     "011d0a001d640b001d540a001d3408001d3219f017e01570",
                 )],
             },
             Frame {
-                begin: 0xe3f2c0,
-                end: 0xe3f384,
+                begin: 0xe3f340,
+                end: 0xe3f404,
                 sha: "bda37c3c6d0fd0402a4a149f3dbb654459aeae3da1795896215687ba579756c6",
                 fragments: &[(
-                    0xe3f2c0,
-                    0xe3f384,
-                    0x1214f24,
+                    0xe3f340,
+                    0xe3f404,
+                    0x122c52c,
                     "01150800157408001564070015340600153211e0",
                 )],
             },
             Frame {
-                begin: 0x985ec0,
-                end: 0x985efc,
-                sha: "c02b7b89ab37615ddfc7ab3446a427eaf60d4de0b76aa866095c8fd554d69046",
-                fragments: &[(0x985ec0, 0x985efc, 0x11bf96c, "0106020006320230")],
+                begin: 0x9862e0,
+                end: 0x98631c,
+                sha: "13d6ae231959dd23022d636f57b0e0e0e09af6015863e528afc1a8d59ecc27a6",
+                fragments: &[(0x9862e0, 0x98631c, 0x11c0b10, "0106020006320230")],
             },
             Frame {
-                begin: 0x985370,
-                end: 0x98539b,
-                sha: "412baee90931a58f7a098973418f358dae749a3cb4f144c4143923fe76c08d94",
-                fragments: &[(0x985370, 0x98539b, 0x11bf96c, "0106020006320230")],
+                begin: 0x9857c0,
+                end: 0x9857eb,
+                sha: "4a5bd584432e8274c25ddc454b4c72acdca0434ba3bbb4d86fa665b18c21d7e6",
+                fragments: &[(0x9857c0, 0x9857eb, 0x11c0b10, "0106020006320230")],
             },
         ];
         const BLOCKS: &[(u32, &[u8])] = &[
             (
-                0xe3e456,
+                0xe3e4d6,
                 &[
                     0x48, 0x8b, 0xce, 0x48, 0x8b, 0x5c, 0x24, 0x50, 0x48, 0x83, 0xc4, 0x20, 0x5f,
-                    0x5e, 0x5d, 0xe9, 0xf6, 0xf8, 0xff, 0xff,
+                    0x5e, 0x5d, 0xe9, 0xc6, 0xf8, 0xff, 0xff,
                 ],
             ),
             (
-                0xe3e882,
+                0xe3e902,
                 &[
                     0x48, 0x8b, 0x17, 0x33, 0xc0, 0xf0, 0x48, 0x0f, 0xb1, 0x9a, 0x80, 0x01, 0x00,
                     0x00, 0x0f, 0x85, 0x40, 0x01, 0x00, 0x00,
                 ],
             ),
             (
-                0x985b7e,
+                0x985f9e,
                 &[
                     0x4c, 0x8b, 0xc0, 0x48, 0x85, 0xc0, 0x74, 0x14, 0xc6, 0x40, 0xf5, 0x01, 0x48,
-                    0x8d, 0x05, 0x37, 0x58, 0x6e, 0x00, 0x49, 0x89, 0x00, 0x49, 0x89, 0x78, 0x08,
+                    0x8d, 0x05, 0x67, 0x64, 0x6e, 0x00, 0x49, 0x89, 0x00, 0x49, 0x89, 0x78, 0x08,
                     0xeb, 0x03, 0x45, 0x33, 0xc0,
                 ],
             ),
             (
-                0x985b9d,
+                0x985fbd,
                 &[
                     0x0f, 0x28, 0x44, 0x24, 0x20, 0x8d, 0x55, 0xff, 0x48, 0x8b, 0x5c, 0x24, 0x48,
-                    0x48, 0x8d, 0x05, 0x1f, 0x37, 0x38, 0x02, 0x48, 0x8b, 0x6c, 0x24, 0x50, 0x49,
+                    0x48, 0x8d, 0x05, 0xff, 0x42, 0x38, 0x02, 0x48, 0x8b, 0x6c, 0x24, 0x50, 0x49,
                     0x8d, 0x48, 0xf8, 0x48, 0x89, 0x77, 0x10, 0x48, 0x8b, 0x74, 0x24, 0x58, 0x4c,
                     0x89, 0x47, 0x08, 0x0f, 0x11, 0x47, 0x18, 0x48, 0xc7, 0x01, 0x00, 0x00, 0x00,
                     0x00, 0x48, 0xc1, 0xe2, 0x05, 0x48, 0x03, 0xd0, 0x48, 0x8b, 0x42, 0x08, 0x4c,
@@ -1172,17 +1185,17 @@ mod worker_payload {
                 ],
             ),
             (
-                0x985bf0,
+                0x986010,
                 &[
                     0x40, 0x53, 0x48, 0x83, 0xec, 0x30, 0x45, 0x33, 0xdb, 0x8d, 0x59, 0xff, 0x48,
-                    0xc1, 0xe3, 0x05, 0x48, 0x8d, 0x05, 0xc9, 0x36, 0x38, 0x02, 0x48, 0x03, 0xd8,
+                    0xc1, 0xe3, 0x05, 0x48, 0x8d, 0x05, 0xa9, 0x42, 0x38, 0x02, 0x48, 0x03, 0xd8,
                     0x4c, 0x89, 0x5c, 0x24, 0x20, 0x4c, 0x8d, 0x44, 0x24, 0x20, 0x41, 0xb2, 0x01,
                     0x45, 0x8b, 0xcb, 0x4c, 0x89, 0x44, 0x24, 0x28, 0x4c, 0x39, 0x1b, 0x0f, 0x84,
                     0x00, 0x01, 0x00, 0x00,
                 ],
             ),
             (
-                0x985c30,
+                0x986050,
                 &[
                     0x48, 0x8b, 0x0b, 0x48, 0x8b, 0x41, 0xf8, 0x48, 0x8d, 0x51, 0xf8, 0x48, 0x89,
                     0x03, 0x48, 0x85, 0xc0, 0x75, 0x04, 0x48, 0x89, 0x5b, 0x08, 0x44, 0x39, 0x59,
@@ -1194,56 +1207,56 @@ mod worker_payload {
                 ],
             ),
             (
-                0x985c82,
+                0x9860a2,
                 &[
                     0x48, 0x8b, 0x7c, 0x24, 0x20, 0x48, 0x85, 0xff, 0x0f, 0x84, 0x93, 0x00, 0x00,
                     0x00, 0x45, 0x84, 0xd2, 0x75, 0x68,
                 ],
             ),
             (
-                0x985cb3,
+                0x9860d3,
                 &[
                     0x48, 0x8b, 0x46, 0x08, 0x48, 0x8b, 0x48, 0x10, 0x48, 0x8b, 0x79, 0x08, 0x80,
-                    0x7f, 0x20, 0x00, 0x75, 0x0c, 0x48, 0x8b, 0xcf, 0xe8, 0x33, 0x8a, 0x4b, 0x00,
+                    0x7f, 0x20, 0x00, 0x75, 0x0c, 0x48, 0x8b, 0xcf, 0xe8, 0x93, 0x86, 0x4b, 0x00,
                     0xc6, 0x47, 0x20, 0x01, 0x4c, 0x8d, 0x46, 0xf8, 0x48, 0x8b, 0xd6, 0x48, 0x8b,
-                    0xcf, 0xe8, 0x60, 0x8b, 0x4b, 0x00,
+                    0xcf, 0xe8, 0xc0, 0x87, 0x4b, 0x00,
                 ],
             ),
             (
-                0x985cfd,
+                0x98611d,
                 &[
                     0x49, 0x8b, 0x59, 0x08, 0x44, 0x38, 0x5b, 0x20, 0x75, 0x11, 0x48, 0x8b, 0xcb,
-                    0xe8, 0xf1, 0x89, 0x4b, 0x00, 0xc6, 0x43, 0x20, 0x01, 0x4c, 0x8b, 0x44, 0x24,
-                    0x28, 0x48, 0x8b, 0xd7, 0x48, 0x8b, 0xcb, 0xe8, 0x1d, 0x8b, 0x4b, 0x00,
+                    0xe8, 0x51, 0x86, 0x4b, 0x00, 0xc6, 0x43, 0x20, 0x01, 0x4c, 0x8b, 0x44, 0x24,
+                    0x28, 0x48, 0x8b, 0xd7, 0x48, 0x8b, 0xcb, 0xe8, 0x7d, 0x87, 0x4b, 0x00,
                 ],
             ),
             (
-                0xe3e840,
+                0xe3e8c0,
                 &[
                     0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x6c, 0x24, 0x18, 0x48, 0x89, 0x74,
                     0x24, 0x20, 0x57, 0x48, 0x81, 0xec, 0x90, 0x00, 0x00, 0x00, 0x48, 0x8b, 0xf9,
-                    0x49, 0x8b, 0xf0, 0x8b, 0x0d, 0x2d, 0xb9, 0x73, 0x02, 0x48, 0x8b, 0xea, 0xff,
-                    0x15, 0x64, 0x7f, 0x15, 0x00, 0x4c, 0x8b, 0x0f, 0x48, 0x8b, 0xd8, 0x4d, 0x8b,
+                    0x49, 0x8b, 0xf0, 0x8b, 0x0d, 0xad, 0xc8, 0x73, 0x02, 0x48, 0x8b, 0xea, 0xff,
+                    0x15, 0xe4, 0x8e, 0x15, 0x00, 0x4c, 0x8b, 0x0f, 0x48, 0x8b, 0xd8, 0x4d, 0x8b,
                     0x89, 0x80, 0x01, 0x00, 0x00, 0x4d, 0x85, 0xc9, 0x0f, 0x85, 0x54, 0x01, 0x00,
                     0x00,
                 ],
             ),
             (
-                0xe3e903,
+                0xe3e983,
                 &[
                     0x4c, 0x8b, 0xc6, 0x48, 0x8b, 0xd5, 0x48, 0x8b, 0xcb, 0xe8, 0x0f, 0x2a, 0x00,
                     0x00,
                 ],
             ),
             (
-                0xe3e9d6,
+                0xe3ea56,
                 &[
                     0x48, 0x8b, 0x0f, 0x48, 0x8d, 0x43, 0x68, 0x45, 0x33, 0xc9, 0x48, 0x89, 0x44,
                     0x24, 0x20, 0x4c, 0x8b, 0xc6, 0x48, 0x8b, 0xd5, 0xe8, 0xc0, 0xf9, 0xff, 0xff,
                 ],
             ),
             (
-                0xe41320,
+                0xe413a0,
                 &[
                     0x48, 0x8b, 0xc4, 0x4c, 0x89, 0x40, 0x18, 0x48, 0x81, 0xec, 0x08, 0x03, 0x00,
                     0x00, 0x48, 0x89, 0x58, 0x20, 0x48, 0x89, 0x78, 0xe8, 0x48, 0x8b, 0xfa, 0x4c,
@@ -1253,17 +1266,17 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe413f5,
+                0xe41475,
                 &[
                     0x48, 0x8b, 0x47, 0xf8, 0x48, 0x8b, 0xd7, 0x49, 0x8b, 0xcf, 0x48, 0x89, 0x84,
                     0x24, 0x18, 0x03, 0x00, 0x00, 0xe8, 0x44, 0x0d, 0x00, 0x00,
                 ],
             ),
             (
-                0xe3e3b0,
+                0xe3e430,
                 &[
                     0x48, 0x89, 0x5c, 0x24, 0x18, 0x55, 0x56, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48,
-                    0x8b, 0x05, 0x9d, 0x76, 0x45, 0x00, 0x49, 0x8b, 0xe8, 0x48, 0x8b, 0xda, 0x48,
+                    0x8b, 0x05, 0x1d, 0x86, 0x45, 0x00, 0x49, 0x8b, 0xe8, 0x48, 0x8b, 0xda, 0x48,
                     0x8b, 0xf1, 0x48, 0x85, 0xc0, 0x74, 0x09, 0x48, 0x81, 0xc1, 0x90, 0x00, 0x00,
                     0x00, 0xff, 0xd0, 0x48, 0x8d, 0x7b, 0xf8, 0xc6, 0x43, 0xf4, 0x02, 0x45, 0x33,
                     0xc0, 0x48, 0x8d, 0x8e, 0x90, 0x00, 0x00, 0x00, 0x48, 0x8b, 0xd3, 0x48, 0x3b,
@@ -1272,7 +1285,7 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe3e404,
+                0xe3e484,
                 &[
                     0x48, 0x8b, 0x3f, 0x80, 0x4b, 0xf5, 0x10, 0x4c, 0x89, 0x74, 0x24, 0x40, 0x4c,
                     0x89, 0x7c, 0x24, 0x48, 0x4c, 0x8b, 0x7c, 0x24, 0x60, 0x4d, 0x8b, 0xcf, 0xe8,
@@ -1284,7 +1297,7 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe3f20f,
+                0xe3f28f,
                 &[
                     0x48, 0x89, 0x54, 0x24, 0x10, 0x57, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xec,
                     0x20, 0x49, 0x63, 0xc0, 0x4d, 0x8b, 0xf1, 0x4c, 0x8b, 0xf9, 0x48, 0x8d, 0x2c,
@@ -1292,13 +1305,13 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe3f272,
+                0xe3f2f2,
                 &[
                     0x48, 0x8d, 0x54, 0x24, 0x48, 0x48, 0x8b, 0xcb, 0xe8, 0x41, 0x00, 0x00, 0x00,
                 ],
             ),
             (
-                0xe3f350,
+                0xe3f3d0,
                 &[
                     0x48, 0x8b, 0x43, 0x08, 0x83, 0xe7, 0x01, 0x48, 0x8b, 0x04, 0x30, 0x48, 0x8d,
                     0x0c, 0xf8, 0x48, 0x85, 0xc9, 0x74, 0x06, 0x49, 0x8b, 0x06, 0x48, 0x89, 0x01,
@@ -1306,7 +1319,7 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe42150,
+                0xe421d0,
                 &[
                     0x48, 0x89, 0x6c, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83,
                     0xec, 0x20, 0x0f, 0xb7, 0x6a, 0xf6, 0x48, 0x8b, 0xf2, 0xc6, 0x42, 0xf4, 0x02,
@@ -1315,7 +1328,7 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe4220d,
+                0xe4228d,
                 &[
                     0x0f, 0xb7, 0xc5, 0xf7, 0xd8, 0x48, 0x63, 0xc8, 0x48, 0x8b, 0xc6, 0x48, 0x83,
                     0xc8, 0x03, 0x48, 0xc1, 0xe1, 0x07, 0x48, 0x03, 0x4f, 0x20, 0x48, 0x89, 0x4b,
@@ -1323,28 +1336,28 @@ mod worker_payload {
                 ],
             ),
             (
-                0xe42242,
+                0xe422c2,
                 &[
                     0x48, 0x8b, 0x4b, 0x18, 0x48, 0x8d, 0x53, 0x10, 0x4c, 0x89, 0x32, 0x48, 0x8b,
                     0xc3, 0x4c, 0x8b, 0x74, 0x24, 0x38, 0x48, 0x87, 0x51, 0x08, 0x48, 0x89, 0x1a,
                 ],
             ),
             (
-                0x985ec0,
+                0x9862e0,
                 &[
                     0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0x41, 0x08, 0x48, 0x8b, 0xd9,
                     0x33, 0xc9, 0x48, 0x89, 0x48, 0x08, 0x48, 0x8b, 0x43, 0x08, 0x48, 0x89, 0x48,
-                    0x10, 0x48, 0x8d, 0x0d, 0x5e, 0x33, 0x38, 0x02, 0xe8, 0x59, 0x67, 0x00, 0x00,
+                    0x10, 0x48, 0x8d, 0x0d, 0x3e, 0x3f, 0x38, 0x02, 0xe8, 0x99, 0x67, 0x00, 0x00,
                     0x48, 0x8b, 0x4b, 0x08, 0x8b, 0xd0, 0x4c, 0x8b, 0x01, 0x41, 0xff, 0x50, 0x08,
                     0x33, 0xc0, 0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3,
                 ],
             ),
             (
-                0x985370,
+                0x9857c0,
                 &[
-                    0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d, 0x05, 0xe3, 0x5f, 0x6e, 0x00,
+                    0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d, 0x05, 0xe3, 0x6b, 0x6e, 0x00,
                     0x48, 0x8b, 0xd9, 0x48, 0x89, 0x01, 0xf6, 0xc2, 0x01, 0x74, 0x0a, 0xba, 0x10,
-                    0x00, 0x00, 0x00, 0xe8, 0x8e, 0x54, 0x7d, 0xff, 0x48, 0x8b, 0xc3, 0x48, 0x83,
+                    0x00, 0x00, 0x00, 0xe8, 0x2e, 0x47, 0x7d, 0xff, 0x48, 0x8b, 0xc3, 0x48, 0x83,
                     0xc4, 0x20, 0x5b, 0xc3,
                 ],
             ),
@@ -1427,19 +1440,19 @@ mod worker_payload {
         fn references(pe: &Pe<'_>) -> Result<Vec<Value>, String> {
             let mut out = Vec::new();
             for (r, op, target) in [
-                (0x985b79, 0xe8, 0xe3cca0),
-                (0x985cdb, 0xe8, 0xe3e840),
-                (0x985d1e, 0xe8, 0xe3e840),
-                (0xe3e90c, 0xe8, 0xe41320),
-                (0xe3e9eb, 0xe8, 0xe3e3b0),
-                (0xe4135c, 0xe8, 0xe42150),
-                (0xe41407, 0xe8, 0xe42150),
-                (0xe3e3fd, 0xe8, 0xe3f200),
-                (0xe3e41d, 0xe8, 0xe3f200),
-                (0xe3e442, 0xe8, 0xe3f200),
-                (0xe3f27a, 0xe8, 0xe3f2c0),
-                (0xe3e465, 0xe9, 0xe3dd60),
-                (0x98538d, 0xe8, 0x15a820),
+                (0x985f99, 0xe8, 0xe3ccf0),
+                (0x9860fb, 0xe8, 0xe3e8c0),
+                (0x98613e, 0xe8, 0xe3e8c0),
+                (0xe3e98c, 0xe8, 0xe413a0),
+                (0xe3ea6b, 0xe8, 0xe3e430),
+                (0xe413dc, 0xe8, 0xe421d0),
+                (0xe41487, 0xe8, 0xe421d0),
+                (0xe3e47d, 0xe8, 0xe3f280),
+                (0xe3e49d, 0xe8, 0xe3f280),
+                (0xe3e4c2, 0xe8, 0xe3f280),
+                (0xe3f2fa, 0xe8, 0xe3f340),
+                (0xe3e4e5, 0xe9, 0xe3ddb0),
+                (0x9857dd, 0xe8, 0x159f10),
             ] {
                 let actual = rel_target(r, pe.span(r, 5, true)?, op, 5, 1)?;
                 if actual != target {
@@ -1452,15 +1465,15 @@ mod worker_payload {
                 );
             }
             // Both branch operands must reach the same fallback entry.
-            for r in [0xe3e87c, 0xe3e890] {
+            for r in [0xe3e8fc, 0xe3e910] {
                 let b = pe.span(r, 6, true)?;
-                if b[..2] != [0x0f, 0x85] || rel_target(r, b, 0x0f, 6, 2)? != 0xe3e9d6 {
+                if b[..2] != [0x0f, 0x85] || rel_target(r, b, 0x0f, 6, 2)? != 0xe3ea56 {
                     return Err("pending fallback JNE operand differs".into());
                 }
-                out.push(json!({"rva":r,"kind":"conditional_JNE","computed_target_rva":0xe3e9d6}));
+                out.push(json!({"rva":r,"kind":"conditional_JNE","computed_target_rva":0xe3ea56}));
             }
             // Fixed preferred-image pointers are data, never indirect-call execution evidence.
-            for (slot, target) in [(0x106b3c8, 0x985370), (0x106b3d0, 0x985ec0)] {
+            for (slot, target) in [(0x106c418, 0x9857c0), (0x106c420, 0x9862e0)] {
                 let raw = u64_at(pe.span(slot, 8, false)?, 0)?;
                 if raw.checked_sub(pe.base) != Some(u64::from(target)) {
                     return Err("pending preferred-image table pointer differs".into());
@@ -1469,13 +1482,13 @@ mod worker_payload {
                 out.push(json!({"slot_rva":slot,"preferred_va":raw,"computed_target_rva":target,
                     "scope":"fixed disk pointer at preferred ImageBase; no DIR64 or executed target claim"}));
             }
-            let b = pe.span(0x985b8a, 7, true)?;
-            if b[..3] != [0x48, 0x8d, 0x05] || rel_target(0x985b8a, b, 0x48, 7, 3)? != 0x106b3c8 {
+            let b = pe.span(0x985faa, 7, true)?;
+            if b[..3] != [0x48, 0x8d, 0x05] || rel_target(0x985faa, b, 0x48, 7, 3)? != 0x106c418 {
                 return Err("pending T table RIP operand differs".into());
             }
-            pe.span(0x106b3c8, 16, false)?;
-            out.push(json!({"rva":0x985b8a,"kind":"rip_relative_table_address",
-                "computed_target_rva":0x106b3c8}));
+            pe.span(0x106c418, 16, false)?;
+            out.push(json!({"rva":0x985faa,"kind":"rip_relative_table_address",
+                "computed_target_rva":0x106c418}));
             Ok(out)
         }
         pub(super) fn inspect(pe: &Pe<'_>) -> Result<Value, String> {
@@ -1485,37 +1498,37 @@ mod worker_payload {
                 .collect::<Result<Vec<_>, _>>()?;
             let blocks = blocks(pe)?;
             let refs = references(pe)?;
-            Ok(json!({"schema":"todo880-pending-publication-static-v1",
+            Ok(json!({"schema":"todo880-pending-publication-static-v2",
                 "host_sha256":HOST_SHA,"frames":frames,"contiguous_blocks":blocks,"references":refs,
                 "input_handoff":{
-                    "construction":"985B7E R8=allocation RAX; nonzero branch writes T.vft=106B3C8 and T+8=original RDI P at985B94",
-                    "pending_link":"985BB6 RCX=T-8; 985BC3 [P+8]=T; 985BDD writes T to the prior list tail and985BE0 writes T-8 as new tail",
-                    "publication_general":"985CB3..985CE0 obtains arena receiver via [T+8]->+10->+8; RDX=T and R8=T-8 at call985CDB",
-                    "publication_same_receiver":"985CFD..985D23 loads receiver [R9+8]; RDX=RDI head T and R8=stack-held tail at985D1E",
+                    "construction":"985F9E R8=allocation RAX; nonzero branch writes T.vft=106C418 and T+8=original RDI P at985FB4",
+                    "pending_link":"985FD6 RCX=T-8; 985FE3 [P+8]=T; 985FFD writes T to the prior list tail and986000 writes T-8 as new tail",
+                    "publication_general":"9860D3..986100 obtains arena receiver via [T+8]->+10->+8; RDX=T and R8=T-8 at call9860FB",
+                    "publication_same_receiver":"98611D..986143 loads receiver [R9+8]; RDX=RDI head T and R8=stack-held tail at98613E",
                     "argument_lifetime_limit":"conditional on preceding calls returning normally and preserving Win64 nonvolatile registers and caller-owned stack slots; native pointer values only, no runtime identity/lifetime or cancellation inferred"
                 },
                 "branches":[
-                    {"caller":0xe3e90c,"callee":0xe41320,
-                     "arguments":"E3E840 saves entry RDX in RBP and R8 in RSI; E3E903..E3E911 restores R8=RSI,RDX=RBP,RCX=RBX",
-                     "transport":"E41336 RDI=RDX; compares RDX-8 with R8; single and linked-element paths pass RDX element to E42150",
-                     "saved_pointer":"E42150 saves RDX in RSI; normal zero/equal-word branch returns original RSI atE42276; alternate constructs [new+8]=RSI|3 atE42228",
-                     "publication_store":"E4136C single or E41506/E41543 multi-element copies E42150 results to pointer array; execution is not shown here"},
-                    {"caller":0xe3e9eb,"callee":0xe3e3b0,
-                     "arguments":"E3E9D6..E3E9F0 restores R8=RSI,RDX=RBP; RCX=[entry RCX],R9d=0,stack fifth argument=RBX+68",
-                     "transport":"E3E3C3 RBP=R8 tail; E3E3C6 RBX=RDX element; E3E3FD/E3E41D/E3E442 call E3F200 with current element in RDX",
-                     "saved_pointer":"E3F20F saves input RDX to home slot; E3F272 passes address of same slot to E3F2C0; E3F364..E3F367 stores its qword in selected pointer slot",
-                     "tail":"E3E465 direct tail to E3DD60; target execution body/receiver ownership not inferred"}
+                    {"caller":0xe3e98c,"callee":0xe413a0,
+                     "arguments":"E3E8C0 saves entry RDX in RBP and R8 in RSI; E3E983..E3E991 restores R8=RSI,RDX=RBP,RCX=RBX",
+                     "transport":"E413B6 RDI=RDX; compares RDX-8 with R8; single and linked-element paths pass RDX element to E421D0",
+                     "saved_pointer":"E421D0 saves RDX in RSI; normal zero/equal-word branch returns original RSI atE422F6; alternate constructs [new+8]=RSI|3 atE422A8",
+                     "publication_store":"E413EC single or E41586/E415C3 multi-element copies E421D0 results to pointer array; execution is not shown here"},
+                    {"caller":0xe3ea6b,"callee":0xe3e430,
+                     "arguments":"E3EA56..E3EA70 restores R8=RSI,RDX=RBP; RCX=[entry RCX],R9d=0,stack fifth argument=RBX+68",
+                     "transport":"E3E443 RBP=R8 tail; E3E446 RBX=RDX element; E3E47D/E3E49D/E3E4C2 call E3F280 with current element in RDX",
+                     "saved_pointer":"E3F28F saves input RDX to home slot; E3F2F2 passes address of same slot to E3F340; E3F3E4..E3F3E7 stores its qword in selected pointer slot",
+                     "tail":"E3E4E5 direct tail to E3DDB0; target execution body/receiver ownership not inferred"}
                 ],
                 "execute_and_destroy":{
-                    "table_rva":0x106b3c8,"execute_slot":8,"execute_target":0x985ec0,
-                    "execute_input":"RCX=T;985EC6 loads [T+8];985EE7 reloads it as RCX;985EF0 calls [[P]+8] with EDX from98C640; normal RET985EFB",
-                    "destroy_slot":0,"destroy_target":0x985370,
-                    "destroy_bytes":"985370 resets [RCX] vft; TEST DL,1 conditional path calls15A820 with EDX16 and RCX preserved; no load/dereference of T+8 in complete frame",
+                    "table_rva":0x106c418,"execute_slot":8,"execute_target":0x9862e0,
+                    "execute_input":"RCX=T;9862E6 loads [T+8];986307 reloads it as RCX;986310 calls [[P]+8] with EDX from98CAA0; normal RET98631B",
+                    "destroy_slot":0,"destroy_target":0x9857c0,
+                    "destroy_bytes":"9857C0 resets [RCX] vft; TEST DL,1 conditional path calls159F10 with EDX16 and RCX preserved; no load/dereference of T+8 in complete frame",
                     "scope":"disk table targets and callee bodies only; queue consumer-to-virtual-execute/destructor call edge not established"
                 },
                 "not_established_by_this_audit":[
                     "runtime T/P identity or lifetime through scheduler copies",
-                    "queue dequeue-to-985EC0 connection and typed/tagged pointer handling",
+                    "queue dequeue-to-9862E0 connection and typed/tagged pointer handling",
                     "unexecuted pending T cancellation, destructor invocation or P settlement",
                     "state byte or word meaning; zero/FreeList as Cancel or join",
                     "same-set Wait joining every pending/copied T",
@@ -1533,8 +1546,8 @@ mod worker_payload {
                     b[p..p + code.len()].copy_from_slice(code);
                 }
                 // One call just before the fixed contiguous allocation-result block.
-                b[0x985b79 - 0xc00..0x985b7e - 0xc00].copy_from_slice(&[0xe8, 0x22, 0x71, 0x4b, 0]);
-                for (slot, target) in [(0x106b3c8, 0x985370), (0x106b3d0, 0x985ec0)] {
+                b[0x985f99 - 0xc00..0x985f9e - 0xc00].copy_from_slice(&[0xe8, 0x52, 0x6d, 0x4b, 0]);
+                for (slot, target) in [(0x106c418, 0x9857c0), (0x106c420, 0x9862e0)] {
                     let p = slot - 0xc00;
                     b[p..p + 8].copy_from_slice(&(0x140000000u64 + target).to_le_bytes());
                 }
@@ -1563,7 +1576,7 @@ mod worker_payload {
                         },
                     ],
                     functions: vec![],
-                    relocations: [0x106b3c8, 0x106b3d0].into_iter().collect(),
+                    relocations: [0x106c418, 0x106c420].into_iter().collect(),
                 }
             }
             #[test]
@@ -1572,8 +1585,8 @@ mod worker_payload {
                 blocks(&pe(&b)).unwrap();
                 references(&pe(&b)).unwrap();
                 for r in [
-                    0x985cdb, 0x985d1e, 0xe3e90c, 0xe3e9eb, 0xe4135c, 0xe41407, 0xe3e3fd, 0xe3e41d,
-                    0xe3e442, 0xe3f27a,
+                    0x9860fb, 0x98613e, 0xe3e98c, 0xe3ea6b, 0xe413dc, 0xe41487, 0xe3e47d, 0xe3e49d,
+                    0xe3e4c2, 0xe3f2fa,
                 ] {
                     let p = r - 0xc00 + 1;
                     b[p] ^= 1;
@@ -1581,18 +1594,18 @@ mod worker_payload {
                     b[p] ^= 1;
                 }
                 for r in [
-                    0x985b94, 0x985cd5, 0xe3e85a, 0xe3e863, 0xe3e903, 0xe3e9e8, 0xe3e3c6, 0xe3f20f,
-                    0xe3f364, 0xe42228,
+                    0x985fb4, 0x9860f5, 0xe3e8da, 0xe3e8e3, 0xe3e983, 0xe3ea68, 0xe3e446, 0xe3f28f,
+                    0xe3f3e4, 0xe422a8,
                 ] {
                     let p = r - 0xc00;
                     b[p] ^= 1;
                     assert!(blocks(&pe(&b)).is_err(), "argument {r:x}");
                     b[p] ^= 1;
                 }
-                b[0xe3e890 - 0xc00 + 2] ^= 1;
+                b[0xe3e910 - 0xc00 + 2] ^= 1;
                 assert!(references(&pe(&b)).is_err());
-                b[0xe3e890 - 0xc00 + 2] ^= 1;
-                b[0x106b3d0 - 0xc00] ^= 1;
+                b[0xe3e910 - 0xc00 + 2] ^= 1;
+                b[0x106c420 - 0xc00] ^= 1;
                 assert!(references(&pe(&b)).is_err(), "wrong execute table target");
             }
             #[test]
@@ -1608,10 +1621,10 @@ mod worker_payload {
                 mapped.relocations.clear();
                 assert!(references(&mapped).is_ok());
                 assert!(
-                    mapped.pointer(0x106b3c8, 0x985370).is_err(),
+                    mapped.pointer(0x106c418, 0x9857c0).is_err(),
                     "DLL relocated-pointer validation remains strict"
                 );
-                assert!(references(&pe(&b[..0x106b3d4 - 0xc00])).is_err());
+                assert!(references(&pe(&b[..0x106c424 - 0xc00])).is_err());
                 assert!(rel_target(0, &[0xe8, 0xf0, 0xff, 0xff, 0xff], 0xe8, 5, 1).is_err());
                 assert!(rel_target(u32::MAX, &[0xe8, 0, 0, 0, 0], 0xe8, 5, 1).is_err());
             }
@@ -2059,7 +2072,7 @@ mod worker_payload {
                     "owner lifetime and its World epoch at construction","global manager identity with owner or its stored receiver",
                     "constructor/destruction ordering against pending or running proxy T",
                     "retain/copy/release/Cancel/reissue completion","safe birthticket transfer",
-                    "4A8530 whole executed frame and SEH completion","985BF0 never-executed task recovery",
+                    "4A8530 whole executed frame and SEH completion","986010 never-executed task recovery",
                     "all-domain Close/Rebuild authority"]}),
             )
         }
@@ -2775,9 +2788,7 @@ fn context_world_path(core: &[u8]) -> Result<Value, String> {
 pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
     let core_sha = format!("{:x}", Sha256::digest(core));
     let host_sha = format!("{:x}", Sha256::digest(host));
-    if core_sha != civ6_native_bridge_rs::PINNED_GAMECORE_SHA256 || host_sha != HOST_SHA {
-        return Err("not both pinned primary files; no ABI interpretation".into());
-    }
+    require_image_pair(&core_sha, &host_sha)?;
     shutdown_pre_wait(core)?;
     let core_calls = [
         (
@@ -2819,12 +2830,12 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
         witnesses.push(json!({"image":"GameCore", "rva":rva, "file_offset":rva-0xc00,"target":target,"purpose":purpose}));
     }
     for (rva, op, target) in [
-        (0x986030, 0xe9, 0x985550),
-        (0x986040, 0xe9, 0x985660),
-        (0x986050, 0xe9, 0x9857b0),
-        (0x986072, 0xe8, 0x985b20),
-        (0x986080, 0xe9, 0x985bf0),
-        (0x985e4b, 0xe8, 0xe3ea70),
+        (0x986450, 0xe9, 0x985970),
+        (0x986460, 0xe9, 0x985a80),
+        (0x986470, 0xe9, 0x985bd0),
+        (0x986492, 0xe8, 0x985f40),
+        (0x9864a0, 0xe9, 0x986010),
+        (0x98626b, 0xe8, 0xe3eaf0),
     ] {
         branch(host, rva, op, target)?;
         witnesses.push(
@@ -2862,17 +2873,17 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
         .get((0x7bbf0 - 0xc00)..(0x7bbf0 - 0xc00 + 14))
         .ok_or("release leaf range")?;
     let read_target = same_byte_target(0x7bbf0, leaf)?;
-    bytes(host, 0x985e50, &[0x48, 0xc7, 0x47, 8, 0, 0, 0, 0])?;
-    bytes(host, 0x985e12, &[0x48, 0x8b, 7, 0x48, 0x89, 0x47, 8])?;
+    bytes(host, 0x986270, &[0x48, 0xc7, 0x47, 8, 0, 0, 0, 0])?;
+    bytes(host, 0x986232, &[0x48, 0x8b, 7, 0x48, 0x89, 0x47, 8])?;
     Ok(json!({
-        "schema":"todo880-native-job-lifecycle-static-v6",
+        "schema":"todo880-native-job-lifecycle-static-v7", "image_revision":IMAGE_REVISION,
         "core_sha256":core_sha,"host_sha256":host_sha,"witnesses":witnesses,
         "manager":{"from_world_offset":0x250,"job_set_offset":0x400,"list_id_offset":0x410,"lifecycle_state_offset":0x38a8},
         "abi":{
             "push":{"rcx":"list ID (native host uses low32, IDs1..64)","rdx":"native job object", "r8":"manager+400 job-set address", "r9":"pointer to 16-byte metadata copy"},
             "wait":{"rcx":"same job-set address", "rdx":"pointer to 16-byte metadata copy", "result":"normal return, not RAX=true; host clears set+8 after native arena wait"}
         },
-        "receipt_candidates":{"wait_return_core":0x4a1196,"conditional_host_callback_merge_core":0x4a11b3,"free_list_return_core":0x4a120e,"host_wait_pointer_clear":0x985e50},
+        "receipt_candidates":{"wait_return_core":0x4a1196,"conditional_host_callback_merge_core":0x4a11b3,"free_list_return_core":0x4a120e,"host_wait_pointer_clear":0x986270},
         "file_offset_basis":"SHA-pinned images with independently verified text RVA1000/raw400; Core rdata RVA9B7000/raw9B5C00 virtual size1A8124 and preferred ImageBase180000000; not a general PE parser",
         "release_leaf":{"wrapper_rva":0x58ff70,"leaf_rva":0x7bbf0,"instruction_bytes":14,"same_byte_target_rva":read_target,"behavior":"non-atomic read then write of one RIP-relative byte; not world teardown","world_shutdown_link_evidence":"not established by this audit"},
         "byte_b61e00_consumer":byte_b61e00_consumer(core, read_target)?,
@@ -2909,6 +2920,27 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn versioned_image_pair_requires_both_exact_new_files() {
+        let old_core = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
+        let old_host = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
+        require_image_pair(CORE_SHA, HOST_SHA).unwrap();
+        for (core, host) in [
+            (old_core, old_host),
+            (old_core, HOST_SHA),
+            (CORE_SHA, old_host),
+            ("", HOST_SHA),
+            (CORE_SHA, ""),
+            (&CORE_SHA[..63], HOST_SHA),
+        ] {
+            assert!(require_image_pair(core, host).is_err());
+        }
+        let mut changed = CORE_SHA.to_owned();
+        changed.replace_range(0..1, "1");
+        assert!(require_image_pair(&changed, HOST_SHA).is_err());
+        assert!(require_image_pair(CORE_SHA, &HOST_SHA.to_ascii_uppercase()).is_err());
+    }
+
     #[test]
     fn no_offsets_are_interpreted_for_unpinned_inputs() {
         assert!(audit(&[], &[]).unwrap_err().contains("pinned"));
