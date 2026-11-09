@@ -7,13 +7,17 @@ use std::cell::RefCell;
 mod deferred;
 #[path = "native_sessions_fixed.rs"]
 mod fixed;
+#[path = "native_input.rs"]
+mod input;
 #[path = "native_sessions_ledger.rs"]
 mod ledger;
+#[path = "native_registry.rs"]
+mod registry;
 #[path = "native_transport.rs"]
 pub(super) mod transports;
 #[cfg(test)]
 use ledger::WorldReceipt;
-use ledger::{Error, Lease, Ledger, Message, Transport};
+use ledger::{Error, Lease, Ledger, Message, TerminalTarget, Transport};
 pub use ledger::{
     Error as SessionError, Lease as SessionLease, Message as SessionMessage,
     Transport as SessionTransport, WorldReceipt as SessionWorldReceipt,
@@ -49,7 +53,9 @@ impl NativeSessionApi {
         let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
         unsafe {
             verify_loaded(exe)?;
+            registry::prepare_host(exe)?;
             transports::prepare_host(exe)?;
+            input::prepare_host(exe)?;
             deferred::install(exe)?;
             install_at(exe)
         }
@@ -129,7 +135,9 @@ impl NativeSessionApi {
         CALLS.with(|s| s.borrow().iter().any(|s| s.kind == 72 || s.kind == 73))
     }
     pub fn drained(world: SessionWorldReceipt) -> Result<(), SessionError> {
-        if deferred::pending().map_err(|_| Error::Unresolved)? != 0 {
+        if deferred::pending().map_err(|_| Error::Unresolved)? != 0
+            || input::pending().map_err(|_| Error::Unresolved)? != 0
+        {
             return Err(Error::Busy);
         }
         state().drained(world)
@@ -141,10 +149,12 @@ impl NativeSessionApi {
     /// The caller must own the installed entries and ensure all native callers
     /// have exited before invoking restoration. Published relays stay resident.
     pub unsafe fn restore() -> Result<(), &'static str> {
+        let input = unsafe { input::restore() };
+        let registry = unsafe { registry::restore() };
         let transport = unsafe { transports::restore() };
         let queued = unsafe { deferred::restore() };
         let session = unsafe { restore() };
-        transport.and(queued).and(session)
+        input.and(registry).and(transport).and(queued).and(session)
     }
 }
 struct RegistryGuard;
@@ -203,7 +213,9 @@ pub(super) fn loaded_world(
     state().loaded_world(lease, previous, world)
 }
 pub(super) fn retire_world(world: SessionWorldReceipt) -> Result<(), SessionError> {
-    if deferred::pending().map_err(|_| Error::Unresolved)? != 0 {
+    if deferred::pending().map_err(|_| Error::Unresolved)? != 0
+        || input::pending().map_err(|_| Error::Unresolved)? != 0
+    {
         return Err(Error::Busy);
     }
     state().retire_world(world)
@@ -238,6 +250,35 @@ pub(super) fn transport_join_result(
 }
 pub(super) fn transport_disconnect_end(lease: SessionLease) -> Result<(), SessionError> {
     state().transport_disconnect_end(lease)
+}
+pub(super) fn terminal_remove_begin(
+    registry: u64,
+    lifetime: u64,
+    id: u32,
+    session: u64,
+) -> Result<Option<(SessionLease, Option<SessionTransport>)>, SessionError> {
+    state().terminal_remove_begin(registry, lifetime, id, session)
+}
+pub(super) fn terminal_registry_begin(
+    registry: u64,
+    lifetime: u64,
+) -> Result<Vec<TerminalTarget>, SessionError> {
+    state().terminal_registry_begin(registry, lifetime)
+}
+pub(super) fn terminal_remove_end(lease: SessionLease) -> Result<(), SessionError> {
+    state().terminal_remove_end(lease)
+}
+pub(super) fn terminal_registry_end(registry: u64, lifetime: u64) -> Result<(), SessionError> {
+    state().terminal_registry_end(registry, lifetime)
+}
+pub(super) fn reserve_input(
+    lease: SessionLease,
+    transport: SessionTransport,
+) -> Result<Option<SessionMessage>, SessionError> {
+    state().reserve_input(lease, transport)
+}
+pub(super) fn fork_input(message: SessionMessage) -> Result<SessionMessage, SessionError> {
+    state().fork_input(message)
 }
 fn unresolved(lease: Option<Lease>) {
     // An error can be reported while the failing ledger guard is still live.
@@ -403,7 +444,8 @@ extern "system" fn begin(raw: *mut Saved) {
                 // The real receive queue must retain the packet's original
                 // receipt before this callback. A registry/callback match
                 // proves the Session incarnation, never the input's World.
-                let message = INPUT.with(|s| s.borrow().last().copied());
+                let message = input::incoming(raw)
+                    .unwrap_or_else(|| INPUT.with(|s| s.borrow().last().copied()));
                 if let Some(message) = message {
                     let id = read32(raw.gpr[0] + 8).unwrap_or_else(|_| fault());
                     let lease = state()
@@ -430,9 +472,12 @@ extern "system" fn begin(raw: *mut Saved) {
                 if let Some(lifetime) = REGISTRIES
                     .lock()
                     .unwrap_or_else(|_| fault())
-                    .remove(&c.registry)
+                    .get(&c.registry)
+                    .copied()
                 {
                     c.owner = lifetime;
+                    c.thread =
+                        registry::destroy_begin(c.registry, lifetime).unwrap_or_else(|_| fault());
                 }
             }
             73 => {
@@ -506,6 +551,15 @@ extern "system" fn begin(raw: *mut Saved) {
                             .find(|c| c.kind == 74)
                             .is_some_and(|c| c.native_transport)
                     });
+                } else if let Some((lease, transport)) = registry::join_candidate(raw.gpr[0]) {
+                    if raw.gpr[1] as u32 != u32::MAX || raw.gpr[0] != transport.thread {
+                        fault();
+                    }
+                    snapshot_transport(lease).unwrap_or_else(|_| fault());
+                    c.lease = Some(lease);
+                    c.transport = Some(transport);
+                    c.thread = raw.gpr[0];
+                    c.registry = 1;
                 }
             }
             71 | 75 => {}
@@ -539,6 +593,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         if c.kind == 74 && c.native_transport {
             let _ = transports::disconnect_end(c.lease.unwrap(), c.transport.unwrap(), true);
         }
+        if c.kind == 77 && c.thread != 0 {
+            let _ = registry::destroy_end(c.thread, true);
+        }
     } else if c.kind == 76 {
         if raw.gpr[4] != c.registry
             || read64(c.registry).ok() != Some(EXE.load(Ordering::Acquire) + 0x1040200)
@@ -547,6 +604,16 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         }
         let mut regs = REGISTRIES.lock().unwrap_or_else(|_| fault());
         if regs.insert(c.registry, c.serial).is_some() {
+            fault();
+        }
+    } else if c.kind == 77 && c.thread != 0 {
+        registry::destroy_end(c.thread, false).unwrap_or_else(|_| fault());
+        if REGISTRIES
+            .lock()
+            .unwrap_or_else(|_| fault())
+            .remove(&c.registry)
+            != Some(c.owner)
+        {
             fault();
         }
     } else if let Some(lease) = c.lease {
@@ -576,6 +643,12 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 transports::disconnect_end(lease, c.transport.unwrap_or_else(|| fault()), false)
             }
             74 => state().closed(lease),
+            75 if c.registry == 1 => registry::join_returned(
+                lease,
+                c.transport.unwrap_or_else(|| fault()),
+                c.thread,
+                raw.gpr[4] as u8,
+            ),
             75 if c.native_transport => transports::join_returned(
                 lease,
                 c.transport.unwrap_or_else(|| fault()),

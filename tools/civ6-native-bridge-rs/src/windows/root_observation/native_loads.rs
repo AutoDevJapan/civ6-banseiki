@@ -287,7 +287,18 @@ pub(super) fn job_finish(raw: &mut Saved, exceptional: bool) {
     match c.kind {
         23 => {
             let task = raw.gpr[4];
-            if task == 0 || s.tasks_by_address.contains_key(&task) {
+            // Host985904 explicitly branches around T publication on NULL.
+            // Cancel this reservation and let that native fallback run.
+            if task == 0 {
+                s.ledger
+                    .allocation_failed(invocation)
+                    .unwrap_or_else(|_| fault());
+                if s.groups.remove(&invocation.0) != Some(c.group) {
+                    fault();
+                }
+                return;
+            }
+            if s.tasks_by_address.contains_key(&task) {
                 fault();
             }
             let id = serial();

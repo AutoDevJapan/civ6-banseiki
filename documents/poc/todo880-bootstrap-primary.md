@@ -25,6 +25,10 @@ Host準備時に、registryとnative sessionの出生、受信・遅延キュー
 
 View初期化 `82E50` が `986150` で発行するHost jobは、既存allocatorの正常return `985904`でTが共有される前に要求へ結ぶ。元T executeから `82DA0`へ保存済みの要求を渡し、その完全な呼出しが終わり、元destructorが正常復帰するまで予約を保持する。World factoryの正常returnは、この要求と元requestの成功がそろった場合だけnative sessionのWorld関係へ反映する。旧Worldに追跡中packetがあれば退役と次Worldへの関係変更を拒否し、発行済みpacketのWorldを現在値から作り直さない。
 
+このHost allocatorがNULLを返した場合は、元の正常な分岐へ戻し、未公開タスクの予約を取り消す。タスクやWorldの資格は発行しない。起動前のHost準備が途中失敗した場合は、先に公開したフックをすべて復元し、復元できない所有記録とrelayを保持する。既に成功した準備への重複要求は、前のフックを取り外さず拒否する。
+
+native transportは元factory、network、threadの出生を公開前から別々に保持する。入力は元poll `C66350`の前にtransport出生時のWorld関係を保存し、`856E80`でのevent構築、元の複製・拡張・解放を通じてその識別を引き継ぐ。出生時にWorldが不明なtransportを、後のpoll時のWorldから補完しない。registryからの正式削除は、元のdestructor、thread待機、ノード解放の全returnまでSessionを終了扱いにしない。これらはOSの受信済みqueueやremote送信元の世代切替を証明するものではない。
+
 遅延受信は、既にadmitされたmessageの保存内容を再serializeする `847510`→move `527440`と、pump `83D570`→decode `7F9C30`→元storage freeの正常return→元session dispatchを区別する。slotの再利用、map growth、未実行取消、storage free中の例外でも元packetの識別を保持する。合成経路では共有session gatewayも経由してこの対応を確認している。これは最初のOS受信queue全体の出生や停止を証明するものではない。
 
 全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。現在は未確立の全域被覆を理由にRebuildを拒否し、同process再読込を新候補の合格としていない。

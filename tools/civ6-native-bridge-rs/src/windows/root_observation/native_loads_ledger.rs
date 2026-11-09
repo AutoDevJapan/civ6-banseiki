@@ -340,6 +340,20 @@ impl Ledger {
         v.reservations = 0;
         Ok(())
     }
+    pub fn allocation_failed(&mut self, invocation: Invocation) -> Result<(), Error> {
+        let v = self.views.get_mut(&invocation.0).ok_or(Error::Unknown)?;
+        if self.current.get(&v.pointer) != Some(&invocation)
+            || v.reservations != 1
+            || v.workers != 0
+            || v.world.is_some()
+        {
+            return Err(Error::Busy);
+        }
+        v.reservations = 0;
+        v.started = false;
+        v.joined = false;
+        Ok(())
+    }
     pub fn worker_returned(&mut self, invocation: Invocation) -> Result<(), Error> {
         let v = self.views.get_mut(&invocation.0).ok_or(Error::Unknown)?;
         if v.workers != 1 {

@@ -298,6 +298,14 @@ pub(super) fn fixture_early_load_execute(continuation: usize) -> usize {
 pub(super) fn fixture_activate_core(core: u64) {
     CORE.store(core, Ordering::Release);
 }
+#[cfg(test)]
+pub(super) unsafe fn fixture_host_install(exe: usize) -> Result<(), &'static str> {
+    unsafe { install_at(exe) }
+}
+#[cfg(test)]
+pub(super) fn fixture_host_sites() -> [(usize, [u8; 8], usize); 4] {
+    SITES
+}
 unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
     let callbacks = [
         native_job_push_gateway as *const () as usize,
@@ -667,16 +675,26 @@ mod tests {
     }
 
     global_asm!(
-        ".p2align 4", ".globl native_jobs_fixture_null_native_tail",
-        ".seh_proc native_jobs_fixture_null_native_tail", "native_jobs_fixture_null_native_tail:",
+        ".p2align 4",
+        ".globl native_jobs_fixture_null_native_tail",
+        ".seh_proc native_jobs_fixture_null_native_tail",
+        "native_jobs_fixture_null_native_tail:",
         ".seh_endprologue",
         // Exact pinned caller985F9E..985FC5. The remainder only supplies the
         // still reached985FD6/985FEB null-derived store, with no game data.
         ".byte 0x4c,0x8b,0xc0,0x48,0x85,0xc0,0x74,0x14,0xc6,0x40,0xf5,0x01,0x48,0x8d,0x05,0x67,0x64,0x6e,0x00,0x49,0x89,0x00,0x49,0x89,0x78,0x08,0xeb,0x03,0x45,0x33,0xc0",
-        "lea rcx,[r8-8]", "mov qword ptr [rcx],0", "ret", ".seh_endproc",
-        ".p2align 4", ".globl native_jobs_fixture_null_native_entry",
-        ".seh_proc native_jobs_fixture_null_native_entry", "native_jobs_fixture_null_native_entry:",
-        ".seh_endprologue", "xor eax,eax", "jmp native_jobs_fixture_null_native_tail", ".seh_endproc",
+        "lea rcx,[r8-8]",
+        "mov qword ptr [rcx],0",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_jobs_fixture_null_native_entry",
+        ".seh_proc native_jobs_fixture_null_native_entry",
+        "native_jobs_fixture_null_native_entry:",
+        ".seh_endprologue",
+        "xor eax,eax",
+        "jmp native_jobs_fixture_null_native_tail",
+        ".seh_endproc",
     );
     unsafe extern "system" {
         fn native_jobs_fixture_null_native_entry();

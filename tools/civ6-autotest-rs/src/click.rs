@@ -1,5 +1,5 @@
 //! Civ VI input is sent only after a unique process and window are verified.
-use crate::{time::monotonic, Error, Result};
+use crate::{Error, Result, time::monotonic};
 use std::{collections::BTreeSet, time::Duration};
 
 pub const VK_ESCAPE: u16 = 0x1b;
@@ -512,6 +512,7 @@ mod win {
         }
         Ok(found)
     }
+    #[cfg(test)]
     fn process_ids_from_snapshot(
         candidates: Vec<(u32, String)>,
         names: &BTreeSet<String>,
@@ -522,9 +523,39 @@ mod win {
             .collect();
         select_candidates(&rows, names)
     }
+    /// Only observation is retried. Access denial is never evidence of exit;
+    /// a subsequent complete snapshot and HANDLE inspection must establish
+    /// the new candidate set before any input or lifecycle action is allowed.
+    fn verify_fresh_snapshots(
+        names: &BTreeSet<String>,
+        mut observe: impl FnMut() -> Result<Vec<ProcessCandidate>>,
+    ) -> Result<BTreeSet<u32>> {
+        let mut last = None;
+        for attempt in 0..3 {
+            let rows = observe()?;
+            match select_candidates(&rows, names) {
+                Ok(ids) => return Ok(ids),
+                Err(error) => {
+                    if attempt == 0 {
+                        eprintln!(
+                            "Transient candidate inspection; refreshing read-only snapshot: {}",
+                            error.message
+                        );
+                    }
+                    last = Some(error);
+                }
+            }
+        }
+        Err(last.unwrap())
+    }
     impl InputBackend for WindowsBackend {
         fn process_ids(&mut self, names: &BTreeSet<String>) -> Result<BTreeSet<u32>> {
-            process_ids_from_snapshot(snapshot_candidates(names)?, names)
+            verify_fresh_snapshots(names, || {
+                Ok(snapshot_candidates(names)?
+                    .into_iter()
+                    .map(|(pid, name)| inspect_candidate(pid, name))
+                    .collect())
+            })
         }
         fn windows(&mut self) -> Result<Vec<(isize, String)>> {
             let mut out = Vec::new();
@@ -700,12 +731,16 @@ mod win {
                 .unwrap()
                 .iter()
                 .any(|(id, _)| *id == pid);
-            eprintln!("snapshot_exit_observation pid={pid} exit_code=259 retained_handle=true fresh_snapshot_contains_pid={listed_after_exit}");
+            eprintln!(
+                "snapshot_exit_observation pid={pid} exit_code=259 retained_handle=true fresh_snapshot_contains_pid={listed_after_exit}"
+            );
             // The frozen snapshot definitely contains the child. Its strong
             // Child handle remains open, and exit 259 is not STILL_ACTIVE.
-            assert!(process_ids_from_snapshot(candidates, &names)
-                .unwrap()
-                .is_empty());
+            assert!(
+                process_ids_from_snapshot(candidates, &names)
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         #[test]
@@ -716,9 +751,11 @@ mod win {
             let candidates = owned_snapshot(pid, &names);
             child.finish();
             drop(child);
-            assert!(process_ids_from_snapshot(candidates, &names)
-                .unwrap()
-                .is_empty());
+            assert!(
+                process_ids_from_snapshot(candidates, &names)
+                    .unwrap()
+                    .is_empty()
+            );
         }
 
         fn live_candidate(pid: u32) -> ProcessCandidate {
@@ -798,6 +835,44 @@ mod win {
                 select_candidates(&[live_candidate(11), exited], &names).unwrap(),
                 BTreeSet::from([11])
             );
+        }
+        #[test]
+        fn transient_denial_requires_a_fresh_verified_snapshot_and_persistent_unknown_still_fails()
+        {
+            let names = BTreeSet::from(["cmd.exe".to_string()]);
+            let mut denied = live_candidate(12);
+            denied.exited = None;
+            denied.created_filetime = None;
+            denied.inspection_error = Some("OpenProcess os_error=Some(5)".into());
+            let mut observations = 0;
+            let ids = verify_fresh_snapshots(&names, || {
+                observations += 1;
+                Ok(if observations == 1 {
+                    vec![live_candidate(11), denied.clone()]
+                } else {
+                    vec![live_candidate(11)]
+                })
+            })
+            .unwrap();
+            assert_eq!(observations, 2);
+            assert_eq!(ids, BTreeSet::from([11]));
+            let mut attempts = 0;
+            assert!(
+                verify_fresh_snapshots(&names, || {
+                    attempts += 1;
+                    Ok(vec![live_candidate(11), denied.clone()])
+                })
+                .is_err()
+            );
+            assert_eq!(attempts, 3);
+            let mut attempts = 0;
+            let two = verify_fresh_snapshots(&names, || {
+                attempts += 1;
+                Ok(vec![live_candidate(11), live_candidate(12)])
+            })
+            .unwrap();
+            assert_eq!(two, BTreeSet::from([11, 12]));
+            assert_eq!(attempts, 1, "real duplicate is not replayed or ignored");
         }
     }
 }

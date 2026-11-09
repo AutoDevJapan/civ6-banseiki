@@ -7,7 +7,7 @@
 //! neither count certifies pending publication or all native dispatch domains.
 use super::*;
 use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
+    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW,
 };
 
 pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0002;
@@ -293,11 +293,7 @@ fn transition(fence: Fence, update: Update) -> bool {
                     && state_phase(state) == 1
                     && composite::copy_catalog(fence.owner, fence.binding, begin, fence.ticket)
                         .is_some();
-                if valid {
-                    (begin, 2)
-                } else {
-                    (0, 0)
-                }
+                if valid { (begin, 2) } else { (0, 0) }
             }
         };
         // Catalog copying is bounded and uses no saved pointer. CAS below
@@ -595,12 +591,29 @@ pub extern "system" fn BridgeRuntimePrepareHost(input: *mut c_void) -> u32 {
     if owned() {
         return BridgeStatus::HookFailure as u32;
     }
-    match std::panic::catch_unwind(|| unsafe {
+    guard_host_prepare(|| unsafe {
         root_observation::native_frames::prepare_host(GetModuleHandleW(null_mut()) as usize)
-    }) {
+    })
+}
+
+// The install lock remains held across both preparation and rollback. Early
+// Host hooks can already be published even though Core installation has not
+// set OWNED. Restore every owner; a failed compare retains its relay/record.
+fn guard_host_prepare(
+    prepare: impl FnOnce() -> Result<(), &'static str> + std::panic::UnwindSafe,
+) -> u32 {
+    if root_observation::native_frames::host_prepared() {
+        // A repeated request does not own the earlier successful transaction.
+        return BridgeStatus::HookFailure as u32;
+    }
+    match std::panic::catch_unwind(prepare) {
         Ok(Ok(())) => BridgeStatus::Ok as u32,
         _ => {
             product_deactivate();
+            let _restored =
+                std::panic::catch_unwind(|| unsafe { root_observation::native_frames::restore() });
+            // Preparation still failed. No rollback result may grant policy
+            // authority, and unrecovered owners remain available to cleanup.
             BridgeStatus::Critical as u32
         }
     }
@@ -1043,6 +1056,134 @@ mod tests {
         assert_eq!(unsafe { ptr::read(failed.cast::<[u8; 8]>()) }, original);
         assert_ne!(unsafe { VirtualFree(failed.cast(), 0, MEM_RELEASE) }, 0);
         assert_ne!(unsafe { VirtualFree(restored.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn partial_host_prepare_failure_restores_published_entries_and_allows_retry() {
+        const ENV: &str = "CIV6_RUNTIME_PARTIAL_HOST_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            use std::os::windows::process::CommandExt;
+            let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(ENV, "1")
+                .args(["--exact", "windows::runtime::tests::partial_host_prepare_failure_restores_published_entries_and_allows_retry", "--nocapture"])
+                .spawn().unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    assert!(status.success());
+                    return;
+                }
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    panic!("Host preparation child timeout");
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+        use root_observation::native_frames as native;
+        let sites = native::fixture_host_job_sites();
+        let size = 0xe40000;
+        let base =
+            unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
+                as usize;
+        assert_ne!(base, 0);
+        for (rva, bytes, _) in sites {
+            unsafe {
+                ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, 8);
+            }
+        }
+        let bad = (base + sites[3].0) as *mut u8;
+        unsafe {
+            *bad = 0xcc;
+        }
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        let _lock = INSTALL_LOCK.lock().unwrap();
+        let published = std::cell::Cell::new(None);
+        assert_eq!(
+            guard_host_prepare(std::panic::AssertUnwindSafe(|| {
+                let result = unsafe { native::fixture_host_jobs(base) };
+                published.set(Some((
+                    result,
+                    sites
+                        .iter()
+                        .take(3)
+                        .all(|(rva, _, _)| (unsafe { *((base + rva) as *const u8) }) == 0xe9),
+                )));
+                result
+            })),
+            BridgeStatus::Critical as u32
+        );
+        assert!(
+            matches!(published.get(), Some((Err(_), true))),
+            "partial publication was not observed"
+        );
+        for (rva, bytes, _) in sites.iter().take(3) {
+            assert_eq!(unsafe { ptr::read((base + rva) as *const [u8; 8]) }, *bytes);
+        }
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert_ne!(
+            unsafe { VirtualProtect(bad.cast(), 8, PAGE_READWRITE, &mut old) },
+            0
+        );
+        unsafe {
+            ptr::copy_nonoverlapping(sites[3].1.as_ptr(), bad, 8);
+        }
+        assert_ne!(unsafe { VirtualProtect(bad.cast(), 8, old, &mut old) }, 0);
+        assert_eq!(
+            guard_host_prepare(|| unsafe { native::fixture_host_jobs(base) }),
+            BridgeStatus::Ok as u32
+        );
+        unsafe { native::restore() }.unwrap();
+        for (rva, bytes, _) in sites {
+            assert_eq!(unsafe { ptr::read((base + rva) as *const [u8; 8]) }, bytes);
+        }
+        let retained = (base + sites[0].0) as *mut u8;
+        let panic_reached = AtomicBool::new(false);
+        assert_eq!(
+            guard_host_prepare(std::panic::AssertUnwindSafe(|| {
+                unsafe { native::fixture_host_jobs(base) }?;
+                unsafe {
+                    VirtualProtect(retained.cast(), 8, PAGE_READWRITE, &mut old);
+                    ptr::write(retained.cast::<[u8; 8]>(), [0xcc; 8]);
+                    VirtualProtect(retained.cast(), 8, old, &mut old);
+                }
+                panic_reached.store(true, Ordering::Release);
+                panic!("owned Host preparation panic")
+            })),
+            BridgeStatus::Critical as u32
+        );
+        assert!(panic_reached.load(Ordering::Acquire));
+        assert_eq!(unsafe { ptr::read(retained.cast::<[u8; 8]>()) }, [0xcc; 8]);
+        for (rva, bytes, _) in sites.iter().skip(1) {
+            assert_eq!(unsafe { ptr::read((base + rva) as *const [u8; 8]) }, *bytes);
+        }
+        assert_eq!(
+            guard_host_prepare(|| unsafe { native::fixture_host_jobs(base) }),
+            BridgeStatus::Critical as u32
+        );
+        assert_ne!(
+            unsafe { VirtualProtect(retained.cast(), 8, PAGE_READWRITE, &mut old) },
+            0
+        );
+        unsafe {
+            ptr::copy_nonoverlapping(sites[0].1.as_ptr(), retained, 8);
+        }
+        assert_ne!(
+            unsafe { VirtualProtect(retained.cast(), 8, old, &mut old) },
+            0
+        );
+        unsafe { native::restore() }.unwrap();
+        assert_eq!(
+            guard_host_prepare(|| unsafe { native::fixture_host_jobs(base) }),
+            BridgeStatus::Ok as u32
+        );
+        unsafe { native::restore() }.unwrap();
+        assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
     }
 
     #[test]

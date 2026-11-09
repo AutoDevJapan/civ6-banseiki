@@ -14,6 +14,7 @@ struct OwnedHook {
 }
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 static FAILED: AtomicBool = AtomicBool::new(false);
+static HOST_PREPARED: AtomicBool = AtomicBool::new(false);
 #[path = "native_consumers.rs"]
 mod consumers;
 #[path = "native_control.rs"]
@@ -488,8 +489,13 @@ pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static s
         sessions::NativeSessionApi::prepare_host(exe)?;
         loads::prepare_host(exe)?;
         jobs::prepare_host(exe)?;
-        consumers::prepare_host(exe)
+        consumers::prepare_host(exe)?;
     }
+    HOST_PREPARED.store(true, Ordering::Release);
+    Ok(())
+}
+pub(in super::super) fn host_prepared() -> bool {
+    HOST_PREPARED.load(Ordering::Acquire)
 }
 pub(in super::super) fn bind_host(core: usize) -> bool {
     sessions::NativeSessionApi::bind_core(
@@ -534,6 +540,14 @@ pub(super) fn fixture(index: usize, continuation: usize) -> usize {
 pub(super) fn counts() -> [u64; 5] {
     std::array::from_fn(|i| TRACE.0[i + 2].load(Ordering::Acquire))
 }
+#[cfg(test)]
+pub(in super::super) unsafe fn fixture_host_jobs(exe: usize) -> Result<(), &'static str> {
+    unsafe { jobs::fixture_host_install(exe) }
+}
+#[cfg(test)]
+pub(in super::super) fn fixture_host_job_sites() -> [(usize, [u8; 8], usize); 4] {
+    jobs::fixture_host_sites()
+}
 
 /// Restore every owned entry, retaining each relay for already fetched jumps.
 /// Failed compares retain responsibility and do not prevent later restores.
@@ -572,6 +586,7 @@ pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
     if failed {
         Err("critical: native frame restoration unverified")
     } else {
+        HOST_PREPARED.store(false, Ordering::Release);
         Ok(())
     }
 }

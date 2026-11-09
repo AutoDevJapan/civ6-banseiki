@@ -127,6 +127,9 @@ extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
+        if raw.invocation.kind == 84 {
+            super::input::free_begin(raw);
+        }
         let mut c = QueueCall {
             serial: serial(),
             kind: raw.invocation.kind,
@@ -316,6 +319,9 @@ fn verify_growth(queue: u64, addresses: &[u64]) -> Result<(), Error> {
     }
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if raw.invocation.kind == 84 {
+        super::input::free_end(raw, exceptional);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

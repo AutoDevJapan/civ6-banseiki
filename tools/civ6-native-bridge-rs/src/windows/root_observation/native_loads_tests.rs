@@ -1,7 +1,7 @@
 use super::*;
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
+    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
 };
 static FLOW: AtomicBool = AtomicBool::new(false);
 static FLOW_QUEUE: AtomicU64 = AtomicU64::new(0);
@@ -408,6 +408,66 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
     assert!(!FAILED.load(Ordering::Acquire));
     assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
 }
+#[test]
+fn host_allocator_null_releases_reservation_without_task_birth_or_world_authority() {
+    if !child("host_allocator_null_releases_reservation_without_task_birth_or_world_authority") {
+        return;
+    }
+    EXE.store(0x140000000, Ordering::Release);
+    let mut view = vec![0u64; 0x2e0 / 8];
+    let pointer = view.as_mut_ptr() as u64;
+    view[0x280 / 8] = 0x9500;
+    let invocation = {
+        let mut s = state();
+        let request = s.ledger.enter().unwrap();
+        s.ledger.fixture_copied(request, 0x9000).unwrap();
+        s.ledger.issued(request, 0x9100, 0x9200).unwrap();
+        s.ledger.returned(request, true).unwrap();
+        s.ledger.consuming(0x9100, 0x9200).unwrap();
+        s.ledger.selected(request, 0x9100, 0x9300, pointer).unwrap();
+        s.ledger.consumed(request, 0x9100).unwrap();
+        s.ledger
+            .initialize(0x9300, pointer, 0x9000)
+            .unwrap()
+            .unwrap()
+    };
+    CALLS.with(|s| {
+        s.borrow_mut().push(Call {
+            serial: 1,
+            kind: 89,
+            source: None,
+            request: None,
+            invocation: Some(invocation),
+            pointer,
+            descriptor: 0,
+            engine: 0,
+            allocation: None,
+            joined: false,
+        })
+    });
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 23;
+    raw.invocation.caller = exe(0x985904);
+    raw.invocation.caller_rsp = 0x88000;
+    job_begin(&mut raw);
+    assert_eq!(state().groups.get(&invocation.0), Some(&0x9500));
+    raw.gpr[4] = 0;
+    job_finish(&mut raw, false);
+    CALLS.with(|s| {
+        s.borrow_mut().pop().unwrap();
+    });
+    let mut s = state();
+    assert!(s.tasks.is_empty());
+    assert!(s.tasks_by_address.is_empty());
+    assert!(s.worlds.is_empty());
+    assert!(!s.groups.contains_key(&invocation.0));
+    assert!(JOB_CALLS.with(|s| s.borrow().is_empty()));
+    assert!(!FAILED.load(Ordering::Acquire));
+    // A later actual allocation can reserve this invocation. The failed
+    // attempt has neither retained a worker nor manufactured a joined task.
+    s.ledger.reserve_worker(invocation).unwrap();
+}
+
 #[test]
 fn all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore() {
     if !child("all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore") {

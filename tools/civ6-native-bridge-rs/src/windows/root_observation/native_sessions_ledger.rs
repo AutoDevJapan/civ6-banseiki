@@ -54,6 +54,7 @@ pub struct Transport {
     pub network: u64,
     pub thread: u64,
 }
+pub type TerminalTarget = (Lease, u32, u64, Option<Transport>);
 struct Packet {
     lease: Lease,
     transport: u64,
@@ -70,6 +71,7 @@ pub(super) struct Ledger {
     packets: HashMap<u64, Packet>,
     retired_worlds: HashSet<(u64, u64)>,
     transport_ids: HashSet<u64>,
+    input_worlds: HashMap<u64, Option<WorldReceipt>>,
     unresolved: bool,
 }
 impl Ledger {
@@ -216,6 +218,101 @@ impl Ledger {
         }
         Ok(Some(lease))
     }
+    pub fn terminal_remove_begin(
+        &mut self,
+        registry: u64,
+        lifetime: u64,
+        id: u32,
+        session: u64,
+    ) -> Result<Option<(Lease, Option<Transport>)>, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let Some(lease) = self.keys.get(&(registry, id)).copied() else {
+            return Ok(None);
+        };
+        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if r.registry_lifetime != Some(lifetime) || r.session != session || r.native_id != Some(id)
+        {
+            return Ok(None);
+        }
+        if r.phase != Phase::Open
+            || r.active != 0
+            || self.packets.values().any(|p| p.lease == lease)
+        {
+            return Err(Error::Busy);
+        }
+        let r = self.records.get_mut(&lease.0).unwrap();
+        r.phase = Phase::Closing;
+        let transport = if r.transport_closed {
+            None
+        } else {
+            r.transport
+        };
+        r.transport_closing = transport.is_some();
+        r.transport_joined = false;
+        Ok(Some((lease, transport)))
+    }
+    pub fn terminal_registry_begin(
+        &mut self,
+        registry: u64,
+        lifetime: u64,
+    ) -> Result<Vec<TerminalTarget>, Error> {
+        let candidates = self
+            .records
+            .iter()
+            .filter(|(_, r)| {
+                r.registry == registry
+                    && r.registry_lifetime == Some(lifetime)
+                    && r.phase == Phase::Open
+            })
+            .map(|(&id, r)| (Lease(id), r.native_id.unwrap_or(0), r.session))
+            .collect::<Vec<_>>();
+        if self.unresolved
+            || candidates.iter().any(|(l, _, _)| {
+                self.records[&l.0].active != 0 || self.packets.values().any(|p| p.lease == *l)
+            })
+        {
+            return Err(Error::Busy);
+        }
+        let mut output = Vec::new();
+        for (lease, id, session) in candidates {
+            let (confirmed, transport) = self
+                .terminal_remove_begin(registry, lifetime, id, session)?
+                .ok_or(Error::Stale)?;
+            if confirmed != lease {
+                return Err(Error::Stale);
+            }
+            output.push((lease, id, session, transport));
+        }
+        Ok(output)
+    }
+    pub fn terminal_remove_end(&mut self, lease: Lease) -> Result<(), Error> {
+        let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
+        if r.phase != Phase::Closing
+            || !r.transport_closed
+            || r.transport_closing
+            || r.active != 0
+            || self.packets.values().any(|p| p.lease == lease)
+        {
+            return Err(Error::Busy);
+        }
+        r.phase = Phase::Closed;
+        Ok(())
+    }
+    pub fn terminal_registry_end(&self, registry: u64, lifetime: u64) -> Result<(), Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        if self.records.values().any(|r| {
+            r.registry == registry
+                && r.registry_lifetime == Some(lifetime)
+                && !matches!(r.phase, Phase::Closed | Phase::Null)
+        }) {
+            return Err(Error::Busy);
+        }
+        Ok(())
+    }
     pub fn publish_transport(
         &mut self,
         lease: Lease,
@@ -248,11 +345,80 @@ impl Ledger {
             thread,
         };
         self.transport_ids.insert(incarnation);
+        self.input_worlds.insert(incarnation, r.world);
         let r = self.records.get_mut(&lease.0).unwrap();
         r.transport = Some(transport);
         r.transport_closed = false;
         r.transport_joined = false;
         Ok(transport)
+    }
+    pub fn reserve_input(
+        &mut self,
+        lease: Lease,
+        transport: Transport,
+    ) -> Result<Option<Message>, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if r.transport != Some(transport)
+            || r.phase != Phase::Open
+            || r.transport_closed
+            || r.transport_closing
+        {
+            return Err(Error::Stale);
+        }
+        let Some(world) = self
+            .input_worlds
+            .get(&transport.incarnation)
+            .copied()
+            .ok_or(Error::Unbound)?
+        else {
+            return Ok(None);
+        };
+        if self
+            .retired_worlds
+            .contains(&(world.binding_id, world.epoch))
+        {
+            return Err(Error::Closed);
+        }
+        let id = self.id()?;
+        self.packets.insert(
+            id,
+            Packet {
+                lease,
+                transport: transport.incarnation,
+                world,
+                active: false,
+            },
+        );
+        Ok(Some(Message(id)))
+    }
+    pub fn fork_input(&mut self, parent: Message) -> Result<Message, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let p = self.packets.get(&parent.0).ok_or(Error::Unknown)?;
+        if p.active
+            || self
+                .retired_worlds
+                .contains(&(p.world.binding_id, p.world.epoch))
+        {
+            return Err(Error::Stale);
+        }
+        let r = self.records.get(&p.lease.0).ok_or(Error::Unknown)?;
+        if r.transport.map(|t| t.incarnation) != Some(p.transport) || r.transport_closed {
+            return Err(Error::Stale);
+        }
+        let packet = Packet {
+            lease: p.lease,
+            transport: p.transport,
+            world: p.world,
+            active: false,
+        };
+        let id = self.id()?;
+        self.packets.insert(id, packet);
+        Ok(Message(id))
     }
     pub fn transport_disconnect_begin(&mut self, lease: Lease) -> Result<Option<Transport>, Error> {
         let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
@@ -378,11 +544,7 @@ impl Ledger {
             return Err(Error::Unresolved);
         }
         let p = self.packets.get(&message.0).ok_or(Error::Unknown)?;
-        if p.active {
-            Err(Error::Busy)
-        } else {
-            Ok(())
-        }
+        if p.active { Err(Error::Busy) } else { Ok(()) }
     }
     pub fn world(&self, lease: Lease) -> Result<WorldReceipt, Error> {
         self.records
@@ -629,10 +791,6 @@ impl Ledger {
                 return Err(Error::Busy);
             }
         }
-        if found {
-            Ok(())
-        } else {
-            Err(Error::Unknown)
-        }
+        if found { Ok(()) } else { Err(Error::Unknown) }
     }
 }

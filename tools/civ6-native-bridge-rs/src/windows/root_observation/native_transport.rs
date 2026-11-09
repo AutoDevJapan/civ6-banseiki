@@ -209,6 +209,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     if c.kind == 108 && receiver != Some((c.pointer, c.serial)) {
         fault()
     }
+    if c.kind == 108 {
+        super::input::receiver_returned(c.pointer, c.serial, exceptional);
+    }
     let Some(id) = c.birth else { return };
     if exceptional {
         state().unresolved(Some(id));
@@ -325,6 +328,19 @@ unsafe extern "system" fn unwind(
     1
 }
 /// Existing845D30 full-frame owner calls this before touching Session+28.
+pub(super) fn terminal_closing(
+    lease: SessionLease,
+    t: SessionTransport,
+) -> Result<(), SessionError> {
+    let (saved_lease, session, _, actual) = state().snapshot(Birth(t.incarnation))?;
+    if saved_lease != lease || actual != t || check_published(Birth(t.incarnation))? != (lease, t) {
+        return Err(Error::Stale);
+    }
+    if state().close(session)? != Some((lease, t)) {
+        return Err(Error::Stale);
+    }
+    Ok(())
+}
 pub(super) fn disconnect_begin(
     session: u64,
 ) -> Result<Option<(SessionLease, SessionTransport)>, SessionError> {
