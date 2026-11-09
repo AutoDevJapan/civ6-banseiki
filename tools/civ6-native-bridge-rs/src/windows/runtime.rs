@@ -80,7 +80,10 @@ pub(super) fn invocation_start() -> u64 {
 pub(super) fn invocation_admitted(cookie: u64) -> bool {
     cookie != 0
         && cookie & INVOCATION_REFUSED == 0
-        && (!owned() || !root_observation::native_frames::unproven_input_active())
+        && (!owned()
+            || (!root_observation::native_frames::unproven_input_active()
+                && PENDING_INVOCATIONS
+                    .with(|pending| pending.borrow().iter().any(|call| call.cookie == cookie))))
 }
 pub(super) unsafe fn invocation_refuse(cookie: *const AtomicU64) {
     if let Some(cookie) = unsafe { cookie.as_ref() } {

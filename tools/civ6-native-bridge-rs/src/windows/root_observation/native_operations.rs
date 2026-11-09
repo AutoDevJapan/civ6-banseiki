@@ -852,6 +852,10 @@ mod tests {
         unsafe {
             runtime::invocation_finish(&AtomicU64::new(outside));
         }
+        assert!(
+            !runtime::invocation_admitted(outside),
+            "settled opaque cookie cannot be reused"
+        );
         let before_unknown = runtime::invocation_start();
         assert!(runtime::invocation_admitted(before_unknown));
         sessions::fixture_unknown_input(|| {});
