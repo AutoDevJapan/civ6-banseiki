@@ -5,6 +5,7 @@
 use crate::*;
 #[path = "renderer_evidence.rs"]
 mod renderer_evidence;
+pub(crate) use renderer_evidence::Run as RendererRun;
 use serde_json::json;
 use std::{
     fs::{self, File, OpenOptions},
@@ -453,6 +454,68 @@ fn close_civ6_with_renderer(
     evidence: &mut Value,
     renderer: Option<(&renderer_evidence::Run, &str, &str)>,
 ) -> Result<(), String> {
+    close_civ6_expected(r, p, evidence, renderer, None)
+}
+fn close_civ6_with_native_scope(
+    r: &mut impl Runner,
+    p: &Paths,
+    evidence: &mut Value,
+    renderer: Option<(&renderer_evidence::Run, &str, &str)>,
+    scope: Option<&process::NativeRecovery>,
+) -> Result<(), String> {
+    let target = scope
+        .map(process::NativeRecovery::target)
+        .transpose()?
+        .flatten();
+    close_civ6_expected(r, p, evidence, renderer, target)
+}
+fn require_native_generation(
+    games: &GameGeneration,
+    target: process::NativeTarget,
+) -> Result<(), String> {
+    if games.len() > 1
+        || games
+            .iter()
+            .any(|(_, pid, created)| (*pid, *created) != (target.pid, target.created))
+    {
+        return Err("native recovery target generation changed; refusing an unrelated game".into());
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod native_recovery_generation_tests {
+    use super::*;
+    #[test]
+    fn recovery_scope_accepts_only_the_original_generation_or_its_confirmed_absence() {
+        let target = process::NativeTarget {
+            pid: 42,
+            created: 71,
+        };
+        assert!(require_native_generation(&vec![], target).is_ok());
+        assert!(
+            require_native_generation(&vec![("CivilizationVI.exe".into(), 42, 71)], target).is_ok()
+        );
+        for games in [
+            vec![("CivilizationVI.exe".into(), 42, 72)],
+            vec![("CivilizationVI.exe".into(), 43, 71)],
+            vec![
+                ("CivilizationVI.exe".into(), 42, 71),
+                ("CivilizationVI_DX12.exe".into(), 43, 72),
+            ],
+        ] {
+            assert!(require_native_generation(&games, target)
+                .unwrap_err()
+                .contains("unrelated game"));
+        }
+    }
+}
+fn close_civ6_expected(
+    r: &mut impl Runner,
+    p: &Paths,
+    evidence: &mut Value,
+    renderer: Option<(&renderer_evidence::Run, &str, &str)>,
+    expected: Option<process::NativeTarget>,
+) -> Result<(), String> {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -498,12 +561,20 @@ fn close_civ6_with_renderer(
         Err(e) => return Err(format!("read pending Steam exit: {e}")),
     };
     let recovering = pending.is_some();
+    if let Some(target) = expected {
+        if !recovering {
+            expected_games = game_generation(r)?;
+        }
+        require_native_generation(&expected_games, target)?;
+    }
     let cursor = (|| -> Result<Option<String>, String> {
         if let Some(cursor) = pending {
             return Ok(Some(cursor));
         }
         if source.is_file() && sync_tool.is_file() {
-            expected_games = game_generation(r)?;
+            if expected.is_none() {
+                expected_games = game_generation(r)?;
+            }
             if expected_games.is_empty() {
                 return Ok(None);
             }
@@ -545,7 +616,7 @@ fn close_civ6_with_renderer(
         retain_renderer(r, p, Some(token), Some(run), stage);
     }
     let mut printed = Ok(());
-    let outcome = if cursor.is_some() || source.is_file() {
+    let outcome = if cursor.is_some() || source.is_file() || expected.is_some() {
         close_civ6_outcome(
             &mut ExitGenerationRunner {
                 runner: r,
@@ -2103,6 +2174,7 @@ struct RunCleanup {
     artifacts: Option<std::path::PathBuf>,
     software_profile: Option<crate::software_renderer::Profile>,
     renderer: Option<renderer_evidence::Run>,
+    native_recovery: Option<process::NativeRecovery>,
 }
 fn pending_recovery_records(p: &Paths) -> Result<bool, String> {
     for name in [
@@ -2134,6 +2206,7 @@ fn main_owned(
         artifacts: cleanup_artifacts,
         software_profile,
         renderer,
+        native_recovery,
     } = cleanup;
     if options.cleanup_only {
         if civ6_running(r)? {
@@ -2410,7 +2483,33 @@ fn main_owned(
         // panics or any subsequent bookkeeping fails. Do not create the
         // driver's CREATE_NEW output directory until the child has returned.
         *renderer = token.map(|_| renderer_evidence::Run::new(Path::new(&artifacts)));
+        *native_recovery = token.map(|token| process::NativeRecovery {
+            paths: p.clone(),
+            token: token.to_owned(),
+            artifacts: Path::new(&artifacts).to_path_buf(),
+            deadline: cleanup_deadline.unwrap(),
+            nonce: new_lock_token(),
+            renderer: renderer.clone(),
+            notice: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            outcome: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        });
+        command.native_recovery = native_recovery.clone();
         let execution = r.run(command);
+        if let Some(outcome) = native_recovery.as_ref().and_then(|scope| {
+            scope
+                .outcome
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+        }) {
+            // Reuse the actual close/Steam/autosave result. Do not replace it
+            // with a second close reporting only that the game is absent.
+            *game_closed = close_cleanup_confirmed(&outcome.evidence);
+            if let Some(state) = reliability.as_deref_mut() {
+                state.round()["native_recovery_exit"] = outcome.evidence;
+                state.round()["native_recovery_error"] = json!(outcome.result.as_ref().err());
+            }
+        }
         retain_renderer(r, p, token, renderer.as_ref(), "driver-return");
         if let Some(deadline) = lease.as_ref().and_then(|limit| limit.hard_deadline()) {
             *cleanup_deadline = Some(cleanup_deadline.unwrap().min(deadline));
@@ -2460,7 +2559,7 @@ fn main_owned(
                     )
                 })
                 .transpose()?;
-            close_civ6_with_renderer(
+            close_civ6_with_native_scope(
                 &mut budget,
                 p,
                 &mut exit_evidence,
@@ -2468,6 +2567,7 @@ fn main_owned(
                     .as_ref()
                     .zip(token)
                     .map(|(run, token)| (run, token, "chain-before-close")),
+                native_recovery.as_ref(),
             )?;
             if let Some(protection) = protection {
                 protection.check(&mut budget, &p.here.join("civ6.lock"))?;
@@ -2556,6 +2656,65 @@ pub fn save_cleanup_exit_evidence(artifacts: &Path, evidence: &mut Value) -> Res
         "steam-exit-cleanup.jsonl",
         "exit-evidence-cleanup.json",
     )
+}
+
+/// The notification comes only from this driver's captured pipe. It grants
+/// no close authority: reacquire and check the existing lock actor, keep the
+/// original cleanup budget, and retain the ordinary generation/Steam evidence.
+pub(crate) fn recover_native_driver(
+    r: &mut impl Runner,
+    scope: &process::NativeRecovery,
+    target: process::NativeTarget,
+    deadline: f64,
+) -> Result<(), String> {
+    let mut evidence = json!({"native_recovery_requested":true,"target_pid":target.pid,"target_created_filetime":target.created});
+    let result = (|| {
+        let mut budget = WithinDeadline {
+            runner: r,
+            deadline: deadline.min(scope.deadline),
+        };
+        let lock = scope.paths.here.join("civ6.lock");
+        let protection = open_close_protection(&mut budget, &lock, &scope.token)?
+            .ok_or("lock ownership changed before native recovery close")?;
+        retain_renderer(
+            &mut budget,
+            &scope.paths,
+            Some(&scope.token),
+            scope.renderer.as_ref(),
+            "native-recovery-driver-return",
+        );
+        let closed = close_civ6_expected(
+            &mut budget,
+            &scope.paths,
+            &mut evidence,
+            scope
+                .renderer
+                .as_ref()
+                .map(|run| (run, scope.token.as_str(), "native-recovery-before-close")),
+            Some(target),
+        );
+        let checked = protection.check(&mut budget, &lock);
+        closed.and(checked)
+    })();
+    evidence["native_recovery_close_confirmed"] = json!(result.is_ok());
+    evidence["native_recovery_close_error"] = json!(result.as_ref().err());
+    let saved = save_exit_evidence_named(
+        &scope.artifacts,
+        &mut evidence,
+        "steam-exit-native-recovery.jsonl",
+        "exit-evidence-native-recovery.json",
+    );
+    let result = match (result, saved) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+        (Err(error), Err(saved)) => Err(format!("{error}; evidence save: {saved}")),
+    };
+    *scope.outcome.lock().unwrap_or_else(|e| e.into_inner()) =
+        Some(process::NativeRecoveryOutcome {
+            evidence,
+            result: result.clone(),
+        });
+    result
 }
 
 fn save_exit_evidence_named(
@@ -2705,7 +2864,7 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
         let yielded = result
             .as_ref()
             .err()
-            .is_some_and(|e| e.contains(process::LEASE_YIELD));
+            .is_some_and(|e| process::is_lease_yield(e));
         reliability.round()["result"] = json!(if code == 0 {
             "success"
         } else if yielded {
@@ -2821,6 +2980,7 @@ fn cli_once(
         artifacts: cleanup_artifacts,
         mut software_profile,
         renderer,
+        native_recovery,
     } = cleanup_state;
     process::clear_interrupt_for_cleanup();
     // Still inside the acquired lease, before CPU restoration or closing the
@@ -2856,13 +3016,14 @@ fn cli_once(
         if let Some(profile) = software_profile.as_mut() {
             if !game_closed {
                 let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    close_civ6_with_renderer(
+                    close_civ6_with_native_scope(
                         r,
                         p,
                         &mut cleanup_exit,
                         renderer
                             .as_ref()
                             .map(|run| (run, token.as_str(), "outer-chain-before-close")),
+                        native_recovery.as_ref(),
                     )
                 }))
                 .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
@@ -2896,7 +3057,7 @@ fn cli_once(
             Ok(())
         } else {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match cleanup_deadline {
-                Some(deadline) => close_civ6_with_renderer(
+                Some(deadline) => close_civ6_with_native_scope(
                     &mut WithinDeadline {
                         runner: r,
                         deadline,
@@ -2906,14 +3067,16 @@ fn cli_once(
                     renderer
                         .as_ref()
                         .map(|run| (run, token.as_str(), "outer-chain-before-close")),
+                    native_recovery.as_ref(),
                 ),
-                None => close_civ6_with_renderer(
+                None => close_civ6_with_native_scope(
                     r,
                     p,
                     &mut cleanup_exit,
                     renderer
                         .as_ref()
                         .map(|run| (run, token.as_str(), "outer-chain-before-close")),
+                    native_recovery.as_ref(),
                 ),
             }))
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))

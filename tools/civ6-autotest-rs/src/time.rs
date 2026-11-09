@@ -143,6 +143,11 @@ mod tests {
                 ErrorKind::Interrupted
             );
             assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
+            #[cfg(windows)]
+            assert_eq!(
+                crate::native_recovery::require_idle().unwrap_err().kind,
+                ErrorKind::Interrupted
+            );
         }
     }
 

@@ -5,6 +5,7 @@
 /// Keep native recovery ownership alive through normal CLI exit and unwinding.
 /// Entry points using a native Session must drop this guard before process::exit.
 pub struct ExitGuard;
+pub const RECOVERY_REQUIRED: &str = "CIV6_NATIVE_RECOVERY_REQUIRED_V1";
 impl Drop for ExitGuard {
     fn drop(&mut self) {
         wait_for_pending_recoveries();
@@ -31,20 +32,31 @@ pub fn reap_completed_recoveries() -> crate::Result<usize> {
 pub(crate) use platform::{retain, Held};
 #[cfg(windows)]
 pub(crate) type CloseAuthority = Box<dyn FnMut(u32, f64) -> crate::Result<()> + Send>;
+#[cfg(windows)]
+pub(crate) fn require_idle() -> crate::Result<()> {
+    crate::time::check_interrupt()?;
+    let remaining = reap_completed_recoveries()?;
+    crate::time::check_interrupt()?;
+    match remaining {
+        0 => Ok(()),
+        count => Err(crate::Error::input(format!("unresolved native ownership ({count} records); refusing another native attachment until exact target/controller exit"))),
+    }
+}
 
 #[cfg(windows)]
 mod platform {
     use crate::{Error, Result};
     use std::{
+        io::Write,
         ops::{Deref, DerefMut},
         os::windows::io::{AsHandle, AsRawHandle, OwnedHandle},
         process::Child,
         sync::{LazyLock, Mutex},
-        time::Duration,
+        time::{Duration, Instant},
     };
     use windows_sys::Win32::{
-        Foundation::{HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
-        System::Threading::WaitForSingleObject,
+        Foundation::{FILETIME, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{GetProcessId, GetProcessTimes, WaitForSingleObject},
     };
 
     /// A Session keeps ordinary field access while allowing Drop to transfer
@@ -87,6 +99,7 @@ mod platform {
         child: Child,
         target: Box<dyn Target>,
         kill_requested: bool,
+        controller_grace: Option<Instant>,
     }
     impl Pending {
         fn target_exited(&self) -> Result<bool> {
@@ -107,6 +120,14 @@ mod platform {
             }
             if self.child.try_wait()?.is_some() {
                 return Ok(true);
+            }
+            // Allow the controller to record its terminal output after the
+            // target exits. This grace never permits more target operations.
+            let grace = self
+                .controller_grace
+                .get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
+            if Instant::now() < *grace {
+                return Ok(false);
             }
             // The target no longer has executable native state. Only our exact
             // spawned controller handle is eligible for this final reap.
@@ -135,6 +156,12 @@ mod platform {
     }
     static REGISTRY: LazyLock<Mutex<Registry>> = LazyLock::new(|| Mutex::new(Registry::default()));
 
+    fn diagnostic(args: std::fmt::Arguments<'_>) {
+        // Diagnostic consumers can disappear during cancellation. An output
+        // failure must never unwind a resource owner or its exit guard.
+        let _ = writeln!(std::io::stderr().lock(), "{args}");
+    }
+
     pub(crate) fn retain<T: AsHandle + Send + 'static>(
         child: Child,
         target: T,
@@ -145,14 +172,17 @@ mod platform {
         // not fail by panicking after taking ownership from a Session.
         registry.next = registry.next.saturating_add(1);
         let id = registry.next;
-        eprintln!("native recovery {id}: retaining controller {} and pinned target ownership ({description}); completion is unconfirmed", child.id());
+        let controller = child.id();
         registry.pending.push(Pending {
             id,
             description,
             child,
             target: Box::new(target),
             kill_requested: false,
+            controller_grace: None,
         });
+        drop(registry);
+        diagnostic(format_args!("native recovery {id}: retaining controller {controller} and pinned target ownership; completion is unconfirmed"));
         id
     }
     pub(super) fn reap_completed() -> Result<usize> {
@@ -190,24 +220,72 @@ mod platform {
     pub(super) fn wait_for_pending() {
         wait_for(&REGISTRY);
     }
+    fn notify_supervisor(owner: &Mutex<Registry>) {
+        let Ok(nonce) = std::env::var("CIV6_NATIVE_RECOVERY_NONCE") else {
+            return;
+        };
+        if nonce.is_empty()
+            || nonce.len() > 64
+            || !nonce.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+        {
+            return;
+        }
+        let targets = {
+            let registry = owner.lock().unwrap_or_else(|e| e.into_inner());
+            registry
+                .pending
+                .iter()
+                .filter_map(|pending| {
+                    let handle = pending.target.as_handle().as_raw_handle() as HANDLE;
+                    let pid = unsafe { GetProcessId(handle) };
+                    let mut created = FILETIME::default();
+                    let mut exited = FILETIME::default();
+                    let mut kernel = FILETIME::default();
+                    let mut user = FILETIME::default();
+                    let known = unsafe {
+                        GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user)
+                    } != 0;
+                    let created = (u64::from(created.dwHighDateTime) << 32)
+                        | u64::from(created.dwLowDateTime);
+                    (known && pid != 0 && created != 0).then_some((pid, created))
+                })
+                .collect::<Vec<_>>()
+        };
+        for (pid, created) in targets {
+            diagnostic(format_args!(
+                "{} {nonce} {pid} {created}",
+                super::RECOVERY_REQUIRED
+            ));
+        }
+    }
     fn wait_for(owner: &Mutex<Registry>) {
         let mut announced = false;
         let mut last_failure = None;
+        let mut interrupted = false;
         loop {
             match reap_in(owner) {
                 Ok(0) => return,
                 Ok(count) if !announced => {
-                    eprintln!("native recovery: {count} unresolved ownership records; waiting for exact process exit before releasing pins");
-                    announced = true;
+                    // This is final exit/unwind, never the middle of a Runner
+                    // step. Only now can the supervisor start game closure.
+                    diagnostic(format_args!("native recovery: {count} unresolved ownership records; waiting for exact process exit before releasing pins"));
                 }
                 Err(error) => {
                     let text = error.to_string();
                     if last_failure.as_deref() != Some(text.as_str()) {
-                        eprintln!("{text}; ownership remains retained");
+                        diagnostic(format_args!("{text}; ownership remains retained"));
                         last_failure = Some(text);
                     }
                 }
                 _ => {}
+            }
+            if !announced {
+                notify_supervisor(owner);
+                announced = true;
+            }
+            if !interrupted && crate::time::check_interrupt().is_err() {
+                diagnostic(format_args!("native recovery: work is interrupted; waiting for the owning supervisor to close the exact target before resource release"));
+                interrupted = true;
             }
             let waiter = {
                 let registry = owner.lock().unwrap_or_else(|e| e.into_inner());
@@ -216,15 +294,21 @@ mod platform {
             match waiter {
                 None => return,
                 Some(Ok(handle)) => {
-                    if unsafe { WaitForSingleObject(handle.as_raw_handle() as HANDLE, u32::MAX) }
-                        != WAIT_OBJECT_0
-                    {
-                        eprintln!("native recovery wait is unknown; ownership remains retained");
+                    let state =
+                        unsafe { WaitForSingleObject(handle.as_raw_handle() as HANDLE, 250) };
+                    if state == WAIT_OBJECT_0 {
+                        // A signaled target can still have a controller inside
+                        // its bounded terminal-output grace.
+                        std::thread::sleep(Duration::from_millis(10));
+                    } else if state != WAIT_TIMEOUT {
+                        diagnostic(format_args!(
+                            "native recovery wait is unknown; ownership remains retained"
+                        ));
                         std::thread::sleep(Duration::from_secs(1));
                     }
                 }
                 Some(Err(error)) => {
-                    eprintln!("{error}; ownership remains retained");
+                    diagnostic(format_args!("{error}; ownership remains retained"));
                     std::thread::sleep(Duration::from_secs(1));
                 }
             }
@@ -305,6 +389,171 @@ mod platform {
         }
 
         #[test]
+        #[ignore = "owned recovery fixture, invoked by its parent test"]
+        fn broken_stderr_retention_worker() {
+            use std::io::{Read, Write};
+            let mut start = [0u8];
+            std::io::stdin().read_exact(&mut start).unwrap();
+            let mut target = Fixture::spawn();
+            let mut controller = Fixture::spawn();
+            let controller_handle =
+                ControllerGuard(controller.0.as_handle().try_clone_to_owned().unwrap());
+            let folder = tempfile::tempdir().unwrap();
+            let path = folder.path().join("broken-stderr-pin.bin");
+            std::fs::write(&path, [7u8; 48]).unwrap();
+            let pin = OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&path)
+                .unwrap();
+            let retained = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                retain(
+                    controller.0.take_owned(),
+                    HookedTarget {
+                        handle: target.0.as_handle().try_clone_to_owned().unwrap(),
+                        _pin: pin,
+                        entered: Mutex::new(None),
+                        release: Mutex::new(mpsc::channel().1),
+                    },
+                    "broken diagnostic pipe fixture".into(),
+                )
+            }))
+            .is_ok();
+            let registered = REGISTRY
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .pending
+                .len();
+            let held = OpenOptions::new().write(true).open(&path).is_err();
+            // A failed native owner must block another native attachment,
+            // while leaving unrelated ordinary game paths alone.
+            let close = || Box::new(|_, _| Ok(())) as crate::native_recovery::CloseAuthority;
+            let bridge = crate::native_bridge::Session::start(
+                0,
+                0.0,
+                folder.path(),
+                "unstarted",
+                1,
+                "can-ever",
+                close(),
+            )
+            .err()
+            .unwrap()
+            .to_string();
+            let trace = crate::native_trace::Session::start(
+                0,
+                0.0,
+                folder.path(),
+                "unstarted",
+                1,
+                "lifecycle",
+                close(),
+            )
+            .err()
+            .unwrap()
+            .to_string();
+            let bootstrap = crate::native_bridge::Session::start_bootstrap(
+                0,
+                0.0,
+                folder.path(),
+                &serde_json::json!({}),
+                close(),
+                Instant::now() + Duration::from_secs(5),
+            )
+            .err()
+            .unwrap()
+            .to_string();
+            target.stop();
+            wait_for_pending();
+            let can_attach_after_exit = crate::native_recovery::require_idle().is_ok();
+            let released = OpenOptions::new().write(true).open(&path).is_ok();
+            let controller_exited =
+                unsafe { WaitForSingleObject(controller_handle.0.as_raw_handle() as HANDLE, 0) }
+                    == WAIT_OBJECT_0;
+            writeln!(std::io::stdout(), "RECOVERY_RESULT retained={retained} registered={registered} held={held} released={released} controller_exited={controller_exited}").unwrap();
+            writeln!(
+                std::io::stdout(),
+                "REATTACH bridge={bridge:?} trace={trace:?} bootstrap={bootstrap:?}"
+            )
+            .unwrap();
+            assert!(retained && registered == 1 && held && released && controller_exited);
+            for error in [bridge, trace, bootstrap] {
+                assert!(error.contains("unresolved native ownership"), "{error}");
+            }
+            assert!(can_attach_after_exit);
+        }
+
+        #[test]
+        fn broken_stderr_cannot_lose_registered_processes_or_file_pins() {
+            use std::io::Write;
+            let mut child = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "native_recovery::platform::tests::broken_stderr_retention_worker",
+                    "--nocapture",
+                ])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .creation_flags(0x08000000)
+                .spawn()
+                .unwrap();
+            // Synchronize the broken pipe before production retain() runs.
+            drop(child.stderr.take());
+            child.stdin.take().unwrap().write_all(&[1]).unwrap();
+            let result = child.wait_with_output().unwrap();
+            let output = String::from_utf8_lossy(&result.stdout);
+            assert!(result.status.success(), "{output}");
+            assert!(output.contains("RECOVERY_RESULT retained=true registered=1 held=true released=true controller_exited=true"), "{output}");
+        }
+
+        #[test]
+        fn target_exit_allows_controller_to_flush_terminal_output_before_forced_reap() {
+            use std::io::{Read, Write};
+            let mut target = Fixture::spawn();
+            let mut controller = Command::new("powershell.exe")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "[Console]::ReadLine() | Out-Null; [Console]::Write('terminal complete')",
+                ])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .creation_flags(0x08000000)
+                .spawn()
+                .unwrap();
+            let guard = ControllerGuard(controller.as_handle().try_clone_to_owned().unwrap());
+            let mut input = controller.stdin.take().unwrap();
+            let mut output = controller.stdout.take().unwrap();
+            let owner = Mutex::new(Registry {
+                next: 1,
+                pending: vec![Pending {
+                    id: 1,
+                    description: "terminal flush fixture".into(),
+                    child: controller,
+                    target: Box::new(target.0.as_handle().try_clone_to_owned().unwrap()),
+                    kill_requested: false,
+                    controller_grace: None,
+                }],
+            });
+            target.stop();
+            let pending = reap_in(&owner).unwrap();
+            let alive = unsafe { WaitForSingleObject(guard.0.as_raw_handle() as HANDLE, 0) }
+                == WAIT_TIMEOUT;
+            input.write_all(b"target exited\n").unwrap();
+            drop(input);
+            wait_for(&owner);
+            let mut text = String::new();
+            output.read_to_string(&mut text).unwrap();
+            assert_eq!(pending, 1);
+            assert!(alive);
+            assert_eq!(text, "terminal complete");
+        }
+
+        #[test]
         fn exit_wait_keeps_pins_and_peer_then_reaps_controller_after_target_exit() {
             let mut target = Fixture::spawn();
             let mut peer = Fixture::spawn();
@@ -336,6 +585,7 @@ mod platform {
                         release: Mutex::new(release_rx),
                     }),
                     kill_requested: false,
+                    controller_grace: None,
                 }],
             }));
             let waiting_owner = Arc::clone(&owner);

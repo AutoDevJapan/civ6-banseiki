@@ -1098,6 +1098,7 @@ mod platform {
                     "native bridge duration must be 1..300 seconds",
                 ));
             }
+            crate::native_recovery::require_idle()?;
             let (created, target) = pinned_created(pid, started)?;
             let runner = std::env::current_exe()?;
             let executable =

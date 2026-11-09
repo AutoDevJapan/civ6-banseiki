@@ -363,6 +363,7 @@ mod platform {
                 ));
             }
             let started = Instant::now();
+            crate::native_recovery::require_idle()?;
             let ready_deadline = started + READY_BUDGET;
             let total_deadline = started + STARTUP_TOTAL;
             let chain_pid = std::env::var(crate::startup::CHAIN_PID_ENV)

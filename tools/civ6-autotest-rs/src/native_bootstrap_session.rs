@@ -138,6 +138,7 @@ impl Session {
                 "bootstrap preparation deadline expired before process pin",
             ));
         }
+        crate::native_recovery::require_idle()?;
         let (created, target) = pinned_created(pid, started)?;
         let name = step["name"]
             .as_str()

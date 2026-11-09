@@ -8,7 +8,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub(super) struct Run {
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Run {
     artifacts: PathBuf,
     started: SystemTime,
 }
