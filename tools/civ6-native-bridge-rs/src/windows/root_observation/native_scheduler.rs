@@ -18,6 +18,9 @@ struct FixedFrame {
 }
 #[path = "native_scheduler_audit.rs"]
 mod audit;
+// Natural-close ledger; keeps the scheduler's single owner of Host list entries.
+#[path = "native_closure.rs"]
+pub(super) mod closure;
 #[path = "native_scheduler_fixed.rs"]
 mod fixed;
 static EXE: AtomicU64 = AtomicU64::new(0);
@@ -32,6 +35,9 @@ struct Scope {
     job: Option<u64>,
     task: u64,
     allocated: bool,
+    // FreeJobList list id and native return address for the closure ledger.
+    arg: u64,
+    caller: u64,
 }
 thread_local! {static SCOPES:RefCell<Vec<Scope>>=const{RefCell::new(Vec::new())};}
 fn unresolved() {
@@ -147,7 +153,23 @@ extern "system" fn begin(raw: *mut Saved) {
             job: None,
             task: 0,
             allocated: false,
+            arg: 0,
+            caller: 0,
         };
+        // Host Add/Push set, Spawn list and FreeJobList identity are observed
+        // before the original runs. The ledger is empty until a manager is seen.
+        match c.kind {
+            130 => closure::submit(raw.gpr[1]),
+            131 => closure::submit(raw.gpr[2]),
+            132 => closure::spawn(raw.gpr[0] as u32),
+            137 => {
+                c.arg = raw.gpr[0];
+                c.caller = raw.invocation.caller;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+        .unwrap_or_else(|v| closure::fault(v));
         if let Some(f) = FRAMES.get() {
             // LoadGameView's existing load carrier binds its World at native
             // birth. Attaching this creator to the old World would make its
@@ -207,6 +229,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         .unwrap_or_else(|| fault());
     if (c.serial, c.kind) != (raw.invocation.token, raw.invocation.kind) {
         fault();
+    }
+    if c.kind == 137 {
+        if exceptional {
+            closure::unwound();
+        } else {
+            closure::list_released(c.arg as u32, c.caller).unwrap_or_else(|v| closure::fault(v));
+        }
     }
     if exceptional && (c.hold.is_some() || c.job.is_some()) {
         unresolved();
@@ -570,6 +599,7 @@ pub(super) unsafe fn bind_core(core: usize) -> Result<(), &'static str> {
             return Err("scheduler resolved export differs");
         }
     }
+    unsafe { closure::install(core)? };
     Ok(())
 }
 unsafe fn install_at(
@@ -647,6 +677,7 @@ unsafe fn install_at(
 }
 pub(super) unsafe fn restore() -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "scheduler hook owner")?;
+    let closure = unsafe { closure::restore() };
     hooks.retain(|o| {
         let h = &o.hook;
         let current = copy_current::<8>(h.target as u64);
@@ -666,7 +697,7 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
             && unsafe { VirtualProtect(h.target.cast(), 8, o.protection, &mut old) } != 0
             && unsafe { FlushInstructionCache(GetCurrentProcess(), h.target.cast(), 8) } != 0)
     });
-    if hooks.is_empty() {
+    if hooks.is_empty() && closure.is_ok() {
         Ok(())
     } else {
         Err("critical: scheduler restoration unverified")
