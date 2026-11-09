@@ -2241,6 +2241,73 @@ pub fn native_frames(b: &[u8], pid: u32, created: u64) -> Result<Value, String> 
     )
 }
 
+pub const NATIVE_CENSUS_BYTES: usize = 128 + 16 * 160 * 24;
+const NATIVE_CENSUS_MODULES: [&str; 16] = [
+    "unused",
+    "frames",
+    "jobs",
+    "control",
+    "operations",
+    "consumers",
+    "worlds",
+    "loads",
+    "sessions",
+    "registry",
+    "transport",
+    "input",
+    "deferred",
+    "wire",
+    "scheduler",
+    "closure",
+];
+/// Independent atomics, sampled while resident gateways may still run. Even
+/// balanced counters are not evidence of a producer seal or a native join.
+pub fn native_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    let w = |i: usize| word(b, i * 8);
+    if b.len() != NATIVE_CENSUS_BYTES
+        || w(0)? != 1
+        || w(1)? != NATIVE_CENSUS_BYTES as u64
+        || w(2)? != u64::from(pid)
+        || w(3)? != created
+        || w(4)? != 16
+        || w(5)? != 160
+        || w(7)? != 0
+        || (8..=10).any(|i| w(i).is_ok_and(|v| v > 1))
+        || (12..16).any(|i| w(i) != Ok(0))
+        || b[128..128 + 160 * 24].iter().any(|v| *v != 0)
+    {
+        return Err("native census identity/version/layout differs".into());
+    }
+    let fault = w(6)?;
+    let fault_module = usize::try_from(fault >> 32).map_err(|_| "native census fault module")?;
+    let fault_line = fault & u64::from(u32::MAX);
+    if fault_module >= NATIVE_CENSUS_MODULES.len() || ((fault_module == 0) != (fault_line == 0)) {
+        return Err("native census fault location differs".into());
+    }
+    let mut rows = Vec::new();
+    for (module, name) in NATIVE_CENSUS_MODULES.iter().enumerate().skip(1) {
+        for kind in 0..160 {
+            let offset = 128 + (module * 160 + kind) * 24;
+            let entered = word(b, offset)?;
+            let returned = word(b, offset + 8)?;
+            let terminal = word(b, offset + 16)?;
+            if entered != 0 || returned != 0 || terminal != 0 {
+                rows.push(json!({"module":name,"module_id":module,"kind":kind,
+                    "entered":entered,"native_returned":returned,"terminal_unwind":terminal}));
+            }
+        }
+    }
+    Ok(
+        json!({"schema":"native-gateway-census-v1","pid":pid,"created_filetime":created,
+        "first_fault":(fault != 0).then(|| json!({"module":NATIVE_CENSUS_MODULES[fault_module],
+            "module_id":fault_module,"source_line":fault_line})),
+        "host_prepared":w(8)? == 1,"core_installed":w(9)? == 1,"restore_attempted":w(10)? == 1,
+        "entries_before_host_prepared":w(11)?,"rows":rows,
+        "sampling":"independent atomic counters; concurrent changes permitted",
+        "boundary_order_proven":false,"product_acceptance":false}),
+    )
+}
+
 #[cfg(test)]
 mod native_frame_tests {
     use super::*;
@@ -2271,6 +2338,79 @@ mod native_frame_tests {
         assert!(native_frames(&b[..127], 12, 34).is_err());
         b[112] = 1;
         assert!(native_frames(&b, 12, 34).is_err());
+    }
+    fn census_fixture() -> Vec<u8> {
+        let mut bytes = vec![0; NATIVE_CENSUS_BYTES];
+        for (i, value) in [
+            (0, 1u64),
+            (1, NATIVE_CENSUS_BYTES as u64),
+            (2, 12),
+            (3, 34),
+            (4, 16),
+            (5, 160),
+            (8, 1),
+            (9, 1),
+        ] {
+            bytes[i * 8..i * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes
+    }
+    #[test]
+    fn census_reads_distinct_gateway_domains_and_atomic_first_fault() {
+        let mut bytes = census_fixture();
+        let offset = 128 + (7 * 160 + 88) * 24;
+        for (i, value) in [3u64, 2, 1].into_iter().enumerate() {
+            bytes[offset + i * 8..offset + i * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes[48..56].copy_from_slice(&((7u64 << 32) | 412).to_le_bytes());
+        let value = native_census(&bytes, 12, 34).unwrap();
+        assert_eq!(value["first_fault"]["module"], "loads");
+        assert_eq!(value["first_fault"]["source_line"], 412);
+        assert_eq!(value["rows"].as_array().unwrap().len(), 1);
+        assert_eq!(value["rows"][0]["kind"], 88);
+        assert_eq!(value["rows"][0]["terminal_unwind"], 1);
+        assert_eq!(value["boundary_order_proven"], false);
+        assert_eq!(value["product_acceptance"], false);
+    }
+    #[test]
+    fn census_empty_or_overlapping_counts_do_not_create_a_certificate() {
+        let mut bytes = census_fixture();
+        let empty = native_census(&bytes, 12, 34).unwrap();
+        assert!(empty["first_fault"].is_null());
+        assert!(empty["rows"].as_array().unwrap().is_empty());
+        assert_eq!(empty["boundary_order_proven"], false);
+        // A return can advance between independent reads of the two words.
+        let offset = 128 + (8 * 160 + 72) * 24 + 8;
+        bytes[offset..offset + 8].copy_from_slice(&1u64.to_le_bytes());
+        let overlap = native_census(&bytes, 12, 34).unwrap();
+        assert_eq!(overlap["rows"][0]["native_returned"], 1);
+        assert_eq!(overlap["product_acceptance"], false);
+    }
+    #[test]
+    fn census_rejects_identity_size_reserved_and_fault_layout_corruption() {
+        let bytes = census_fixture();
+        assert!(native_census(&bytes, 13, 34).is_err());
+        assert!(native_census(&bytes, 12, 35).is_err());
+        assert!(native_census(&bytes[..bytes.len() - 1], 12, 34).is_err());
+        for (offset, value) in [
+            (0, 2u64),
+            (8, 128),
+            (32, 15),
+            (40, 159),
+            (48, 7u64 << 32),
+            (48, (16u64 << 32) | 12),
+            (56, 1),
+            (64, 2),
+            (96, 1),
+            (128, 1),
+        ] {
+            let mut bad = bytes.clone();
+            bad[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+            assert!(
+                native_census(&bad, 12, 34).is_err(),
+                "offset {offset} value {value}"
+            );
+        }
     }
 }
 pub fn trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {

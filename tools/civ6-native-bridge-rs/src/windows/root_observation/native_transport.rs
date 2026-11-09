@@ -25,7 +25,12 @@ thread_local! {static CALLS:RefCell<Vec<Call>>=const {RefCell::new(Vec::new())};
 fn state() -> std::sync::MutexGuard<'static, Ledger> {
     STATE.lock().unwrap_or_else(|_| fault())
 }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(100);
     if let Ok(mut s) = STATE.try_lock() {
         s.unresolved(None)
@@ -195,6 +200,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(e) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

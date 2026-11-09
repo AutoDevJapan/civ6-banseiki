@@ -15,6 +15,28 @@ pub(super) struct WorldLease {
     pub game: u64,
     pub world: u64,
 }
+/// Captured at native Session birth, while no World is live. It describes
+/// the next unpublished World, not a lookup of a later current World.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct BirthWindow {
+    serial: u64,
+    context: u64,
+    game: u64,
+    epoch: u64,
+}
+impl BirthWindow {
+    pub(super) fn matches(self, world: WorldLease) -> bool {
+        world.serial == self.serial
+            && world.epoch != 0
+            && world.context != 0
+            && world.game != 0
+            && world.world != 0
+            && (self.context == 0
+                || (world.context == self.context
+                    && world.game == self.game
+                    && world.epoch == self.epoch))
+    }
+}
 struct ContextBirth {
     serial: u64,
     epoch: u64,
@@ -30,7 +52,12 @@ struct Bindings {
 }
 static BINDINGS: std::sync::LazyLock<Mutex<Bindings>> =
     std::sync::LazyLock::new(|| Mutex::new(Bindings::default()));
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(60);
     FAILED.store(true, Ordering::Release);
     TRACE.0[6].store(1, Ordering::Release);
@@ -45,6 +72,28 @@ fn value(address: u64) -> u64 {
         .unwrap_or_else(|| fault())
 }
 impl Bindings {
+    fn birth_window(&self) -> Option<BirthWindow> {
+        let live: Vec<_> = self.contexts.iter().filter(|(_, b)| !b.closed).collect();
+        if live.is_empty() {
+            return Some(BirthWindow {
+                serial: self.next.checked_add(1)?,
+                context: 0,
+                game: 0,
+                epoch: 0,
+            });
+        }
+        if let [(context, b)] = live.as_slice() {
+            if !b.closing && b.world.is_none() {
+                return Some(BirthWindow {
+                    serial: b.serial,
+                    context: **context,
+                    game: b.game,
+                    epoch: b.epoch,
+                });
+            }
+        }
+        None
+    }
     fn context(&mut self, context: u64, game: u64, epoch: u64) -> Result<(), &'static str> {
         if context == 0
             || game == 0
@@ -141,6 +190,16 @@ pub(super) fn birth(world: u64) -> Option<WorldLease> {
 pub(super) fn installed() -> bool {
     CORE.load(Ordering::Acquire) != 0
 }
+pub(super) fn capture_birth_window() -> Option<BirthWindow> {
+    if !HOST_PREPARED.load(Ordering::Acquire) {
+        return None;
+    }
+    BINDINGS.lock().ok()?.birth_window()
+}
+#[cfg(test)]
+pub(super) fn fixture_first_birth_window() -> BirthWindow {
+    Bindings::default().birth_window().unwrap()
+}
 
 extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
@@ -216,6 +275,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }
@@ -473,6 +535,25 @@ pub(super) unsafe fn restore() -> Result<(), &'static str> {
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn session_birth_windows_name_only_the_next_unpublished_world() {
+        let mut b = Bindings::default();
+        let initial = b.birth_window().unwrap();
+        b.context(10, 20, 1).unwrap();
+        let pending = b.birth_window().unwrap();
+        let first = b.world(20, 30, 1).unwrap();
+        assert!(initial.matches(first) && pending.matches(first));
+        assert!(b.birth_window().is_none());
+        b.close(20).unwrap();
+        assert!(b.birth_window().is_none(), "a closing World is still live");
+        assert!(b.closed(20, first.serial));
+        let next = b.birth_window().unwrap();
+        assert!(!next.matches(first));
+        b.context(10, 20, 2).unwrap();
+        let second = b.world(20, 30, 2).unwrap();
+        assert!(next.matches(second));
+        assert!(!initial.matches(second) && !pending.matches(second));
+    }
     fn child(name: &str) -> bool {
         const ENV: &str = "CIV6_NATIVE_WORLD_OWNED_CHILD";
         if std::env::var_os(ENV).is_some() {

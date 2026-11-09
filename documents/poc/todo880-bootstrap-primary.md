@@ -51,6 +51,10 @@ Snapshot `273F40`から元request `16B5C0`、所有stream `166B40`、command36 `
 
 NetSnapshot `80F230`からsnapshot ownerへの実呼出しでは、元messageの値、payload、長さ、metadataをコピーします。SessionへWorld関係を渡すには、同じ受信・dispatchで既に発行されたWorld ticketを必要とし、live Sessionの現在値を代用しません。turn/sequenceやローカルに解決されたplayer番号をWorld nonceとして扱いません。
 
+初回のWorldがまだ無いSessionには、出生時に観測した次の未公開Worldの識別候補を保持します。正確なsnapshot ownerとSessionを持つ元load要求が受理され、その要求のworker内で一致するWorldが出生した場合だけ初回関係を確定します。閉鎖中のWorld、古い候補、未観測のregistry、kind 4は採用しません。この候補は入力ticketではなく、結合前に発行されたpacketやtransportを新Worldへ付け替えません。実load gatewayの試験では初回結合と古い候補の拒否を確認しましたが、Session出生・Core設置を含む全体の肯定受入は未成立です。
+
+gatewayごとの入口、元関数の正常復帰、terminal SEHと最初のfatal箇所を、別の常駐診断表へ記録します。bootstrapは元のバイト列と解析結果を別々に保存し、読取・保存・形式の失敗を区別します。実行中の独立したatomic値なので、件数の一致や空集合をnative停止の証明には使いません。
+
 ## 自然shutdownと未達
 
 Closeは製品側の許可を失効させ、元の自然shutdownを進めます。World `63E160`→manager `4A1150`→同setのWait `9922C0`をreceiver・caller・stackで照合します。元Waitから後続の破壊処理へ戻す前に実行中の仕事と同期frameを排出し、元の `380B0`で保存用ノードを解放してから最終排出を確認します。現在のshutdown制御stackを自己待ちに含めません。
@@ -74,5 +78,7 @@ cargo nextest run --locked --manifest-path tools/Cargo.toml -p civ6-native-bridg
 通常CIで省略される一次照合を合格とみなさず、対象件数と実結果を別に保持します。ゲーム原本や必要な利用権のないfixtureを、このコマンドで取得・配布することはありません。
 
 後続候補では通常起動・Prepare・原保存読込・ゲーム内の確認・観測停止の5手順と5判定が成功し、終了・自動保存の復元も確認しています。通常のnative getterでは22人×22ownerの484組でHash/Indexの結果が一致しました。その保存状態では任命可能が0、任命不可が484であり、全員の加入・進化・支払い成功を示す結果ではありません。
+
+さらに後の8手順の実行では、Prepare後の保存読込中の異常終了、Host準備の拒否、Prepare成功後もLoadの成立を確認できない結果が残っています。最後の実行は2/8で、実保存読込の合格には数えていません。今回の初回結合と診断表の変更後は、画面・実ゲームでの再実行を行っていません。
 
 元の製品受入7条件は未達です。通常22人の加入・進化・任命、起動の自動接続と同一process読込、AI本人の費用2・3支払いと余分な昇進拒否、未払い配置拒否、途中支払いMPの保存読込、元113手順と保存比較6組・両AI、正式中和後の功績・効果停止と保存回復・再配置を、短い診断へ置き換えません。

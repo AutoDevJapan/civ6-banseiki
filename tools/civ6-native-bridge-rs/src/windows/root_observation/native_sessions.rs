@@ -15,6 +15,7 @@ mod ledger;
 mod registry;
 #[path = "native_transport.rs"]
 pub(super) mod transports;
+pub(super) use ledger::BootstrapTarget;
 #[cfg(test)]
 use ledger::WorldReceipt;
 use ledger::{Error, Lease, Ledger, Message, TerminalTarget, Transport};
@@ -300,7 +301,7 @@ fn state() -> std::sync::MutexGuard<'static, Ledger> {
     LEDGER
         .get_or_init(|| Mutex::new(Ledger::default()))
         .lock()
-        .unwrap_or_else(|_| std::process::abort())
+        .unwrap_or_else(|_| fault())
 }
 pub(super) fn snapshot_owner(
     owner: u64,
@@ -316,6 +317,49 @@ pub(super) fn loaded_world(
     world: SessionWorldReceipt,
 ) -> Result<(), SessionError> {
     state().loaded_world(lease, previous, world)
+}
+/// Only the exact native snapshot owner and a Session born in the observed
+/// pre-World window can propose an initial binding. The input remains
+/// unqualified; this target issues no packet or product authority.
+pub(super) fn bootstrap_load_target(
+    owner: u64,
+    session: u64,
+    packet: Option<PacketReceipt>,
+) -> Option<BootstrapTarget> {
+    let target = state().bootstrap_target(owner, session)?;
+    if (NativeSessionApi::admission_active() || super::unproven_input_active()) && packet.is_none()
+    {
+        return None;
+    }
+    if packet.is_some_and(|p| {
+        p.lease != target.lease
+            || p.world.is_some()
+            || !state().bootstrap_packet_matches(target.lease, p.transport)
+    }) {
+        return None;
+    }
+    Some(target)
+}
+#[cfg(test)]
+pub(super) fn fixture_bootstrap_session(owner: u64, session: u64) -> SessionLease {
+    let mut ledger = state();
+    let lease = ledger.birth(1, Some(1), owner, 2).unwrap();
+    ledger.record_birth_window(lease, worlds::fixture_first_birth_window());
+    ledger
+        .factory(lease, lease.0 as u32, owner, session, 0x9000 + lease.0)
+        .unwrap();
+    ledger.published(lease, lease.0 as u32).unwrap();
+    lease
+}
+#[cfg(test)]
+pub(super) fn fixture_bound_session_world(lease: SessionLease) -> Option<SessionWorldReceipt> {
+    state().world(lease).ok()
+}
+pub(super) fn bind_bootstrap_world(
+    target: BootstrapTarget,
+    world: worlds::WorldLease,
+) -> Result<(), SessionError> {
+    state().bind_bootstrap_world(target, world)
 }
 pub(super) fn retire_world(world: SessionWorldReceipt) -> Result<(), SessionError> {
     if deferred::pending().map_err(|_| Error::Unresolved)? != 0
@@ -399,7 +443,12 @@ fn unresolved(lease: Option<Lease>) {
         f.mark_unresolved();
     }
 }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(70);
     unresolved(None);
     std::process::abort()
@@ -521,6 +570,9 @@ extern "system" fn begin(raw: *mut Saved) {
                             .birth(c.registry, lifetime, c.owner, raw.gpr[1] as u32)
                             .unwrap_or_else(|_| fault()),
                     );
+                    if let Some(window) = worlds::capture_birth_window() {
+                        state().record_birth_window(c.lease.unwrap(), window);
+                    }
                 }
             }
             71 if caller(raw, 0x7f8cf5) => {
@@ -706,6 +758,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(e) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

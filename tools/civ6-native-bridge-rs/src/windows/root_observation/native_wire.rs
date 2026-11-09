@@ -40,6 +40,16 @@ pub(super) struct Snapshot {
     metadata: u32,
 }
 impl Snapshot {
+    pub(super) fn bootstrap_target(
+        self,
+        owner: u64,
+        session: u64,
+    ) -> Option<sessions::BootstrapTarget> {
+        if self.owner != owner || !self.matches_session(None) {
+            return None;
+        }
+        sessions::bootstrap_load_target(owner, session, self.packet)
+    }
     pub fn matches_session(
         self,
         source: Option<(
@@ -63,7 +73,12 @@ struct Call {
     snapshot: Option<Snapshot>,
 }
 thread_local! { static CALLS: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) }; }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(140);
     FAILED.store(true, Ordering::Release);
     if let Some(frames) = FRAMES.get() {
@@ -157,6 +172,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

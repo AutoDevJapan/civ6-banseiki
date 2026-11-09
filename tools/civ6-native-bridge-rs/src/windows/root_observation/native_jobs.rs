@@ -23,7 +23,12 @@ const SITES: [(usize, [u8; 8], usize); 4] = [
     (0xe3ccf0, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c], 5),
 ];
 thread_local! {static STACK:RefCell<Vec<(u64,u64,u64)>>=const {RefCell::new(Vec::new())};}
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(20);
     FAILED.store(true, Ordering::Release);
     TRACE.0[6].store(1, Ordering::Release);
@@ -111,6 +116,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     scheduler::allocated(raw, exceptional);
     loads::job_finish(raw, exceptional);
     if raw.invocation.cookie != COOKIE {

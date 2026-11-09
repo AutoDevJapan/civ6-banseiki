@@ -15,6 +15,8 @@ struct OwnedHook {
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 static FAILED: AtomicBool = AtomicBool::new(false);
 static HOST_PREPARED: AtomicBool = AtomicBool::new(false);
+#[path = "native_census.rs"]
+pub(super) mod census;
 #[path = "native_consumers.rs"]
 mod consumers;
 #[path = "native_control.rs"]
@@ -97,15 +99,20 @@ pub static BRIDGE_RUNTIME_NATIVE_FRAME_TRACE_SIZE: u64 = 128;
 pub(super) fn diagnostic(index: usize) {
     TRACE.0[13].store(index as u64, Ordering::Release);
 }
+#[track_caller]
+fn fault() -> ! {
+    census::fault(1, std::panic::Location::caller().line());
+    std::process::abort()
+}
 
 extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
-        let frames = FRAMES.get().unwrap_or_else(|| std::process::abort());
+        let frames = FRAMES.get().unwrap_or_else(|| fault());
         raw.invocation.token = frames
             .enter_with_provenance(sessions::NativeSessionApi::unproven_input_active())
-            .unwrap_or_else(|_| std::process::abort());
+            .unwrap_or_else(|_| fault());
         raw.invocation.cookie = COOKIE;
         if !frames.healthy() {
             FAILED.store(true, Ordering::Release);
@@ -114,18 +121,21 @@ extern "system" fn begin(raw: *mut Saved) {
             // Do not race it by dereferencing old native receivers. This is
             // the same owned-process fatal boundary as a failed Close, never
             // a fabricated native return or a successful cancellation.
-            std::process::abort();
+            fault();
         }
         TRACE.0[2].fetch_add(1, Ordering::Relaxed);
         TRACE.0[5].fetch_add(1, Ordering::AcqRel);
     }))
     .is_err()
     {
-        std::process::abort();
+        fault();
     }
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(1, raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }
@@ -439,6 +449,7 @@ pub(in super::super) unsafe fn install(core: usize) -> Result<(), &'static str> 
         }
         TRACE.0[7].fetch_or(1 << i, Ordering::Release);
     }
+    census::installed();
     Ok(())
 }
 
@@ -521,6 +532,10 @@ pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static s
         current_created_filetime().ok_or("native Host process identity")?,
         Ordering::Release,
     );
+    census::identity(
+        TRACE.0[8].load(Ordering::Acquire),
+        TRACE.0[9].load(Ordering::Acquire),
+    );
     unsafe {
         diagnostic(1001);
         sessions::NativeSessionApi::prepare_host(exe)?;
@@ -536,6 +551,7 @@ pub(in super::super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static s
         scheduler::prepare_host(exe)?;
     }
     diagnostic(1007);
+    census::prepared();
     HOST_PREPARED.store(true, Ordering::Release);
     Ok(())
 }
@@ -597,6 +613,7 @@ pub(in super::super) fn fixture_host_job_sites() -> [(usize, [u8; 8], usize); 4]
 /// Restore every owned entry, retaining each relay for already fetched jumps.
 /// Failed compares retain responsibility and do not prevent later restores.
 pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
+    census::restored();
     let mut hooks = HOOKS.lock().map_err(|_| "native frame owner poisoned")?;
     let mut failed = unsafe { jobs::restore() }.is_err();
     failed |= unsafe { consumers::restore() }.is_err();

@@ -8,6 +8,43 @@ use windows_sys::Win32::System::Memory::{
     PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_READONLY, PAGE_WRITECOPY,
 };
 
+fn native_census_sample(
+    pid: u32,
+    created: u64,
+    read: impl FnOnce(&mut [u8]) -> Result<(), String>,
+    save: impl FnOnce(&[u8]) -> Result<(), String>,
+) -> Value {
+    let mut bytes = vec![0; wire::NATIVE_CENSUS_BYTES];
+    if let Err(error) = read(&mut bytes) {
+        return json!({"type":"native_gateway_census","status":"read failed","error":error});
+    }
+    if let Err(error) = save(&bytes) {
+        return json!({"type":"native_gateway_census","status":"preservation failed","error":error});
+    }
+    match wire::native_census(&bytes, pid, created) {
+        Ok(mut census) => {
+            census["type"] = json!("native_gateway_census");
+            census["status"] = json!("captured");
+            census
+        }
+        Err(error) => json!({"type":"native_gateway_census","status":"invalid snapshot",
+            "raw_preserved":true,"error":error}),
+    }
+}
+fn capture_native_census(
+    game: &Handle,
+    address: usize,
+    request: &wire::Request,
+    extension: &str,
+) -> Value {
+    native_census_sample(
+        request.pid,
+        request.created,
+        |bytes| read_remote(game, address, bytes),
+        |bytes| preserve(&request.output, extension, bytes),
+    )
+}
+
 fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, String> {
     let local = LocalDll(unsafe {
         LoadLibraryExW(
@@ -606,6 +643,8 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 b"BridgeRuntimeStopObservation\0",
                 b"BRIDGE_RUNTIME_PROPERTY_LOG\0",
                 b"BRIDGE_RUNTIME_NATIVE_FRAME_TRACE\0",
+                b"BRIDGE_RUNTIME_NATIVE_CENSUS\0",
+                b"BRIDGE_RUNTIME_NATIVE_CENSUS_SIZE\0",
             ],
         )?
     };
@@ -632,6 +671,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     let mut job = OwnedJob::attach(&game, req.pid, req.created)?;
     let mut prepared_trace_address = None;
     let mut root_trace_address = None;
+    let mut native_census_address = None;
     let mut root_evidence_saved = false;
     let mut stop_observation_stage = ObservationStopStage::NotRequested;
     let result = (|| -> Result<(), String> {
@@ -653,6 +693,14 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 } else {
                     wire::ROOT_BYTES
                 },
+            )?);
+        } else {
+            native_census_address = Some(root_address(
+                &game,
+                &runtime,
+                runtime_exports[6],
+                runtime_exports[7],
+                wire::NATIVE_CENSUS_BYTES,
             )?);
         }
         let diagnostic_address = Some(root_address(
@@ -714,6 +762,9 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                         |bytes| preserve(&req.output, "bootstrap-prepare-diagnostic.bin", bytes),
                     );
                     if status != Some(0) && !req.root_only {
+                        diagnosis["native_census"] = native_census_address.map(|address|
+                            capture_native_census(&game, address, &req, "host-prepare-native-census.bin"))
+                            .unwrap_or_else(|| json!({"status":"pointer unavailable"}));
                         diagnosis["native_host"] = match pointer(&game, runtime.base + runtime_exports[5]) {
                             Ok(address) => {
                                 let mut bytes=[0u8;128];
@@ -873,6 +924,17 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             &mut writer,
             wire::native_frames(&frame_bytes, req.pid, req.created)?,
         )?;
+        let census = capture_native_census(
+            &game,
+            native_census_address.ok_or("native census address absent")?,
+            &req,
+            "native-census.bin",
+        );
+        let census_captured = census["status"] == "captured";
+        write_json(&mut writer, census)?;
+        if !census_captured {
+            return Err("native census unavailable; original snapshot status retained".into());
+        }
         for (extension, bytes) in [
             ("property-log-first.bin", &log.0),
             ("property-log-second.bin", &log.1),
@@ -954,6 +1016,13 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                     RECOVERY_SECONDS * 1000,
                 ));
             }
+            let census = native_census_address.map(|address| {
+                capture_native_census(&game, address, &req, "failure-native-census.bin")
+            });
+            let e = failure_evidence_error(e, census, |record| {
+                write_json(&mut writer, record)
+                    .and_then(|_| writer.flush().map_err(|error| error.to_string()))
+            });
             let evidence = prepared_trace_address.map(|address| {
                 failure_trace_snapshot(
                     req.pid,
@@ -979,6 +1048,40 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn census_preserves_invalid_bytes_and_never_promotes_io_failure() {
+        let mut saved = None;
+        let invalid = native_census_sample(
+            12,
+            34,
+            |bytes| {
+                bytes[0] = 7;
+                Ok(())
+            },
+            |bytes| {
+                saved = Some(bytes.to_vec());
+                Ok(())
+            },
+        );
+        assert_eq!(invalid["status"], "invalid snapshot");
+        assert_eq!(invalid["raw_preserved"], true);
+        assert_eq!(saved.unwrap()[0], 7);
+        let mut saves = 0;
+        let read = native_census_sample(
+            12,
+            34,
+            |_| Err("OS 5".into()),
+            |_| {
+                saves += 1;
+                Ok(())
+            },
+        );
+        assert_eq!(read["status"], "read failed");
+        assert_eq!(read["error"], "OS 5");
+        assert_eq!(saves, 0);
+        let save = native_census_sample(12, 34, |_| Ok(()), |_| Err("disk full".into()));
+        assert_eq!(save["status"], "preservation failed");
+    }
     #[test]
     fn bootstrap_prepare_host_substages_do_not_turn_unknown_response_into_success() {
         for (stage, label) in [

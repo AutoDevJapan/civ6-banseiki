@@ -49,7 +49,12 @@ fn unresolved() {
         f.mark_unresolved();
     }
 }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(130);
     unresolved();
     std::process::abort()
@@ -218,6 +223,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

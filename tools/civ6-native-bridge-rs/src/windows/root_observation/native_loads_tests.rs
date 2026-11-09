@@ -5,6 +5,9 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 };
 static FLOW: AtomicBool = AtomicBool::new(false);
 static FLOW_PATH: AtomicBool = AtomicBool::new(false);
+static FLOW_BOOTSTRAP: AtomicBool = AtomicBool::new(false);
+static FLOW_BOOTSTRAP_STALE: AtomicBool = AtomicBool::new(false);
+static FLOW_DESCRIPTOR: AtomicU64 = AtomicU64::new(0);
 static FLOW_QUEUE: AtomicU64 = AtomicU64::new(0);
 static FLOW_PAYLOAD: AtomicU64 = AtomicU64::new(0);
 static FLOW_OWNED: AtomicU64 = AtomicU64::new(0);
@@ -66,7 +69,13 @@ extern "system" fn flow_worker_body() {
     jobs::fixture_activate_core(0x180000000);
     world_created(worlds::WorldLease {
         epoch: 1,
-        serial: 9,
+        serial: if FLOW_BOOTSTRAP.load(Ordering::Acquire)
+            && !FLOW_BOOTSTRAP_STALE.load(Ordering::Acquire)
+        {
+            1
+        } else {
+            9
+        },
         context: 10,
         game: 20,
         world: 30,
@@ -98,6 +107,10 @@ global_asm!(
     "mov [rsp+0x20],r9","sub rsp,0x38",".seh_stackalloc 0x38",".seh_endprologue",
     "mov rdx,r8","call {path_body}","mov rcx,[rip+{queue}]","call {allocate}",
     ".globl load_flow_path_allocate_return","load_flow_path_allocate_return:","mov al,1","lea rsp,[rsp+0x38]","ret",".seh_endproc",
+    ".p2align 4",".globl load_flow_snapshot",".seh_proc load_flow_snapshot","load_flow_snapshot:",
+    "mov [rsp+8],rbx",".seh_savereg rbx,8","sub rsp,0x38",".seh_stackalloc 0x38",".seh_endprologue",
+    "xor ecx,ecx","mov edx,2","mov r8,[rip+{descriptor_input}]","xor r9d,r9d","mov qword ptr [rsp+0x20],0x2000","call {request}",
+    "lea rsp,[rsp+0x38]","ret",".seh_endproc",
     ".p2align 4",".globl load_flow_copy",".seh_proc load_flow_copy","load_flow_copy:",
     ".byte 0x40,0x55",".seh_pushreg rbp","push rsi",".seh_pushreg rsi","push rdi",".seh_pushreg rdi","push r15",".seh_pushreg r15",
     "sub rsp,0x28",".seh_stackalloc 0x28",".seh_endprologue","call {copy_body}",
@@ -145,6 +158,7 @@ global_asm!(
     copy_body=sym flow_copy_body,allocate_body=sym flow_allocate_body,start_body=sym flow_start_body,worker_body=sym flow_worker_body,path_body=sym flow_path_body,
     queue=sym FLOW_QUEUE,payload=sym FLOW_PAYLOAD,engine=sym FLOW_ENGINE,arena=sym FLOW_ARENA,
     worker_driver=sym load_flow_worker_driver,
+    descriptor_input=sym FLOW_DESCRIPTOR,request=sym native_load_request_gateway,
 );
 unsafe extern "system" {
     fn load_flow_copy_return();
@@ -160,6 +174,7 @@ unsafe extern "system" {
     fn load_flow_execute();
     fn load_flow_request();
     fn load_flow_path_request();
+    fn load_flow_snapshot();
     fn load_flow_copy();
     fn load_flow_allocate();
     fn load_flow_bank();
@@ -399,6 +414,23 @@ fn ordinary_path_command_view_and_native_world_birth_need_no_stale_global_stream
     }
     run_load_gateway_chain(true);
 }
+#[test]
+fn bootstrap_owner_request_binds_only_its_observed_native_world_birth() {
+    if !child("bootstrap_owner_request_binds_only_its_observed_native_world_birth") {
+        return;
+    }
+    FLOW_BOOTSTRAP.store(true, Ordering::Release);
+    run_load_gateway_chain(false);
+}
+#[test]
+fn stale_bootstrap_birth_window_keeps_the_original_load_without_session_authority() {
+    if !child("stale_bootstrap_birth_window_keeps_the_original_load_without_session_authority") {
+        return;
+    }
+    FLOW_BOOTSTRAP.store(true, Ordering::Release);
+    FLOW_BOOTSTRAP_STALE.store(true, Ordering::Release);
+    run_load_gateway_chain(false);
+}
 fn run_load_gateway_chain(path_request: bool) {
     let size = 0x2400000;
     let base =
@@ -440,6 +472,7 @@ fn run_load_gateway_chain(path_request: bool) {
         *((vp + 0x298) as *mut u64) = exe(0x82da0);
     }
     let original = [
+        (0, load_flow_snapshot as *const () as u64),
         (
             1,
             if path_request {
@@ -464,20 +497,41 @@ fn run_load_gateway_chain(path_request: bool) {
     let request: unsafe extern "system" fn(u64, u32, u64, u64, u64) -> u64 =
         unsafe { std::mem::transmute(gateways()[1]) };
     let descriptor_source = [2u32, 0, if path_request { 0 } else { 4 }, 0, 0, 0, 0];
+    FLOW_DESCRIPTOR.store(descriptor_source.as_ptr() as u64, Ordering::Release);
     let path: Vec<u16> = "ordinary.Civ6Save\0".encode_utf16().collect();
+    let mut snapshot_owner = [0u64; 4];
+    snapshot_owner[0] = exe(0xfd35c8);
+    snapshot_owner[1] = 0x7700;
+    let bootstrap_lease = if FLOW_BOOTSTRAP.load(Ordering::Acquire) {
+        unsafe {
+            *(exe(0xfd36b0) as *mut u64) = exe(0x273f40);
+        }
+        Some(sessions::fixture_bootstrap_session(
+            snapshot_owner.as_ptr() as u64,
+            snapshot_owner[1],
+        ))
+    } else {
+        None
+    };
     assert_eq!(
         unsafe {
-            request(
-                if path_request {
-                    path.as_ptr() as u64
-                } else {
-                    0
-                },
-                2,
-                descriptor_source.as_ptr() as u64,
-                0,
-                if path_request { 0 } else { 0x2000 },
-            )
+            if bootstrap_lease.is_some() {
+                let snapshot: unsafe extern "system" fn(u64) -> u64 =
+                    std::mem::transmute(gateways()[0]);
+                snapshot(snapshot_owner.as_ptr() as u64)
+            } else {
+                request(
+                    if path_request {
+                        path.as_ptr() as u64
+                    } else {
+                        0
+                    },
+                    2,
+                    descriptor_source.as_ptr() as u64,
+                    0,
+                    if path_request { 0 } else { 0x2000 },
+                )
+            }
         } as u8,
         1
     );
@@ -510,7 +564,31 @@ fn run_load_gateway_chain(path_request: bool) {
         .unwrap()
         .seal_executions_and_wait(Instant::now() + Duration::from_secs(1))
         .unwrap();
-    assert_eq!(state().worlds.get(&1).unwrap().serial, 9);
+    let expected_serial =
+        if bootstrap_lease.is_some() && !FLOW_BOOTSTRAP_STALE.load(Ordering::Acquire) {
+            1
+        } else {
+            9
+        };
+    assert_eq!(state().worlds.get(&1).unwrap().serial, expected_serial);
+    if let Some(lease) = bootstrap_lease {
+        if FLOW_BOOTSTRAP_STALE.load(Ordering::Acquire) {
+            assert_eq!(sessions::fixture_bound_session_world(lease), None);
+            assert_eq!(
+                state().binding_rejections.get(&1),
+                Some(&sessions::SessionError::Stale)
+            );
+        } else {
+            assert_eq!(
+                sessions::fixture_bound_session_world(lease),
+                Some(sessions::SessionWorldReceipt {
+                    binding_id: 1,
+                    epoch: 1
+                })
+            );
+            assert!(state().binding_rejections.is_empty());
+        }
+    }
     let mut destruction: Saved = unsafe { std::mem::zeroed() };
     destruction.invocation.kind = 22;
     destruction.invocation.caller_rsp = 0x300;

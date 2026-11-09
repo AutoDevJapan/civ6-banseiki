@@ -24,6 +24,7 @@ struct Source {
         Option<sessions::SessionWorldReceipt>,
     )>,
     wire: Option<wire::Snapshot>,
+    bootstrap: Option<sessions::BootstrapTarget>,
 }
 #[derive(Default)]
 struct State {
@@ -36,6 +37,7 @@ struct State {
     accepted: std::collections::HashSet<u64>,
     worlds: HashMap<u64, worlds::WorldLease>,
     groups: HashMap<u64, u64>,
+    binding_rejections: HashMap<u64, sessions::SessionError>,
 }
 struct Task {
     invocation: LoadInvocation,
@@ -73,7 +75,12 @@ thread_local! {
 fn state() -> MutexGuard<'static, State> {
     STATE.lock().unwrap_or_else(|_| fault())
 }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(80);
     if let Ok(mut s) = STATE.try_lock() {
         s.ledger.unresolved();
@@ -416,7 +423,11 @@ pub(super) fn world_created(world: worlds::WorldLease) {
     {
         fault();
     }
-    if let Some((lease, previous)) = source.session.filter(|_| accepted) {
+    if let Some(target) = source.bootstrap.filter(|_| accepted) {
+        if let Err(reason) = sessions::bind_bootstrap_world(target, world) {
+            state().binding_rejections.insert(request.0, reason);
+        }
+    } else if let Some((lease, previous)) = source.session.filter(|_| accepted) {
         sessions::loaded_world(
             lease,
             previous,
@@ -458,8 +469,16 @@ extern "system" fn begin(raw: *mut Saved) {
                         None => None,
                     };
                     c.source = Some(Source {
-                        session: relation,
+                        session: relation.filter(|(_, world)| world.is_some()),
                         wire,
+                        bootstrap: if relation.is_none_or(|(_, world)| world.is_none()) {
+                            match wire {
+                                Some(snapshot) => snapshot.bootstrap_target(owner, session),
+                                None => sessions::bootstrap_load_target(owner, session, None),
+                            }
+                        } else {
+                            None
+                        },
                     });
                     if c.source
                         .and_then(|source| source.wire)
@@ -499,6 +518,7 @@ extern "system" fn begin(raw: *mut Saved) {
                         .unwrap_or(Source {
                             session: None,
                             wire: None,
+                            bootstrap: None,
                         })
                 } else {
                     // A local pathname intent does not borrow the current
@@ -506,6 +526,7 @@ extern "system" fn begin(raw: *mut Saved) {
                     Source {
                         session: None,
                         wire: None,
+                        bootstrap: None,
                     }
                 };
                 let mut s = state();
@@ -729,6 +750,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }
@@ -779,8 +803,12 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 if accepted && result.is_ok() {
                     s.accepted.insert(request.0);
                     if let Some(world) = s.worlds.get(&request.0).copied() {
-                        if let Some((lease, previous)) = s.sources.get(&request.0).unwrap().session
-                        {
+                        let source = *s.sources.get(&request.0).unwrap();
+                        if let Some(target) = source.bootstrap {
+                            if let Err(reason) = sessions::bind_bootstrap_world(target, world) {
+                                s.binding_rejections.insert(request.0, reason);
+                            }
+                        } else if let Some((lease, previous)) = source.session {
                             sessions::loaded_world(
                                 lease,
                                 previous,

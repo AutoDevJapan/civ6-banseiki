@@ -92,7 +92,12 @@ fn poison() {
     }
     super::unresolved(None);
 }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     super::super::diagnostic(80);
     poison();
     std::process::abort()
@@ -402,6 +407,9 @@ fn verify_growth(queue: u64, addresses: &[u64]) -> Result<(), Error> {
     }
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.kind == 84 {
         super::input::free_end(raw, exceptional);
     }

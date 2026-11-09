@@ -439,7 +439,12 @@ pub(in super::super) fn unwound() {
     }
     unresolved();
 }
+#[track_caller]
 pub(in super::super) fn fault(violation: Violation) -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(150 + violation as usize);
     #[cfg(test)]
     {
@@ -460,6 +465,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(error) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

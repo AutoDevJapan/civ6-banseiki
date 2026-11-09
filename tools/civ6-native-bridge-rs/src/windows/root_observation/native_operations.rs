@@ -14,7 +14,12 @@ static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 static NATIVE_OPERATION_CONTINUE: [AtomicU64; 10] = [const { AtomicU64::new(0) }; 10];
 thread_local! {static STACK:RefCell<Vec<(u64,u64)>>=const {RefCell::new(Vec::new())};}
 type Site = (usize, [u8; 8], usize, usize);
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(40);
     FAILED.store(true, Ordering::Release);
     TRACE.0[6].store(1, Ordering::Release);
@@ -101,6 +106,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(e) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

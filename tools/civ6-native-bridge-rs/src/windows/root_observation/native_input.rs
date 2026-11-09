@@ -57,7 +57,12 @@ fn poison() {
     }
     super::unresolved(None);
 }
+#[track_caller]
 fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
     diagnostic(110);
     poison();
     std::process::abort()
@@ -423,6 +428,9 @@ extern "system" fn begin(raw: *mut Saved) {
     unsafe { SetLastError(e) };
 }
 fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
     if raw.invocation.cookie != COOKIE {
         return;
     }

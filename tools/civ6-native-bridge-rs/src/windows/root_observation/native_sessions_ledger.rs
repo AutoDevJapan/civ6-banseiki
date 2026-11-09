@@ -1,4 +1,5 @@
 //! Identity accounting. Native addresses and IDs never create World authority.
+use super::super::worlds::{BirthWindow, WorldLease};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,6 +10,12 @@ pub struct Message(pub(super) u64);
 pub struct WorldReceipt {
     pub binding_id: u64,
     pub epoch: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in super::super) struct BootstrapTarget {
+    pub lease: Lease,
+    pub window: BirthWindow,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -36,6 +43,7 @@ struct Record {
     owner: u64,
     kind: u32,
     world: Option<WorldReceipt>,
+    birth_window: Option<BirthWindow>,
     native_id: Option<u32>,
     session: u64,
     callback: u64,
@@ -101,6 +109,7 @@ impl Ledger {
                 owner,
                 kind,
                 world: None,
+                birth_window: None,
                 native_id: None,
                 session: 0,
                 callback: 0,
@@ -191,7 +200,60 @@ impl Ledger {
             return Err(Error::Unbound);
         }
         r.world = Some(world);
+        r.birth_window = None;
         Ok(())
+    }
+    pub fn record_birth_window(&mut self, lease: Lease, window: BirthWindow) {
+        if let Some(record) = self.records.get_mut(&lease.0) {
+            if record.phase == Phase::Birth
+                && record.registry_lifetime.is_some()
+                && record.kind != 4
+            {
+                record.birth_window = Some(window);
+            }
+        }
+    }
+    pub fn bootstrap_target(&self, owner: u64, session: u64) -> Option<BootstrapTarget> {
+        let lease = self.snapshot_owner(owner, session)?;
+        let record = self.records.get(&lease.0)?;
+        if self.unresolved || record.world.is_some() {
+            return None;
+        }
+        Some(BootstrapTarget {
+            lease,
+            window: record.birth_window?,
+        })
+    }
+    pub fn bootstrap_packet_matches(&self, lease: Lease, incarnation: u64) -> bool {
+        self.records.get(&lease.0).is_some_and(|record| {
+            record.phase == Phase::Open
+                && !record.transport_closed
+                && !record.transport_closing
+                && record
+                    .transport
+                    .is_some_and(|transport| transport.incarnation == incarnation)
+        })
+    }
+    pub fn bind_bootstrap_world(
+        &mut self,
+        target: BootstrapTarget,
+        world: WorldLease,
+    ) -> Result<(), Error> {
+        let record = self.records.get(&target.lease.0).ok_or(Error::Unknown)?;
+        if self.unresolved
+            || record.birth_window != Some(target.window)
+            || !target.window.matches(world)
+            || self.retired_worlds.contains(&(world.serial, world.epoch))
+        {
+            return Err(Error::Stale);
+        }
+        self.bind_world(
+            target.lease,
+            WorldReceipt {
+                binding_id: world.serial,
+                epoch: world.epoch,
+            },
+        )
     }
     pub fn session(&self, session: u64) -> Option<Lease> {
         self.sessions.get(&session).copied()
@@ -802,3 +864,7 @@ impl Ledger {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "native_sessions_bootstrap_tests.rs"]
+mod bootstrap_tests;

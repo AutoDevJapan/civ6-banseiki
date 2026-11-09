@@ -644,6 +644,7 @@ macro_rules! gateway {
             // not gateway entry RSP, is the manager parent for Wait's -40h.
             "lea rax,[rsp-8]\nmov [rsp+0x108],rax\n",
             "mov rax,[rsp+0x28]\nmov [rsp+0x140],rax\n",
+            "lea rcx,[rsp+0x20]\nmov edx,{census_module}\ncall {census_enter}\n",
             "lea rcx,[rsp+0x20]\ncall {begin}\n",
             "mov rcx,[rsp+0x20]\nmov rdx,[rsp+0x28]\nmov r8,[rsp+0x30]\nmov r9,[rsp+0x38]\n",
             "mov rax,[rsp+0x40]\nmov r10,[rsp+0x48]\nmov r11,[rsp+0x50]\n",
@@ -657,6 +658,7 @@ macro_rules! gateway {
             "mov [rsp+0x40],rax\nmov [rsp+0x48],r10\nmov [rsp+0x50],r11\n",
             "movdqu [rsp+0x60],xmm0\nmovdqu [rsp+0x70],xmm1\nmovdqu [rsp+0x80],xmm2\n",
             "movdqu [rsp+0x90],xmm3\nmovdqu [rsp+0xa0],xmm4\nmovdqu [rsp+0xb0],xmm5\n",
+            "lea rcx,[rsp+0x20]\nmov edx,{census_module}\ncall {census_return}\n",
             "lea rcx,[rsp+0x20]\ncall {end}\n",
             "mov rcx,[rsp+0x20]\nmov rdx,[rsp+0x28]\nmov r8,[rsp+0x30]\nmov r9,[rsp+0x38]\n",
             "mov rax,[rsp+0x40]\nmov r10,[rsp+0x48]\nmov r11,[rsp+0x50]\n",
@@ -667,7 +669,10 @@ macro_rules! gateway {
             // is already gone before the gateway releases its fixed frame.
             "lea rsp,[rsp+0x1c8]\nret\n.seh_endproc\n"
         ), begin=sym $begin,end=sym $end,unwind=sym $unwind,original=sym $original,
-            restore_flags=sym root_flags_restore,save_flags=sym root_flags_save);
+            restore_flags=sym root_flags_restore,save_flags=sym root_flags_save,
+            census_module=const crate::windows::root_observation::native_frames::census::module(module_path!()),
+            census_enter=sym crate::windows::root_observation::native_frames::census::entered,
+            census_return=sym crate::windows::root_observation::native_frames::census::returned);
     };
 }
 // Keep the child after gateway!'s textual definition: it reuses this macro,
