@@ -33,6 +33,7 @@ pub(super) struct Pe<'a> {
     sections: Vec<Section>,
     pub functions: Vec<Function>,
     relocations: BTreeSet<u32>,
+    import_directory: u32,
 }
 impl<'a> Pe<'a> {
     pub fn parse(bytes: &'a [u8]) -> Result<Self, String> {
@@ -89,6 +90,7 @@ impl<'a> Pe<'a> {
             sections,
             functions: Vec::new(),
             relocations: BTreeSet::new(),
+            import_directory: u32_at(bytes, opt + 112 + 8)?,
         };
         let prva = u32_at(bytes, opt + 112 + 3 * 8)?;
         let plen = u32_at(bytes, opt + 116 + 3 * 8)? as usize;
@@ -241,6 +243,88 @@ impl<'a> Pe<'a> {
             return Err(format!("operation VFT/DIR64 differs at {slot:#x}"));
         }
         self.span(target, 1, true)?;
+        Ok(())
+    }
+
+    fn ascii(&self, rva: u32) -> Result<String, String> {
+        let mut out = String::new();
+        for i in 0..256u32 {
+            let b = self.span(rva.checked_add(i).ok_or("import name overflow")?, 1, false)?[0];
+            if b == 0 {
+                return Ok(out);
+            }
+            if !b.is_ascii() {
+                return Err("non-ASCII import name".into());
+            }
+            out.push(char::from(b));
+        }
+        Err("unterminated import name".into())
+    }
+
+    /// Resolve the named import behind a specific IAT cell, without loading it.
+    pub fn import(&self, cell: u32, dll: &str, name: &str) -> Result<(), String> {
+        if self.import_directory == 0 {
+            return Err("session import directory absent".into());
+        }
+        let mut matches = 0;
+        let mut terminated = false;
+        for i in 0..256u32 {
+            let row = self.span(
+                self.import_directory
+                    .checked_add(i * 20)
+                    .ok_or("import overflow")?,
+                20,
+                false,
+            )?;
+            if row.iter().all(|&b| b == 0) {
+                terminated = true;
+                break;
+            }
+            let lookup = u32_at(row, 0)?;
+            let first = u32_at(row, 16)?;
+            if !self.ascii(u32_at(row, 12)?)?.eq_ignore_ascii_case(dll)
+                || cell < first
+                || !(cell - first).is_multiple_of(8)
+                || cell - first >= 32768
+            {
+                continue;
+            }
+            let delta = cell - first;
+            let mut in_table = true;
+            for preceding in (0..delta).step_by(8) {
+                let thunk = lookup
+                    .checked_add(preceding)
+                    .ok_or("import thunk overflow")?;
+                if u64_at(self.span(thunk, 8, false)?, 0)? == 0 {
+                    in_table = false;
+                    break;
+                }
+            }
+            if !in_table {
+                continue;
+            }
+            let hint_name = u64_at(
+                self.span(
+                    lookup.checked_add(delta).ok_or("import thunk overflow")?,
+                    8,
+                    false,
+                )?,
+                0,
+            )?;
+            // Ordinal, empty and unmapped thunk cells cannot prove a named API.
+            let hint_name =
+                u32::try_from(hint_name).map_err(|_| "ordinal or large import thunk")?;
+            if hint_name == 0 {
+                continue;
+            }
+            if self.ascii(hint_name.checked_add(2).ok_or("import hint overflow")?)? == name {
+                self.span(cell, 8, false)?;
+                matches += 1;
+            }
+        }
+        if !terminated || matches != 1 {
+            return Err(format!("session named IAT mismatch at {cell:#x}"));
+        }
         Ok(())
     }
 }

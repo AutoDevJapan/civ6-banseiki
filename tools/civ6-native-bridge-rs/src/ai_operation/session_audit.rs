@@ -4,6 +4,8 @@
 mod fixed;
 #[path = "session_audit/flow.rs"]
 mod flow;
+#[path = "session_audit/lease.rs"]
+mod lease;
 #[path = "session_audit/pe.rs"]
 mod pe;
 
@@ -191,6 +193,7 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
         flow::HOST_SLOTS,
         false,
     )?;
+    let native_lease = lease::inspect(host)?;
     let admission = json!({
         "context_table":0xa101e8,"context_constructor":0x58fb40,
         "enqueue":{"slot":0x230,"adapter":0x590810,"target":0x373e0},
@@ -224,11 +227,12 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
         "queued_storage":"entry RCX saved as RBX; native queue fields E0/E8/F0/F8; record RDI contains bytes+0/+8 and scalars+20/+24",
         "queued_dispatch":0x83d882,
         "queued_dispatch_receiver":"RCX=entry pump RBX; RDX=decoder RAX retained in RSI; call[[RBX]+238]; this is a transport object's slot, not evidence of Core Context type",
-        "incoming_entry":0x860000,"incoming_table_slot":0x10494d0,
+        "incoming_entry":0x860000,"incoming_table":0x10494a8,"incoming_slot":0x28,"incoming_table_slot":0x10494d0,
         "incoming_receiver":"entry RCX is connection-facing interface; [RCX+8] indexes global235B878 via7F9960; R14 retains the returned session-facing object",
         "incoming_decode_calls":[0x860073,0x8600dd],"incoming_dispatch_calls":[0x8600f7,0x860136],
         "incoming_post_dispatch_destroy":[0x860109,0x860147],
-        "limits":"the exact table/implementation for session-facing virtual+238 and all upstream connection lifetimes are not bound here; global lookup keyed by a scalar does not establish epoch identity"});
+        "session_dispatch":0x842030,
+        "limits":"native_lease fixes the registration, callback and session-dispatch types; no World epoch is inferred from registry ID or current Context"});
     let shutdown = json!({
         "entry":0x63e160,"world_table":0xa45160,"world_constructor":0x750600,
         "early_flag_stores":[0x63e176,0x63e182],
@@ -245,14 +249,14 @@ fn inspect(core: &Pe<'_>, host: &Pe<'_>) -> Result<Value, String> {
         "required_cut":"session/message/producer inflight and every active prototype reader/execute must be resolved BEFORE original380B0; cleanup-return storage drain alone is too late to protect380E3",
         "limits":"flags2A4/2A6, normal manager Wait and storage-free normal returns are distinct facts; none independently seals every producer"});
     Ok(
-        json!({"schema":"native-session-boundary-static-v1","image_revision":"steam-26407122",
+        json!({"schema":"native-session-boundary-static-v2","image_revision":"steam-26407122",
         "core_sha256":CORE_SHA,"host_sha256":HOST_SHA,"core_evidence":c,"host_evidence":h,
         "context_admission":admission,"message_lifetime":message,"transport":transport,
-        "shutdown_order":shutdown,"adapter_contract":adapter_contract(),
+        "shutdown_order":shutdown,"adapter_contract":adapter_contract(),"native_lease":native_lease,
         "not_established_by_this_audit":[
             "old packet/session identity across lookup, session replacement, reconnect and address reuse",
             "upstream network admission stop and same-session inflight join with native guarantees",
-            "typed transport virtual+238 implementation and complete alternate incoming/replay paths",
+            "complete alternate incoming/replay paths and joins for every transport kind",
             "World generation for all operation/message constructors, deserializers and queues",
             "runtime gateway installation, exception propagation correctness or lifecycle product acceptance",
             "all-domain producer seal/copy/cancel/join and normal-runtime Rebuild authority"],
