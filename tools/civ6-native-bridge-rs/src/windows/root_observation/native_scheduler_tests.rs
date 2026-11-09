@@ -39,6 +39,7 @@ fn child(name: &str) -> bool {
         .args([
             "--exact",
             &format!("windows::root_observation::native_frames::scheduler::tests::{name}"),
+            "--include-ignored",
             "--nocapture",
         ])
         .spawn()
@@ -692,3 +693,6 @@ fn early_coreless_full_worker_and_nested_dispatch_return_unknown_task_transparen
     assert!(SCOPES.with(|s| s.borrow().is_empty()));
     assert!(!FAILED.load(Ordering::Acquire));
 }
+
+#[path = "native_scheduler_prepare_tests.rs"]
+mod early_prepare;
