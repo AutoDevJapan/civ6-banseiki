@@ -391,9 +391,25 @@ unsafe fn install_sites(
     sites: [(*mut u8, [u8; 16]); 2],
     callee: *mut u8,
 ) -> Result<(), &'static str> {
-    if !supports_atomic_promotion_fetch() {
-        return Err("runtime promotion requires AMD atomic operand fetch");
-    }
+    unsafe { install_sites_with_cpu_gate(sites, callee, supports_atomic_promotion_fetch()) }
+}
+
+// The runtime wrapper always supplies the real CPU query. Tests can exercise
+// refusal on every CPU without introducing a controller or environment override.
+unsafe fn install_sites_with_cpu_gate(
+    sites: [(*mut u8, [u8; 16]); 2],
+    callee: *mut u8,
+    cpu_gate: bool,
+) -> Result<(), &'static str> {
+    crate::atomic_fetch::with_supported_cpu(cpu_gate, || unsafe {
+        install_sites_supported_cpu(sites, callee)
+    })
+}
+
+unsafe fn install_sites_supported_cpu(
+    sites: [(*mut u8, [u8; 16]); 2],
+    callee: *mut u8,
+) -> Result<(), &'static str> {
     let mut slots = SLOTS
         .lock()
         .map_err(|_| "runtime promotion lock poisoned")?;

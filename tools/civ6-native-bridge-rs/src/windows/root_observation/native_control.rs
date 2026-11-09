@@ -524,6 +524,11 @@ mod tests {
     }
     #[test]
     fn same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return",
+        ) else {
+            return;
+        };
         const ENV: &str = "CIV6_NATIVE_CONTROL_SIX_STACK_CHILD";
         if std::env::var_os(ENV).is_none() {
             let mut p=std::process::Command::new(std::env::current_exe().unwrap())
@@ -565,6 +570,11 @@ mod tests {
         if !child("original_wait_joins_worker_through_six_full_gateways_before_cleanup") {
             return;
         }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "original_wait_joins_worker_through_six_full_gateways_before_cleanup",
+        ) else {
+            return;
+        };
         mixed_fixture(true, false);
     }
     #[test]
@@ -572,10 +582,20 @@ mod tests {
         if !child("real_host_wait_receipt_reaches_control_after_six_worker_frames_return") {
             return;
         }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "real_host_wait_receipt_reaches_control_after_six_worker_frames_return",
+        ) else {
+            return;
+        };
         mixed_fixture(true, true);
     }
     #[test]
     fn current_arena_normal_return_never_reaches_destructive_control_cleanup() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "current_arena_normal_return_never_reaches_destructive_control_cleanup",
+        ) else {
+            return;
+        };
         const ENV: &str = "CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD";
         if std::env::var_os(ENV).is_none() {
             let mut p=std::process::Command::new(std::env::current_exe().unwrap())
@@ -611,9 +631,6 @@ mod tests {
         if parallel {
             SIX_STARTED.set(std::sync::Barrier::new(2)).unwrap();
             SIX_RELEASE.set(std::sync::Barrier::new(2)).unwrap();
-        }
-        if !supports_atomic_promotion_fetch() {
-            panic!("fixture needs atomic fetch support");
         }
         let size = if with_host { 0xe50000 } else { 0xa00000 };
         let base =
@@ -1139,9 +1156,11 @@ mod tests {
         ) {
             return;
         }
-        if !supports_atomic_promotion_fetch() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage",
+        ) else {
             return;
-        }
+        };
         FRAMES.set(NativeFrames::new()).ok().unwrap();
         let base = unsafe {
             VirtualAlloc(

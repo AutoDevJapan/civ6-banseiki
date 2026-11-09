@@ -323,7 +323,11 @@ fn four_real_atomic_entries_restore_bytes_protection_and_keep_relays() {
     if !child("four_real_atomic_entries_restore_bytes_protection_and_keep_relays") {
         return;
     }
-    assert!(supports_atomic_promotion_fetch());
+    let Some(_fixture) = crate::windows::atomic_fixture::require(
+        "four_real_atomic_entries_restore_bytes_protection_and_keep_relays",
+    ) else {
+        return;
+    };
     ready();
     let base = unsafe {
         VirtualAlloc(

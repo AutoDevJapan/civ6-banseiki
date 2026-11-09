@@ -8,6 +8,9 @@
 /// Portable scenario limit; only the Windows module implements execution.
 pub const MAX_ACTIVE_SECONDS: u32 = 300;
 
+#[cfg(any(windows, test))]
+mod atomic_fetch;
+
 /// Offline protocol negotiation; this does not open or modify a game process.
 pub fn controller_capabilities() -> serde_json::Value {
     serde_json::json!({

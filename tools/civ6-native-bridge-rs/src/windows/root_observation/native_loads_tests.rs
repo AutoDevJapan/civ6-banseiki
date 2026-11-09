@@ -666,10 +666,11 @@ fn all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore() 
     if !child("all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore") {
         return;
     }
-    assert!(
-        supports_atomic_promotion_fetch(),
-        "required atomic entry exchange unavailable"
-    );
+    let Some(_fixture) = crate::windows::atomic_fixture::require(
+        "all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore",
+    ) else {
+        return;
+    };
     let size = 0x2400000;
     let base = unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
         as usize;

@@ -694,9 +694,11 @@ mod tests {
         if !child("three_native_world_entry_exchanges_restore_owned_bytes") {
             return;
         }
-        if !supports_atomic_promotion_fetch() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "three_native_world_entry_exchanges_restore_owned_bytes",
+        ) else {
             return;
-        }
+        };
         let size = 0x760000;
         let base =
             unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
@@ -745,9 +747,11 @@ mod tests {
         if !child("actual_birth_gateways_bind_original_outputs_before_caller_stores") {
             return;
         }
-        if !supports_atomic_promotion_fetch() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "actual_birth_gateways_bind_original_outputs_before_caller_stores",
+        ) else {
             return;
-        }
+        };
         FRAMES.set(NativeFrames::new()).ok().unwrap();
         let size = 0x760000;
         let base =

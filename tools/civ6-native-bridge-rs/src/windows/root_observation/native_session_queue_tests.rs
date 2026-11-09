@@ -831,7 +831,11 @@ fn all_seven_installed_entries_execute_original_once_preserve_result_flags_and_r
     {
         return;
     }
-    assert!(supports_atomic_promotion_fetch());
+    let Some(_fixture) = crate::windows::atomic_fixture::require(
+        "all_seven_installed_entries_execute_original_once_preserve_result_flags_and_restore",
+    ) else {
+        return;
+    };
     let base = unsafe {
         VirtualAlloc(
             null_mut(),

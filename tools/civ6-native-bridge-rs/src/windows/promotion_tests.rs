@@ -13,7 +13,7 @@ const ORIGINAL: u64 = 0xaabb_ccdd_1122_3301;
 
 #[test]
 fn unpublished_relay_is_freed_but_transferred_storage_is_retained() {
-    if !child("unpublished_relay_is_freed_but_transferred_storage_is_retained") {
+    if !owned_child("unpublished_relay_is_freed_but_transferred_storage_is_retained") {
         return;
     }
     let allocate = || {
@@ -103,22 +103,31 @@ impl Drop for OwnedChild {
 
 // Each test runs itself in an owned Win64 child. No inventory-only helper is
 // counted as an executed gateway fixture. Child output retains its exact count.
-fn child(name: &str) -> bool {
-    if !supports_atomic_promotion_fetch() {
-        // CI on another CPU verifies refusal before mutation. It does not
-        // count as an executed AMD/Win64 gateway fixture in the evidence.
-        assert_eq!(
-            unsafe { install_sites([(null_mut(), [0; 16]); 2], null_mut()) },
-            Err("runtime promotion requires AMD atomic operand fetch")
-        );
-        assert!(!used());
-        println!("AMD gateway child NOT EXECUTED; unsupported-CPU refusal verified");
-        return false;
+fn child(name: &'static str) -> bool {
+    if std::env::var("JAC_RUNTIME_PROMOTION_CHILD").as_deref() == Ok(name) {
+        return true;
     }
+    let Some(_fixture) = atomic_fixture::require(name) else {
+        return false;
+    };
+    owned_child(name)
+}
+
+fn owned_child(name: &str) -> bool {
     if std::env::var("JAC_RUNTIME_PROMOTION_CHILD").as_deref() == Ok(name) {
         return true;
     }
     let name = format!("windows::promotion::tests::{name}");
+    let inventory = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--list", "--exact", &name])
+        .creation_flags(0x08000000)
+        .output()
+        .unwrap();
+    assert!(inventory.status.success());
+    assert!(
+        String::from_utf8_lossy(&inventory.stdout).contains(&format!("{name}: test")),
+        "owned promotion fixture was not found"
+    );
     let mut child = OwnedChild(
         std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", &name, "--nocapture"])
@@ -142,6 +151,66 @@ fn child(name: &str) -> bool {
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[test]
+fn cpu_gate_false_refuses_before_memory_or_publication_mutation() {
+    // This child deliberately bypasses the fixture's host-CPU skip. Both
+    // branches below run on AMD, Intel and unknown Windows runners.
+    if !owned_child("cpu_gate_false_refuses_before_memory_or_publication_mutation") {
+        return;
+    }
+    let p = unsafe { page() };
+    let bytes = [0x5au8; 16]; // Deliberately invalid: gate=true cannot patch it.
+    unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len()) };
+    let mut old = 0;
+    assert_ne!(
+        unsafe {
+            VirtualProtect(
+                p.cast(),
+                CODE_PAGE,
+                windows_sys::Win32::System::Memory::PAGE_READONLY,
+                &mut old,
+            )
+        },
+        0
+    );
+    let protection = || {
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        assert_ne!(
+            unsafe { VirtualQuery(p.cast(), &mut info, std::mem::size_of_val(&info)) },
+            0
+        );
+        info.Protect
+    };
+    let before_protection = protection();
+    assert!(!used());
+    assert!(SLOTS.lock().unwrap().is_empty());
+    assert!(RUNTIME_PROMOTION_TARGET.load(Ordering::Acquire).is_null());
+    let result = unsafe { install_sites_with_cpu_gate([(p, bytes); 2], p, false) };
+    assert!(!used(), "CPU refusal consumed the installer lifetime");
+    assert!(SLOTS.lock().unwrap().is_empty());
+    assert!(RUNTIME_PROMOTION_TARGET.load(Ordering::Acquire).is_null());
+    assert_eq!(copy_current::<16>(p as u64), Some(bytes));
+    assert_eq!(protection(), before_protection);
+    assert_eq!(
+        result,
+        Err("runtime promotion requires AMD atomic operand fetch")
+    );
+
+    // A true gate must reach the ordinary window validation. No instruction
+    // is exchanged, and no executable fixture runs on an unsupported CPU.
+    assert_eq!(
+        unsafe { install_sites_with_cpu_gate([(p, bytes); 2], p, true) },
+        Err("runtime promotion complete call window differs"),
+        "true CPU gate did not reach window validation"
+    );
+    assert!(used());
+    assert_eq!(RUNTIME_PROMOTION_TARGET.load(Ordering::Acquire), p);
+    assert!(SLOTS.lock().unwrap().is_empty());
+    assert_eq!(copy_current::<16>(p as u64), Some(bytes));
+    assert_eq!(protection(), before_protection);
+    assert_ne!(unsafe { VirtualFree(p.cast(), 0, MEM_RELEASE) }, 0);
 }
 
 unsafe fn page() -> *mut u8 {

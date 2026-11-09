@@ -116,13 +116,11 @@ mod root_observation;
 /// that condition. Intel's documented cross-modifying-code contract differs,
 /// so this optional mode refuses other CPU vendors before any mutation.
 pub fn supports_atomic_promotion_fetch() -> bool {
-    let leaf = core::arch::x86_64::__cpuid(0);
-    let mut vendor = [0u8; 12];
-    vendor[..4].copy_from_slice(&leaf.ebx.to_le_bytes());
-    vendor[4..8].copy_from_slice(&leaf.edx.to_le_bytes());
-    vendor[8..].copy_from_slice(&leaf.ecx.to_le_bytes());
-    &vendor == b"AuthenticAMD"
+    crate::atomic_fetch::vendor_supported(&crate::atomic_fetch::cpu_vendor())
 }
+
+#[cfg(test)]
+mod atomic_fixture;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]

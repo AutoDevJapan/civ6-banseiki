@@ -620,6 +620,8 @@ mod tests {
             stdout.contains("running 1 test") && stdout.contains(name),
             "owned child did not execute the selected test: {stdout}"
         );
+        // Preserve the child's EXECUTED / NOT EXECUTED evidence for CI.
+        print!("{stdout}");
         false
     }
     #[test]
@@ -754,11 +756,12 @@ mod tests {
         if !child("pinned_history_clear_gateway_frees_once_and_rejects_a_changed_complete_body") {
             return;
         }
-        if !supports_atomic_promotion_fetch() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "pinned_history_clear_gateway_frees_once_and_rejects_a_changed_complete_body",
+        ) else {
             assert!(HOOKS.lock().unwrap().is_empty());
-            println!("NOT EXECUTED: history-clear entry exchange requires supported atomic instruction fetch");
             return;
-        }
+        };
         use windows_sys::Win32::System::Diagnostics::Debug::{
             RtlAddFunctionTable, RtlDeleteFunctionTable, IMAGE_RUNTIME_FUNCTION_ENTRY,
         };
@@ -950,9 +953,11 @@ mod tests {
         if !child("ten_original_entry_patches_restore_without_losing_relocated_operands") {
             return;
         }
-        if !supports_atomic_promotion_fetch() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "ten_original_entry_patches_restore_without_losing_relocated_operands",
+        ) else {
             return;
-        }
+        };
         FRAMES.set(NativeFrames::new()).ok().unwrap();
         let size = 0xb8b000;
         let base =

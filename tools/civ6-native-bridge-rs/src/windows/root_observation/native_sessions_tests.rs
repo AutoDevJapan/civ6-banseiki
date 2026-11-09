@@ -627,7 +627,11 @@ fn all_real_atomic_entries_restore_original_bytes_and_protection() {
     if !child("all_real_atomic_entries_restore_original_bytes_and_protection") {
         return;
     }
-    assert!(supports_atomic_promotion_fetch());
+    let Some(_fixture) = crate::windows::atomic_fixture::require(
+        "all_real_atomic_entries_restore_original_bytes_and_protection",
+    ) else {
+        return;
+    };
     let base = unsafe {
         VirtualAlloc(
             null_mut(),

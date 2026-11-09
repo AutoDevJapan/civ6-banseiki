@@ -619,9 +619,11 @@ mod tests {
         if !child("all_three_job_entry_cas_publish_restore_and_keep_continuations") {
             return;
         }
-        if !supports_atomic_promotion_fetch() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "all_three_job_entry_cas_publish_restore_and_keep_continuations",
+        ) else {
             return;
-        }
+        };
         FRAMES.set(NativeFrames::new()).ok().unwrap();
         let base = unsafe {
             VirtualAlloc(
