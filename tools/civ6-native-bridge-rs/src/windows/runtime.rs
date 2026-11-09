@@ -7,7 +7,7 @@
 //! neither count certifies pending publication or all native dispatch domains.
 use super::*;
 use windows_sys::Win32::System::LibraryLoader::{
-    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN, GetModuleHandleExW,
+    GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
 };
 
 pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0002;
@@ -297,7 +297,11 @@ fn transition(fence: Fence, update: Update) -> bool {
                     && state_phase(state) == 1
                     && composite::copy_catalog(fence.owner, fence.binding, begin, fence.ticket)
                         .is_some();
-                if valid { (begin, 2) } else { (0, 0) }
+                if valid {
+                    (begin, 2)
+                } else {
+                    (0, 0)
+                }
             }
         };
         // Catalog copying is bounded and uses no saved pointer. CAS below

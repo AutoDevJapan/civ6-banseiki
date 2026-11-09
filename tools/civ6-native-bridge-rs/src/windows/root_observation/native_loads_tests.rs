@@ -1,7 +1,7 @@
 use super::*;
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
+    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
 static FLOW: AtomicBool = AtomicBool::new(false);
 static FLOW_QUEUE: AtomicU64 = AtomicU64::new(0);

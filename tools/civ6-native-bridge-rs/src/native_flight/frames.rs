@@ -790,7 +790,7 @@ impl NativeFrames {
 mod tests {
     use super::*;
     use std::{
-        sync::{Arc, mpsc},
+        sync::{mpsc, Arc},
         time::Duration,
     };
     fn deadline() -> Instant {

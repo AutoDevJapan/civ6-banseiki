@@ -544,7 +544,11 @@ impl Ledger {
             return Err(Error::Unresolved);
         }
         let p = self.packets.get(&message.0).ok_or(Error::Unknown)?;
-        if p.active { Err(Error::Busy) } else { Ok(()) }
+        if p.active {
+            Err(Error::Busy)
+        } else {
+            Ok(())
+        }
     }
     pub fn world(&self, lease: Lease) -> Result<WorldReceipt, Error> {
         self.records
@@ -791,6 +795,10 @@ impl Ledger {
                 return Err(Error::Busy);
             }
         }
-        if found { Ok(()) } else { Err(Error::Unknown) }
+        if found {
+            Ok(())
+        } else {
+            Err(Error::Unknown)
+        }
     }
 }

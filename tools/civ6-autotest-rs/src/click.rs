@@ -1,5 +1,5 @@
 //! Civ VI input is sent only after a unique process and window are verified.
-use crate::{Error, Result, time::monotonic};
+use crate::{time::monotonic, Error, Result};
 use std::{collections::BTreeSet, time::Duration};
 
 pub const VK_ESCAPE: u16 = 0x1b;
@@ -736,11 +736,9 @@ mod win {
             );
             // The frozen snapshot definitely contains the child. Its strong
             // Child handle remains open, and exit 259 is not STILL_ACTIVE.
-            assert!(
-                process_ids_from_snapshot(candidates, &names)
-                    .unwrap()
-                    .is_empty()
-            );
+            assert!(process_ids_from_snapshot(candidates, &names)
+                .unwrap()
+                .is_empty());
         }
 
         #[test]
@@ -751,11 +749,9 @@ mod win {
             let candidates = owned_snapshot(pid, &names);
             child.finish();
             drop(child);
-            assert!(
-                process_ids_from_snapshot(candidates, &names)
-                    .unwrap()
-                    .is_empty()
-            );
+            assert!(process_ids_from_snapshot(candidates, &names)
+                .unwrap()
+                .is_empty());
         }
 
         fn live_candidate(pid: u32) -> ProcessCandidate {
@@ -857,13 +853,11 @@ mod win {
             assert_eq!(observations, 2);
             assert_eq!(ids, BTreeSet::from([11]));
             let mut attempts = 0;
-            assert!(
-                verify_fresh_snapshots(&names, || {
-                    attempts += 1;
-                    Ok(vec![live_candidate(11), denied.clone()])
-                })
-                .is_err()
-            );
+            assert!(verify_fresh_snapshots(&names, || {
+                attempts += 1;
+                Ok(vec![live_candidate(11), denied.clone()])
+            })
+            .is_err());
             assert_eq!(attempts, 3);
             let mut attempts = 0;
             let two = verify_fresh_snapshots(&names, || {

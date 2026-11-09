@@ -1,7 +1,7 @@
 use super::*;
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
+    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
 pub(super) static FLOW: AtomicBool = AtomicBool::new(false);
 pub(super) static NETWORK: AtomicU64 = AtomicU64::new(0);
@@ -354,14 +354,12 @@ fn typed_callback_enters_shared_incoming_with_saved_input() {
     super::super::EXE.store(base as u64, Ordering::Release);
     super::super::CORE.store(1, Ordering::Release);
     FRAMES.get_or_init(NativeFrames::new);
-    assert!(
-        super::super::SCOPE
-            .set(SessionScopeHooks {
-                enter_existing_epoch: scope_enter,
-                leave: scope_leave
-            })
-            .is_ok()
-    );
+    assert!(super::super::SCOPE
+        .set(SessionScopeHooks {
+            enter_existing_epoch: scope_enter,
+            leave: scope_leave
+        })
+        .is_ok());
     super::super::NATIVE_SESSION_CONTINUE[2].store(
         fixture_incoming_original as *const () as u64 + 5,
         Ordering::Release,

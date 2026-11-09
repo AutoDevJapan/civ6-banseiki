@@ -2,7 +2,7 @@ use super::*;
 use std::os::windows::process::CommandExt;
 use std::sync::atomic::AtomicUsize;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
+    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
 #[link(name = "kernel32")]
 unsafe extern "system" {
@@ -211,14 +211,12 @@ impl Fixture {
     fn new() -> Self {
         FIXTURE.store(true, Ordering::Release);
         FRAMES.get_or_init(NativeFrames::new);
-        assert!(
-            SCOPE
-                .set(SessionScopeHooks {
-                    enter_existing_epoch: scope_enter,
-                    leave: scope_leave
-                })
-                .is_ok()
-        );
+        assert!(SCOPE
+            .set(SessionScopeHooks {
+                enter_existing_epoch: scope_enter,
+                leave: scope_leave
+            })
+            .is_ok());
         CORE.store(1, Ordering::Release);
         let exe = unsafe {
             VirtualAlloc(
