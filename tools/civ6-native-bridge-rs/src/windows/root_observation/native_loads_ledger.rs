@@ -24,6 +24,7 @@ enum Outcome {
 }
 struct Load {
     stream: Option<u64>,
+    stream_birth: Option<u64>,
     outcome: Outcome,
     commands: usize,
     view: Option<Invocation>,
@@ -39,6 +40,8 @@ struct View {
     pointer: u64,
     workers: usize,
     reservations: usize,
+    started: bool,
+    joined: bool,
     initializer_returned: bool,
     world: Option<(u64, u64)>,
     stream_read: bool,
@@ -52,6 +55,9 @@ pub(super) struct Ledger {
     views: HashMap<u64, View>,
     current: HashMap<u64, Invocation>,
     unresolved: bool,
+    stream_pointer: u64,
+    stream_birth: u64,
+    copy_active: Option<u64>,
 }
 impl Ledger {
     fn id(&mut self) -> Result<u64, Error> {
@@ -67,6 +73,7 @@ impl Ledger {
             id,
             Load {
                 stream: None,
+                stream_birth: None,
                 outcome: Outcome::Entered,
                 commands: 0,
                 view: None,
@@ -74,13 +81,74 @@ impl Ledger {
         );
         Ok(Request(id))
     }
-    pub fn copied(&mut self, request: Request, stream: u64) -> Result<(), Error> {
+    fn copied(&mut self, request: Request, stream: u64) -> Result<(), Error> {
         let load = self.loads.get_mut(&request.0).ok_or(Error::Unknown)?;
         if stream == 0 || load.stream.is_some() || load.outcome != Outcome::Entered {
             return Err(Error::Stale);
         }
         load.stream = Some(stream);
+        load.stream_birth = Some(self.stream_birth);
         Ok(())
+    }
+    pub fn begin_copy(&mut self) -> Result<u64, Error> {
+        let id = self.id()?;
+        self.copy_active = Some(id);
+        self.stream_pointer = 0;
+        self.stream_birth = 0;
+        Ok(id)
+    }
+    pub fn stream_constructed(&mut self, copy: u64, pointer: u64) -> Result<(), Error> {
+        if self.copy_active != Some(copy) || pointer == 0 || self.stream_birth != 0 {
+            return Err(Error::Stale);
+        }
+        self.stream_pointer = pointer;
+        self.stream_birth = copy;
+        Ok(())
+    }
+    pub fn end_copy(
+        &mut self,
+        copy: u64,
+        request: Option<Request>,
+        actual: u64,
+    ) -> Result<(), Error> {
+        if request.is_none() && self.copy_active != Some(copy) {
+            return Ok(());
+        }
+        if self.copy_active != Some(copy) {
+            return Err(Error::Stale);
+        }
+        if request.is_some()
+            && (self.stream_birth != copy || self.stream_pointer != actual || actual == 0)
+        {
+            return Err(Error::Stale);
+        }
+        if let Some(request) = request {
+            self.copied(request, actual)?;
+        }
+        self.copy_active = None;
+        Ok(())
+    }
+    pub fn abandon_copy(&mut self, copy: u64) {
+        if self.copy_active == Some(copy) {
+            self.copy_active = None;
+            self.stream_birth = 0;
+            self.stream_pointer = 0;
+        }
+    }
+    #[cfg(test)]
+    pub fn fixture_copied(&mut self, request: Request, pointer: u64) -> Result<(), Error> {
+        let copy = self.begin_copy()?;
+        self.stream_constructed(copy, pointer)?;
+        self.end_copy(copy, Some(request), pointer)
+    }
+    fn same_stream(&self, request: Request, pointer: u64) -> bool {
+        self.loads.get(&request.0).is_some_and(|load| {
+            load.stream == Some(pointer)
+                && load.stream_birth == Some(self.stream_birth)
+                && self.stream_pointer == pointer
+                && self.stream_birth != 0
+                && self.copy_active.is_none()
+        })
     }
     pub fn issued(&mut self, request: Request, payload: u64, descriptor: u64) -> Result<(), Error> {
         let load = self.loads.get_mut(&request.0).ok_or(Error::Unknown)?;
@@ -179,7 +247,7 @@ impl Ledger {
         };
         let load = self.loads.get(&request.0).ok_or(Error::Unknown)?;
         if view != pointer
-            || load.stream != Some(stream)
+            || !self.same_stream(request, stream)
             || load.outcome == Outcome::Rejected
             || load.view.is_some()
         {
@@ -189,7 +257,12 @@ impl Ledger {
             .current
             .get(&pointer)
             .and_then(|id| self.views.get(&id.0))
-            .is_some_and(|v| v.workers != 0 || v.reservations != 0 || !v.initializer_returned)
+            .is_some_and(|v| {
+                v.workers != 0
+                    || v.reservations != 0
+                    || !v.initializer_returned
+                    || (v.started && !v.joined)
+            })
         {
             return Err(Error::Busy);
         }
@@ -202,6 +275,8 @@ impl Ledger {
                 pointer,
                 workers: 0,
                 reservations: 0,
+                started: false,
+                joined: false,
                 initializer_returned: false,
                 world: None,
                 stream_read: false,
@@ -237,6 +312,24 @@ impl Ledger {
             return Err(Error::Busy);
         }
         v.reservations = 1;
+        v.started = true;
+        v.joined = false;
+        Ok(())
+    }
+    pub fn current(&self, pointer: u64) -> Option<Invocation> {
+        self.current.get(&pointer).copied()
+    }
+    pub fn joined(&mut self, invocation: Invocation) -> Result<(), Error> {
+        let v = self.views.get_mut(&invocation.0).ok_or(Error::Unknown)?;
+        if !v.started
+            || v.joined
+            || v.reservations != 0
+            || v.workers != 0
+            || !v.initializer_returned
+        {
+            return Err(Error::Busy);
+        }
+        v.joined = true;
         Ok(())
     }
     pub fn release_worker(&mut self, invocation: Invocation) -> Result<(), Error> {
@@ -281,7 +374,7 @@ impl Ledger {
     }
     pub fn stream_read(&mut self, invocation: Invocation, stream: u64) -> Result<(), Error> {
         let request = self.request(invocation)?;
-        if self.loads.get(&request.0).ok_or(Error::Unknown)?.stream != Some(stream) {
+        if !self.same_stream(request, stream) {
             return Err(Error::Stale);
         }
         self.views.get_mut(&invocation.0).unwrap().stream_read = true;
@@ -297,7 +390,7 @@ mod tests {
     use super::*;
     fn accepted(l: &mut Ledger, stream: u64, payload: u64) -> Request {
         let r = l.enter().unwrap();
-        l.copied(r, stream).unwrap();
+        l.fixture_copied(r, stream).unwrap();
         l.issued(r, payload, 36).unwrap();
         l.returned(r, true).unwrap();
         r
@@ -306,7 +399,7 @@ mod tests {
     fn publication_can_race_acceptance_but_cannot_issue_world_authority() {
         let mut l = Ledger::default();
         let r = l.enter().unwrap();
-        l.copied(r, 10).unwrap();
+        l.fixture_copied(r, 10).unwrap();
         l.issued(r, 20, 36).unwrap();
         assert_eq!(l.consuming(20, 36), Ok(Some(r)));
         l.selected(r, 20, 30, 40).unwrap();
@@ -326,13 +419,13 @@ mod tests {
         l.returned(r, false).unwrap();
         assert_eq!(l.consuming(20, 36), Ok(None));
         assert_eq!(l.initialize(1, 2, 10), Ok(None));
-        assert_eq!(l.copied(r, 10), Err(Error::Stale));
+        assert_eq!(l.fixture_copied(r, 10), Err(Error::Stale));
     }
     #[test]
     fn a_failed_request_after_publication_is_sticky_unresolved() {
         let mut l = Ledger::default();
         let r = l.enter().unwrap();
-        l.copied(r, 10).unwrap();
+        l.fixture_copied(r, 10).unwrap();
         assert_eq!(l.returned(r, false), Err(Error::Unresolved));
         assert_eq!(l.enter(), Err(Error::Unresolved));
     }
@@ -378,6 +471,28 @@ mod tests {
         assert_eq!(l.stream_read(nv, 10), Err(Error::Stale));
     }
     #[test]
+    fn destroying_task_does_not_replace_same_group_native_wait_receipt() {
+        let mut l = Ledger::default();
+        let r = accepted(&mut l, 10, 20);
+        l.consuming(20, 36).unwrap();
+        l.selected(r, 20, 30, 40).unwrap();
+        l.consumed(r, 20).unwrap();
+        let old = l.initialize(30, 40, 10).unwrap().unwrap();
+        l.reserve_worker(old).unwrap();
+        l.initialized(old).unwrap();
+        let new = accepted(&mut l, 11, 20);
+        l.consuming(20, 36).unwrap();
+        l.selected(new, 20, 30, 40).unwrap();
+        l.consumed(new, 20).unwrap();
+        assert_eq!(l.joined(old), Err(Error::Busy));
+        l.release_worker(old).unwrap();
+        assert_eq!(l.initialize(30, 40, 11), Err(Error::Busy));
+        l.joined(old).unwrap();
+        let next = l.initialize(30, 40, 11).unwrap().unwrap();
+        assert_ne!(old, next);
+        assert_eq!(l.joined(old), Err(Error::Busy));
+    }
+    #[test]
     fn terminal_unwind_cannot_create_acceptance_or_a_new_binding() {
         let mut l = Ledger::default();
         let r = accepted(&mut l, 10, 20);
@@ -387,5 +502,25 @@ mod tests {
         // A native failure is never treated as successful cancellation.
         assert_eq!(l.consuming(20, 36), Err(Error::Unresolved));
         assert_ne!(r.0, 0);
+    }
+    #[test]
+    fn reused_stream_address_cannot_satisfy_an_old_request_incarnation() {
+        let mut l = Ledger::default();
+        let old = accepted(&mut l, 10, 20);
+        l.consuming(20, 36).unwrap();
+        l.selected(old, 20, 30, 40).unwrap();
+        l.consumed(old, 20).unwrap();
+        let newer = l.enter().unwrap();
+        l.fixture_copied(newer, 10).unwrap();
+        l.returned(newer, true).unwrap();
+        assert_eq!(l.initialize(30, 40, 10), Err(Error::Stale));
+        let mut other = Ledger::default();
+        let r = other.enter().unwrap();
+        let first = other.begin_copy().unwrap();
+        other.stream_constructed(first, 10).unwrap();
+        let second = other.begin_copy().unwrap();
+        other.stream_constructed(second, 10).unwrap();
+        other.end_copy(second, None, 10).unwrap();
+        assert_eq!(other.end_copy(first, Some(r), 10), Err(Error::Stale));
     }
 }

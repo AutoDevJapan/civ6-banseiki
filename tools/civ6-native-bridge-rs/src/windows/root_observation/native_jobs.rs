@@ -288,6 +288,16 @@ pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
     EXE.store(exe as u64, Ordering::Release);
     unsafe { install_at(exe) }
 }
+#[cfg(test)]
+pub(super) fn fixture_early_load_execute(continuation: usize) -> usize {
+    CORE.store(0, Ordering::Release);
+    NATIVE_JOB_CONTINUE[1].store(continuation as u64, Ordering::Release);
+    native_job_execute_gateway as *const () as usize
+}
+#[cfg(test)]
+pub(super) fn fixture_activate_core(core: u64) {
+    CORE.store(core, Ordering::Release);
+}
 unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
     let callbacks = [
         native_job_push_gateway as *const () as usize,

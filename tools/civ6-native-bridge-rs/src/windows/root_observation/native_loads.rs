@@ -16,7 +16,7 @@ static ALLOCATION: Mutex<()> = Mutex::new(());
 static STATE: std::sync::LazyLock<Mutex<State>> =
     std::sync::LazyLock::new(|| Mutex::new(State::default()));
 #[unsafe(no_mangle)]
-static NATIVE_LOAD_CONTINUE: [AtomicU64; 11] = [const { AtomicU64::new(0) }; 11];
+static NATIVE_LOAD_CONTINUE: [AtomicU64; 13] = [const { AtomicU64::new(0) }; 13];
 #[derive(Clone, Copy)]
 struct Source {
     session: Option<(
@@ -34,6 +34,7 @@ struct State {
     tasks_by_address: HashMap<u64, u64>,
     accepted: std::collections::HashSet<u64>,
     worlds: HashMap<u64, worlds::WorldLease>,
+    groups: HashMap<u64, u64>,
 }
 struct Task {
     invocation: LoadInvocation,
@@ -50,6 +51,7 @@ struct JobCall {
     invocation: Option<LoadInvocation>,
     view: u64,
     group: u64,
+    hold: Option<(u64, u64)>,
 }
 struct Call {
     serial: u64,
@@ -61,6 +63,7 @@ struct Call {
     descriptor: u64,
     engine: u64,
     allocation: Option<MutexGuard<'static, ()>>,
+    joined: bool,
 }
 thread_local! {
     static CALLS: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) };
@@ -137,6 +140,7 @@ pub(super) fn job_begin(raw: &mut Saved) {
         invocation: None,
         view: 0,
         group: 0,
+        hold: None,
     };
     match c.kind {
         23 if caller(raw, 0x985904) => {
@@ -156,6 +160,10 @@ pub(super) fn job_begin(raw: &mut Saved) {
                 c.view = view;
                 c.group = value(view + 0x280);
                 if c.group == 0 {
+                    fault();
+                }
+                let mut s = state();
+                if s.groups.insert(invocation.0, c.group).is_some() {
                     fault();
                 }
             }
@@ -200,6 +208,54 @@ pub(super) fn job_begin(raw: &mut Saved) {
     JOB_CALLS.with(|s| s.borrow_mut().push(c));
     raw.invocation.errors |= 1 << 63;
 }
+/// Observe the existing complete arena gateway inside the original load-group
+/// Wait. This does not install a second arena hook or call a scheduler API.
+pub(super) fn group_arena_enter(raw: &mut Saved, external: bool) {
+    if !caller(raw, 0x985bb0) {
+        return;
+    }
+    CALLS.with(|s| {
+        let mut s = s.borrow_mut();
+        let Some(c) = s
+            .iter_mut()
+            .rev()
+            .find(|c| c.kind == 91 && c.invocation.is_some())
+        else {
+            return;
+        };
+        if c.engine != raw.gpr[0] || c.pointer.checked_sub(0x30) != Some(raw.invocation.caller_rsp)
+        {
+            fault();
+        }
+        raw.invocation.list = c.serial;
+        raw.invocation.set = u64::from(external);
+    });
+}
+pub(super) fn group_arena_return(raw: &Saved, exceptional: bool) {
+    if raw.invocation.list == 0 {
+        return;
+    }
+    CALLS.with(|s| {
+        let mut s = s.borrow_mut();
+        let c = s
+            .iter_mut()
+            .rev()
+            .find(|c| c.serial == raw.invocation.list)
+            .unwrap_or_else(|| fault());
+        if exceptional || raw.invocation.set != 1 {
+            #[cfg(test)]
+            if std::env::var_os("CIV6_LOAD_GROUP_CURRENT_NEGATIVE").is_some() {
+                println!("LOAD_GROUP_CURRENT_ARENA_REACHED");
+                use std::io::Write;
+                std::io::stdout().flush().unwrap();
+            }
+            state().ledger.unresolved();
+            FAILED.store(true, Ordering::Release);
+            return;
+        }
+        c.joined = true;
+    });
+}
 pub(super) fn job_finish(raw: &mut Saved, exceptional: bool) {
     if raw.invocation.errors & (1 << 63) == 0 {
         return;
@@ -215,6 +271,12 @@ pub(super) fn job_finish(raw: &mut Saved, exceptional: bool) {
         if c.invocation.is_some() {
             state().ledger.unresolved();
             FAILED.store(true, Ordering::Release);
+        }
+        if let Some((hold, _)) = c.hold {
+            if let Some(f) = FRAMES.get() {
+                f.mark_unresolved();
+                f.leave(hold).unwrap_or_else(|_| fault());
+            }
         }
         return;
     }
@@ -261,12 +323,39 @@ pub(super) fn job_finish(raw: &mut Saved, exceptional: bool) {
         }
         _ => fault(),
     }
+    if let Some((hold, _)) = c.hold {
+        FRAMES
+            .get()
+            .unwrap_or_else(|| fault())
+            .leave(hold)
+            .unwrap_or_else(|_| fault());
+    }
 }
 /// Called only at the Core factory's before-publication normal return.
 pub(super) fn world_created(world: worlds::WorldLease) {
     let Some(invocation) = current_worker() else {
         return;
     };
+    // This is a native before-publication birth, on an already retained
+    // load-task invocation. Transfer its exact epoch into the runtime that
+    // may have been installed while this original Host task was running.
+    JOB_CALLS.with(|calls| {
+        let mut calls = calls.borrow_mut();
+        let job = calls
+            .iter_mut()
+            .rev()
+            .find(|c| c.kind == 21 && c.invocation == Some(invocation))
+            .unwrap_or_else(|| fault());
+        if job.hold.is_some() {
+            fault();
+        }
+        let hold = FRAMES
+            .get()
+            .unwrap_or_else(|| fault())
+            .enter_existing_epoch(world.epoch)
+            .unwrap_or_else(|_| fault());
+        job.hold = Some((hold, world.epoch));
+    });
     let mut s = state();
     let request = s
         .ledger
@@ -306,6 +395,7 @@ extern "system" fn begin(raw: *mut Saved) {
             descriptor: 0,
             engine: 0,
             allocation: None,
+            joined: false,
         };
         match c.kind {
             80 => {
@@ -321,6 +411,17 @@ extern "system" fn begin(raw: *mut Saved) {
                 // Fifth argument is the original source stream. The existing
                 // native busy branch may reject without publishing anything.
                 c.pointer = value(raw.invocation.caller_rsp + 0x28);
+                // Other kind2 paths intentionally clear the stream and load
+                // from a pathname. They are outside this stream carrier and
+                // must keep their ordinary native success/AL0 semantics.
+                if c.pointer == 0
+                    || copy_current::<4>(raw.gpr[2] + 8).map(u32::from_le_bytes) != Some(4)
+                {
+                    raw.invocation.cookie = COOKIE;
+                    raw.invocation.token = c.serial;
+                    CALLS.with(|s| s.borrow_mut().push(c));
+                    return;
+                }
                 let source = CALLS
                     .with(|s| {
                         s.borrow()
@@ -336,21 +437,38 @@ extern "system" fn begin(raw: *mut Saved) {
                 c.source = Some(source);
                 c.request = Some(request);
             }
-            82 if caller(raw, 0x16bd51) => {
-                if let Some(request) = parent_request() {
-                    let source = CALLS
-                        .with(|s| {
-                            s.borrow()
-                                .iter()
-                                .rev()
-                                .find(|c| c.kind == 81)
-                                .map(|c| c.pointer)
-                        })
-                        .unwrap_or(0);
-                    if raw.gpr[0] != source {
-                        fault();
+            82 => {
+                c.descriptor = state().ledger.begin_copy().unwrap_or_else(|_| fault());
+                if caller(raw, 0x16bd51) {
+                    if let Some(request) = parent_request() {
+                        let source = CALLS
+                            .with(|s| {
+                                s.borrow()
+                                    .iter()
+                                    .rev()
+                                    .find(|c| c.kind == 81)
+                                    .map(|c| c.pointer)
+                            })
+                            .unwrap_or(0);
+                        if raw.gpr[0] != source {
+                            fault();
+                        }
+                        c.request = Some(request);
                     }
-                    c.request = Some(request);
+                }
+            }
+            92 if caller(raw, 0x166bcb) => {
+                let parent = CALLS.with(|s| {
+                    s.borrow()
+                        .iter()
+                        .rev()
+                        .find(|c| c.kind == 82)
+                        .map(|c| (c.descriptor, c.request))
+                });
+                if let Some((copy, request)) = parent {
+                    c.descriptor = copy;
+                    c.pointer = raw.gpr[0];
+                    c.request = request;
                 }
             }
             83 => {
@@ -482,6 +600,20 @@ extern "system" fn begin(raw: *mut Saved) {
                 c.pointer = raw.gpr[1];
                 c.descriptor = raw.gpr[2];
             }
+            91 => {
+                let view = raw.gpr[0].saturating_sub(0x240);
+                let s = state();
+                if let Some(invocation) = s.ledger.current(view) {
+                    if let Some(group) = s.groups.get(&invocation.0).copied() {
+                        if value(raw.gpr[0]) != exe(0xfad3e0) || value(raw.gpr[0] + 0x40) != group {
+                            fault();
+                        }
+                        c.invocation = Some(invocation);
+                        c.engine = group;
+                        c.pointer = raw.invocation.native_rsp;
+                    }
+                }
+            }
             88 => {
                 if let Some(invocation) = current_worker() {
                     let stream = if raw.gpr[1] == 0 {
@@ -496,7 +628,7 @@ extern "system" fn begin(raw: *mut Saved) {
                     c.invocation = Some(invocation);
                 }
             }
-            81 | 82 | 85 | 86 => {}
+            81 | 85 | 86 | 92 => {}
             _ => fault(),
         }
         raw.invocation.cookie = COOKIE;
@@ -520,12 +652,35 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     if c.serial != raw.invocation.token || c.kind != raw.invocation.kind {
         fault();
     }
-    if exceptional {
+    if exceptional && (c.request.is_some() || c.invocation.is_some()) {
         state().ledger.unresolved();
         FAILED.store(true, Ordering::Release);
         if let Some(f) = FRAMES.get() {
             f.mark_unresolved();
         }
+        return;
+    }
+    if exceptional {
+        if c.kind == 82 {
+            state().ledger.abandon_copy(c.descriptor);
+        }
+        return;
+    }
+    if c.kind == 92 && c.descriptor != 0 {
+        if raw.gpr[4] != c.pointer {
+            fault();
+        }
+        state()
+            .ledger
+            .stream_constructed(c.descriptor, c.pointer)
+            .unwrap_or_else(|_| fault());
+        return;
+    }
+    if c.kind == 82 {
+        state()
+            .ledger
+            .end_copy(c.descriptor, c.request, value(exe(0x22d8d18)))
+            .unwrap_or_else(|_| fault());
         return;
     }
     if let Some(request) = c.request {
@@ -553,7 +708,6 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 }
                 result
             }
-            82 => s.ledger.copied(request, value(exe(0x22d8d18))),
             83 if raw.gpr[4] != 0 => {
                 let payload = raw.gpr[4];
                 // The original CAS selected the bank. Do not reuse a selector
@@ -591,6 +745,16 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 .worker_returned(invocation)
                 .unwrap_or_else(|_| fault()),
             88 | 89 => {}
+            91 => {
+                if !c.joined || state().tasks.values().any(|t| t.invocation == invocation) {
+                    fault();
+                }
+                state()
+                    .ledger
+                    .joined(invocation)
+                    .unwrap_or_else(|_| fault());
+                state().groups.remove(&invocation.0);
+            }
             _ => fault(),
         }
     }
@@ -670,6 +834,15 @@ home_original!(
     "0x18"
 );
 home_original!(
+    "native_load_group_original",
+    "8",
+    "rbx",
+    ".seh_savereg rbx,8\n",
+    "88",
+    "0x10",
+    "0x18"
+);
+home_original!(
     "native_load_request_original",
     "0x20",
     "r9",
@@ -724,6 +897,20 @@ global_asm!(
     "mov eax,[rcx+0x800100]",
     "mov [rsp+8],rax",
     "mov rax,[rip+NATIVE_LOAD_CONTINUE+24]",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rsp+8]",
+    "jmp qword ptr [rsp+0x10]",
+    ".seh_endproc",
+    ".globl native_load_stream_birth_original",
+    ".seh_proc native_load_stream_birth_original",
+    "native_load_stream_birth_original:",
+    "push rbx",
+    ".seh_pushreg rbx",
+    "sub rsp,0x20",
+    ".seh_stackalloc 0x20",
+    ".seh_endprologue",
+    "mov [rsp+8],rax",
+    "mov rax,[rip+NATIVE_LOAD_CONTINUE+96]",
     "mov [rsp+0x10],rax",
     "mov rax,[rsp+8]",
     "jmp qword ptr [rsp+0x10]",
@@ -817,6 +1004,10 @@ unsafe extern "system" {
     fn native_load_start_gateway();
     fn native_load_bank_original();
     fn native_load_bank_gateway();
+    fn native_load_group_original();
+    fn native_load_group_gateway();
+    fn native_load_stream_birth_original();
+    fn native_load_stream_birth_gateway();
     fn native_load_snapshot_gateway();
     fn native_load_request_gateway();
     fn native_load_copy_gateway();
@@ -916,7 +1107,23 @@ gateway!(
     end,
     unwind
 );
-fn gateways() -> [usize; 11] {
+gateway!(
+    "native_load_group_gateway",
+    "91",
+    native_load_group_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_load_stream_birth_gateway",
+    "92",
+    native_load_stream_birth_original,
+    begin,
+    end,
+    unwind
+);
+fn gateways() -> [usize; 13] {
     [
         native_load_snapshot_gateway as *const () as usize,
         native_load_request_gateway as *const () as usize,
@@ -929,9 +1136,11 @@ fn gateways() -> [usize; 11] {
         native_load_stream_gateway as *const () as usize,
         native_load_start_gateway as *const () as usize,
         native_load_bank_gateway as *const () as usize,
+        native_load_group_gateway as *const () as usize,
+        native_load_stream_birth_gateway as *const () as usize,
     ]
 }
-const SITES: [(usize, [u8; 8], usize); 11] = [
+const SITES: [(usize, [u8; 8], usize); 13] = [
     (0x273f40, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x74], 5),
     (
         0x16b5c0,
@@ -959,6 +1168,12 @@ const SITES: [(usize, [u8; 8], usize); 11] = [
         11,
     ),
     (0x5f470, [0x40, 0x56, 0x48, 0x83, 0xec, 0x20, 0x8b, 2], 6),
+    (0x985b80, [0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83], 5),
+    (
+        0x991920,
+        [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d],
+        6,
+    ),
 ];
 pub(super) unsafe fn prepare_host(module: usize) -> Result<(), &'static str> {
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
@@ -969,7 +1184,7 @@ pub(super) unsafe fn prepare_host(module: usize) -> Result<(), &'static str> {
 }
 unsafe fn install_at(
     module: usize,
-    sites: &[(usize, [u8; 8], usize); 11],
+    sites: &[(usize, [u8; 8], usize); 13],
 ) -> Result<(), &'static str> {
     let mut hooks = HOOKS.lock().map_err(|_| "load hook owner")?;
     if !hooks.is_empty() {

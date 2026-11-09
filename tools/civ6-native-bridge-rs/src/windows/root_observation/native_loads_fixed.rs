@@ -93,6 +93,10 @@ Fragment{begin:0x16403b,end:0x16409f,unwind:0x1168380,hex:"21000c0000f4120400e41
 Fragment{begin:0x16409f,end:0x1640ec,unwind:0x11683a8,hex:"2100080000f4120400e4130400c4150400341c04c03c1600e93c16000c831601"},
 Fragment{begin:0x1640ec,end:0x1640f8,unwind:0x11683c8,hex:"21000000c03c1600e93c16000c831601"},
 ]},
+FixedFrame{begin:0x985b80,end:0x985bc3,sha:"6f35d0e5070b1800ff44e67cf0324c2cc74c3b36f3cde5dfe217987a8c0732a1",parts:&[
+Fragment{begin:0x985b80,end:0x985bc3,unwind:0x11f0fac,hex:"010a04000a3406000a320670"},
+]},
+FixedFrame{begin:0x991920,end:0x991945,sha:"9761e9a3d38710e6ecc251f2e38def6c0ceaeff1ba810ab783f4369ed74f8717",parts:&[Fragment{begin:0x991920,end:0x991945,unwind:0x11c0b10,hex:"0106020006320230"}]},
 ];
 pub(super) unsafe fn verify(module: usize) -> Result<(), &'static str> {
     for f in FRAMES {

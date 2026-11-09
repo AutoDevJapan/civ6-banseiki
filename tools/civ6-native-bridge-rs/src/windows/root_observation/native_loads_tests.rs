@@ -10,7 +10,16 @@ static FLOW_OWNED: AtomicU64 = AtomicU64::new(0);
 static FLOW_ENGINE: AtomicU64 = AtomicU64::new(0);
 static FLOW_VIEW: AtomicU64 = AtomicU64::new(0);
 static FLOW_TASK: AtomicU64 = AtomicU64::new(0);
+static FLOW_ARENA: AtomicU64 = AtomicU64::new(0);
 extern "system" fn flow_copy_body() {
+    let destination = FLOW_OWNED.load(Ordering::Acquire);
+    let mut born: Saved = unsafe { std::mem::zeroed() };
+    born.invocation.kind = 92;
+    born.invocation.caller = exe(0x166bcb);
+    born.gpr[0] = destination;
+    begin(&mut born);
+    born.gpr[4] = destination;
+    finish(&mut born, false);
     unsafe {
         *((exe(0x22d8d18)) as *mut u64) = FLOW_OWNED.load(Ordering::Acquire);
     }
@@ -40,6 +49,8 @@ extern "system" fn flow_start_body() {
 extern "system" fn flow_worker_body() {
     let invocation = current_worker().unwrap();
     assert_eq!(state().ledger.request(invocation).unwrap().0, 1);
+    FRAMES.get_or_init(NativeFrames::new);
+    jobs::fixture_activate_core(0x180000000);
     world_created(worlds::WorldLease {
         epoch: 1,
         serial: 9,
@@ -47,6 +58,13 @@ extern "system" fn flow_worker_body() {
         game: 20,
         world: 30,
     });
+    assert_eq!(
+        FRAMES
+            .get()
+            .unwrap()
+            .seal_executions_and_wait(Instant::now() + Duration::from_secs(1)),
+        Err(crate::native_flight::Error::Reentrant)
+    );
 }
 global_asm!(
     ".p2align 4",".globl load_flow_request",".seh_proc load_flow_request","load_flow_request:",
@@ -85,10 +103,22 @@ global_asm!(
     ".globl load_flow_worker_driver",".seh_proc load_flow_worker_driver","load_flow_worker_driver:",
     "sub rsp,0x28",".seh_stackalloc 0x28",".seh_endprologue","call {worker}",
     ".globl load_flow_worker_return","load_flow_worker_return:","lea rsp,[rsp+0x28]","ret",".seh_endproc",
+    ".p2align 4",".globl load_flow_group",".seh_proc load_flow_group","load_flow_group:",
+    "mov [rsp+8],rbx",".seh_savereg rbx,8","push rdi",".seh_pushreg rdi","sub rsp,0x20",".seh_stackalloc 0x20",".seh_endprologue",
+    "mov rdi,rcx","mov rcx,[rcx+0x40]","call qword ptr [rip+{arena}]",
+    ".globl load_flow_group_return","load_flow_group_return:","mov qword ptr [rdi+0x40],0","mov rbx,[rsp+0x30]","lea rsp,[rsp+0x20]","pop rdi","ret",".seh_endproc",
+    ".p2align 4",".globl load_flow_arena",".seh_proc load_flow_arena","load_flow_arena:",
+    ".byte 0x40,0x55",".seh_pushreg rbp","push rbx",".seh_pushreg rbx","push rsi",".seh_pushreg rsi","lea rbp,[rsp-0x47]",".seh_endprologue",
+    "pop rsi","pop rbx","pop rbp","ret",".seh_endproc",
+    ".p2align 4",".globl load_flow_execute",".seh_proc load_flow_execute","load_flow_execute:",
+    ".byte 0x40,0x53",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",".seh_endprologue",
+    "mov rcx,[rcx+8]","sub rcx,0x248","call {worker_driver}",
+    "lea rsp,[rsp+0x20]","pop rbx","ret",".seh_endproc",
     copy=sym native_load_copy_gateway,allocate=sym native_load_allocate_gateway,command=sym native_load_command_gateway,
     select=sym native_load_select_gateway,initialize=sym native_load_initialize_gateway,start=sym native_load_start_gateway,worker=sym native_load_worker_gateway,
     copy_body=sym flow_copy_body,allocate_body=sym flow_allocate_body,start_body=sym flow_start_body,worker_body=sym flow_worker_body,
-    queue=sym FLOW_QUEUE,payload=sym FLOW_PAYLOAD,engine=sym FLOW_ENGINE,
+    queue=sym FLOW_QUEUE,payload=sym FLOW_PAYLOAD,engine=sym FLOW_ENGINE,arena=sym FLOW_ARENA,
+    worker_driver=sym load_flow_worker_driver,
 );
 unsafe extern "system" {
     fn load_flow_copy_return();
@@ -97,6 +127,10 @@ unsafe extern "system" {
     fn load_flow_initialize_return();
     fn load_flow_start_return();
     fn load_flow_worker_return();
+    fn load_flow_group_return();
+    fn load_flow_group();
+    fn load_flow_arena();
+    fn load_flow_execute();
     fn load_flow_request();
     fn load_flow_copy();
     fn load_flow_allocate();
@@ -120,6 +154,7 @@ pub(super) fn caller_override(rva: u64) -> Option<u64> {
         0x63fcd => Some(load_flow_initialize_return as *const () as u64),
         0x83144 => Some(load_flow_start_return as *const () as u64),
         0x985b63 => Some(load_flow_worker_return as *const () as u64),
+        0x985bb0 => Some(load_flow_group_return as *const () as u64),
         _ => None,
     }
 }
@@ -164,6 +199,109 @@ fn child(name: &str) -> bool {
         }
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+#[test]
+fn unsupported_path_load_and_unknown_terminal_unwind_keep_original_semantics() {
+    if !child("unsupported_path_load_and_unknown_terminal_unwind_keep_original_semantics") {
+        return;
+    }
+    let mut home = [0u64; 8];
+    home[5] = 0;
+    let descriptor = [2u32, 0, 0, 0];
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 81;
+    raw.invocation.caller_rsp = home.as_ptr() as u64;
+    raw.gpr[1] = 2;
+    raw.gpr[2] = descriptor.as_ptr() as u64;
+    begin(&mut raw);
+    assert!(CALLS.with(|s| s.borrow().last().unwrap().request.is_none()));
+    raw.gpr[4] = 1;
+    finish(&mut raw, false);
+    assert!(!FAILED.load(Ordering::Acquire));
+    let mut unknown: Saved = unsafe { std::mem::zeroed() };
+    unknown.invocation.kind = 87;
+    begin(&mut unknown);
+    assert!(CALLS.with(|s| s.borrow().last().unwrap().invocation.is_none()));
+    finish(&mut unknown, true);
+    assert!(!FAILED.load(Ordering::Acquire));
+    assert!(state().ledger.enter().is_ok());
+    let mut known: Saved = unsafe { std::mem::zeroed() };
+    known.invocation.kind = 81;
+    home[5] = 0x1000;
+    let descriptor = [2u32, 0, 4, 0];
+    known.invocation.caller_rsp = home.as_ptr() as u64;
+    known.gpr[1] = 2;
+    known.gpr[2] = descriptor.as_ptr() as u64;
+    begin(&mut known);
+    finish(&mut known, true);
+    assert!(FAILED.load(Ordering::Acquire));
+    assert_eq!(state().ledger.enter(), Err(ledger::Error::Unresolved));
+}
+#[test]
+fn load_group_wait_uses_existing_arena_gateway_and_requires_external_normal_return() {
+    const ENV: &str = "CIV6_LOAD_GROUP_CURRENT_NEGATIVE";
+    if std::env::var_os(ENV).is_none()
+        && !child("load_group_wait_uses_existing_arena_gateway_and_requires_external_normal_return")
+    {
+        return;
+    }
+    let negative = std::env::var_os(ENV).is_some();
+    let base = 0x140000000;
+    EXE.store(base, Ordering::Release);
+    FLOW.store(true, Ordering::Release);
+    let mut view = vec![0u64; 0x2e0 / 8];
+    let vp = view.as_mut_ptr() as u64;
+    view[0x240 / 8] = exe(0xfad3e0);
+    view[0x280 / 8] = 0x123400;
+    let invocation = {
+        let mut s = state();
+        let r = s.ledger.enter().unwrap();
+        s.ledger.fixture_copied(r, 10).unwrap();
+        s.ledger.issued(r, 20, 30).unwrap();
+        s.ledger.returned(r, true).unwrap();
+        s.ledger.consuming(20, 30).unwrap();
+        s.ledger.selected(r, 20, 40, vp).unwrap();
+        s.ledger.consumed(r, 20).unwrap();
+        let v = s.ledger.initialize(40, vp, 10).unwrap().unwrap();
+        s.ledger.reserve_worker(v).unwrap();
+        s.ledger.initialized(v).unwrap();
+        s.ledger.release_worker(v).unwrap();
+        s.groups.insert(v.0, 0x123400);
+        v
+    };
+    let arena =
+        consumers::fixture_group_arena(load_flow_arena as *const () as usize + 9, !negative);
+    FLOW_ARENA.store(arena as u64, Ordering::Release);
+    NATIVE_LOAD_CONTINUE[11].store(load_flow_group as *const () as u64 + 5, Ordering::Release);
+    let call: unsafe extern "system" fn(u64) = unsafe { std::mem::transmute(gateways()[11]) };
+    unsafe {
+        call(vp + 0x240);
+    }
+    if negative {
+        panic!("current arena unexpectedly returned through join guard");
+    }
+    assert!(CALLS.with(|s| s.borrow().is_empty()));
+    assert_eq!(state().ledger.joined(invocation), Err(ledger::Error::Busy));
+    let mut p=std::process::Command::new(std::env::current_exe().unwrap()).creation_flags(0x08000000)
+        .stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped())
+        .env(ENV,"1").args(["--exact","windows::root_observation::native_frames::loads::tests::load_group_wait_uses_existing_arena_gateway_and_requires_external_normal_return","--nocapture"])
+        .spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if p.try_wait().unwrap().is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = p.kill();
+            let _ = p.wait();
+            panic!("current arena child timed out");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let out = p.wait_with_output().unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("LOAD_GROUP_CURRENT_ARENA_REACHED"));
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("current arena unexpectedly returned"));
 }
 #[test]
 fn native_request_command_view_and_task_gateway_chain_retains_before_publication_carrier() {
@@ -224,7 +362,11 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
     NATIVE_LOAD_ASYNC_LABEL.store(exe(0x106c4c4), Ordering::Release);
     let request: unsafe extern "system" fn(u64, u32, u64, u64, u64) -> u64 =
         unsafe { std::mem::transmute(gateways()[1]) };
-    assert_eq!(unsafe { request(0, 2, 0, 0, 0x2000) } as u8, 1);
+    let descriptor_source = [2u32, 0, 4, 0];
+    assert_eq!(
+        unsafe { request(0, 2, descriptor_source.as_ptr() as u64, 0, 0x2000) } as u8,
+        1
+    );
     assert_eq!(
         state().ledger.consuming(payload, queue + 0x400080),
         Err(ledger::Error::Stale)
@@ -236,15 +378,23 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
         load_flow_transition(ep);
     }
     assert_eq!(state().tasks_by_address.len(), 1);
-    let mut execution: Saved = unsafe { std::mem::zeroed() };
-    execution.invocation.kind = 21;
-    execution.invocation.caller_rsp = 0x200;
-    execution.gpr[0] = tp;
-    job_begin(&mut execution);
+    assert!(
+        FRAMES.get().is_none(),
+        "Host execute enters before Core runtime exists"
+    );
+    let execute: unsafe extern "system" fn(u64) -> u64 = unsafe {
+        std::mem::transmute(jobs::fixture_early_load_execute(
+            load_flow_execute as *const () as usize + 6,
+        ))
+    };
     unsafe {
-        load_flow_worker_driver(vp);
+        execute(tp);
     }
-    job_finish(&mut execution, false);
+    FRAMES
+        .get()
+        .unwrap()
+        .seal_executions_and_wait(Instant::now() + Duration::from_secs(1))
+        .unwrap();
     assert_eq!(state().worlds.get(&1).unwrap().serial, 9);
     let mut destruction: Saved = unsafe { std::mem::zeroed() };
     destruction.invocation.kind = 22;
@@ -259,8 +409,8 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
     assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
 }
 #[test]
-fn all_eleven_native_load_entry_exchanges_execute_original_once_and_restore() {
-    if !child("all_eleven_native_load_entry_exchanges_execute_original_once_and_restore") {
+fn all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore() {
+    if !child("all_thirteen_native_load_entry_exchanges_execute_original_once_and_restore") {
         return;
     }
     assert!(
@@ -278,7 +428,7 @@ fn all_eleven_native_load_entry_exchanges_execute_original_once_and_restore() {
         }
         let mut tail = vec![];
         // Atomically count exactly one original body. RCX is the fixture's
-        // valid native receiver; all9 synthetic bodies share this counter.
+        // valid native receiver; all synthetic bodies share this counter.
         tail.extend_from_slice(&[0xf0, 0x48, 0xff, 0x81, 0, 0x60, 0, 0]);
         let result = if i == 1 { 0 } else { 0x1122_3344_5566_7788u64 };
         tail.extend_from_slice(&[0x48, 0xb8]);
@@ -288,6 +438,7 @@ fn all_eleven_native_load_entry_exchanges_execute_original_once_and_restore() {
             6 => tail.extend_from_slice(&[0x41, 0x5e, 0x41, 0x5c, 0x5d]),
             9 => tail.extend_from_slice(&[0x48, 0x83, 0xc4, 0x38]),
             10 => tail.extend_from_slice(&[0x48, 0x83, 0xc4, 0x20, 0x5e]),
+            12 => tail.extend_from_slice(&[0x48, 0x83, 0xc4, 0x20, 0x5b]),
             _ => {}
         }
         tail.extend_from_slice(&[0xf9, 0xc3]);

@@ -130,6 +130,12 @@ pub(super) unsafe fn fixture_install(exe: usize, core: usize) -> Result<(), &'st
 pub(super) fn fixture_current_arena() {
     TEST_ARENA_CLASS.store(1, Ordering::Release);
 }
+#[cfg(test)]
+pub(super) fn fixture_group_arena(continuation: usize, external: bool) -> usize {
+    NATIVE_CONSUMER_CONTINUE[3].store(continuation as u64, Ordering::Release);
+    TEST_ARENA_CLASS.store(if external { 2 } else { 1 }, Ordering::Release);
+    gateways()[3]
+}
 
 extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
@@ -176,6 +182,7 @@ extern "system" fn begin(raw: *mut Saved) {
                 });
             }
             53 => {
+                loads::group_arena_enter(raw, external_arena(raw.gpr[0]));
                 let parent = WAITS.with(|s| {
                     s.borrow()
                         .last()
@@ -260,6 +267,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             }
         }
         53 => {
+            loads::group_arena_return(raw, exceptional);
             if raw.invocation.parent != 0 {
                 if exceptional {
                     unresolved();
