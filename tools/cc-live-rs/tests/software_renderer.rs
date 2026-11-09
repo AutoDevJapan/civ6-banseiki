@@ -6,7 +6,9 @@ mod tests {
         fs::{self, File, OpenOptions},
         os::windows::fs::OpenOptionsExt,
         path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
     };
+    static ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     const ORIGINAL: &[u8] = b"DeviceID 5056\r\nAllowSWRenderer 0\r\nOther 9\r\n";
     const CPU: &[u8] = b"DeviceID 140\r\nAllowSWRenderer 1\r\nOther 9\r\n";
@@ -18,14 +20,23 @@ mod tests {
     }
     impl Fixture {
         fn new() -> Self {
-            let root = std::env::temp_dir().join(format!(
-                "todo2258-{}-{}",
-                std::process::id(),
+            Self::with_stamp(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
-                    .as_nanos()
+                    .as_nanos(),
+            )
+        }
+        fn with_stamp(stamp: u128) -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "cc-live-renderer-{}-{}-{}",
+                std::process::id(),
+                stamp,
+                ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed)
             ));
+            // A clock sample is not ownership. Never reuse an existing root
+            // whose settings/queue may still belong to another fixture.
+            fs::create_dir(&root).unwrap();
             let p = Paths {
                 here: root.join("here"),
                 wt: root.join("wt"),
@@ -91,6 +102,31 @@ mod tests {
         Interrupted,
         PrepareFailsFirst,
         RestoreBlocked,
+    }
+    #[test]
+    fn equal_clock_samples_cannot_share_settings_queue_or_cleanup() {
+        let candidate = std::env::temp_dir().join(format!(
+            "cc-live-renderer-{}-{}",
+            std::process::id(),
+            u128::MAX
+        ));
+        assert!(
+            !candidate.exists(),
+            "pre-existing fixture is not owned by this test"
+        );
+        let first = Fixture::with_stamp(u128::MAX);
+        let second = Fixture::with_stamp(u128::MAX);
+        assert_ne!(
+            first.root, second.root,
+            "equal timestamps reused another fixture's ownership boundary"
+        );
+        fs::write(first.backup(), b"first owner").unwrap();
+        drop(first);
+        assert_eq!(fs::read(&second.settings).unwrap(), ORIGINAL);
+        assert!(!second.backup().exists());
+        let root = second.root.clone();
+        drop(second);
+        assert!(!root.exists());
     }
     struct Model<'a> {
         f: &'a Fixture,
