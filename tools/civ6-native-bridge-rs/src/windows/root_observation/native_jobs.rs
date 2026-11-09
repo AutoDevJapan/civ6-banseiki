@@ -34,7 +34,12 @@ extern "system" fn begin(raw: *mut Saved) {
         let f = FRAMES.get().unwrap_or_else(|| fault());
         let (id, task) = match raw.invocation.kind {
             20 => {
-                if raw.invocation.caller != CORE.load(Ordering::Acquire) + 0x992267 {
+                let core = CORE.load(Ordering::Acquire);
+                let from_core = (core..core + 0xc80000).contains(&raw.invocation.caller);
+                let vft =
+                    u64::from_le_bytes(copy_current::<8>(raw.gpr[1]).unwrap_or_else(|| fault()));
+                let core_payload = (core..core + 0xc80000).contains(&vft);
+                if !from_core && !core_payload {
                     return;
                 }
                 (

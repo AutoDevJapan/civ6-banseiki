@@ -25,7 +25,15 @@ pub(super) fn ready() -> bool {
     if CORE.load(Ordering::Acquire) == 0 {
         return true;
     }
-    WAITED.load(Ordering::Acquire) && SHUTDOWN_RETURNED.load(Ordering::Acquire)
+    // The installed adapters establish one path and tracked reservations.
+    // They do not establish all producer admission/copy/cancel domains. Do
+    // not convert their zero count or normal Wait return into new authority.
+    native_coverage_complete()
+        && WAITED.load(Ordering::Acquire)
+        && SHUTDOWN_RETURNED.load(Ordering::Acquire)
+}
+fn native_coverage_complete() -> bool {
+    false
 }
 pub(super) fn reopened() {
     CLOSING.store(false, Ordering::Release);
@@ -415,13 +423,11 @@ mod tests {
         finish(&mut m, false);
         assert!(!ready());
         finish(&mut w, false);
-        assert!(ready());
-        assert!(super::reopen());
-        assert!(!ready());
-        assert_eq!(
-            f.execute(200, 100),
-            Err(crate::native_flight::Error::Unresolved)
+        assert!(
+            !ready(),
+            "one native path must not certify all publisher/copy/cancel domains"
         );
+        assert!(!super::reopen());
     }
     global_asm!(
         ".p2align 4",

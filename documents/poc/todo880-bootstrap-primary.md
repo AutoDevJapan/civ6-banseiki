@@ -17,7 +17,7 @@ CoreがHostのPushを呼ぶ前に、payloadとjob-setに対応する世代付き
 
 Closeは資格と橋の新受付を失効させ、nativeの自然shutdownを先に進める。World `63E160`→manager `4A1150`→同setのWait `9922C0`という実呼出しのreceiver・callerを照合し、Waitの元正常returnから`4A1196`へ戻す前に予約と同期frameの排出を確認する。現在のshutdown/manager/Waitを自己待ちに含めず、正常shutdown復帰が未確認ならRebuildを拒否する。SEHを正常returnや取消と扱わない。
 
-全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。
+全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。現在は未確立の全域被覆を理由にRebuildを拒否し、同process再読込を新候補の合格としていない。
 
 以下は従来版に対する元の静的調査である。新版のRVAや受入結果へ読み替えない。
 
