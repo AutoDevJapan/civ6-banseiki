@@ -106,6 +106,13 @@ pub(super) fn fixture_invocation_closed() -> bool {
 pub(super) fn fixture_product_inactive() -> bool {
     !PRODUCT_ACTIVE.load(Ordering::Acquire)
 }
+pub(super) fn inactive_and_drained() -> bool {
+    OWNED.load(Ordering::Acquire)
+        && INSTALLED.load(Ordering::Acquire)
+        && !PRODUCT_ACTIVE.load(Ordering::Acquire)
+        && INVOCATIONS.drained()
+        && !INVOCATION_FAILURE.load(Ordering::Acquire)
+}
 #[cfg(test)]
 pub(super) fn fixture_pending_invocations() -> u32 {
     INVOCATIONS.pending_for_test()
@@ -892,6 +899,12 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
         return BridgeStatus::Critical as u32;
     }
     if !root_observation::native_frames::reopen() {
+        // A missing all-domain certificate is not itself a failed native
+        // drain. Never reopen product grants on this path. The observer may
+        // advance only after its exact World and every retained use ended.
+        if root_observation::native_frames::resume_unqualified_observation() {
+            return BridgeStatus::BoundaryUnproven as u32;
+        }
         return BridgeStatus::Critical as u32;
     }
     if !product_activate() {

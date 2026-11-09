@@ -8,6 +8,10 @@ static EXE: AtomicU64 = AtomicU64::new(0);
 static CORE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len())
+}
+
 #[cfg(test)]
 static TEST_ARENA_CLASS: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]

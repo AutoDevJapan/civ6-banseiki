@@ -10,6 +10,10 @@ static CORE: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]
 static NATIVE_OPERATION_FLAG: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, sites().len())
+}
+
 #[unsafe(no_mangle)]
 static NATIVE_OPERATION_CONTINUE: [AtomicU64; 10] = [const { AtomicU64::new(0) }; 10];
 thread_local! {static STACK:RefCell<Vec<(u64,u64)>>=const {RefCell::new(Vec::new())};}

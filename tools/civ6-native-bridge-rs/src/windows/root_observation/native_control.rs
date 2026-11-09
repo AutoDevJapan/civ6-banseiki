@@ -9,8 +9,12 @@ static SHUTDOWN_RETURNED: AtomicBool = AtomicBool::new(false);
 // necessary condition for ready() and never a native seal by itself.
 static CLOSURE_COMPLETE: AtomicBool = AtomicBool::new(false);
 static WORLD: AtomicU64 = AtomicU64::new(0);
+static WORLD_BIRTH: Mutex<Option<worlds::WorldLease>> = Mutex::new(None);
 static CORE: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, NATIVE_CONTROL_CONTINUE.len())
+}
 #[unsafe(no_mangle)]
 static NATIVE_CONTROL_CONTINUE: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 thread_local! {static STACK:RefCell<Vec<(u64,u64,u64)>>=const {RefCell::new(Vec::new())};}
@@ -52,10 +56,18 @@ pub(super) fn ready() -> bool {
     // The installed adapters establish one path and tracked reservations.
     // They do not establish all producer admission/copy/cancel domains. Do
     // not convert their zero count or normal Wait return into new authority.
-    native_coverage_complete()
+    native_coverage_complete() && observed_shutdown_complete()
+}
+/// Necessary local lifetime facts, deliberately separate from coverage.
+pub(super) fn observed_shutdown_complete() -> bool {
+    CORE.load(Ordering::Acquire) != 0
+        && CLOSING.load(Ordering::Acquire)
         && WAITED.load(Ordering::Acquire)
         && SHUTDOWN_RETURNED.load(Ordering::Acquire)
         && CLOSURE_COMPLETE.load(Ordering::Acquire)
+        && WORLD_BIRTH
+            .lock()
+            .is_ok_and(|birth| birth.is_some_and(worlds::completed))
 }
 fn native_coverage_complete() -> bool {
     false
@@ -66,6 +78,7 @@ pub(super) fn reopened() {
     SHUTDOWN_RETURNED.store(false, Ordering::Release);
     CLOSURE_COMPLETE.store(false, Ordering::Release);
     WORLD.store(0, Ordering::Release);
+    *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = None;
 }
 extern "system" fn begin(raw: *mut Saved) {
     let error = unsafe { GetLastError() };
@@ -103,6 +116,7 @@ extern "system" fn begin(raw: *mut Saved) {
                     if birth != worlds::closing(raw.gpr[0]) || birth.is_none() {
                         fault();
                     }
+                    *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = birth;
                 }
                 if raw.gpr[0] == 0 {
                     fault();
@@ -1002,6 +1016,7 @@ mod tests {
             assert_eq!(WORLD.load(Ordering::Acquire), 0);
             assert!(!WAITED.load(Ordering::Acquire));
         }
+
         let world = vec![0u8; 0x2b0];
         let mut no_op = raw(30, world.as_ptr() as u64, 0x1800471c2);
         begin(&mut no_op);
@@ -1010,6 +1025,112 @@ mod tests {
         assert_eq!(WORLD.load(Ordering::Acquire), 0);
     }
 
+    #[test]
+    fn observation_resume_requires_the_exact_closed_world_and_settled_uses_without_product_grants()
+    {
+        if !child("observation_resume_requires_the_exact_closed_world_and_settled_uses_without_product_grants") {
+            return;
+        }
+        // Policy unit fixture: these controlled lifetime facts are not a
+        // production install/coverage acceptance or a native join proof.
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        runtime::fixture_invocation_runtime();
+        CORE.store(0x180000000, Ordering::Release);
+        let birth = worlds::fixture_world_birth();
+        *WORLD_BIRTH.lock().unwrap() = Some(birth);
+        WORLD.store(birth.world, Ordering::Release);
+        CLOSING.store(true, Ordering::Release);
+        WAITED.store(true, Ordering::Release);
+        SHUTDOWN_RETURNED.store(true, Ordering::Release);
+        CLOSURE_COMPLETE.store(true, Ordering::Release);
+        assert!(
+            !observed_shutdown_complete(),
+            "World's outer return is still absent"
+        );
+        assert!(!super::super::resume_unqualified_observation());
+        worlds::fixture_world_close(birth);
+        assert!(observed_shutdown_complete());
+        for flag in [&CLOSING, &WAITED, &SHUTDOWN_RETURNED, &CLOSURE_COMPLETE] {
+            flag.store(false, Ordering::Release);
+            assert!(!observed_shutdown_complete());
+            flag.store(true, Ordering::Release);
+        }
+        *WORLD_BIRTH.lock().unwrap() = Some(worlds::WorldLease {
+            serial: birth.serial + 1,
+            ..birth
+        });
+        assert!(
+            !observed_shutdown_complete(),
+            "an address alias cannot finish the saved World"
+        );
+        *WORLD_BIRTH.lock().unwrap() = Some(birth);
+        assert!(
+            !super::super::resume_unqualified_observation(),
+            "product permission is still open"
+        );
+        let frames = FRAMES.get().unwrap();
+        let pending = frames.enter().unwrap();
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        assert_eq!(
+            frames.seal_and_wait(Instant::now() + Duration::from_secs(1)),
+            Err(crate::native_flight::Error::Reentrant)
+        );
+        assert!(
+            !super::super::resume_unqualified_observation(),
+            "a retained native use is still live"
+        );
+        frames.leave(pending).unwrap();
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        assert_eq!(
+            runtime::BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::Critical as u32,
+            "this policy unit fixture did not install native entry owners"
+        );
+        assert!(!super::super::resume_observation_with_owned_entries(false));
+        // Exercise the policy only with an injected ownership fact. The
+        // production wrapper above rejects this incomplete installation.
+        assert!(super::super::resume_observation_with_owned_entries(true));
+        assert!(runtime::fixture_product_inactive());
+        assert!(runtime::fixture_invocation_closed());
+        assert_eq!(runtime::invocation_start(), 0);
+        assert_eq!(
+            TRACE.0[12].load(Ordering::Acquire),
+            0,
+            "no qualified reopen was certified"
+        );
+        let next = frames.enter().unwrap();
+        assert!(
+            frames.healthy(),
+            "ordinary native work can execute after the settled boundary"
+        );
+        frames.leave(next).unwrap();
+        assert!(
+            !observed_shutdown_complete(),
+            "one close receipt cannot be replayed"
+        );
+        assert!(!super::super::resume_unqualified_observation());
+    }
+
+    #[test]
+    fn unresolved_native_use_never_turns_into_a_transparent_rebuild_status() {
+        if !child("unresolved_native_use_never_turns_into_a_transparent_rebuild_status") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        runtime::fixture_invocation_runtime();
+        FRAMES.get().unwrap().mark_unresolved();
+        assert_eq!(
+            runtime::BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::Critical as u32
+        );
+        assert!(runtime::fixture_product_inactive());
+        assert!(runtime::fixture_invocation_closed());
+    }
     #[test]
     fn actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage() {
         if !child(

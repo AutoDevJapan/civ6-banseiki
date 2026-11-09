@@ -26,6 +26,10 @@ mod fixed;
 static EXE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len()) && closure::hook_entries_owned()
+}
+
 #[unsafe(no_mangle)]
 static NATIVE_SCHEDULER_CONTINUE: [AtomicU64; 8] = [const { AtomicU64::new(0) }; 8];
 struct Scope {

@@ -33,21 +33,27 @@ fn child(name: &str) -> bool {
     if std::env::var_os(ENV).is_some() {
         return true;
     }
+    let full_name = format!("windows::root_observation::native_frames::scheduler::tests::{name}");
     let mut p = std::process::Command::new(std::env::current_exe().unwrap())
         .creation_flags(0x08000000)
         .env(ENV, "1")
-        .args([
-            "--exact",
-            &format!("windows::root_observation::native_frames::scheduler::tests::{name}"),
-            "--include-ignored",
-            "--nocapture",
-        ])
+        .args(["--exact", &full_name, "--include-ignored", "--nocapture"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         if let Some(s) = p.try_wait().unwrap() {
-            assert!(s.success(), "scheduler child{s}");
+            let output = p.wait_with_output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(s.success(), "scheduler child{s}\n{stdout}\n{stderr}");
+            assert!(
+                stdout.contains("running 1 test")
+                    && stdout.contains(&format!("{full_name} ... ok")),
+                "scheduler child did not execute its exact test: {stdout}\n{stderr}"
+            );
             return false;
         }
         if Instant::now() >= deadline {

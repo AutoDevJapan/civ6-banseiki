@@ -397,6 +397,7 @@ pub enum BridgeStatus {
     EntryBytes = 4,
     HookFailure = 5,
     Critical = 6,
+    BoundaryUnproven = civ6_bootstrap_rs::RUNTIME_REBUILD_UNPROVEN,
     Panic = 99,
 }
 

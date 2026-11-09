@@ -9,6 +9,10 @@ mod slots;
 static QUEUE_EXE: AtomicU64 = AtomicU64::new(0);
 static QUEUE_NEXT: AtomicU64 = AtomicU64::new(0);
 static QUEUE_HOOKS: Mutex<Vec<super::super::OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&QUEUE_HOOKS, SITES.len())
+}
+
 static SLOTS: OnceLock<Mutex<slots::Ledger<Receipt>>> = OnceLock::new();
 #[unsafe(no_mangle)]
 static NATIVE_SESSION_QUEUE_CONTINUE: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];

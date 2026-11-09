@@ -6,6 +6,8 @@ pub mod observation;
 pub mod protocol;
 
 pub const VERSION: u32 = 0x0880_0003;
+/// Product grants remain closed; only fully settled native observation resumes.
+pub const RUNTIME_REBUILD_UNPROVEN: u32 = 7;
 pub const EXE_SHA: &str = "d1a0cfd439e7451be515f47595cfa0b6b983f56d1faf4ea434a4ce3b21491ebe";
 pub const CORE_SHA: &str = "092abfbb2176f8df04b5212f819dc269dd83aea866ff05aaf489904a1ff7c41f";
 pub const MENU_CORE_SHA: &str = "160875db284b825ec2711d23ba425dab99e10a386b7ad0cbd4a33e40e75bcc05";
@@ -45,6 +47,7 @@ enum Phase {
     Open,
     Closing,
     Closed,
+    Observing,
     UnsupportedInlineExchange,
 }
 
@@ -150,8 +153,10 @@ fn rebuild_at_loader(
         return Err("reload boundary differs before factory");
     }
     let status = rebuild();
-    if status == 0 {
-        *phase = Phase::Open;
+    match status {
+        0 => *phase = Phase::Open,
+        RUNTIME_REBUILD_UNPROVEN => *phase = Phase::Observing,
+        _ => {}
     }
     Ok(Some(status))
 }
@@ -265,6 +270,38 @@ mod tests {
         let mut phase = Phase::Closed;
         assert_eq!(rebuild_at_loader(&mut phase, boundary(), || 5), Ok(Some(5)));
         assert_eq!(phase, Phase::Closed);
+    }
+
+    #[test]
+    fn drained_observation_resume_is_distinct_from_a_qualified_rebuild_and_can_recover() {
+        let mut phase = Phase::Closed;
+        assert_eq!(
+            rebuild_at_loader(&mut phase, boundary(), || RUNTIME_REBUILD_UNPROVEN),
+            Ok(Some(RUNTIME_REBUILD_UNPROVEN))
+        );
+        assert_ne!(
+            phase,
+            Phase::Closed,
+            "a safely resumed observer must not abort the factory"
+        );
+        assert_ne!(
+            phase,
+            Phase::Open,
+            "observation does not reopen product permission"
+        );
+        assert_eq!(
+            loader_action(phase, 1, Some(0x24a90d)),
+            Ok(LoaderAction::Ignore)
+        );
+        assert_eq!(
+            rebuild_at_loader(&mut phase, boundary(), || panic!("duplicate Rebuild")),
+            Ok(None)
+        );
+        // A later complete close and qualified rebuild can open normally.
+        // No permanent Disabled state replaces the successful path.
+        phase = Phase::Closed;
+        assert_eq!(rebuild_at_loader(&mut phase, boundary(), || 0), Ok(Some(0)));
+        assert_eq!(phase, Phase::Open);
     }
 
     #[test]

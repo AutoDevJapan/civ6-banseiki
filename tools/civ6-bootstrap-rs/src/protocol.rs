@@ -2273,7 +2273,7 @@ pub fn native_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> 
         || w(5)? != 160
         || w(7)? != 0
         || (8..=10).any(|i| w(i).is_ok_and(|v| v > 1))
-        || (12..16).any(|i| w(i) != Ok(0))
+        || (13..16).any(|i| w(i) != Ok(0))
         || b[128..128 + 160 * 24].iter().any(|v| *v != 0)
     {
         return Err("native census identity/version/layout differs".into());
@@ -2302,7 +2302,7 @@ pub fn native_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> 
         "first_fault":(fault != 0).then(|| json!({"module":NATIVE_CENSUS_MODULES[fault_module],
             "module_id":fault_module,"source_line":fault_line})),
         "host_prepared":w(8)? == 1,"core_installed":w(9)? == 1,"restore_attempted":w(10)? == 1,
-        "entries_before_host_prepared":w(11)?,"rows":rows,
+        "entries_before_host_prepared":w(11)?,"unqualified_observation_reopens":w(12)?,"rows":rows,
         "sampling":"independent atomic counters; concurrent changes permitted",
         "boundary_order_proven":false,"product_acceptance":false}),
     )
@@ -2385,6 +2385,10 @@ mod native_frame_tests {
         let overlap = native_census(&bytes, 12, 34).unwrap();
         assert_eq!(overlap["rows"][0]["native_returned"], 1);
         assert_eq!(overlap["product_acceptance"], false);
+        bytes[96..104].copy_from_slice(&2u64.to_le_bytes());
+        let observing = native_census(&bytes, 12, 34).unwrap();
+        assert_eq!(observing["unqualified_observation_reopens"], 2);
+        assert_eq!(observing["boundary_order_proven"], false);
     }
     #[test]
     fn census_rejects_identity_size_reserved_and_fault_layout_corruption() {
@@ -2401,7 +2405,7 @@ mod native_frame_tests {
             (48, (16u64 << 32) | 12),
             (56, 1),
             (64, 2),
-            (96, 1),
+            (104, 1),
             (128, 1),
         ] {
             let mut bad = bytes.clone();
@@ -2411,6 +2415,35 @@ mod native_frame_tests {
                 "offset {offset} value {value}"
             );
         }
+    }
+    #[test]
+    fn observation_only_rebuild_status_is_not_a_successful_bootstrap_acceptance() {
+        let mut bytes = vec![0; TRACE_BYTES];
+        for (i, value) in [
+            (0, 2u64),
+            (1, CAPACITY as u64),
+            (2, 12),
+            (3, 34),
+            (4, 0x100),
+            (5, 0x200),
+            (6, 128),
+            (7, 3),
+        ] {
+            bytes[i * 8..i * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        for (index, kind) in [11u64, 1, 7].into_iter().enumerate() {
+            let offset = HEADER + index * ROW;
+            bytes[offset..offset + 8].copy_from_slice(&(index as u64 + 1).to_le_bytes());
+            bytes[offset + 8..offset + 16].copy_from_slice(&kind.to_le_bytes());
+        }
+        let status = HEADER + 2 * ROW + 64;
+        bytes[status..status + 8]
+            .copy_from_slice(&u64::from(crate::RUNTIME_REBUILD_UNPROVEN).to_le_bytes());
+        assert_eq!(trace(&bytes, 12, 34), Err("runtime API failure".into()));
+        bytes[status..status + 8].fill(0);
+        let qualified = trace(&bytes, 12, 34).unwrap();
+        assert_eq!(qualified["boundary_order_proven"], false);
+        assert_eq!(qualified["product_acceptance"], false);
     }
 }
 pub fn trace(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {

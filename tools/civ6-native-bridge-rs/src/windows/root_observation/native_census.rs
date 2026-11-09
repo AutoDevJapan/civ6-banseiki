@@ -118,6 +118,9 @@ pub(in super::super) fn installed() {
 pub(in super::super) fn restored() {
     DATA.header[10].store(1, Ordering::Release);
 }
+pub(in super::super) fn observation_resumed() {
+    DATA.header[12].fetch_add(1, Ordering::Relaxed);
+}
 fn row(module: usize, kind: u64) -> Option<&'static Counters> {
     if module == 0 || module >= MODULES || kind >= KINDS as u64 {
         return None;

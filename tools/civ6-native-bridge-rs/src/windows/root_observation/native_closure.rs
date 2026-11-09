@@ -18,6 +18,10 @@ static CORE: AtomicU64 = AtomicU64::new(0);
 static ACTIVE: AtomicU64 = AtomicU64::new(0);
 static LEDGER: Mutex<Ledger> = Mutex::new(Ledger::new());
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, [ENTRY].len())
+}
+
 #[unsafe(no_mangle)]
 static NATIVE_CLOSURE_CONTINUE: AtomicU64 = AtomicU64::new(0);
 

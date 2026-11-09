@@ -5,6 +5,10 @@ use std::collections::HashMap;
 
 static CORE: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len())
+}
+
 #[unsafe(no_mangle)]
 static NATIVE_WORLD_CONTINUE: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -190,6 +194,18 @@ pub(super) fn birth(world: u64) -> Option<WorldLease> {
 pub(super) fn installed() -> bool {
     CORE.load(Ordering::Acquire) != 0
 }
+pub(super) fn completed(lease: WorldLease) -> bool {
+    BINDINGS.lock().is_ok_and(|bindings| {
+        bindings.contexts.get(&lease.context).is_some_and(|birth| {
+            birth.serial == lease.serial
+                && birth.epoch == lease.epoch
+                && birth.game == lease.game
+                && birth.world == Some(lease)
+                && birth.closing
+                && birth.closed
+        })
+    })
+}
 pub(super) fn capture_birth_window() -> Option<BirthWindow> {
     if !HOST_PREPARED.load(Ordering::Acquire) {
         return None;
@@ -199,6 +215,18 @@ pub(super) fn capture_birth_window() -> Option<BirthWindow> {
 #[cfg(test)]
 pub(super) fn fixture_first_birth_window() -> BirthWindow {
     Bindings::default().birth_window().unwrap()
+}
+#[cfg(test)]
+pub(super) fn fixture_world_birth() -> WorldLease {
+    let mut bindings = BINDINGS.lock().unwrap();
+    bindings.context(10, 20, 1).unwrap();
+    bindings.world(20, 30, 1).unwrap()
+}
+#[cfg(test)]
+pub(super) fn fixture_world_close(lease: WorldLease) {
+    let mut bindings = BINDINGS.lock().unwrap();
+    assert_eq!(bindings.close(lease.game), Some(lease));
+    assert!(bindings.closed(lease.game, lease.serial));
 }
 
 extern "system" fn begin(raw: *mut Saved) {

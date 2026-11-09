@@ -10,6 +10,10 @@ use records::{Input, Receipt};
 static INPUT_EXE: AtomicU64 = AtomicU64::new(0);
 static INPUT_NEXT: AtomicU64 = AtomicU64::new(0);
 static INPUT_HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&INPUT_HOOKS, SITES.len())
+}
+
 static RECORDS: std::sync::LazyLock<Mutex<records::Ledger<Ticket>>> =
     std::sync::LazyLock::new(|| Mutex::new(records::Ledger::new()));
 #[unsafe(no_mangle)]

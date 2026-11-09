@@ -3,6 +3,10 @@
 use super::*;
 use std::cell::RefCell;
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len())
+}
+
 static CORE: AtomicU64 = AtomicU64::new(0);
 static EXE: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]

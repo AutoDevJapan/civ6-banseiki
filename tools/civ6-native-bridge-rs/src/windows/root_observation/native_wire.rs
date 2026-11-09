@@ -22,6 +22,10 @@ struct FixedFrame {
 static EXE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, [ORIGINAL].len())
+}
+
 #[unsafe(no_mangle)]
 static NATIVE_WIRE_CONTINUE: AtomicU64 = AtomicU64::new(0);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

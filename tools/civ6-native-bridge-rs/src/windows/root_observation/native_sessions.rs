@@ -116,6 +116,14 @@ static CORE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static LEDGER: OnceLock<Mutex<Ledger>> = OnceLock::new();
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len())
+        && registry::hook_entries_owned()
+        && transports::hook_entries_owned()
+        && input::hook_entries_owned()
+        && deferred::hook_entries_owned()
+}
+
 static SCOPE: OnceLock<SessionScopeHooks> = OnceLock::new();
 static REGISTRIES: std::sync::LazyLock<Mutex<std::collections::HashMap<u64, u64>>> =
     std::sync::LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));

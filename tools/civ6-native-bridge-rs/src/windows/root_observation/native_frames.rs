@@ -13,6 +13,28 @@ struct OwnedHook {
     protection: u32,
 }
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+fn owns_hook_entries(owners: &Mutex<Vec<OwnedHook>>, expected: usize) -> bool {
+    expected != 0
+        && owners.lock().is_ok_and(|owners| {
+            owners.len() == expected
+                && owners.iter().all(|owned| {
+                    copy_current::<8>(owned.hook.target as u64) == Some(owned.hook.patched)
+                })
+        })
+}
+fn all_hook_entries_owned() -> bool {
+    HOST_PREPARED.load(Ordering::Acquire)
+        && owns_hook_entries(&HOOKS, SITES.len())
+        && jobs::hook_entries_owned()
+        && consumers::hook_entries_owned()
+        && worlds::hook_entries_owned()
+        && control::hook_entries_owned()
+        && operations::hook_entries_owned()
+        && sessions::hook_entries_owned()
+        && loads::hook_entries_owned()
+        && wire::hook_entries_owned()
+        && scheduler::hook_entries_owned()
+}
 static FAILED: AtomicBool = AtomicBool::new(false);
 static HOST_PREPARED: AtomicBool = AtomicBool::new(false);
 #[path = "native_census.rs"]
@@ -591,6 +613,26 @@ pub(in super::super) fn reopen() -> bool {
     success
 }
 
+/// Resume native bookkeeping with product permission still closed. This is
+/// not a qualified Rebuild and never increments the certified reopen count.
+pub(in super::super) fn resume_unqualified_observation() -> bool {
+    resume_observation_with_owned_entries(all_hook_entries_owned())
+}
+fn resume_observation_with_owned_entries(owned: bool) -> bool {
+    if !owned
+        || !runtime::inactive_and_drained()
+        || FAILED.load(Ordering::Acquire)
+        || !control::observed_shutdown_complete()
+        || FRAMES.get().is_none_or(|frames| frames.reopen().is_err())
+    {
+        return false;
+    }
+    control::reopened();
+    census::observation_resumed();
+    diagnostic(2001);
+    true
+}
+
 #[cfg(test)]
 pub(super) fn fixture(index: usize, continuation: usize) -> usize {
     FRAMES.get_or_init(NativeFrames::new);
@@ -659,6 +701,41 @@ pub(in super::super) unsafe fn restore() -> Result<(), &'static str> {
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn retained_hook_ownership_refuses_empty_partial_restored_and_changed_entries() {
+        let mut words = [0x1122u64, 0x3344];
+        let owners = Mutex::new(
+            words
+                .iter_mut()
+                .map(|word| OwnedHook {
+                    hook: Hook {
+                        target: (word as *mut u64).cast(),
+                        original: 0u64.to_le_bytes(),
+                        patched: word.to_le_bytes(),
+                        prefix: None,
+                        _code: null_mut(),
+                    },
+                    protection: PAGE_READWRITE,
+                })
+                .collect(),
+        );
+        assert!(owns_hook_entries(&owners, 2));
+        assert!(!owns_hook_entries(&owners, 0));
+        assert!(!owns_hook_entries(&owners, 1));
+        unsafe { ptr::write_volatile(words.as_mut_ptr().add(1), 0x7788) };
+        assert!(!owns_hook_entries(&owners, 2));
+        unsafe { ptr::write_volatile(words.as_mut_ptr().add(1), 0x3344) };
+        assert!(owns_hook_entries(&owners, 2));
+        unsafe { ptr::write_volatile(words.as_mut_ptr().add(1), 0) };
+        assert!(
+            !owns_hook_entries(&owners, 2),
+            "restored original is not an owned patch"
+        );
+        owners.lock().unwrap().pop();
+        assert!(!owns_hook_entries(&owners, 2));
+        owners.lock().unwrap().clear();
+        assert!(!owns_hook_entries(&owners, 2));
+    }
     #[test]
     fn six_real_entry_exchanges_restore_original_bytes_and_keep_frame_ownership() {
         const ENV: &str = "CIV6_NATIVE_FRAMES_CAS_CHILD";

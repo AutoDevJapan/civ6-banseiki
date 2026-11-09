@@ -12,6 +12,10 @@ use ledger::{Invocation as LoadInvocation, Ledger, Request};
 static EXE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len())
+}
+
 static ALLOCATION: Mutex<()> = Mutex::new(());
 static STATE: std::sync::LazyLock<Mutex<State>> =
     std::sync::LazyLock::new(|| Mutex::new(State::default()));

@@ -539,7 +539,7 @@ fn event(
         return Err("new context differs from factory global".into());
     }
     let mut close_token = None;
-    if old != 0 && s.phase == Phase::Open {
+    if old != 0 && matches!(s.phase, Phase::Open | Phase::Observing) {
         record(2, receiver, old, incoming, from, s.generation, 0);
         let status = unsafe { (s.close)(std::ptr::null_mut()) };
         LAST_STATUS.store(status as usize, Ordering::Release);
@@ -692,7 +692,7 @@ fn target_loader_return(result: usize, ret: usize, entry: LoaderInvocation) -> R
             status
         })?
         .ok_or("reload did not execute Rebuild")?;
-        if status != 0 {
+        if status != 0 && status != RUNTIME_REBUILD_UNPROVEN {
             return Err("runtime Rebuild failed before factory".into());
         }
         return Ok(());

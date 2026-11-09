@@ -12,6 +12,10 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 static STATE: std::sync::LazyLock<Mutex<Ledger>> =
     std::sync::LazyLock::new(|| Mutex::new(Ledger::default()));
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, SITES.len())
+}
+
 #[unsafe(no_mangle)]
 static NATIVE_TRANSPORT_CONTINUE: [AtomicU64; 9] = [const { AtomicU64::new(0) }; 9];
 struct Call {
