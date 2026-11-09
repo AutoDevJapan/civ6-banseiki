@@ -354,8 +354,8 @@ gateway!(
     end,
     unwind
 );
-pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
-    let sites = [
+fn sites() -> [(usize, [u8; 8], usize, usize); 3] {
+    [
         (
             0x63e160,
             [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9],
@@ -374,8 +374,14 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
             5,
             native_control_wait_gateway as *const () as usize,
         ),
-    ];
+    ]
+}
+pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
+    let sites = sites();
     let mut owners = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
+    if !owners.is_empty() {
+        return Err("native control hooks already installed");
+    }
     // Refuse invalid bindings before publishing a Core identity. Initialize
     // before the first entry exchange so concurrent callbacks never see zero;
     // each exchange still rechecks its bytes and protection below.
@@ -386,65 +392,81 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
         }
         let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
         if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+            || !entry.addr().is_multiple_of(8)
+            || info.State != MEM_COMMIT
+            || info.Protect & PAGE_GUARD != 0
             || info.Protect & 0xff != PAGE_EXECUTE_READ
         {
             return Err("native control protection");
         }
     }
-    CORE.store(core as u64, Ordering::Release);
-    for (i, (rva, expected, n, gateway)) in sites.into_iter().enumerate() {
-        let entry = (core + rva) as *mut u8;
-        if copy_current::<8>(entry as u64) != Some(expected) {
-            return Err("native control entry differs");
+    let previous_core = CORE.swap(core as u64, Ordering::AcqRel);
+    let result = (|| -> Result<(), &'static str> {
+        for (i, (rva, expected, n, gateway)) in sites.into_iter().enumerate() {
+            #[cfg(test)]
+            tests::before_publication(core, i);
+            let entry = (core + rva) as *mut u8;
+            if copy_current::<8>(entry as u64) != Some(expected) {
+                return Err("native control entry differs");
+            }
+            let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+            if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+                || !entry.addr().is_multiple_of(8)
+                || info.State != MEM_COMMIT
+                || info.Protect & PAGE_GUARD != 0
+                || info.Protect & 0xff != PAGE_EXECUTE_READ
+            {
+                return Err("native control protection");
+            }
+            let code = unsafe { executable_near(entry as usize, entry as usize, n) }
+                .ok_or("native control relay unavailable")?;
+            let mut unpublished = Unpublished(code);
+            unsafe {
+                ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
+                ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), code.add(6), 8);
+            }
+            let mut old = 0;
+            if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
+                || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
+            {
+                return Err("native control relay publication");
+            }
+            let mut patched = expected;
+            patched[..5].copy_from_slice(
+                &rel32_jump(entry as usize, code as usize).ok_or("native control range")?,
+            );
+            patched[5..n].fill(0x90);
+            NATIVE_CONTROL_CONTINUE[i].store((core + rva + n) as u64, Ordering::Release);
+            owners.push(OwnedHook {
+                hook: Hook {
+                    target: entry,
+                    original: expected,
+                    patched,
+                    prefix: None,
+                    _code: code,
+                },
+                protection: info.Protect,
+            });
+            unpublished.0 = null_mut();
+            let r = unsafe {
+                exchange_entry(
+                    entry,
+                    u64::from_le_bytes(expected),
+                    u64::from_le_bytes(patched),
+                )
+            }?;
+            if !r.exchanged || !r.protection_restored || !r.cache_flushed {
+                return Err("critical: native control publication");
+            }
         }
-        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-        if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
-            || info.Protect & 0xff != PAGE_EXECUTE_READ
-        {
-            return Err("native control protection");
-        }
-        let code = unsafe { executable_near(entry as usize, entry as usize, n) }
-            .ok_or("native control relay unavailable")?;
-        let mut unpublished = Unpublished(code);
-        unsafe {
-            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
-            ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), code.add(6), 8);
-        }
-        let mut old = 0;
-        if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
-            || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
-        {
-            return Err("native control relay publication");
-        }
-        let mut patched = expected;
-        patched[..5].copy_from_slice(
-            &rel32_jump(entry as usize, code as usize).ok_or("native control range")?,
-        );
-        patched[5..n].fill(0x90);
-        NATIVE_CONTROL_CONTINUE[i].store((core + rva + n) as u64, Ordering::Release);
-        owners.push(OwnedHook {
-            hook: Hook {
-                target: entry,
-                original: expected,
-                patched,
-                prefix: None,
-                _code: code,
-            },
-            protection: info.Protect,
-        });
-        unpublished.0 = null_mut();
-        let r = unsafe {
-            exchange_entry(
-                entry,
-                u64::from_le_bytes(expected),
-                u64::from_le_bytes(patched),
-            )
-        }?;
-        if !r.exchanged || !r.protection_restored || !r.cache_flushed {
-            return Err("critical: native control publication");
-        }
+        Ok(())
+    })();
+    // An unpublished refusal can return to the prior state. Retained entries
+    // may have fetched their relay, so their callbacks still need this Core.
+    if result.is_err() && owners.is_empty() {
+        CORE.store(previous_core, Ordering::Release);
     }
-    Ok(())
+    result
 }
 pub(super) unsafe fn restore() -> Result<(), &'static str> {
     let mut o = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
@@ -480,6 +502,53 @@ pub(super) fn fixture_observation_resume_guards(resume: fn() -> bool, complete: 
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    static FAIL_SITE: AtomicUsize = AtomicUsize::new(usize::MAX);
+    pub(super) fn before_publication(core: usize, index: usize) {
+        if FAIL_SITE.load(Ordering::Acquire) == index {
+            assert_eq!(CORE.load(Ordering::Acquire), core as u64);
+            let (rva, mut original, _, _) = sites()[index];
+            original[0] ^= 1;
+            unsafe { worlds::install_fixture::write_at(core + rva, &original) };
+        }
+    }
+    #[test]
+    fn failed_control_recheck_rolls_back_only_without_retained_owners() {
+        if !child("failed_control_recheck_rolls_back_only_without_retained_owners") {
+            return;
+        }
+        let entries = sites().map(|(rva, original, _, _)| (rva, original));
+        {
+            let refused = worlds::install_fixture::Memory::new(&entries);
+            refused.protect_all(PAGE_EXECUTE_READ);
+            FAIL_SITE.store(0, Ordering::Release);
+            let result = unsafe { install(refused.base) };
+            FAIL_SITE.store(usize::MAX, Ordering::Release);
+            assert_eq!(result, Err("native control entry differs"));
+            assert!(HOOKS.lock().unwrap().is_empty());
+            assert_eq!(
+                CORE.load(Ordering::Acquire),
+                0,
+                "empty install must return its Core binding"
+            );
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "failed_control_recheck_rolls_back_only_without_retained_owners",
+        ) else {
+            return;
+        };
+        let memory = worlds::install_fixture::Memory::new(&entries);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        FAIL_SITE.store(1, Ordering::Release);
+        let result = unsafe { install(memory.base) };
+        FAIL_SITE.store(usize::MAX, Ordering::Release);
+        assert_eq!(result, Err("native control entry differs"));
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(HOOKS.lock().unwrap().len(), 1);
+        assert_ne!(memory.bytes(entries[0].0), entries[0].1);
+        unsafe { restore() }.unwrap();
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(memory.bytes(entries[0].0), entries[0].1);
+    }
     fn child(name: &str) -> bool {
         const ENV: &str = "CIV6_NATIVE_CONTROL_OWNED_CHILD";
         if std::env::var_os(ENV).is_some() {
