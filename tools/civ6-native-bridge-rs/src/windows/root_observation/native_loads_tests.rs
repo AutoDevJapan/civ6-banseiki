@@ -4,6 +4,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
     RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
 static FLOW: AtomicBool = AtomicBool::new(false);
+static FLOW_PATH: AtomicBool = AtomicBool::new(false);
 static FLOW_QUEUE: AtomicU64 = AtomicU64::new(0);
 static FLOW_PAYLOAD: AtomicU64 = AtomicU64::new(0);
 static FLOW_OWNED: AtomicU64 = AtomicU64::new(0);
@@ -26,6 +27,18 @@ extern "system" fn flow_copy_body() {
 }
 extern "system" fn flow_allocate_body() -> u64 {
     FLOW_PAYLOAD.load(Ordering::Acquire)
+}
+extern "system" fn flow_path_body(path: *const u16, options: *const u8) {
+    unsafe {
+        std::ptr::copy_nonoverlapping(options, exe(0x1267a68) as *mut u8, 28);
+        let mut len = 0usize;
+        while len < 259 && *path.add(len) != 0 {
+            *((exe(0x1267a9c) as *mut u16).add(len)) = *path.add(len);
+            len += 1;
+        }
+        *((exe(0x1267a9c) as *mut u16).add(len)) = 0;
+        *(exe(0x1267a98) as *mut u32) = len as u32;
+    }
 }
 extern "system" fn flow_start_body() {
     let view = FLOW_VIEW.load(Ordering::Acquire);
@@ -72,6 +85,10 @@ global_asm!(
     "mov rcx,[rsp+0x60]","mov edx,2","call {copy}",
     ".globl load_flow_copy_return","load_flow_copy_return:","mov rcx,[rip+{queue}]","call {allocate}",
     ".globl load_flow_allocate_return","load_flow_allocate_return:","mov al,1","lea rsp,[rsp+0x38]","ret",".seh_endproc",
+    ".p2align 4",".globl load_flow_path_request",".seh_proc load_flow_path_request","load_flow_path_request:",
+    "mov [rsp+0x20],r9","sub rsp,0x38",".seh_stackalloc 0x38",".seh_endprologue",
+    "mov rdx,r8","call {path_body}","mov rcx,[rip+{queue}]","call {allocate}",
+    ".globl load_flow_path_allocate_return","load_flow_path_allocate_return:","mov al,1","lea rsp,[rsp+0x38]","ret",".seh_endproc",
     ".p2align 4",".globl load_flow_copy",".seh_proc load_flow_copy","load_flow_copy:",
     ".byte 0x40,0x55",".seh_pushreg rbp","push rsi",".seh_pushreg rsi","push rdi",".seh_pushreg rdi","push r15",".seh_pushreg r15",
     "sub rsp,0x28",".seh_stackalloc 0x28",".seh_endprologue","call {copy_body}",
@@ -116,13 +133,14 @@ global_asm!(
     "lea rsp,[rsp+0x20]","pop rbx","ret",".seh_endproc",
     copy=sym native_load_copy_gateway,allocate=sym native_load_allocate_gateway,command=sym native_load_command_gateway,
     select=sym native_load_select_gateway,initialize=sym native_load_initialize_gateway,start=sym native_load_start_gateway,worker=sym native_load_worker_gateway,
-    copy_body=sym flow_copy_body,allocate_body=sym flow_allocate_body,start_body=sym flow_start_body,worker_body=sym flow_worker_body,
+    copy_body=sym flow_copy_body,allocate_body=sym flow_allocate_body,start_body=sym flow_start_body,worker_body=sym flow_worker_body,path_body=sym flow_path_body,
     queue=sym FLOW_QUEUE,payload=sym FLOW_PAYLOAD,engine=sym FLOW_ENGINE,arena=sym FLOW_ARENA,
     worker_driver=sym load_flow_worker_driver,
 );
 unsafe extern "system" {
     fn load_flow_copy_return();
     fn load_flow_allocate_return();
+    fn load_flow_path_allocate_return();
     fn load_flow_select_return();
     fn load_flow_initialize_return();
     fn load_flow_start_return();
@@ -132,6 +150,7 @@ unsafe extern "system" {
     fn load_flow_arena();
     fn load_flow_execute();
     fn load_flow_request();
+    fn load_flow_path_request();
     fn load_flow_copy();
     fn load_flow_allocate();
     fn load_flow_bank();
@@ -149,6 +168,9 @@ pub(super) fn caller_override(rva: u64) -> Option<u64> {
     }
     match rva {
         0x16bd51 => Some(load_flow_copy_return as *const () as u64),
+        0x163dea if FLOW_PATH.load(Ordering::Acquire) => {
+            Some(load_flow_path_allocate_return as *const () as u64)
+        }
         0x163dea => Some(load_flow_allocate_return as *const () as u64),
         0xdb88d => Some(load_flow_select_return as *const () as u64),
         0x63fcd => Some(load_flow_initialize_return as *const () as u64),
@@ -199,6 +221,55 @@ fn child(name: &str) -> bool {
         }
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+#[test]
+fn pathname_capture_preserves_native_utf16_cap_and_keeps_stream_inputs_separate() {
+    let mut name = vec![0x3042u16; 270];
+    name.push(0);
+    let mut options = [0u32; 7];
+    let input = path_input(name.as_ptr() as u64, options.as_ptr() as u64).unwrap();
+    assert_eq!(input.name, vec![0x3042u16; 259]);
+    options[2] = 4;
+    assert!(path_input(name.as_ptr() as u64, options.as_ptr() as u64).is_none());
+    assert!(path_input(0, options.as_ptr() as u64).is_none());
+}
+#[test]
+fn ordinary_path_load_retains_an_intent_before_command_publication() {
+    if !child("ordinary_path_load_retains_an_intent_before_command_publication") {
+        return;
+    }
+    let home = [0u64; 8];
+    let path: Vec<u16> = "ordinary.Civ6Save\0".encode_utf16().collect();
+    let descriptor = [2u32, 0, 0, 0, 0, 0, 0];
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 81;
+    raw.invocation.caller_rsp = home.as_ptr() as u64;
+    raw.gpr[0] = path.as_ptr() as u64;
+    raw.gpr[1] = 2;
+    raw.gpr[2] = descriptor.as_ptr() as u64;
+    begin(&mut raw);
+    let request = CALLS.with(|s| s.borrow().last().unwrap().request);
+    assert!(
+        request.is_some(),
+        "ordinary pathname load lost its native intent"
+    );
+    assert_eq!(parent_request(), request);
+    assert!(state().tasks.is_empty());
+    assert!(state().worlds.is_empty());
+    assert!(state()
+        .sources
+        .get(&request.unwrap().0)
+        .unwrap()
+        .session
+        .is_none());
+    // Entry retains an intent; it does not claim that the native busy branch
+    // accepted or published it. A plain AL0 remains an ordinary rejection.
+    raw.gpr[4] = 0;
+    finish(&mut raw, false);
+    assert!(CALLS.with(|s| s.borrow().is_empty()));
+    assert!(state().accepted.is_empty());
+    assert!(state().ledger.enter().is_ok());
+    assert!(!FAILED.load(Ordering::Acquire));
 }
 #[test]
 fn unsupported_path_load_and_unknown_terminal_unwind_keep_original_semantics() {
@@ -310,12 +381,23 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
     ) {
         return;
     }
+    run_load_gateway_chain(false);
+}
+#[test]
+fn ordinary_path_command_view_and_native_world_birth_need_no_stale_global_stream() {
+    if !child("ordinary_path_command_view_and_native_world_birth_need_no_stale_global_stream") {
+        return;
+    }
+    run_load_gateway_chain(true);
+}
+fn run_load_gateway_chain(path_request: bool) {
     let size = 0x2400000;
     let base =
         unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) } as u64;
     assert_ne!(base, 0);
     EXE.store(base, Ordering::Release);
     FLOW.store(true, Ordering::Release);
+    FLOW_PATH.store(path_request, Ordering::Release);
     let queue = exe(0x1ad4d00);
     let payload = queue + 0x90;
     let descriptor = exe(0x22d58a0);
@@ -337,6 +419,9 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
         *((descriptor + 0x20) as *mut u64) = exe(0xef220);
         *((ep + 0x14f0) as *mut u64) = vp;
         *((exe(0x12c3c88)) as *mut u64) = ep;
+        if path_request {
+            *(exe(0x22d8d18) as *mut u64) = 0xdead;
+        }
         *(vp as *mut u64) = exe(0xfad3f0);
         *((vp + 0x240) as *mut u64) = exe(0xfad3e0);
         *((vp + 0x248) as *mut u64) = exe(0x106c390);
@@ -346,7 +431,14 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
         *((vp + 0x298) as *mut u64) = exe(0x82da0);
     }
     let original = [
-        (1, load_flow_request as *const () as u64),
+        (
+            1,
+            if path_request {
+                load_flow_path_request as *const () as u64
+            } else {
+                load_flow_request as *const () as u64
+            },
+        ),
         (2, load_flow_copy as *const () as u64),
         (3, load_flow_allocate as *const () as u64),
         (4, load_flow_command as *const () as u64),
@@ -362,11 +454,25 @@ fn native_request_command_view_and_task_gateway_chain_retains_before_publication
     NATIVE_LOAD_ASYNC_LABEL.store(exe(0x106c4c4), Ordering::Release);
     let request: unsafe extern "system" fn(u64, u32, u64, u64, u64) -> u64 =
         unsafe { std::mem::transmute(gateways()[1]) };
-    let descriptor_source = [2u32, 0, 4, 0];
+    let descriptor_source = [2u32, 0, if path_request { 0 } else { 4 }, 0, 0, 0, 0];
+    let path: Vec<u16> = "ordinary.Civ6Save\0".encode_utf16().collect();
     assert_eq!(
-        unsafe { request(0, 2, descriptor_source.as_ptr() as u64, 0, 0x2000) } as u8,
+        unsafe {
+            request(
+                if path_request {
+                    path.as_ptr() as u64
+                } else {
+                    0
+                },
+                2,
+                descriptor_source.as_ptr() as u64,
+                0,
+                if path_request { 0 } else { 0x2000 },
+            )
+        } as u8,
         1
     );
+    assert!(state().sources.get(&1).unwrap().session.is_none());
     assert_eq!(
         state().ledger.consuming(payload, queue + 0x400080),
         Err(ledger::Error::Stale)

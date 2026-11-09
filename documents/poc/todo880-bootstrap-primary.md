@@ -45,11 +45,15 @@ native registry、Session、transport、network、threadの出生を公開前か
 
 Snapshot `273F40`から元request `16B5C0`、所有stream `166B40`、command36 `162480`、bank consumer `5F470`、`EF220`→`DB810`→`6B7D0`、View `82E50`、Host job、worker `82DA0`へ元要求を渡します。元requestのAL1はcommand公開より後なので、発行と成功を別々に保持します。Host allocatorがNULLを返す元分岐は透明に通し、未公開の予約だけを取り消します。
 
+通常のpathname読込では、同じ元requestが持つUTF-16名と読込設定を入口で保存します。発行済みcommandが選んだViewで、その保存値と元の読込設定が一致する場合に要求を引き継ぎます。古いglobal streamを借りず、pathname要求から現在Sessionの資格を補完しません。元のAL0は、公開前なら通常の拒否として保持します。
+
 NetSnapshot `80F230`からsnapshot ownerへの実呼出しでは、元messageの値、payload、長さ、metadataをコピーします。SessionへWorld関係を渡すには、同じ受信・dispatchで既に発行されたWorld ticketを必要とし、live Sessionの現在値を代用しません。turn/sequenceやローカルに解決されたplayer番号をWorld nonceとして扱いません。
 
 ## 自然shutdownと未達
 
 Closeは製品側の許可を失効させ、元の自然shutdownを進めます。World `63E160`→manager `4A1150`→同setのWait `9922C0`をreceiver・caller・stackで照合します。元Waitから後続の破壊処理へ戻す前に実行中の仕事と同期frameを排出し、元の `380B0`で保存用ノードを解放してから最終排出を確認します。現在のshutdown制御stackを自己待ちに含めません。
+
+managerは元の初期化 `49C7C0`の正常returnで世代を作ります。閉鎖時のlist識別と、そのmanager自身による `4A1209`のFreeJobList呼出し・一度だけの正常returnを記録します。Wait後の同setへのAdd/Pushを拒否し、閉鎖済みの記録は実際の再初期化まで残します。list識別だけを使うSpawnは別domainでの再利用を区別できないため、遅いSpawnを検出した場合は受領を未完にします。World閉鎖外のmanager再初期化経路を、World停止の証明には使いません。
 
 現在の接続は全producerの自然停止、全scheduler domain、コピー・再発行・取消の全alias、OS受信済みqueueやremote送信元の世代切替を証明していません。`native_coverage_complete()`はfalseのまま、Rebuildを拒否します。正常Waitや追跡件数0だけを全域の許可へ変換しません。
 

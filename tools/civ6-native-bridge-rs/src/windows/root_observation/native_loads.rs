@@ -100,6 +100,35 @@ fn dword(address: u64) -> u32 {
         .map(u32::from_le_bytes)
         .unwrap_or_else(|| fault())
 }
+fn path_input(pointer: u64, descriptor: u64) -> Option<ledger::PathInput> {
+    if pointer == 0 {
+        return None;
+    }
+    let options = copy_current::<28>(descriptor)?;
+    if u32::from_le_bytes(options[8..12].try_into().unwrap()) == 4 {
+        return None;
+    }
+    // 16B5C0 copies at most 259 UTF-16 units and then writes its terminator.
+    // Capture the same values while the original caller still owns the input.
+    let mut name = Vec::new();
+    for index in 0..259u64 {
+        let unit = u16::from_le_bytes(copy_current::<2>(pointer.checked_add(index * 2)?)?);
+        if unit == 0 {
+            break;
+        }
+        name.push(unit);
+    }
+    Some(ledger::PathInput { options, name })
+}
+fn configured_path() -> Option<ledger::PathInput> {
+    let input = path_input(exe(0x1267a9c), exe(0x1267a68))?;
+    if input.name.len() != dword(exe(0x1267a98)) as usize
+        || copy_current::<2>(exe(0x1267a9c) + input.name.len() as u64 * 2) != Some([0, 0])
+    {
+        return None;
+    }
+    Some(input)
+}
 fn exe(rva: u64) -> u64 {
     EXE.load(Ordering::Acquire) + rva
 }
@@ -446,31 +475,46 @@ extern "system" fn begin(raw: *mut Saved) {
                 // Fifth argument is the original source stream. The existing
                 // native busy branch may reject without publishing anything.
                 c.pointer = value(raw.invocation.caller_rsp + 0x28);
-                // Other kind2 paths intentionally clear the stream and load
-                // from a pathname. They are outside this stream carrier and
-                // must keep their ordinary native success/AL0 semantics.
-                if c.pointer == 0
-                    || copy_current::<4>(raw.gpr[2] + 8).map(u32::from_le_bytes) != Some(4)
-                {
+                let stream = copy_current::<4>(raw.gpr[2] + 8).map(u32::from_le_bytes) == Some(4);
+                let path = if stream {
+                    None
+                } else {
+                    path_input(raw.gpr[0], raw.gpr[2])
+                };
+                if (stream && c.pointer == 0) || (!stream && path.is_none()) {
                     raw.invocation.cookie = COOKIE;
                     raw.invocation.token = c.serial;
                     CALLS.with(|s| s.borrow_mut().push(c));
                     return;
                 }
-                let source = CALLS
-                    .with(|s| {
-                        s.borrow()
-                            .iter()
-                            .rev()
-                            .find(|c| c.kind == 80)
-                            .and_then(|c| c.source)
-                    })
-                    .unwrap_or(Source {
+                let source = if stream {
+                    CALLS
+                        .with(|s| {
+                            s.borrow()
+                                .iter()
+                                .rev()
+                                .find(|c| c.kind == 80)
+                                .and_then(|c| c.source)
+                        })
+                        .unwrap_or(Source {
+                            session: None,
+                            wire: None,
+                        })
+                } else {
+                    // A local pathname intent does not borrow the current
+                    // Session, an outer packet, or an old World ticket.
+                    Source {
                         session: None,
                         wire: None,
-                    });
+                    }
+                };
                 let mut s = state();
-                let request = s.ledger.enter().unwrap_or_else(|_| fault());
+                let request = if let Some(path) = path {
+                    s.ledger.enter_path(path)
+                } else {
+                    s.ledger.enter()
+                }
+                .unwrap_or_else(|_| fault());
                 s.sources.insert(request.0, source);
                 c.source = Some(source);
                 c.request = Some(request);
@@ -588,10 +632,15 @@ extern "system" fn begin(raw: *mut Saved) {
                     && value(c.engine + 0x14f0) == c.pointer
                     && value(c.engine + 0x5400) == c.pointer
                 {
-                    c.invocation = state()
-                        .ledger
-                        .initialize(c.engine, c.pointer, value(exe(0x22d8d18)))
-                        .unwrap_or_else(|_| fault());
+                    let mut s = state();
+                    c.invocation = if s.ledger.path_pending(c.engine) {
+                        let input = configured_path().unwrap_or_else(|| fault());
+                        s.ledger.initialize_path(c.engine, c.pointer, &input)
+                    } else {
+                        s.ledger
+                            .initialize(c.engine, c.pointer, value(exe(0x22d8d18)))
+                    }
+                    .unwrap_or_else(|_| fault());
                 }
             }
             87 => {

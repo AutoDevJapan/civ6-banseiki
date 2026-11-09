@@ -22,7 +22,15 @@ enum Outcome {
     Accepted,
     Rejected,
 }
+/// Values copied by the pinned request body into the native pathname load
+/// configuration. This carries an intent, never a Session or World authority.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PathInput {
+    pub options: [u8; 28],
+    pub name: Vec<u16>,
+}
 struct Load {
+    path: Option<PathInput>,
     stream: Option<u64>,
     stream_birth: Option<u64>,
     outcome: Outcome,
@@ -72,6 +80,7 @@ impl Ledger {
         self.loads.insert(
             id,
             Load {
+                path: None,
                 stream: None,
                 stream_birth: None,
                 outcome: Outcome::Entered,
@@ -81,9 +90,22 @@ impl Ledger {
         );
         Ok(Request(id))
     }
+    pub fn enter_path(&mut self, path: PathInput) -> Result<Request, Error> {
+        if path.name.len() > 259 || u32::from_le_bytes(path.options[8..12].try_into().unwrap()) == 4
+        {
+            return Err(Error::Stale);
+        }
+        let request = self.enter()?;
+        self.loads.get_mut(&request.0).unwrap().path = Some(path);
+        Ok(request)
+    }
     fn copied(&mut self, request: Request, stream: u64) -> Result<(), Error> {
         let load = self.loads.get_mut(&request.0).ok_or(Error::Unknown)?;
-        if stream == 0 || load.stream.is_some() || load.outcome != Outcome::Entered {
+        if stream == 0
+            || load.path.is_some()
+            || load.stream.is_some()
+            || load.outcome != Outcome::Entered
+        {
             return Err(Error::Stale);
         }
         load.stream = Some(stream);
@@ -154,7 +176,7 @@ impl Ledger {
         let load = self.loads.get_mut(&request.0).ok_or(Error::Unknown)?;
         if payload == 0
             || descriptor == 0
-            || load.stream.is_none()
+            || (load.stream.is_none() && load.path.is_none())
             || load.outcome != Outcome::Entered
         {
             return Err(Error::Stale);
@@ -245,12 +267,41 @@ impl Ledger {
         let Some((view, request)) = self.pending.get(&engine).copied() else {
             return Ok(None);
         };
+        let matches = self.same_stream(request, stream);
+        self.initialize_matching(engine, pointer, view, request, matches)
+    }
+    pub fn path_pending(&self, engine: u64) -> bool {
+        self.pending.get(&engine).is_some_and(|(_, request)| {
+            self.loads
+                .get(&request.0)
+                .is_some_and(|load| load.path.is_some())
+        })
+    }
+    pub fn initialize_path(
+        &mut self,
+        engine: u64,
+        pointer: u64,
+        input: &PathInput,
+    ) -> Result<Option<Invocation>, Error> {
+        let Some((view, request)) = self.pending.get(&engine).copied() else {
+            return Ok(None);
+        };
+        let matches = self
+            .loads
+            .get(&request.0)
+            .is_some_and(|load| load.path.as_ref() == Some(input));
+        self.initialize_matching(engine, pointer, view, request, matches)
+    }
+    fn initialize_matching(
+        &mut self,
+        engine: u64,
+        pointer: u64,
+        view: u64,
+        request: Request,
+        matches: bool,
+    ) -> Result<Option<Invocation>, Error> {
         let load = self.loads.get(&request.0).ok_or(Error::Unknown)?;
-        if view != pointer
-            || !self.same_stream(request, stream)
-            || load.outcome == Outcome::Rejected
-            || load.view.is_some()
-        {
+        if view != pointer || !matches || load.outcome == Outcome::Rejected || load.view.is_some() {
             return Err(Error::Stale);
         }
         if self
@@ -442,6 +493,37 @@ mod tests {
         l.fixture_copied(r, 10).unwrap();
         assert_eq!(l.returned(r, false), Err(Error::Unresolved));
         assert_eq!(l.enter(), Err(Error::Unresolved));
+    }
+    #[test]
+    fn pathname_intent_requires_its_issued_command_and_matching_native_configuration() {
+        let mut l = Ledger::default();
+        let input = PathInput {
+            options: [0; 28],
+            name: "ordinary.Civ6Save".encode_utf16().collect(),
+        };
+        assert_eq!(l.initialize_path(30, 40, &input), Ok(None));
+        let r = l.enter_path(input.clone()).unwrap();
+        assert_eq!(l.initialize_path(30, 40, &input), Ok(None));
+        l.issued(r, 20, 36).unwrap();
+        l.returned(r, true).unwrap();
+        l.consuming(20, 36).unwrap();
+        l.selected(r, 20, 30, 40).unwrap();
+        l.consumed(r, 20).unwrap();
+        assert!(l.path_pending(30));
+        assert_eq!(l.initialize(30, 40, 0), Err(Error::Stale));
+        let mut changed = input.clone();
+        changed.name[0] ^= 1;
+        assert_eq!(l.initialize_path(30, 40, &changed), Err(Error::Stale));
+        changed = input.clone();
+        changed.options[4] ^= 1;
+        assert_eq!(l.initialize_path(30, 40, &changed), Err(Error::Stale));
+        let v = l.initialize_path(30, 40, &input).unwrap().unwrap();
+        assert_eq!(l.world(v, 2, 1), Err(Error::Stale));
+        l.worker(40).unwrap();
+        l.initialized(v).unwrap();
+        assert_eq!(l.world(v, 2, 1), Ok(r));
+        assert_eq!(l.stream_read(v, 10), Err(Error::Stale));
+        l.worker_returned(v).unwrap();
     }
     #[test]
     fn native_command_view_and_stream_keep_one_request_incarnation() {
