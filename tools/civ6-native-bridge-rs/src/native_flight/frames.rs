@@ -148,6 +148,55 @@ impl NativeFrames {
             || s.jobs.values().any(|j| j.executing_thread == Some(tid))
     }
 
+    /// A Host consumer inherits only an already-issued T's generation. It
+    /// retains a separate complete-frame hold after that T has completed.
+    pub fn consumer_enter(&self, task: u64) -> Result<Option<u64>, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let job = s
+            .jobs
+            .values()
+            .find(|j| j.task == task && task != 0 && j.set != u64::MAX);
+        let Some(job) = job else {
+            return Ok(None);
+        };
+        if job.generation != s.generation {
+            s.unresolved = true;
+            return Err(Error::Stale);
+        }
+        let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+        s.next = id;
+        let generation = s.generation;
+        s.frames.insert(id, (generation, thread::current().id()));
+        Ok(Some(id))
+    }
+
+    pub fn consumer_attach(&self, hold: u64, task: u64) -> Result<bool, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.unresolved || s.frames.get(&hold) != Some(&(s.generation, thread::current().id())) {
+            s.unresolved = true;
+            return Err(Error::Stale);
+        }
+        let Some(job) = s
+            .jobs
+            .values()
+            .find(|j| j.task == task && task != 0 && j.set != u64::MAX)
+        else {
+            return Ok(false);
+        };
+        if job.generation != s.generation {
+            s.unresolved = true;
+            return Err(Error::Stale);
+        }
+        Ok(true)
+    }
+
+    pub fn consumer_exit(&self, hold: u64) -> Result<(), Error> {
+        self.leave(hold)
+    }
+
     pub fn reopen(&self) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.unresolved {
@@ -759,6 +808,29 @@ mod tests {
         f.seal_executions_and_wait(deadline()).unwrap();
         assert_eq!(f.queue_execute(123), Err(Error::Unresolved));
         assert_eq!(f.reopen(), Err(Error::Unresolved));
+    }
+
+    #[test]
+    fn known_t_consumer_frame_survives_execute_and_destructor_until_native_return() {
+        let f = NativeFrames::new();
+        assert_eq!(f.consumer_enter(123), Ok(None));
+        let job = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(job, 123).unwrap();
+        let hold = f.consumer_enter(123).unwrap().unwrap();
+        f.pushed(job, 123).unwrap();
+        assert_eq!(f.execute(123, 100), Ok(job));
+        f.completed(job).unwrap();
+        assert_eq!(f.consumer_attach(hold, 999), Ok(false));
+        f.cancelled(123).unwrap();
+        assert_eq!(
+            f.seal_executions_and_wait(deadline()),
+            Err(Error::Reentrant)
+        );
+        assert_eq!(f.reopen(), Err(Error::Busy));
+        f.consumer_exit(hold).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert_eq!(f.consumer_enter(123), Ok(None));
     }
 
     #[test]
