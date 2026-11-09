@@ -41,6 +41,17 @@ pub fn audit_worker_payload(core: &[u8], host: &[u8]) -> Result<Value, String> {
             "basis":"file-buffer-only code structure; not measured process or runtime counters"}}))
 }
 
+/// Local queue-consumer and allocation-return evidence, never runtime authority.
+/// Existing selectors and their output remain unchanged.
+pub fn audit_queue_consumer(core: &[u8], host: &[u8]) -> Result<Value, String> {
+    let base = audit_worker_payload(core, host)?;
+    Ok(
+        json!({"schema":"native-queue-consumer-static-v1", "base_worker_audit":base,
+        "queue_consumer_slice":worker_payload::inspect_consumer(host)?,
+        "certificate_issued":false,"product_acceptance":false}),
+    )
+}
+
 mod worker_payload {
     use super::*;
     // Pure PE section mapping follows civ6-pe-rs/src/main.rs. It additionally
@@ -475,6 +486,10 @@ mod worker_payload {
     /// Only the explicit --worker-payload result gains this additional slice.
     pub(super) fn inspect_pending(host: &[u8]) -> Result<Value, String> {
         pending_publication::inspect(&Pe::parse_executable(host)?)
+    }
+
+    pub(super) fn inspect_consumer(host: &[u8]) -> Result<Value, String> {
+        pending_publication::inspect_consumer(&Pe::parse_executable(host)?)
     }
 
     pub(super) fn inspect_outer_frames(core: &[u8]) -> Result<Value, String> {
@@ -954,6 +969,12 @@ mod worker_payload {
 
     mod pending_publication {
         use super::*;
+        mod consumer;
+
+        pub(super) fn inspect_consumer(pe: &Pe<'_>) -> Result<Value, String> {
+            consumer::inspect(pe)
+        }
+
         struct Frame {
             begin: u32,
             end: u32,
