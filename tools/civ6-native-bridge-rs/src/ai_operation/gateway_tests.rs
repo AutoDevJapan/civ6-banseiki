@@ -1,4 +1,5 @@
 use super::*;
+use windows_sys::Win32::Foundation::{GetLastError, SetLastError};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     RtlLookupFunctionEntry, CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
@@ -186,6 +187,16 @@ fn seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return() {
     ) {
         return;
     }
+    let mut baseline_state = [0u64; 2];
+    unsafe { SetLastError(0x13579bdf) };
+    let baseline_result = unsafe {
+        ai_unwind_driver(
+            baseline_state.as_mut_ptr(),
+            original_unwinds as *const () as usize,
+        )
+    };
+    let baseline_error = unsafe { GetLastError() };
+    assert_eq!(baseline_result, 1);
     AI_GATE_TARGETS[0].store(original_unwinds as *const () as u64, Ordering::Release);
     let mut arena = vec![0u8; 0x400];
     let receiver = arena.as_ptr() as u64;
@@ -263,8 +274,14 @@ fn seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return() {
         }))
     });
     let mut state = [0u64; 2];
+    unsafe { SetLastError(0x13579bdf) };
     let result = unsafe { ai_unwind_driver(state.as_mut_ptr(), gateways()[0]) };
+    let error = unsafe { GetLastError() };
     assert_eq!(result, 1);
+    assert_eq!(
+        error, baseline_error,
+        "observer changed the original unwind LastError"
+    );
     assert_eq!(UNWOUND.load(Ordering::Acquire), 1);
     assert_eq!(DEPTH.with(Cell::get), 0);
     assert!(INVOCATION.with(Cell::get).is_none());
@@ -433,6 +450,158 @@ core::arch::global_asm!(
 unsafe extern "system" {
     fn accepted_stage_driver(receiver: u64, target: usize, phase: u32) -> u64;
     fn accepted_stage_return();
+}
+static ERROR_ORIGINAL_CALLS: AtomicU32 = AtomicU32::new(0);
+static ERROR_LEASE_CHECKS: AtomicU32 = AtomicU32::new(0);
+unsafe extern "system" fn last_error_original(_: u64, _: u32) -> u64 {
+    let input = unsafe { GetLastError() };
+    ERROR_ORIGINAL_CALLS.fetch_add(1, Ordering::SeqCst);
+    unsafe { SetLastError(0x02468ace) };
+    u64::from(input)
+}
+struct ErrorChangingLease;
+unsafe impl RuntimeLease for ErrorChangingLease {
+    fn begin(&self, _: u32, _: u64) -> Option<LeaseStamp> {
+        None
+    }
+    fn current(&self, _: LeaseStamp, _: u64) -> bool {
+        ERROR_LEASE_CHECKS.fetch_add(1, Ordering::SeqCst);
+        unsafe { SetLastError(0xbad0c0de) };
+        false
+    }
+}
+static ERROR_LEASE: ErrorChangingLease = ErrorChangingLease;
+fn last_error_binding(receiver: u64, player: u64, stamp: LeaseStamp) -> Binding {
+    // Layout/observer fixture only; it never registers or patches a target.
+    Binding {
+        base: 0x180000000,
+        callback_return: accepted_stage_return as *const () as u64,
+        receiver,
+        player,
+        owner: stamp.owner,
+        definition: PaymentDefinition {
+            governor_index: 8,
+            cost: 2,
+            base: 3,
+            titles: [Some(4), None],
+        },
+        lease: &ERROR_LEASE,
+        installed: stamp,
+        promotion: 4,
+    }
+}
+#[test]
+fn failed_observation_read_preserves_original_input_and_output_last_error() {
+    if !child(
+        "gateway::tests::failed_observation_read_preserves_original_input_and_output_last_error",
+        "CIV6_AI_ERROR_READ_CHILD",
+    ) {
+        return;
+    }
+    let page = unsafe { VirtualAlloc(ptr::null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_NOACCESS) };
+    assert!(!page.is_null());
+    let mut receiver = [0u8; 0xa0];
+    receiver[0x98..0xa0].copy_from_slice(&(page as u64).to_le_bytes());
+    let receiver = receiver.as_ptr() as u64;
+    let stamp = LeaseStamp {
+        pid: 1,
+        created: 1,
+        owner: 0,
+        generation: 1,
+        session: 1,
+        begin_ticket: 1,
+        arm_token: 1,
+    };
+    assert!(BINDING
+        .set(last_error_binding(receiver, page as u64, stamp))
+        .is_ok());
+    AI_GATE_TARGETS[0].store(last_error_original as *const () as u64, Ordering::Release);
+    ACTIVE.store(true, Ordering::Release);
+    unsafe { SetLastError(0x13579bdf) };
+    let baseline =
+        unsafe { accepted_stage_driver(receiver, last_error_original as *const () as usize, 2) };
+    let baseline_after = unsafe { GetLastError() };
+    unsafe { SetLastError(0x13579bdf) };
+    let actual = unsafe { accepted_stage_driver(receiver, gateways()[0], 2) };
+    let actual_after = unsafe { GetLastError() };
+    assert_ne!(unsafe { VirtualFree(page, 0, MEM_RELEASE) }, 0);
+    assert_eq!(ERROR_ORIGINAL_CALLS.load(Ordering::Acquire), 2);
+    assert_eq!(baseline, 0x13579bdf);
+    assert_eq!(
+        actual, baseline,
+        "observer changed the original input LastError"
+    );
+    assert_eq!(baseline_after, 0x02468ace);
+    assert_eq!(actual_after, baseline_after);
+}
+#[test]
+fn lease_observation_preserves_original_input_and_output_last_error() {
+    if !child(
+        "gateway::tests::lease_observation_preserves_original_input_and_output_last_error",
+        "CIV6_AI_ERROR_LEASE_CHILD",
+    ) {
+        return;
+    }
+    let memory = [0u8; 0x200];
+    let receiver = memory.as_ptr() as u64;
+    let player = receiver + 0x100;
+    let mut c = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut e = c;
+    let mut k = c;
+    let mut u = c;
+    assert_ne!(
+        unsafe { GetProcessTimes(GetCurrentProcess(), &mut c, &mut e, &mut k, &mut u) },
+        0
+    );
+    let stamp = LeaseStamp {
+        pid: unsafe { GetCurrentProcessId() },
+        created: u64::from(c.dwHighDateTime) << 32 | u64::from(c.dwLowDateTime),
+        owner: 3,
+        generation: 1,
+        session: 1,
+        begin_ticket: 1,
+        arm_token: 7,
+    };
+    assert!(BINDING
+        .set(last_error_binding(receiver, player, stamp))
+        .is_ok());
+    ACTIVE.store(true, Ordering::Release);
+    DEPTH.with(|depth| depth.set(1));
+    INVOCATION.with(|invocation| {
+        invocation.set(Some(Invocation {
+            stamp,
+            player,
+            receiver,
+            thread: unsafe { GetCurrentThreadId() },
+        }))
+    });
+    AI_GATE_TARGETS[1].store(last_error_original as *const () as u64, Ordering::Release);
+    unsafe { SetLastError(0x13579bdf) };
+    let baseline =
+        unsafe { accepted_stage_driver(receiver, last_error_original as *const () as usize, 2) };
+    let baseline_after = unsafe { GetLastError() };
+    unsafe { SetLastError(0x13579bdf) };
+    let actual = unsafe { accepted_stage_driver(receiver, gateways()[1], 2) };
+    let actual_after = unsafe { GetLastError() };
+    assert_eq!(ERROR_ORIGINAL_CALLS.load(Ordering::Acquire), 2);
+    assert_eq!(
+        ERROR_LEASE_CHECKS.load(Ordering::Acquire),
+        2,
+        "entry and return observations must run"
+    );
+    assert_eq!(baseline, 0x13579bdf);
+    assert_eq!(baseline_after, 0x02468ace);
+    assert_eq!(
+        actual_after, baseline_after,
+        "lease observation changed output LastError"
+    );
+    assert_eq!(
+        actual, baseline,
+        "lease observation changed input LastError"
+    );
 }
 static FIXTURE_EPOCH: AtomicU32 = AtomicU32::new(1);
 static FIXTURE_CALLS: AtomicU32 = AtomicU32::new(0);

@@ -18,7 +18,7 @@ use std::{
     },
 };
 use windows_sys::Win32::{
-    Foundation::FILETIME,
+    Foundation::{GetLastError, SetLastError, FILETIME},
     System::{
         Diagnostics::Debug::{FlushInstructionCache, ReadProcessMemory},
         LibraryLoader::{
@@ -168,13 +168,14 @@ fn identity(stamp: LeaseStamp) -> bool {
 }
 
 /// SEH termination handler: unwinding through any observed original call
-/// invalidates the whole per-thread capture. No native call or allocation.
+/// invalidates the whole per-thread capture. No original call or allocation.
 unsafe extern "system" fn unwind_observer(
     record: *const windows_sys::Win32::System::Diagnostics::Debug::EXCEPTION_RECORD,
     _frame: usize,
     _context: *mut windows_sys::Win32::System::Diagnostics::Debug::CONTEXT,
     _dispatcher: *mut std::ffi::c_void,
 ) -> i32 {
+    let last_error = unsafe { GetLastError() };
     if !record.is_null() && unsafe { (*record).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
         let _ = INVOCATION.try_with(|c| c.set(None));
         let _ = DEPTH.try_with(|d| d.set(0));
@@ -185,12 +186,14 @@ unsafe extern "system" fn unwind_observer(
         });
         UNWOUND.fetch_add(1, Ordering::Relaxed);
     }
+    unsafe { SetLastError(last_error) };
     1 // ExceptionContinueSearch, preserves the original unwind target.
 }
 
 /// Records copied entry/exit registers, never changes them. A missing lease
 /// suppresses observation while the immutable original target still runs once.
 extern "system" fn observe(raw: *mut Registers, after: u32) {
+    let last_error = unsafe { GetLastError() };
     let _ = std::panic::catch_unwind(|| {
         let raw = unsafe { &mut *raw };
         if after == 0 {
@@ -354,6 +357,7 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
             });
         }
     });
+    unsafe { SetLastError(last_error) };
 }
 
 // Every target is published once BEFORE registration and retained permanently.
