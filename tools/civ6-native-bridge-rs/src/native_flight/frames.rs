@@ -219,6 +219,13 @@ impl NativeFrames {
                 if !sources.contains(id) && (threads.contains(owner) || inherited) {
                     *generation = 0;
                     sources.push(*id);
+                    if let Some(lineage) = s.frame_sources.get(id) {
+                        for source in lineage {
+                            if !sources.contains(source) {
+                                sources.push(*source);
+                            }
+                        }
+                    }
                     if !threads.contains(owner) {
                         threads.push(*owner);
                     }
@@ -232,11 +239,29 @@ impl NativeFrames {
                     || job.source_frames.iter().any(|id| sources.contains(id))
                 {
                     job.generation = 0;
+                    for source in &job.source_frames {
+                        if !sources.contains(source) {
+                            sources.push(*source);
+                            changed = true;
+                        }
+                    }
                     if let Some(owner) = job.executing_thread {
                         if !threads.contains(&owner) {
                             threads.push(owner);
                             changed = true;
                         }
+                    }
+                }
+            }
+            // A worker may discover unknown provenance after its issuer
+            // returned from publication. Downgrade still-active issuing
+            // frames and their other children using the retained lineage.
+            for id in &sources {
+                if let Some((generation, owner)) = s.frames.get_mut(id) {
+                    *generation = 0;
+                    if !threads.contains(owner) {
+                        threads.push(*owner);
+                        changed = true;
                     }
                 }
             }
@@ -1415,5 +1440,47 @@ mod tests {
         f.leave(root).unwrap();
         assert!(f.unproven_on_current_thread());
         assert_eq!(f.reopen(), Err(Error::Unresolved));
+    }
+    #[test]
+    fn tainted_worker_provenance_reaches_issuer_and_prior_sibling() {
+        let f = std::sync::Arc::new(NativeFrames::new());
+        let parent = f.enter().unwrap();
+        let producer = f.begin_queue_producer().unwrap();
+        f.queue_allocated(producer, 100, None).unwrap();
+        f.queue_producer_returned(producer).unwrap();
+        let task = f.issue_on_set(200, 10).unwrap();
+        f.bind_before_publication(task, 300).unwrap();
+        f.pushed(task, 300).unwrap();
+        let worker = f.clone();
+        std::thread::spawn(move || {
+            let outer = worker.enter().unwrap();
+            let consumer = worker.consumer_enter(300).unwrap().unwrap();
+            let execution = worker.execute(300, 200).unwrap();
+            let unknown = worker.enter_with_provenance(true).unwrap();
+            worker.leave(unknown).unwrap();
+            worker.completed(execution).unwrap();
+            worker.consumer_exit(consumer).unwrap();
+            worker.leave(outer).unwrap();
+        })
+        .join()
+        .unwrap();
+        let issuer_unproven = f.unproven_on_current_thread();
+        let worker = f.clone();
+        let sibling_unproven = std::thread::spawn(move || {
+            let execution = worker.queue_execute(100).unwrap();
+            let unproven = worker.unproven_on_current_thread();
+            worker.completed(execution).unwrap();
+            unproven
+        })
+        .join()
+        .unwrap();
+        assert!(
+            issuer_unproven && sibling_unproven,
+            "issuer={issuer_unproven}, sibling={sibling_unproven}"
+        );
+        let retired = f.retire_queue(100).unwrap();
+        f.queue_retired(retired).unwrap();
+        f.leave(parent).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
     }
 }
