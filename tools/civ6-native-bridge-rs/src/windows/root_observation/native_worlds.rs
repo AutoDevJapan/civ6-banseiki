@@ -129,6 +129,15 @@ impl Bindings {
 pub(super) fn closing(world: u64) -> Option<WorldLease> {
     BINDINGS.lock().ok()?.closing(world)
 }
+pub(super) fn birth(world: u64) -> Option<WorldLease> {
+    BINDINGS
+        .lock()
+        .ok()?
+        .contexts
+        .values()
+        .filter(|b| !b.closed)
+        .find_map(|b| b.world.filter(|w| w.world == world))
+}
 pub(super) fn installed() -> bool {
     CORE.load(Ordering::Acquire) != 0
 }
@@ -175,6 +184,14 @@ extern "system" fn begin(raw: *mut Saved) {
                 if world == 0 {
                     return;
                 }
+                let identity = b
+                    .contexts
+                    .values()
+                    .find_map(|r| r.world.filter(|w| w.world == world))
+                    .unwrap_or_else(|| fault());
+                if identity.game != raw.gpr[0] {
+                    fault();
+                }
                 let lease = b.close(raw.gpr[0]).unwrap_or_else(|| fault());
                 if lease.world != world {
                     fault();
@@ -187,8 +204,9 @@ extern "system" fn begin(raw: *mut Saved) {
             _ => fault(),
         }
         let f = FRAMES.get().unwrap_or_else(|| fault());
-        raw.invocation.epoch = f.native_birth_epoch().unwrap_or_else(|_| fault());
-        raw.invocation.token = f.enter().unwrap_or_else(|_| fault());
+        let (hold, epoch) = f.begin_native_birth().unwrap_or_else(|_| fault());
+        raw.invocation.epoch = epoch;
+        raw.invocation.token = hold;
         raw.invocation.cookie = COOKIE;
     }))
     .is_err()
@@ -265,8 +283,17 @@ unsafe extern "system" fn unwind(
     _: *mut c_void,
 ) -> i32 {
     let error = unsafe { GetLastError() };
-    if !r.is_null() && unsafe { (*r).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
-        finish(unsafe { &mut *((frame + 0x20) as *mut Saved) }, true);
+    if !r.is_null()
+        && unsafe { (*r).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0
+        && std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            finish(unsafe { &mut *((frame + 0x20) as *mut Saved) }, true)
+        }))
+        .is_err()
+    {
+        FAILED.store(true, Ordering::Release);
+        if let Some(f) = FRAMES.get() {
+            f.mark_unresolved();
+        }
     }
     unsafe { SetLastError(error) };
     1

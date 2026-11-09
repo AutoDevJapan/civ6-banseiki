@@ -78,8 +78,11 @@ extern "system" fn begin(raw: *mut Saved) {
                     return;
                 }
                 raw.invocation.world = raw.gpr[0];
-                if worlds::installed() && worlds::closing(raw.gpr[0]).is_none() {
-                    fault();
+                if worlds::installed() {
+                    let birth = worlds::birth(raw.gpr[0]);
+                    if birth != worlds::closing(raw.gpr[0]) || birth.is_none() {
+                        fault();
+                    }
                 }
                 if raw.gpr[0] == 0 {
                     fault();

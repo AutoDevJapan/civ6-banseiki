@@ -200,13 +200,32 @@ impl NativeFrames {
 
     /// Observed only from a verified native constructor/factory invocation,
     /// before its first object publication. Not an epoch for a delayed input.
-    pub fn native_birth_epoch(&self) -> Result<u64, Error> {
-        let s = self.state.lock().map_err(|_| Error::Poisoned)?;
+    pub fn begin_native_birth(&self) -> Result<(u64, u64), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.unresolved || s.sealed || s.executions_drained {
             Err(Error::Closed)
         } else {
-            Ok(s.generation)
+            let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+            s.next = id;
+            let epoch = s.generation;
+            s.frames.insert(id, (epoch, thread::current().id()));
+            Ok((id, epoch))
         }
+    }
+
+    /// Consume provenance supplied by an existing native birth/message
+    /// reservation. A delayed input never adopts the newest generation.
+    pub fn enter_existing_epoch(&self, epoch: u64) -> Result<u64, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.unresolved || s.executions_drained || epoch != s.generation || epoch == 0 {
+            s.unresolved = true;
+            self.changed.notify_all();
+            return Err(Error::Stale);
+        }
+        let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+        s.next = id;
+        s.frames.insert(id, (epoch, thread::current().id()));
+        Ok(id)
     }
 
     pub fn reopen(&self) -> Result<(), Error> {
@@ -890,6 +909,33 @@ mod tests {
         assert_eq!(g.begin_queue_producer(), Err(Error::Unresolved));
         g.leave(cleanup).unwrap();
         assert_eq!(g.reopen(), Err(Error::Unresolved));
+    }
+    #[test]
+    fn native_constructor_epoch_and_hold_are_acquired_atomically() {
+        let f = NativeFrames::new();
+        let (hold, epoch) = f.begin_native_birth().unwrap();
+        assert_eq!(epoch, 1);
+        assert_eq!(f.seal_and_wait(deadline()), Err(Error::Reentrant));
+        assert_eq!(f.reopen(), Err(Error::Busy));
+        f.leave(hold).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        let (hold, next) = f.begin_native_birth().unwrap();
+        assert_eq!(next, 2);
+        f.leave(hold).unwrap();
+    }
+    #[test]
+    fn delayed_native_message_must_keep_issued_epoch_after_world_rebuild() {
+        let f = NativeFrames::new();
+        let (birth, epoch) = f.begin_native_birth().unwrap();
+        f.leave(birth).unwrap();
+        let old = f.enter_existing_epoch(epoch).unwrap();
+        assert_eq!(f.seal_and_wait(deadline()), Err(Error::Reentrant));
+        f.leave(old).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert_eq!(f.enter_existing_epoch(epoch), Err(Error::Stale));
+        assert_eq!(f.begin_native_birth(), Err(Error::Closed));
     }
 
     #[test]
