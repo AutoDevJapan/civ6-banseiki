@@ -203,10 +203,26 @@ impl NativeFrames {
         let j = s.jobs.get_mut(&id).unwrap();
         j.task = task;
         j.push_returned = true;
-        if j.execution == 2 {
+        if j.execution == 2 || j.execution == 3 {
             s.jobs.remove(&id);
         }
         self.changed.notify_all();
+        Ok(())
+    }
+    /// Bind the allocator's original result before caller initialization or
+    /// publication. The allocator frame supplies only an opaque live address.
+    pub fn bind_before_publication(&self, id: u64, task: u64) -> Result<(), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        let valid = task != 0
+            && s.jobs
+                .get(&id)
+                .is_some_and(|j| j.generation == s.generation && j.task == 0 && !j.push_returned)
+            && !s.jobs.values().any(|j| j.task == task);
+        if !valid {
+            s.unresolved = true;
+            return Err(Error::Unresolved);
+        }
+        s.jobs.get_mut(&id).unwrap().task = task;
         Ok(())
     }
 
@@ -259,11 +275,15 @@ impl NativeFrames {
             .find_map(|(id, j)| (j.task == task && task != 0).then_some(*id))
         {
             let j = &s.jobs[&id];
-            if j.execution != 0 || !j.push_returned {
+            if j.execution != 0 {
                 s.unresolved = true;
                 return Err(Error::Unresolved);
             }
-            s.jobs.remove(&id);
+            if j.push_returned {
+                s.jobs.remove(&id);
+            } else {
+                s.jobs.get_mut(&id).unwrap().execution = 3;
+            }
             self.changed.notify_all();
         }
         Ok(())
@@ -367,6 +387,19 @@ mod tests {
         assert_eq!(f.reopen(), Err(Error::Busy));
         f.pushed(job, 200).unwrap();
         f.seal_and_wait(deadline()).unwrap();
+    }
+    #[test]
+    fn unexecuted_cancel_before_push_return_keeps_reservation_until_original_return() {
+        let f = NativeFrames::new();
+        let id = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(id, 200).unwrap();
+        f.cancelled(200).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        assert_eq!(f.seal_and_wait(Instant::now()), Err(Error::Timeout));
+        assert_eq!(f.reopen(), Err(Error::Busy));
+        f.pushed(id, 200).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
     }
 
     #[test]

@@ -4,10 +4,11 @@ use super::*;
 use std::cell::RefCell;
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 static CORE: AtomicU64 = AtomicU64::new(0);
+static EXE: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]
-static NATIVE_JOB_CONTINUE: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+static NATIVE_JOB_CONTINUE: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
 // The exact SHA-pinned host: Push export, complete execute wrapper, destructor.
-const SITES: [(usize, [u8; 8], usize); 3] = [
+const SITES: [(usize, [u8; 8], usize); 4] = [
     (0x986480, [0x48, 0x83, 0xec, 0x38, 0x41, 0x0f, 0x10, 1], 8),
     (
         0x9862e0,
@@ -19,6 +20,7 @@ const SITES: [(usize, [u8; 8], usize); 3] = [
         [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d],
         6,
     ),
+    (0xe3ccf0, [0x48, 0x89, 0x5c, 0x24, 8, 0x48, 0x89, 0x6c], 5),
 ];
 thread_local! {static STACK:RefCell<Vec<(u64,u64,u64)>>=const {RefCell::new(Vec::new())};}
 fn fault() -> ! {
@@ -69,6 +71,15 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
                 (0, raw.gpr[0])
             }
+            23 => {
+                if raw.invocation.caller != EXE.load(Ordering::Acquire) + 0x985f9e {
+                    return;
+                }
+                let Some((20, id, _)) = STACK.with(|s| s.borrow().last().copied()) else {
+                    return;
+                };
+                (id, 0)
+            }
             _ => fault(),
         };
         raw.invocation.cookie = COOKIE;
@@ -112,6 +123,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             .unwrap_or_else(|_| fault()),
         22 => f
             .cancelled(raw.invocation.world)
+            .unwrap_or_else(|_| fault()),
+        23 => f
+            .bind_before_publication(raw.invocation.token, raw.gpr[4])
             .unwrap_or_else(|_| fault()),
         _ => fault(),
     }
@@ -182,6 +196,18 @@ global_asm!(
     "mov rax,[rsp+0x10]",
     "jmp qword ptr [rsp+0x18]",
     ".seh_endproc",
+    ".globl native_job_allocate_original",
+    ".seh_proc native_job_allocate_original",
+    "native_job_allocate_original:",
+    "mov [rsp+8],rbx",
+    ".seh_savereg rbx,8",
+    ".seh_endprologue",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+NATIVE_JOB_CONTINUE+24]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
 );
 unsafe extern "system" {
     fn native_job_push_original();
@@ -190,11 +216,21 @@ unsafe extern "system" {
     fn native_job_push_gateway();
     fn native_job_execute_gateway();
     fn native_job_destroy_gateway();
+    fn native_job_allocate_original();
+    fn native_job_allocate_gateway();
 }
 gateway!(
     "native_job_push_gateway",
     "20",
     native_job_push_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_job_allocate_gateway",
+    "23",
+    native_job_allocate_original,
     begin,
     end,
     unwind
@@ -219,6 +255,7 @@ gateway!(
 pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     CORE.store(core as u64, Ordering::Release);
     let exe = unsafe { GetModuleHandleW(null_mut()) } as usize;
+    EXE.store(exe as u64, Ordering::Release);
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
     unsafe { install_at(exe) }
 }
@@ -227,6 +264,7 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
         native_job_push_gateway as *const () as usize,
         native_job_execute_gateway as *const () as usize,
         native_job_destroy_gateway as *const () as usize,
+        native_job_allocate_gateway as *const () as usize,
     ];
     let mut owners = HOOKS.lock().map_err(|_| "native job owner poisoned")?;
     if !owners.is_empty() {
@@ -506,7 +544,7 @@ mod tests {
         let base = unsafe {
             VirtualAlloc(
                 null_mut(),
-                0x990000,
+                0xe40000,
                 MEM_COMMIT | MEM_RESERVE,
                 PAGE_READWRITE,
             )
@@ -519,11 +557,11 @@ mod tests {
         }
         let mut old = 0;
         assert_ne!(
-            unsafe { VirtualProtect(base as _, 0x990000, PAGE_EXECUTE_READ, &mut old) },
+            unsafe { VirtualProtect(base as _, 0xe40000, PAGE_EXECUTE_READ, &mut old) },
             0
         );
         unsafe { install_at(base) }.unwrap();
-        assert_eq!(HOOKS.lock().unwrap().len(), 3);
+        assert_eq!(HOOKS.lock().unwrap().len(), 4);
         for (i, (rva, _, n)) in SITES.into_iter().enumerate() {
             assert_eq!(
                 NATIVE_JOB_CONTINUE[i].load(Ordering::Acquire),
@@ -537,5 +575,28 @@ mod tests {
             assert_eq!(copy_current::<8>((base + rva) as u64), Some(expected));
         }
         assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn original_allocator_return_binds_t_before_native_caller_can_cancel_it() {
+        if !child("original_allocator_return_binds_t_before_native_caller_can_cancel_it") {
+            return;
+        }
+        let f = FRAMES.get_or_init(NativeFrames::new);
+        EXE.store(0x140000000, Ordering::Release);
+        let id = f.issue_on_set(100, 10).unwrap();
+        STACK.with(|s| s.borrow_mut().push((20, id, 0)));
+        let mut allocation: Saved = unsafe { std::mem::zeroed() };
+        allocation.invocation.kind = 23;
+        allocation.invocation.caller = 0x140985f9e;
+        begin(&mut allocation);
+        allocation.gpr[4] = 200;
+        finish(&mut allocation, false);
+        assert!(f.contains_task(200));
+        f.cancelled(200).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        f.pushed(id, 200).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(0));
+        assert_eq!(STACK.with(|s| s.borrow_mut().pop()), Some((20, id, 0)));
     }
 }

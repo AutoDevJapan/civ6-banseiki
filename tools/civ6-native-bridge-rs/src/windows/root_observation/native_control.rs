@@ -52,6 +52,18 @@ extern "system" fn begin(raw: *mut Saved) {
         let parent = STACK.with(|s| s.borrow().last().copied());
         match raw.invocation.kind {
             30 => {
+                // Other real callers stop/reinitialize this subsystem during
+                // ordinary play. Only the fixed destruction caller belongs
+                // to this control chain; none of the others supplies a reload
+                // receipt or a reason to abort the original call.
+                if raw.invocation.caller != core + 0x471c2 {
+                    return;
+                }
+                // A no-op is an ordinary native return, never a failed Wait.
+                // The caller's earlier guard read can race a prior shutdown.
+                if copy_current::<1>(raw.gpr[0] + 0x2a4) != Some([1]) {
+                    return;
+                }
                 raw.invocation.world = raw.gpr[0];
                 if raw.gpr[0] == 0 {
                     fault();
@@ -406,9 +418,10 @@ mod tests {
         f.pushed(job, 200).unwrap();
         assert!(!ready());
         request_close(); // No blocking seal before native shutdown.
-        let mut world = vec![0u64; 0x260 / 8];
+        let mut world = vec![0u64; 0x2b0 / 8];
         world[0x250 / 8] = 300;
-        let mut w = raw(30, world.as_ptr() as u64, 0);
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
         begin(&mut w);
         let mut m = raw(31, 300, 0x18063e1d5);
         begin(&mut m);
@@ -511,5 +524,132 @@ mod tests {
         }
         assert!(!WAITED.load(Ordering::Acquire));
         assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn unrelated_world_shutdown_caller_never_creates_a_reload_receipt() {
+        if !child("unrelated_world_shutdown_caller_never_creates_a_reload_receipt") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        request_close();
+        for caller in [0x180046a7b, 0x18063deb7, 0x180597999] {
+            let mut w = raw(30, 1, caller);
+            begin(&mut w);
+            assert_eq!(w.invocation.cookie, 0);
+            finish(&mut w, false);
+            assert_eq!(WORLD.load(Ordering::Acquire), 0);
+            assert!(!WAITED.load(Ordering::Acquire));
+        }
+        let world = vec![0u8; 0x2b0];
+        let mut no_op = raw(30, world.as_ptr() as u64, 0x1800471c2);
+        begin(&mut no_op);
+        assert_eq!(no_op.invocation.cookie, 0);
+        finish(&mut no_op, false);
+        assert_eq!(WORLD.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage() {
+        if !child(
+            "actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage",
+        ) {
+            return;
+        }
+        if !supports_atomic_promotion_fetch() {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let base = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                0xa00000,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            )
+        } as usize;
+        assert_ne!(base, 0);
+        let put = |rva: usize, bytes: &[u8]| unsafe {
+            ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, bytes.len())
+        };
+        let call = |rva: usize, target: usize| {
+            let mut b = [0u8; 5];
+            b[0] = 0xe8;
+            b[1..].copy_from_slice(&((target as i64 - rva as i64 - 5) as i32).to_le_bytes());
+            put(rva, &b);
+        };
+        // All native bodies are process-owned fixture instructions. The
+        // original control gateways, CAS, Close and Rebuild are real code.
+        unsafe {
+            ptr::write_bytes((base + 0x63e160) as *mut u8, 0x90, 0x200);
+            ptr::write_bytes((base + 0x4a1150) as *mut u8, 0x90, 0x80);
+        }
+        put(
+            0x63e160,
+            &[
+                0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xa4, 2, 0, 0, 0, 0x48, 0x8b, 0xd9,
+            ],
+        );
+        put(0x63e1c9, &[0x48, 0x8b, 0x8b, 0x50, 2, 0, 0]);
+        call(0x63e1d0, 0x4a1150);
+        put(0x63e1d5, &[0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3]);
+        put(
+            0x4a1150,
+            &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(0x4a117f, &[0x48, 0x81, 0xc1, 0, 4, 0, 0]);
+        call(0x4a1191, 0x9922c0);
+        put(
+            0x4a1196,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x48, 0x48, 0x83, 0xc4, 0x30, 0x5e, 0xc3,
+            ],
+        );
+        put(
+            0x9922c0,
+            &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(
+            0x9922ca,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ],
+        );
+        put(0x471b0, &[0x48, 0x83, 0xec, 0x28]);
+        unsafe {
+            ptr::write_bytes((base + 0x471b4) as *mut u8, 0x90, 9);
+        }
+        call(0x471bd, 0x63e160);
+        put(0x471c2, &[0x48, 0x83, 0xc4, 0x28, 0xc3]);
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, 0xa00000, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        unsafe { install(base) }.unwrap();
+        runtime::fixture_invocation_runtime();
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let mut manager = vec![0u64; 0x500 / 8];
+        world[0x250 / 8] = manager.as_mut_ptr() as u64;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let invoke: unsafe extern "system" fn(*mut u64) =
+            unsafe { std::mem::transmute(base + 0x471b0) };
+        unsafe {
+            invoke(world.as_mut_ptr());
+        }
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert_eq!(
+            runtime::BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::Critical as u32
+        );
+        assert!(runtime::fixture_product_inactive());
+        unsafe { restore() }.unwrap();
+        assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
     }
 }
