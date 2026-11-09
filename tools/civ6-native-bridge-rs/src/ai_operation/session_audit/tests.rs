@@ -32,7 +32,20 @@ fn all_frames(dll: bool) -> Vec<&'static Frame> {
     let mut result: Vec<_> = frames(dll).iter().collect();
     if !dll {
         result.extend(lease::fixed::FRAMES);
+    } else {
+        result.extend(world::fixed::FRAMES);
     }
+    result
+}
+fn all_slots(dll: bool) -> Vec<(u32, u32)> {
+    let mut result = slots(dll).to_vec();
+    result.extend(if dll {
+        world::flow::SLOTS
+    } else {
+        lease::flow::SLOTS
+    });
+    result.sort_unstable();
+    result.dedup();
     result
 }
 fn blocks(dll: bool) -> &'static [Block] {
@@ -108,8 +121,21 @@ fn specimen(dll: bool) -> Vec<u8> {
     for v in blocks(dll) {
         write_hex(&mut b, v.rva, v.hex, dll);
     }
-    for &(slot, target) in slots(dll) {
+    for (slot, target) in all_slots(dll) {
         w64(&mut b, offset(slot, dll), base + u64::from(target));
+    }
+    if dll {
+        for block in world::flow::BLOCKS {
+            write_hex(&mut b, block.rva, block.hex, true);
+        }
+        for (rva, value) in [
+            (0xa18d90, &b"UnitManager\0"[..]),
+            (0xa45238, &b"Notifications\0"[..]),
+            (0x9c4860, &b"ObjectPairing\0"[..]),
+        ] {
+            let p = offset(rva, true);
+            b[p..p + value.len()].copy_from_slice(value);
+        }
     }
     if !dll {
         for v in lease::flow::BLOCKS {
@@ -139,7 +165,7 @@ fn specimen(dll: bool) -> Vec<u8> {
     }
     if dll {
         let mut groups = std::collections::BTreeMap::<u32, Vec<u32>>::new();
-        for &(slot, _) in slots(true) {
+        for (slot, _) in all_slots(true) {
             groups.entry(slot & !0xfff).or_default().push(slot);
         }
         let mut p = RELOC;
@@ -175,6 +201,8 @@ fn valid(b: &[u8], dll: bool) -> Result<Value, String> {
     )?;
     if !dll {
         lease::inspect(&parse(b, dll)?)?;
+    } else {
+        world::inspect(&parse(b, dll)?)?;
     }
     Ok(report)
 }
@@ -303,6 +331,93 @@ fn session_native_join_named_api_rejects_wrong_import_thunk_dll_and_name() {
     host[p + 7] = 0;
     w32(&mut host, 0x98 + 112 + 8, 0);
     assert!(named(&host).is_err(), "missing import directory");
+}
+
+#[test]
+fn session_world_records_trace_registered_types_and_distinguish_native_id_domains() {
+    let b = specimen(true);
+    let report = world::inspect(&Pe::parse(&b).unwrap()).unwrap();
+    assert_eq!(
+        report["world_registration"]["registration_entry_shared"],
+        0x63da80
+    );
+    assert_eq!(report["materialization"]["bind_entry"], 0x987b0);
+    assert_eq!(report["materialization"]["bind_caller_return"], 0x63ccb2);
+    assert_eq!(report["materialization"]["record_stride"], 0x120);
+    assert_eq!(report["object_pairing_chain"]["object_table"], 0xa22c98);
+    assert_eq!(
+        report["object_pairing_chain"]["typed_shutdown_target"],
+        0x641240
+    );
+    assert_eq!(report["shutdown"]["vcall"], 0x50358);
+    assert_eq!(report["certificate_issued"], false);
+    assert_ne!(
+        report["object_pairing_chain"]["record_index_global"],
+        0x235b874
+    );
+}
+
+#[test]
+fn session_world_registration_and_move_semantics_reject_every_witness_byte_mutation() {
+    let mut b = specimen(true);
+    world::inspect(&Pe::parse(&b).unwrap()).unwrap();
+    for block in world::flow::BLOCKS {
+        for i in 0..block.hex.len() / 2 {
+            let p = offset(block.rva, true) + i;
+            b[p] ^= 1;
+            assert!(
+                world::inspect(&Pe::parse(&b).unwrap()).is_err(),
+                "World block {:x}+{i}",
+                block.rva
+            );
+            b[p] ^= 1;
+        }
+    }
+    for r in world::flow::REFERENCES {
+        let p = offset(r.rva, true) + r.displacement;
+        b[p] ^= 1;
+        assert!(
+            references(&Pe::parse(&b).unwrap(), world::flow::REFERENCES).is_err(),
+            "World ref {:x}",
+            r.rva
+        );
+        b[p] ^= 1;
+    }
+}
+
+#[test]
+fn session_world_record_tables_names_and_complete_callback_frames_reject_mutation() {
+    let mut b = specimen(true);
+    for f in world::fixed::FRAMES {
+        for rva in [f.begin, f.begin + (f.end - f.begin) / 2, f.end - 1] {
+            let p = offset(rva, true);
+            b[p] ^= 1;
+            assert!(
+                world::inspect(&Pe::parse(&b).unwrap()).is_err(),
+                "World frame {rva:x}"
+            );
+            b[p] ^= 1;
+        }
+    }
+    for &(slot, _) in world::flow::SLOTS {
+        let p = offset(slot, true);
+        b[p] ^= 1;
+        assert!(
+            world::inspect(&Pe::parse(&b).unwrap()).is_err(),
+            "World slot {slot:x}"
+        );
+        b[p] ^= 1;
+    }
+    for rva in [0xa18d90, 0xa45238, 0x9c4860] {
+        let p = offset(rva, true);
+        b[p] ^= 1;
+        assert!(
+            world::inspect(&Pe::parse(&b).unwrap()).is_err(),
+            "World record name {rva:x}"
+        );
+        b[p] ^= 1;
+    }
+    world::inspect(&Pe::parse(&b).unwrap()).unwrap();
 }
 
 #[test]
