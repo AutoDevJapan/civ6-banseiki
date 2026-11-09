@@ -66,7 +66,7 @@ impl NativeFrames {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let tid = thread::current().id();
         let inherited = Self::inherited(&s, tid);
-        if s.sealed && !inherited {
+        if s.executions_drained || (s.sealed && !inherited) {
             s.unresolved = true;
         }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
@@ -240,6 +240,7 @@ impl NativeFrames {
         if payload == 0
             || set == 0
             || s.unresolved
+            || s.executions_drained
             || (s.sealed && !Self::inherited(&s, thread::current().id()))
             || s.jobs.values().any(|j| j.payload == payload)
         {
@@ -386,6 +387,7 @@ impl NativeFrames {
             })
         });
         if s.unresolved
+            || s.executions_drained
             || s.frames.get(&producer) != Some(&(s.generation, thread::current().id()))
             || task == 0
             || !valid_source
@@ -808,6 +810,21 @@ mod tests {
         f.seal_executions_and_wait(deadline()).unwrap();
         assert_eq!(f.queue_execute(123), Err(Error::Unresolved));
         assert_eq!(f.reopen(), Err(Error::Unresolved));
+    }
+    #[test]
+    fn original_cleanup_frame_never_authorizes_new_producer_reentry() {
+        let f = NativeFrames::new();
+        f.seal_executions_and_wait(deadline()).unwrap();
+        let cleanup = f.begin_native_cleanup().unwrap();
+        assert_eq!(f.issue_on_set(100, 10), Err(Error::Unresolved));
+        f.leave(cleanup).unwrap();
+        assert_eq!(f.reopen(), Err(Error::Unresolved));
+        let g = NativeFrames::new();
+        g.seal_executions_and_wait(deadline()).unwrap();
+        let cleanup = g.begin_native_cleanup().unwrap();
+        assert_eq!(g.begin_queue_producer(), Err(Error::Unresolved));
+        g.leave(cleanup).unwrap();
+        assert_eq!(g.reopen(), Err(Error::Unresolved));
     }
 
     #[test]
