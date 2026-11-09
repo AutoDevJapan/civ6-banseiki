@@ -2,7 +2,7 @@ use super::*;
 use std::os::windows::process::CommandExt;
 use std::sync::atomic::AtomicUsize;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
+    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
 };
 #[link(name = "kernel32")]
 unsafe extern "system" {
@@ -211,12 +211,14 @@ impl Fixture {
     fn new() -> Self {
         FIXTURE.store(true, Ordering::Release);
         FRAMES.get_or_init(NativeFrames::new);
-        assert!(SCOPE
-            .set(SessionScopeHooks {
-                enter_existing_epoch: scope_enter,
-                leave: scope_leave
-            })
-            .is_ok());
+        assert!(
+            SCOPE
+                .set(SessionScopeHooks {
+                    enter_existing_epoch: scope_enter,
+                    leave: scope_leave
+                })
+                .is_ok()
+        );
         CORE.store(1, Ordering::Release);
         let exe = unsafe {
             VirtualAlloc(
@@ -298,6 +300,7 @@ impl Fixture {
             transport: None,
             native_transport: false,
             thread: 0,
+            unproven_hold: None,
         };
         super::super::CALLS.with(|s| s.borrow_mut().push(c));
         unsafe {
@@ -703,6 +706,7 @@ fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
         transport: None,
         native_transport: false,
         thread: 0,
+        unproven_hold: None,
     };
     super::super::CALLS.with(|s| s.borrow_mut().push(c));
     assert_eq!(f.pump(), 0x8811);
@@ -714,7 +718,11 @@ fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
         None,
         "unknown83D888 must not fall back to outer72"
     );
-    assert!(!FULL_HOLD.load(Ordering::Acquire));
+    assert!(
+        FULL_HOLD.load(Ordering::Acquire),
+        "unknown original frame must still block teardown"
+    );
+    assert!(!FRAMES.get().unwrap().unproven_on_current_thread());
     assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
     assert_eq!(pending(), Ok(0));
 }

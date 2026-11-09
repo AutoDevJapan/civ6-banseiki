@@ -508,6 +508,26 @@ fn actual_poll_reserves_before_body_and_binds_ctor_before_publication() {
     let id = retire(record.as_mut_ptr() as u64).unwrap();
     release(vec![id]);
     assert_eq!(pending(), Ok(0));
+    let old = WorldReceipt {
+        binding_id: 8,
+        epoch: 1,
+    };
+    let new = WorldReceipt {
+        binding_id: 9,
+        epoch: 2,
+    };
+    state().retire_world(old).unwrap();
+    state().loaded_world(l, Some(old), new).unwrap();
+    // The same transport still has its old birth World. Its native poll and
+    // event construction must continue, without issuing a new-World ticket.
+    unsafe {
+        assert_eq!(fixture_poll_driver(0x1234, poll.as_mut_ptr() as u64, 0), 1);
+        fixture_ctor_driver(record.as_mut_ptr() as u64, 4, 7, 0x5000, 9, 0x35);
+    }
+    assert!(POLLED.with(|s| s.borrow().is_none()));
+    assert!(records().at(record.as_ptr() as u64).is_none());
+    assert_eq!(pending(), Ok(0));
+    assert_eq!(state().reserve_input(l, t), Err(Error::Closed));
 }
 #[test]
 fn shared_free_keeps_old_serial_until_normal_return_despite_address_reuse() {

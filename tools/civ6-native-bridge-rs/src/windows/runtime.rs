@@ -39,6 +39,9 @@ pub(super) fn invocation_start() -> u64 {
     if !INSTALLED.load(Ordering::Acquire) {
         return 0;
     }
+    if root_observation::native_frames::unproven_input_active() {
+        return 0;
+    }
     INVOCATIONS
         .enter()
         .map_or(0, |generation| u64::from(generation) + 1)
@@ -169,7 +172,7 @@ fn call_owner(governors: u64) -> Option<(u32, u64)> {
 }
 
 pub(super) fn call_begin(governors: u64) -> CallFence {
-    if !owned() {
+    if !owned() || root_observation::native_frames::unproven_input_active() {
         return CallFence::default();
     }
     let session = PRODUCT_SESSION.load(Ordering::Acquire);
@@ -198,7 +201,8 @@ pub(super) fn call_current(fence: CallFence, governors: u64) -> bool {
     if !owned() {
         return true;
     }
-    if fence.read_state != 1
+    if root_observation::native_frames::unproven_input_active()
+        || fence.read_state != 1
         || fence.ticket == 0
         || !live_session(fence.session)
         || call_owner(governors) != Some((fence.owner, fence.receiver))

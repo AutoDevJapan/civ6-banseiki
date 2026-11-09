@@ -22,19 +22,19 @@ extern "system" fn begin(raw: *mut Saved) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
         let f = FRAMES.get().unwrap_or_else(|| fault());
-        if matches!(raw.invocation.kind, 40 | 42 | 43)
-            && sessions::NativeSessionApi::admission_active()
-            && sessions::NativeSessionApi::current_world().is_none()
-        {
-            fault();
-        }
+        // Native input without a World receipt must keep executing. Retain
+        // its queue work as explicitly unproven instead of adopting this
+        // World's epoch or turning the original enqueue into an abort.
+        let unproven = super::unproven_input_active();
         let core = CORE.load(Ordering::Acquire);
         let id = match raw.invocation.kind {
             48 if control::owns_operation_cleanup(raw.invocation.caller) => {
                 raw.invocation.errors = 2;
                 f.begin_native_cleanup().unwrap_or_else(|_| fault())
             }
-            40 | 43 | 44 | 46 | 47 | 48 => f.begin_queue_producer().unwrap_or_else(|_| fault()),
+            40 | 43 | 44 | 46 | 47 | 48 => f
+                .begin_queue_producer_with_provenance(unproven)
+                .unwrap_or_else(|_| fault()),
             41 => {
                 let caller = raw.invocation.caller.wrapping_sub(core);
                 let producer_kind = match caller {
@@ -69,7 +69,8 @@ extern "system" fn begin(raw: *mut Saved) {
                     f.queue_execute(raw.gpr[7]).unwrap_or_else(|_| fault())
                 } else {
                     raw.invocation.errors = 1;
-                    f.begin_queue_producer().unwrap_or_else(|_| fault())
+                    f.begin_queue_producer_with_provenance(unproven)
+                        .unwrap_or_else(|_| fault())
                 }
             }
             _ => fault(),
@@ -311,8 +312,15 @@ gateway!(
     end,
     unwind
 );
-gateway!("native_operation_allocate_gateway","41",native_operation_allocate_original,begin,end,unwind,
-    "mov rax,[rsp+0x1f0]\nmov [rsp+0x20],rax\nmov rax,[rsp+0x1f8]\nmov [rsp+0x28],rax\nmov rax,[rsp+0x40]\n");
+gateway!(
+    "native_operation_allocate_gateway",
+    "41",
+    native_operation_allocate_original,
+    begin,
+    end,
+    unwind,
+    "mov rax,[rsp+0x1f0]\nmov [rsp+0x20],rax\nmov rax,[rsp+0x1f8]\nmov [rsp+0x28],rax\nmov rax,[rsp+0x40]\n"
+);
 gateway!(
     "native_operation_execute_gateway",
     "42",
@@ -815,6 +823,70 @@ mod tests {
     unsafe extern "system" {
         fn native_operation_probe_enqueue();
         fn native_operation_probe_execute();
+    }
+    #[test]
+    fn unknown_incoming_keeps_original_enqueue_return_without_issuing_world_authority() {
+        if !child("unknown_incoming_keeps_original_enqueue_return_without_issuing_world_authority")
+        {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        NATIVE_OPERATION_CONTINUE[0].store(
+            native_operation_probe_enqueue as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        let invoke: unsafe extern "system" fn(*mut u64) -> u64 =
+            unsafe { std::mem::transmute(native_operation_enqueue_gateway as *const ()) };
+        let mut calls = 0;
+        runtime::fixture_invocation_runtime();
+        let value = sessions::fixture_unknown_input(|| unsafe { invoke(&mut calls) });
+        assert_eq!(value, 0x11223344);
+        assert_eq!(calls, 1);
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert!(STACK.with(|s| s.borrow().is_empty()));
+        assert!(sessions::NativeSessionApi::current_world().is_none());
+        assert!(!FRAMES.get().unwrap().unproven_on_current_thread());
+        let outside = runtime::invocation_start();
+        assert!(runtime::invocation_admitted(outside));
+        unsafe {
+            runtime::invocation_finish(&AtomicU64::new(outside));
+        }
+        sessions::fixture_unknown_input(|| {
+            assert_eq!(runtime::invocation_start(), 0);
+            assert!(!runtime::call_current(runtime::CallFence::default(), 0));
+            assert_eq!(runtime::call_begin(0).ticket, 0);
+        });
+        // An unproven enqueue can publish work that executes after the raw
+        // callback has returned. The saved node, rather than the new scope's
+        // current World, controls the later product admission.
+        sessions::fixture_unknown_input(|| {
+            let mut enqueue = saved(40, 0);
+            begin(&mut enqueue);
+            allocation(0x3743a, 100, 0);
+            allocation(0x374ce, 200, 0);
+            finish(&mut enqueue, false);
+        });
+        let mut copy = saved(44, 0);
+        begin(&mut copy);
+        allocation(0x3657d, 300, 200);
+        finish(&mut copy, false);
+        for node in [100, 300] {
+            let mut execute = saved(42, 0x37358);
+            execute.gpr[7] = node;
+            begin(&mut execute);
+            assert_eq!(runtime::invocation_start(), 0);
+            finish(&mut execute, false);
+            retire(0x373a2, node);
+        }
+        retire(0x38024, 200);
+        assert!(!super::unproven_input_active());
+        assert!(sessions::NativeSessionApi::current_world().is_none());
+        FRAMES
+            .get()
+            .unwrap()
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
     }
     #[test]
     fn original_four_push_shims_preserve_saved_rbp_and_native_return() {

@@ -64,15 +64,28 @@ impl NativeFrames {
     /// Called before the original's first instruction. Reentry on the same
     /// native stack inherits its root's epoch, including after closure.
     pub fn enter(&self) -> Result<u64, Error> {
+        self.enter_with_provenance(false)
+    }
+
+    /// Zero is explicitly unproven, never the current World's epoch. Native
+    /// callers still execute and drain, but descendants cannot gain authority.
+    pub fn enter_with_provenance(&self, unproven: bool) -> Result<u64, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let tid = thread::current().id();
         let inherited = Self::inherited(&s, tid);
         if s.executions_drained || (s.sealed && !inherited) {
             s.unresolved = true;
         }
+        if unproven {
+            Self::taint_thread(&mut s, tid);
+        }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
-        let generation = s.generation;
+        let generation = if unproven || Self::unproven(&s, tid) {
+            0
+        } else {
+            s.generation
+        };
         s.frames.insert(id, (generation, tid));
         self.changed.notify_all();
         Ok(id)
@@ -82,7 +95,9 @@ impl NativeFrames {
     /// or terminal SEH. A stale/duplicate/wrong-thread cookie cannot settle it.
     pub fn leave(&self, id: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
-        if s.frames.get(&id) != Some(&(s.generation, thread::current().id())) {
+        if !s.frames.get(&id).is_some_and(|(generation, tid)| {
+            (*generation == 0 || *generation == s.generation) && *tid == thread::current().id()
+        }) {
             s.unresolved = true;
             self.changed.notify_all();
             return Err(Error::Stale);
@@ -148,6 +163,31 @@ impl NativeFrames {
         s.frames.values().any(|(_, t)| *t == tid)
             || s.jobs.values().any(|j| j.executing_thread == Some(tid))
     }
+    fn unproven(s: &State, tid: ThreadId) -> bool {
+        s.frames
+            .values()
+            .any(|(generation, t)| *generation == 0 && *t == tid)
+            || s.jobs
+                .values()
+                .any(|j| j.generation == 0 && j.executing_thread == Some(tid))
+    }
+    fn taint_thread(s: &mut State, tid: ThreadId) {
+        for (generation, owner) in s.frames.values_mut() {
+            if *owner == tid {
+                *generation = 0;
+            }
+        }
+        for job in s.jobs.values_mut() {
+            if job.executing_thread == Some(tid) {
+                job.generation = 0;
+            }
+        }
+    }
+    pub fn unproven_on_current_thread(&self) -> bool {
+        self.state
+            .lock()
+            .map_or(true, |s| Self::unproven(&s, thread::current().id()))
+    }
 
     /// A Host consumer inherits only an already-issued T's generation. It
     /// retains a separate complete-frame hold after that T has completed.
@@ -163,20 +203,28 @@ impl NativeFrames {
         let Some(job) = job else {
             return Ok(None);
         };
-        if job.generation != s.generation {
+        if job.generation != 0 && job.generation != s.generation {
             s.unresolved = true;
             return Err(Error::Stale);
         }
+        let generation = if Self::unproven(&s, thread::current().id()) {
+            0
+        } else {
+            job.generation
+        };
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
-        let generation = s.generation;
         s.frames.insert(id, (generation, thread::current().id()));
         Ok(Some(id))
     }
 
     pub fn consumer_attach(&self, hold: u64, task: u64) -> Result<bool, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
-        if s.unresolved || s.frames.get(&hold) != Some(&(s.generation, thread::current().id())) {
+        if s.unresolved
+            || !s.frames.get(&hold).is_some_and(|(generation, tid)| {
+                (*generation == 0 || *generation == s.generation) && *tid == thread::current().id()
+            })
+        {
             s.unresolved = true;
             return Err(Error::Stale);
         }
@@ -187,9 +235,12 @@ impl NativeFrames {
         else {
             return Ok(false);
         };
-        if job.generation != s.generation {
+        if job.generation != 0 && job.generation != s.generation {
             s.unresolved = true;
             return Err(Error::Stale);
+        }
+        if job.generation == 0 {
+            Self::taint_thread(&mut s, thread::current().id());
         }
         Ok(true)
     }
@@ -267,6 +318,14 @@ impl NativeFrames {
         self.issue_on_set(payload, 1)
     }
     pub fn issue_on_set(&self, payload: u64, set: u64) -> Result<u64, Error> {
+        self.issue_on_set_with_provenance(payload, set, false)
+    }
+    pub fn issue_on_set_with_provenance(
+        &self,
+        payload: u64,
+        set: u64,
+        unproven: bool,
+    ) -> Result<u64, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if payload == 0
             || set == 0
@@ -280,7 +339,11 @@ impl NativeFrames {
         }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
-        let generation = s.generation;
+        let generation = if unproven || Self::unproven(&s, thread::current().id()) {
+            0
+        } else {
+            s.generation
+        };
         s.jobs.insert(
             id,
             Job {
@@ -312,7 +375,7 @@ impl NativeFrames {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let generation = s.generation;
         let valid = s.jobs.get(&id).is_some_and(|j| {
-            j.generation == generation
+            (j.generation == 0 || j.generation == generation)
                 && !j.push_returned
                 && task != 0
                 && (j.bound_task == 0 || j.bound_task == task)
@@ -342,7 +405,10 @@ impl NativeFrames {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let valid = task != 0
             && s.jobs.get(&id).is_some_and(|j| {
-                j.generation == s.generation && j.bound_task == 0 && !j.retiring && !j.push_returned
+                (j.generation == 0 || j.generation == s.generation)
+                    && j.bound_task == 0
+                    && !j.retiring
+                    && !j.push_returned
             })
             && !s.jobs.values().any(|j| j.task == task);
         if !valid {
@@ -361,7 +427,11 @@ impl NativeFrames {
         }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
-        let generation = s.generation;
+        let generation = if Self::unproven(&s, thread::current().id()) {
+            0
+        } else {
+            s.generation
+        };
         s.jobs.insert(
             id,
             Job {
@@ -383,7 +453,10 @@ impl NativeFrames {
     /// One complete native producer may allocate multiple nodes. Its frame
     /// holds every child until the producer's original normal return.
     pub fn begin_queue_producer(&self) -> Result<u64, Error> {
-        let id = self.enter()?;
+        self.begin_queue_producer_with_provenance(false)
+    }
+    pub fn begin_queue_producer_with_provenance(&self, unproven: bool) -> Result<u64, Error> {
+        let id = self.enter_with_provenance(unproven)?;
         if self.healthy() {
             Ok(id)
         } else {
@@ -416,20 +489,30 @@ impl NativeFrames {
         source: Option<u64>,
     ) -> Result<u64, Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
-        let valid_source = source.is_none_or(|node| {
-            s.jobs.values().any(|j| {
-                j.task == node
-                    && node != 0
-                    && j.generation == s.generation
-                    && j.set == u64::MAX
-                    && !j.retiring
-            })
+        let source_generation = source.and_then(|node| {
+            s.jobs
+                .values()
+                .find(|j| {
+                    j.task == node
+                        && node != 0
+                        && (j.generation == 0 || j.generation == s.generation)
+                        && j.set == u64::MAX
+                        && !j.retiring
+                })
+                .map(|j| j.generation)
         });
+        let producer_generation = s
+            .frames
+            .get(&producer)
+            .filter(|(generation, tid)| {
+                (*generation == 0 || *generation == s.generation) && *tid == thread::current().id()
+            })
+            .map(|(generation, _)| *generation);
         if s.unresolved
             || s.executions_drained
-            || s.frames.get(&producer) != Some(&(s.generation, thread::current().id()))
+            || producer_generation.is_none()
             || task == 0
-            || !valid_source
+            || (source.is_some() && source_generation.is_none())
             || s.jobs.values().any(|j| j.task == task)
         {
             s.unresolved = true;
@@ -438,7 +521,12 @@ impl NativeFrames {
         }
         let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
         s.next = id;
-        let generation = s.generation;
+        let generation = if producer_generation == Some(0) || source_generation == Some(0) {
+            Self::taint_thread(&mut s, thread::current().id());
+            0
+        } else {
+            s.generation
+        };
         s.jobs.insert(
             id,
             Job {
@@ -459,7 +547,9 @@ impl NativeFrames {
 
     pub fn queue_producer_returned(&self, producer: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
-        if s.frames.get(&producer) != Some(&(s.generation, thread::current().id())) {
+        if !s.frames.get(&producer).is_some_and(|(generation, tid)| {
+            (*generation == 0 || *generation == s.generation) && *tid == thread::current().id()
+        }) {
             s.unresolved = true;
             return Err(Error::Stale);
         }
@@ -486,7 +576,7 @@ impl NativeFrames {
             (j.task == task
                 && task != 0
                 && j.set == u64::MAX
-                && j.generation == s.generation
+                && (j.generation == 0 || j.generation == s.generation)
                 && !j.retiring
                 && j.execution != 1)
                 .then_some(*id)
@@ -504,7 +594,10 @@ impl NativeFrames {
     pub fn queue_retired(&self, id: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.jobs.get(&id).is_none_or(|j| {
-            j.generation != s.generation || j.set != u64::MAX || !j.retiring || j.execution == 1
+            (j.generation != 0 && j.generation != s.generation)
+                || j.set != u64::MAX
+                || !j.retiring
+                || j.execution == 1
         }) {
             s.unresolved = true;
             return Err(Error::Unresolved);
@@ -554,13 +647,16 @@ impl NativeFrames {
                 && j.set == u64::MAX
                 && j.execution == 0
                 && !j.retiring
-                && j.generation == s.generation)
+                && (j.generation == 0 || j.generation == s.generation))
                 .then_some(*id)
         });
         let Some(id) = id else {
             s.unresolved = true;
             return Err(Error::Unresolved);
         };
+        if s.jobs[&id].generation == 0 {
+            Self::taint_thread(&mut s, thread::current().id());
+        }
         s.jobs.get_mut(&id).unwrap().execution = 1;
         s.jobs.get_mut(&id).unwrap().executing_thread = Some(thread::current().id());
         Ok(id)
@@ -572,7 +668,7 @@ impl NativeFrames {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         let id = s.jobs.iter().find_map(|(id, j)| {
             (j.payload == payload
-                && j.generation == s.generation
+                && (j.generation == 0 || j.generation == s.generation)
                 && j.execution == 0
                 && !j.retiring
                 && (j.bound_task == 0 || j.bound_task == task)
@@ -583,6 +679,9 @@ impl NativeFrames {
             s.unresolved = true;
             return Err(Error::Unresolved);
         };
+        if s.jobs[&id].generation == 0 {
+            Self::taint_thread(&mut s, thread::current().id());
+        }
         let j = s.jobs.get_mut(&id).unwrap();
         j.task = task;
         j.bound_task = task;
@@ -594,7 +693,7 @@ impl NativeFrames {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.jobs.get(&id).is_none_or(|j| {
             j.execution != 1
-                || j.generation != s.generation
+                || (j.generation != 0 && j.generation != s.generation)
                 || j.executing_thread != Some(thread::current().id())
         }) {
             s.unresolved = true;
@@ -657,7 +756,7 @@ impl NativeFrames {
     pub fn task_retired(&self, id: u64) -> Result<(), Error> {
         let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
         if s.jobs.get(&id).is_none_or(|j| {
-            j.generation != s.generation
+            (j.generation != 0 && j.generation != s.generation)
                 || j.set == u64::MAX
                 || !j.retiring
                 || !matches!(j.execution, 0 | 2)
@@ -691,7 +790,7 @@ impl NativeFrames {
 mod tests {
     use super::*;
     use std::{
-        sync::{mpsc, Arc},
+        sync::{Arc, mpsc},
         time::Duration,
     };
     fn deadline() -> Instant {
@@ -1010,5 +1109,79 @@ mod tests {
         f.cancelled(400).unwrap();
         f.seal_and_wait(deadline()).unwrap();
         f.reopen().unwrap();
+    }
+    #[test]
+    fn unproven_input_copies_and_async_jobs_never_adopt_a_world_epoch() {
+        let f = std::sync::Arc::new(NativeFrames::new());
+        let producer = f.begin_queue_producer_with_provenance(true).unwrap();
+        assert!(f.unproven_on_current_thread());
+        f.queue_allocated(producer, 100, None).unwrap();
+        f.queue_producer_returned(producer).unwrap();
+        assert!(!f.unproven_on_current_thread());
+        let copy = f.begin_queue_producer().unwrap();
+        f.queue_allocated(copy, 200, Some(100)).unwrap();
+        assert!(
+            f.unproven_on_current_thread(),
+            "copy keeps its source provenance through full return"
+        );
+        f.queue_producer_returned(copy).unwrap();
+        let worker = f.clone();
+        let task = std::thread::spawn(move || {
+            let outer = worker.enter().unwrap();
+            let execution = worker.queue_execute(200).unwrap();
+            assert!(worker.unproven_on_current_thread());
+            let nested = worker.enter().unwrap();
+            let task = worker.issue_on_set(300, 10).unwrap();
+            worker.bind_before_publication(task, 400).unwrap();
+            worker.pushed(task, 400).unwrap();
+            worker.leave(nested).unwrap();
+            worker.completed(execution).unwrap();
+            assert!(
+                worker.unproven_on_current_thread(),
+                "outer consumer still holds old work after inner completion"
+            );
+            worker.leave(outer).unwrap();
+            assert!(!worker.unproven_on_current_thread());
+            task
+        })
+        .join()
+        .unwrap();
+        let consumer = f.consumer_enter(400).unwrap().unwrap();
+        assert!(f.unproven_on_current_thread());
+        assert_eq!(f.execute(400, 300), Ok(task));
+        f.completed(task).unwrap();
+        assert!(
+            f.unproven_on_current_thread(),
+            "whole consumer still owns unproven input"
+        );
+        f.consumer_exit(consumer).unwrap();
+        assert!(!f.unproven_on_current_thread());
+        for node in [100, 200] {
+            let id = f.retire_queue(node).unwrap();
+            f.queue_retired(id).unwrap();
+        }
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        let known = f.begin_queue_producer().unwrap();
+        assert!(!f.unproven_on_current_thread());
+        f.queue_producer_returned(known).unwrap();
+    }
+    #[test]
+    fn unproven_node_address_reuse_keeps_old_identity_without_tainting_new_node() {
+        let f = NativeFrames::new();
+        let old = f.begin_queue_producer_with_provenance(true).unwrap();
+        f.queue_allocated(old, 100, None).unwrap();
+        f.queue_producer_returned(old).unwrap();
+        let retired = f.retire_queue(100).unwrap();
+        let new = f.begin_queue_producer().unwrap();
+        f.queue_allocated(new, 100, None).unwrap();
+        f.queue_producer_returned(new).unwrap();
+        f.queue_retired(retired).unwrap();
+        let execution = f.queue_execute(100).unwrap();
+        assert!(!f.unproven_on_current_thread());
+        f.completed(execution).unwrap();
+        let id = f.retire_queue(100).unwrap();
+        f.queue_retired(id).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
     }
 }

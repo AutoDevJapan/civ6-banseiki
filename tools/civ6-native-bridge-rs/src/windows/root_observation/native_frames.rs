@@ -99,7 +99,9 @@ extern "system" fn begin(raw: *mut Saved) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
         let frames = FRAMES.get().unwrap_or_else(|| std::process::abort());
-        raw.invocation.token = frames.enter().unwrap_or_else(|_| std::process::abort());
+        raw.invocation.token = frames
+            .enter_with_provenance(sessions::NativeSessionApi::unproven_input_active())
+            .unwrap_or_else(|_| std::process::abort());
         raw.invocation.cookie = COOKIE;
         if !frames.healthy() {
             FAILED.store(true, Ordering::Release);
@@ -468,6 +470,12 @@ pub(super) fn close_executions(deadline: Instant) -> bool {
         std::io::stdout().flush().unwrap();
     }
     !FAILED.load(Ordering::Acquire) && result.is_ok()
+}
+pub(in super::super) fn unproven_input_active() -> bool {
+    sessions::NativeSessionApi::unproven_input_active()
+        || FRAMES
+            .get()
+            .is_some_and(NativeFrames::unproven_on_current_thread)
 }
 fn session_enter(epoch: u64) -> Result<u64, sessions::SessionError> {
     FRAMES

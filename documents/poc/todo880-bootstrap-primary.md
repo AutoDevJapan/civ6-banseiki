@@ -29,6 +29,8 @@ View初期化 `82E50` が `986150` で発行するHost jobは、既存allocator�
 
 native transportは元factory、network、threadの出生を公開前から別々に保持する。入力は元poll `C66350`の前にtransport出生時のWorld関係を保存し、`856E80`でのevent構築、元の複製・拡張・解放を通じてその識別を引き継ぐ。出生時にWorldが不明なtransportを、後のpoll時のWorldから補完しない。registryからの正式削除は、元のdestructor、thread待機、ノード解放の全returnまでSessionを終了扱いにしない。これらはOSの受信済みqueueやremote送信元の世代切替を証明するものではない。
 
+Worldの資格が不明な受信も、元のenqueue・実行・解放を通常どおり進める。この入力から生まれた保存ノード、複製、非同期Host job、呼出し全体には不明の印を引き継ぎ、現在のWorld世代を後から発行しない。これらも完全な復帰と元の解放までは排出待ちに含め、その処理中は製品側の許可を発行しない。
+
 遅延受信は、既にadmitされたmessageの保存内容を再serializeする `847510`→move `527440`と、pump `83D570`→decode `7F9C30`→元storage freeの正常return→元session dispatchを区別する。slotの再利用、map growth、未実行取消、storage free中の例外でも元packetの識別を保持する。合成経路では共有session gatewayも経由してこの対応を確認している。これは最初のOS受信queue全体の出生や停止を証明するものではない。
 
 全producerの自然停止、他のdispatch domain、taskコピー・再発行と取消の網羅、arena Waitの全分岐、先行cleanupとの寿命関係は未実証である。この候補の会計と一経路の正常returnを、全nativeの破棄許可や製品受入へ拡大しない。現在は未確立の全域被覆を理由にRebuildを拒否し、同process再読込を新候補の合格としていない。

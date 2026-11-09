@@ -101,7 +101,12 @@ fn network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
     transports::from_network(p)
 }
 fn reserve(lease: Lease, t: Transport) -> Result<Option<Message>, Error> {
-    super::reserve_input(lease, t)
+    match super::reserve_input(lease, t) {
+        // A normal same-transport reload can retire its issuing World. Keep
+        // native polling transparent; Closed grants no replacement receipt.
+        Err(Error::Closed) => Ok(None),
+        result => result,
+    }
 }
 fn fork(message: Message) -> Result<Message, Error> {
     super::fork_input(message)

@@ -54,8 +54,12 @@ extern "system" fn begin(raw: *mut Saved) {
                     return;
                 }
                 (
-                    f.issue_on_set(raw.gpr[1], raw.gpr[2])
-                        .unwrap_or_else(|_| fault()),
+                    f.issue_on_set_with_provenance(
+                        raw.gpr[1],
+                        raw.gpr[2],
+                        super::unproven_input_active(),
+                    )
+                    .unwrap_or_else(|_| fault()),
                     0,
                 )
             }

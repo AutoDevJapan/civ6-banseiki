@@ -134,6 +134,13 @@ impl NativeSessionApi {
     pub fn admission_active() -> bool {
         CALLS.with(|s| s.borrow().iter().any(|s| s.kind == 72 || s.kind == 73))
     }
+    pub fn unproven_input_active() -> bool {
+        CALLS.with(|s| {
+            s.borrow()
+                .iter()
+                .any(|c| matches!(c.kind, 72 | 73) && c.message.is_none())
+        })
+    }
     pub fn drained(world: SessionWorldReceipt) -> Result<(), SessionError> {
         if deferred::pending().map_err(|_| Error::Unresolved)? != 0
             || input::pending().map_err(|_| Error::Unresolved)? != 0
@@ -156,6 +163,15 @@ impl NativeSessionApi {
         let session = unsafe { restore() };
         input.and(registry).and(transport).and(queued).and(session)
     }
+}
+#[cfg(test)]
+pub(super) fn fixture_unknown_input<R>(body: impl FnOnce() -> R) -> R {
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 72;
+    begin(&mut raw);
+    let result = body();
+    finish(&mut raw, false);
+    result
 }
 struct RegistryGuard;
 impl Drop for RegistryGuard {
@@ -185,6 +201,7 @@ struct Call {
     transport: Option<Transport>,
     native_transport: bool,
     thread: u64,
+    unproven_hold: Option<u64>,
 }
 thread_local! {
     static REGISTRY:RefCell<Vec<(u64,u64)>>=const {RefCell::new(Vec::new())};
@@ -391,6 +408,7 @@ extern "system" fn begin(raw: *mut Saved) {
             transport: None,
             native_transport: false,
             thread: 0,
+            unproven_hold: None,
         };
         match c.kind {
             70 => {
@@ -565,6 +583,18 @@ extern "system" fn begin(raw: *mut Saved) {
             71 | 75 => {}
             _ => fault(),
         }
+        if matches!(c.kind, 72 | 73) && c.message.is_none() {
+            if let Some(frames) = FRAMES.get() {
+                c.unproven_hold = Some(
+                    frames
+                        .enter_with_provenance(true)
+                        .unwrap_or_else(|_| fault()),
+                );
+                if !frames.healthy() {
+                    fault();
+                }
+            }
+        }
         raw.invocation.cookie = COOKIE;
         raw.invocation.token = c.serial;
         CALLS.with(|s| s.borrow_mut().push(c));
@@ -673,6 +703,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         if (SCOPE.get().unwrap_or_else(|| fault()).leave)(hold, exceptional).is_err() {
             fault();
         }
+    }
+    if let Some(hold) = c.unproven_hold {
+        let frames = FRAMES.get().unwrap_or_else(|| fault());
+        if exceptional {
+            frames.mark_unresolved();
+        }
+        frames.leave(hold).unwrap_or_else(|_| fault());
     }
 }
 extern "system" fn end(raw: *mut Saved) {
