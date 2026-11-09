@@ -101,16 +101,8 @@ extern "system" fn before_publication(queue: u64) {
     );
 }
 extern "system" fn admission_body(session: u64, message: u64) {
-    let mut raw: Saved = unsafe { std::mem::zeroed() };
-    raw.gpr[0] = session;
-    raw.gpr[1] = message;
-    raw.invocation.caller = queue_fixture_admission_return as *const () as u64;
-    let admitted = admission(&raw).flatten();
-    if let Some((lease, packet)) = admitted {
-        state().admitted(lease, session).unwrap();
-        *ADMISSION_WORLD.lock().unwrap() = Some(state().message_world(packet).unwrap());
-        state().admission_returned(lease).unwrap();
-    }
+    let _native_inputs = (session, message);
+    *ADMISSION_WORLD.lock().unwrap() = super::super::NativeSessionApi::current_world();
     FULL_HOLD.store(
         FRAMES
             .get()
@@ -170,8 +162,18 @@ global_asm!(
     "mov qword ptr [rbx+0x20],0","mov rbx,[rsp+0x30]","lea rsp,[rsp+0x28]","ret",".seh_endproc",
     dest=sym DESTINATION,decoded=sym DECODED,movew=sym native_session_queue_move_gateway,
     published=sym before_publication,enqueue=sym native_session_queue_enqueue_gateway,decode=sym native_session_queue_decode_gateway,
-    freew=sym native_session_queue_free_gateway,admitted=sym admission_body,freed=sym free_body,
+    freew=sym native_session_queue_free_gateway,admitted=sym super::super::native_session_admission_gateway,freed=sym free_body,
 );
+global_asm!(
+    ".p2align 4",".globl queue_fixture_admission_original",".seh_proc queue_fixture_admission_original","queue_fixture_admission_original:",
+    ".byte 0x40,0x55",".seh_pushreg rbp","push rbx",".seh_pushreg rbx","push rsi",".seh_pushreg rsi",
+    "push rdi",".seh_pushreg rdi","sub rsp,0x28",".seh_stackalloc 0x28",".seh_endprologue",
+    "call {body}","lea rsp,[rsp+0x28]","pop rdi","pop rsi","pop rbx","pop rbp","ret",".seh_endproc",
+    body=sym admission_body,
+);
+unsafe extern "system" {
+    fn queue_fixture_admission_original();
+}
 unsafe extern "system" {
     fn queue_fixture_enqueue();
     fn queue_fixture_move();
@@ -198,6 +200,7 @@ unsafe extern "system" {
     fn queue_fixture_growth();
 }
 struct Fixture {
+    exe: usize,
     session: Box<[u64; 80]>,
     slot: Box<[u64; 6]>,
     source: Box<[u64; 6]>,
@@ -215,7 +218,25 @@ impl Fixture {
             })
             .is_ok());
         CORE.store(1, Ordering::Release);
-        let session = Box::new([0u64; 80]);
+        let exe = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                0x1050000,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            )
+        } as usize;
+        assert_ne!(exe, 0);
+        EXE.store(exe as u64, Ordering::Release);
+        unsafe {
+            *((exe + 0x10432c0) as *mut u64) = (exe + 0x842030) as u64;
+        }
+        let mut session = Box::new([0u64; 80]);
+        session[0] = exe as u64 + 0x1043088;
+        super::super::NATIVE_SESSION_CONTINUE[3].store(
+            queue_fixture_admission_original as *const () as u64 + 5,
+            Ordering::Release,
+        );
         let slot = Box::new([0u64; 6]);
         let source = Box::new([0x1000, 0x1010, 0x1020, 0, 1, 2]);
         let mut s = state();
@@ -256,6 +277,7 @@ impl Fixture {
             Ordering::Release,
         );
         Self {
+            exe,
             session,
             slot,
             source,
@@ -292,6 +314,11 @@ impl Fixture {
         let f: unsafe extern "system" fn(u64) -> u64 =
             unsafe { std::mem::transmute(gateways()[2]) };
         unsafe { f(self.session.as_ptr() as u64) }
+    }
+}
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        assert_ne!(unsafe { VirtualFree(self.exe as _, 0, MEM_RELEASE) }, 0);
     }
 }
 #[test]
@@ -650,6 +677,43 @@ fn pending_old_packet_blocks_same_session_rebind_until_cancel_then_never_mints_n
     let message = state().reserve(f.lease).unwrap();
     assert_eq!(state().message_world(message), Ok(new));
     state().cancel_before_dispatch(message).unwrap();
+    assert_eq!(pending(), Ok(0));
+}
+
+#[test]
+fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
+    if !child("unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt") {
+        return;
+    }
+    let mut f = Fixture::new();
+    f.slot[0] = 0x1000;
+    f.slot[1] = 0x1010;
+    f.slot[2] = 0x1020;
+    f.session[31] = 1;
+    let c = super::super::Call {
+        serial: 1,
+        kind: 72,
+        lease: Some(f.lease),
+        hold: None,
+        message: Some(f.message),
+        registry: 0,
+        owner: 0,
+        id: 0,
+        transport: None,
+        thread: 0,
+    };
+    super::super::CALLS.with(|s| s.borrow_mut().push(c));
+    assert_eq!(f.pump(), 0x8811);
+    super::super::CALLS.with(|s| {
+        s.borrow_mut().pop();
+    });
+    assert_eq!(
+        *ADMISSION_WORLD.lock().unwrap(),
+        None,
+        "unknown83D888 must not fall back to outer72"
+    );
+    assert!(!FULL_HOLD.load(Ordering::Acquire));
+    assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
     assert_eq!(pending(), Ok(0));
 }
 
