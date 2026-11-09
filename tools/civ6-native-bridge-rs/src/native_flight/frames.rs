@@ -95,6 +95,33 @@ impl NativeFrames {
         self.changed.notify_all();
         Ok(id)
     }
+    /// Attach a complete scheduler frame only to already retained work on
+    /// this stack. Unknown scheduler input cannot create a World epoch.
+    pub fn enter_inherited(&self) -> Result<Option<u64>, Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let tid = thread::current().id();
+        if !Self::inherited(&s, tid) {
+            return Ok(None);
+        }
+        if s.executions_drained {
+            s.unresolved = true;
+            return Err(Error::Closed);
+        }
+        let generation = if Self::unproven(&s, tid) {
+            0
+        } else {
+            s.generation
+        };
+        let sources = Self::lineage(&s, None);
+        let id = s.next.checked_add(1).ok_or(Error::Exhausted)?;
+        s.next = id;
+        s.frames.insert(id, (generation, tid));
+        s.frame_sources.insert(id, sources);
+        Ok(Some(id))
+    }
 
     /// A gateway clears its stack cookie before calling this on normal return
     /// or terminal SEH. A stale/duplicate/wrong-thread cookie cannot settle it.
@@ -493,6 +520,26 @@ impl NativeFrames {
         }
         s.jobs.get_mut(&id).unwrap().task = task;
         s.jobs.get_mut(&id).unwrap().bound_task = task;
+        Ok(())
+    }
+    /// Only an original allocator's normal NULL branch may abandon a Host
+    /// reservation that has never acquired a task or reached publication.
+    pub fn cancel_unpublished_job(&self, id: u64) -> Result<(), Error> {
+        let mut s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        if s.jobs.get(&id).is_none_or(|j| {
+            (j.generation != 0 && j.generation != s.generation)
+                || j.task != 0
+                || j.bound_task != 0
+                || j.push_returned
+                || j.execution != 0
+                || j.retiring
+                || j.set == u64::MAX
+        }) {
+            s.unresolved = true;
+            return Err(Error::Stale);
+        }
+        s.jobs.remove(&id);
+        self.changed.notify_all();
         Ok(())
     }
     pub fn reserve_queue(&self) -> Result<u64, Error> {
@@ -1350,5 +1397,23 @@ mod tests {
         f.leave(producer).unwrap();
         assert!(!f.unproven_on_current_thread());
         f.seal_and_wait(deadline()).unwrap();
+    }
+    #[test]
+    fn scheduler_inherits_unknown_lineage_and_cancels_only_never_published_tasks() {
+        let f = NativeFrames::new();
+        assert_eq!(f.enter_inherited(), Ok(None));
+        let root = f.enter_with_provenance(true).unwrap();
+        let scheduler = f.enter_inherited().unwrap().unwrap();
+        let task = f.issue_on_set(10, 20).unwrap();
+        f.cancel_unpublished_job(task).unwrap();
+        f.leave(scheduler).unwrap();
+        assert!(f.unproven_on_current_thread());
+        let published = f.issue_on_set(30, 20).unwrap();
+        f.bind_before_publication(published, 40).unwrap();
+        assert_eq!(f.cancel_unpublished_job(published), Err(Error::Stale));
+        assert!(f.contains_task(40));
+        f.leave(root).unwrap();
+        assert!(f.unproven_on_current_thread());
+        assert_eq!(f.reopen(), Err(Error::Unresolved));
     }
 }
