@@ -291,6 +291,7 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
     unsafe { install_at(exe) }
 }
 pub(super) unsafe fn prepare_host(exe: usize) -> Result<(), &'static str> {
+    diagnostic(1100);
     let _pin = super::super::pin(GAME_EXE, civ6_bootstrap_rs::EXE_SHA)?;
     EXE.store(exe as u64, Ordering::Release);
     unsafe { install_at(exe) }
@@ -323,21 +324,30 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
         native_job_destroy_gateway as *const () as usize,
         native_job_allocate_gateway as *const () as usize,
     ];
+    diagnostic(1101);
     let mut owners = HOOKS.lock().map_err(|_| "native job owner poisoned")?;
     if !owners.is_empty() {
+        diagnostic(1102);
         return Err("native jobs already installed");
     }
     for (i, (rva, expected, displaced)) in SITES.into_iter().enumerate() {
+        // Preserve the failed site's phase before the outer Prepare reports
+        // a dependency refusal. A fresh process can then distinguish entry,
+        // protection, relay allocation, and atomic publication failures.
+        let stage = 1110 + i * 10;
+        diagnostic(stage);
         let entry = (exe + rva) as *mut u8;
         if copy_current::<8>(entry as u64) != Some(expected) {
             return Err("native job entry differs");
         }
+        diagnostic(stage + 1);
         let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
         if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
             || info.Protect & 0xff != PAGE_EXECUTE_READ
         {
             return Err("native job protection");
         }
+        diagnostic(stage + 2);
         let code = unsafe { executable_near(entry as usize, entry as usize, displaced) }
             .ok_or("native job relay unavailable")?;
         let mut unpublished = Unpublished(code);
@@ -346,6 +356,7 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
             ptr::copy_nonoverlapping((callbacks[i] as u64).to_le_bytes().as_ptr(), code.add(6), 8);
         }
         let mut old = 0;
+        diagnostic(stage + 3);
         if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
             || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
         {
@@ -368,6 +379,7 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
             protection: info.Protect,
         });
         unpublished.0 = null_mut();
+        diagnostic(stage + 4);
         let o = unsafe {
             exchange_entry(
                 entry,
@@ -375,6 +387,7 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
                 u64::from_le_bytes(patched),
             )
         }?;
+        diagnostic(stage + 5);
         if !o.exchanged || !o.protection_restored || !o.cache_flushed {
             return Err("critical: native job publication");
         }
