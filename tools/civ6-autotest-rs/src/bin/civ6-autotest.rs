@@ -117,6 +117,7 @@ fn run(args: Args) -> Result<i32> {
     runner.run()
 }
 fn main() {
+    let native_recovery = civ6_autotest_rs::native_recovery::ExitGuard;
     let code = match run(Args::parse()) {
         Ok(code) => code,
         Err(e) => {
@@ -128,6 +129,7 @@ fn main() {
             }
         }
     };
+    drop(native_recovery);
     std::process::exit(code);
 }
 

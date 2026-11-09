@@ -742,6 +742,7 @@ fn run(args: Args) -> Result<()> {
 }
 
 fn main() -> std::process::ExitCode {
+    let _native_recovery = civ6_autotest_rs::native_recovery::ExitGuard;
     match run(Args::parse()) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {

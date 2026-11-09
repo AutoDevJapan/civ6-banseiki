@@ -1085,3 +1085,11 @@ Windowsの所有子検査は、実際の開始・復帰ハンドラーとReadPro
 `native_worlds` が出生を記録していない有効な CGame の終了と、`native_control` が出生を確認できない World の終了は、元処理へ渡す。これらに閉鎖用の cookie、Wait・shutdown の receipt、別の World の世代を与えない。診断2062を残し、World台帳の閉鎖完了と次の出生窓の発行を拒否する。この不足は後続の通常 native frame を abort させる会計破損と分けて保持し、通常のトラフィックで消去しない。
 
 出生と精算対象が既知であるのに閉鎖世代が一致しない場合の拒否は維持する。World を持たない通常の no-op は未観測閉鎖へ分類しない。所有した native stub の gateway 検査で、元処理の一回実行、全幅の戻り値・LastError の保持、閉鎖完了の拒否、後続 frame の正常終了を確認する。これらは全 native 経路の排出証明、正式な Rebuild の成功、実保存読込や製品の受入成功を意味しない。
+
+## 終了未確認の観測Sessionの所有
+
+bridge の READY 失敗、欠 stdin/stdout、終了処理の失敗や panic で target/controller の終了を確認できない場合は、Child、正確な target の handle、実行物の file pin、close authority を回復所有へ移す。エラーはエラーのまま返し、移管を正常な readiness や cleanup 完了にしない。trace の Unresolved も、状態名だけを理由に所有物を解放しない。正常な resident receipt と明示的な detach は従来どおり区別する。
+
+回復所有は live target への終了操作や制御 lease の更新を追加しない。同じ handle で target の OS 終了を確認した後にだけ、自分が起動した controller を回収し、両方の終了後に pin と保持資源を解放する。CLI の正常 exit と Rust unwind はこの回復待機を通る。回復待機は step の成功や期限延長ではなく、終了未確認の資源を捨てないための最終処理であり、target の終了まで CLI の最終終了が待機する場合がある。外部からの強制終了や電源断の回復を保証したものではない。
+
+所有した sleeper と小さい fixture file による検査で、失敗した初期化・Drop・未解決 trace の早期解放を修正前に再現し、修正後の pin 保持、正確な identity handle、peer の不変、OS 終了後の controller 回収と pin 解放を確認する。これを実ゲームの終了・設定復元・native 全域の排出証明や元の製品受入へ数えない。

@@ -20,6 +20,7 @@ pub mod native_bridge;
 pub mod native_carrier_witness;
 mod native_inventory;
 pub mod native_order;
+pub mod native_recovery;
 pub mod native_trace;
 pub mod payment_scenario;
 pub mod persona_payment;

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use crate::native_recovery::{CloseAuthority, Held};
     use serde_json::Value;
     use std::{
         collections::{BTreeMap, BTreeSet},
@@ -16,7 +17,7 @@ mod platform {
         io::{BufRead, BufReader, Read, Write},
         os::windows::{
             ffi::OsStringExt,
-            io::{AsRawHandle, FromRawHandle, OwnedHandle},
+            io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle},
             process::CommandExt,
         },
         process::{Child, ChildStdin, Command, Stdio},
@@ -76,6 +77,20 @@ mod platform {
         created: u64,
         restart_start: f64,
         exe: PathBuf,
+    }
+    impl AsHandle for PinnedGameIdentity {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            self.handle.as_handle()
+        }
+    }
+    struct RecoveryTarget {
+        identity: PinnedGameIdentity,
+        _close_authority: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+    }
+    impl AsHandle for RecoveryTarget {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            self.identity.as_handle()
+        }
     }
     impl PinnedGameIdentity {
         fn pin(pid: u32, expected_restart_start: f64) -> Result<Self> {
@@ -307,13 +322,13 @@ mod platform {
         }
     }
     pub struct Session {
-        child: Child,
+        child: Held<Child>,
         stdin: Option<ChildStdin>,
         messages: Receiver<ObserverMessage>,
         reader_closed: bool,
         output: PathBuf,
         mode: String,
-        identity: PinnedGameIdentity,
+        identity: Held<PinnedGameIdentity>,
         phase: Phase,
         failure: Option<String>,
         stop_sent: bool,
@@ -322,7 +337,7 @@ mod platform {
         critical: Option<String>,
         close_attempted: bool,
         close_error: Option<String>,
-        close_owned_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        close_owned_game: Held<CloseAuthority>,
     }
     impl Session {
         pub fn start(
@@ -428,13 +443,13 @@ mod platform {
                 })?;
             let (tx, rx) = mpsc::channel();
             let mut session = Self {
-                child,
+                child: child.into(),
                 stdin: None,
                 messages: rx,
                 reader_closed: false,
                 output: trace,
                 mode: mode.to_owned(),
-                identity,
+                identity: identity.into(),
                 phase: Phase::Attaching,
                 failure: None,
                 stop_sent: false,
@@ -443,7 +458,7 @@ mod platform {
                 critical: None,
                 close_attempted: false,
                 close_error: None,
-                close_owned_game,
+                close_owned_game: close_owned_game.into(),
             };
             session.stdin = session.child.stdin.take();
             let stdout = match session.child.stdout.take() {
@@ -834,8 +849,32 @@ mod platform {
     }
     impl Drop for Session {
         fn drop(&mut self) {
+            if !self.child.is_present() {
+                return;
+            }
             if !self.phase.terminal() {
-                let _ = self.stop();
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.stop()));
+            }
+            let controller_exited = matches!(self.child.try_wait(), Ok(Some(_)));
+            let detached = self.phase == Phase::Detached && controller_exited;
+            let target_exited = self.identity.exited().unwrap_or(false) && controller_exited;
+            if !detached && !target_exited {
+                drop(self.stdin.take());
+                let description = format!(
+                    "native trace target {}/{} phase {:?} output {}",
+                    self.identity.pid,
+                    self.identity.created,
+                    self.phase,
+                    self.output.display()
+                );
+                crate::native_recovery::retain(
+                    self.child.take_owned(),
+                    RecoveryTarget {
+                        identity: self.identity.take_owned(),
+                        _close_authority: self.close_owned_game.take_owned(),
+                    },
+                    description,
+                );
             }
         }
     }
@@ -851,6 +890,112 @@ mod platform {
         use windows_sys::Win32::System::Threading::TerminateProcess;
 
         const FIXTURE_READY: &str = "PR86_CRITICAL_FIXTURE_READY";
+
+        #[test]
+        fn unresolved_drop_retains_its_own_target_identity_and_controller() {
+            struct Fixture(Option<Child>);
+            impl std::ops::Deref for Fixture {
+                type Target = Child;
+                fn deref(&self) -> &Child {
+                    self.0.as_ref().unwrap()
+                }
+            }
+            impl Fixture {
+                fn spawn() -> Self {
+                    Self(Some(
+                        Command::new("powershell.exe")
+                            .args([
+                                "-NoProfile",
+                                "-NonInteractive",
+                                "-Command",
+                                "Start-Sleep -Seconds 60",
+                            ])
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .creation_flags(CREATE_NO_WINDOW)
+                            .spawn()
+                            .unwrap(),
+                    ))
+                }
+                fn stop(&mut self) {
+                    if let Some(child) = self.0.as_mut() {
+                        if child.try_wait().unwrap().is_none() {
+                            child.kill().unwrap();
+                        }
+                        child.wait().unwrap();
+                    }
+                }
+            }
+            impl Drop for Fixture {
+                fn drop(&mut self) {
+                    if let Some(child) = self.0.as_mut() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                }
+            }
+            let mut target = Fixture::spawn();
+            let mut controller = Fixture::spawn();
+            let mut peer = Fixture::spawn();
+            let target_pid = target.id();
+            let controller_handle = controller.as_handle().try_clone_to_owned().unwrap();
+            let target_created = created(target.as_raw_handle() as HANDLE).unwrap();
+            let identity =
+                PinnedGameIdentity::pin(target_pid, restart_unix_start(target_created)).unwrap();
+            let retained_identity = identity.handle.as_raw_handle() as HANDLE;
+            let (_, messages) = mpsc::channel();
+            let closes = Arc::new(AtomicUsize::new(0));
+            let close_counter = Arc::clone(&closes);
+            // The outer handles only reap these fixtures. The assertion queries
+            // the exact handle owned by the production Session, not a duplicate.
+            let session = Session {
+                child: controller.0.take().unwrap().into(),
+                stdin: None,
+                messages,
+                reader_closed: true,
+                output: PathBuf::from("unresolved-owned-fixture.jsonl"),
+                mode: "lifecycle".into(),
+                identity: identity.into(),
+                phase: Phase::Unresolved,
+                failure: None,
+                stop_sent: true,
+                stop_deadline: Some(Instant::now()),
+                close_reserve: Duration::ZERO,
+                critical: Some("fixture unconfirmed detach".into()),
+                close_attempted: true,
+                close_error: Some("fixture close refused".into()),
+                close_owned_game: (Box::new(move |_, _| {
+                    close_counter.fetch_add(1, Ordering::SeqCst);
+                    Err(Error::input("fixture close refused"))
+                })
+                    as Box<dyn FnMut(u32, f64) -> Result<()> + Send>)
+                    .into(),
+            };
+            drop(session);
+            let held_pid =
+                unsafe { windows_sys::Win32::System::Threading::GetProcessId(retained_identity) };
+            let controller_alive =
+                unsafe { WaitForSingleObject(controller_handle.as_raw_handle() as HANDLE, 0) }
+                    == WAIT_TIMEOUT;
+            let target_alive = target.0.as_mut().unwrap().try_wait().unwrap().is_none();
+            let peer_alive = peer.0.as_mut().unwrap().try_wait().unwrap().is_none();
+            target.stop();
+            let raw = controller_handle.as_raw_handle() as HANDLE;
+            if unsafe { WaitForSingleObject(raw, 0) } != WAIT_OBJECT_0 {
+                let _ = unsafe { TerminateProcess(raw, 1) };
+            }
+            assert_eq!(unsafe { WaitForSingleObject(raw, 3_000) }, WAIT_OBJECT_0);
+            controller.stop();
+            peer.stop();
+            crate::native_recovery::reap_completed_recoveries().unwrap();
+            assert!(target_alive && controller_alive && peer_alive);
+            assert_eq!(closes.load(Ordering::SeqCst), 0);
+            assert_eq!(
+                held_pid, target_pid,
+                "unresolved Drop lost its exact target identity handle"
+            );
+        }
 
         // Production Unresolved intentionally retains observer authority.
         // A timed test worker is different: its creator must reap its exact
@@ -1082,13 +1227,13 @@ mod platform {
             (
                 FixtureSession {
                     inner: Some(Session {
-                        child,
+                        child: child.into(),
                         stdin,
                         messages: rx,
                         reader_closed: true,
                         output: PathBuf::from("fixture.jsonl"),
                         mode: "governor".into(),
-                        identity,
+                        identity: identity.into(),
                         phase: Phase::Ready,
                         failure: None,
                         stop_sent: false,
@@ -1097,7 +1242,7 @@ mod platform {
                         critical: None,
                         close_attempted: false,
                         close_error: None,
-                        close_owned_game: Box::new(move |request_pid, request_start| {
+                        close_owned_game: (Box::new(move |request_pid, request_start| {
                             assert_eq!(request_pid, pid);
                             assert_eq!(request_start, expected_start);
                             closes.fetch_add(1, Ordering::SeqCst);
@@ -1119,7 +1264,9 @@ mod platform {
                                 }
                             }
                             Ok(())
-                        }),
+                        })
+                            as Box<dyn FnMut(u32, f64) -> Result<()> + Send>)
+                            .into(),
                     }),
                     process: fixture_process,
                 },

@@ -124,12 +124,17 @@ return tostring(owner)..'|'..tostring(def.Index)
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use crate::native_recovery::{CloseAuthority, Held};
     use civ6_native_bridge_rs::BridgeMode;
     use serde_json::Value;
     use sha2::{Digest, Sha256};
     use std::ffi::OsString;
     use std::io::{BufRead, BufReader, Read, Write};
-    use std::os::windows::{ffi::OsStringExt, io::AsRawHandle, process::CommandExt};
+    use std::os::windows::{
+        ffi::OsStringExt,
+        io::{AsHandle, AsRawHandle, BorrowedHandle},
+        process::CommandExt,
+    };
     use std::process::{Child, ChildStdin, Command, Stdio};
     use std::sync::mpsc::{self, Receiver};
     use std::time::{Duration, Instant};
@@ -856,6 +861,44 @@ mod platform {
             unsafe { CloseHandle(self.0) };
         }
     }
+    impl AsHandle for PinnedTarget {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            // The wrapper owns this valid process handle until its Drop.
+            unsafe { BorrowedHandle::borrow_raw(self.0) }
+        }
+    }
+    struct RecoveryTarget {
+        target: PinnedTarget,
+        _binary_pins: Vec<std::fs::File>,
+        _close_authority: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+    }
+    impl AsHandle for RecoveryTarget {
+        fn as_handle(&self) -> BorrowedHandle<'_> {
+            self.target.as_handle()
+        }
+    }
+    fn retain_failed_controller(
+        mut child: Child,
+        target: PinnedTarget,
+        binary_pins: Vec<std::fs::File>,
+        close_authority: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        description: String,
+    ) -> Option<u64> {
+        if unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0
+            && matches!(child.try_wait(), Ok(Some(_)))
+        {
+            return None;
+        }
+        Some(crate::native_recovery::retain(
+            child,
+            RecoveryTarget {
+                target,
+                _binary_pins: binary_pins,
+                _close_authority: close_authority,
+            },
+            description,
+        ))
+    }
 
     fn same_file(actual: &Path, expected: &str) -> bool {
         actual
@@ -986,15 +1029,15 @@ mod platform {
     }
 
     pub struct Session {
-        child: Child,
+        child: Held<Child>,
         input: Option<ChildStdin>,
         lines: Receiver<String>,
         artifact: PathBuf,
         pid: u32,
         created: u64,
         started: f64,
-        target: PinnedTarget,
-        close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        target: Held<PinnedTarget>,
+        close_game: Held<CloseAuthority>,
         finished: bool,
         mode: BridgeMode,
         assignment_subject: Option<AssignmentSubject>,
@@ -1167,48 +1210,27 @@ mod platform {
             started: f64,
             target: PinnedTarget,
             mode: BridgeMode,
-            mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+            close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
             resident_runtime: bool,
             binary_pins: Vec<std::fs::File>,
             bootstrap: bool,
             readiness_deadline: Option<Instant>,
         ) -> Result<Self> {
             let input = child.stdin.take();
-            let Some(stdout) = child.stdout.take() else {
-                let close = close_game(pid, started);
-                let cleanup = finish_failed_cleanup(close, &target, &mut child);
-                return Err(Error::input(format!(
-                    "bridge stdout unavailable; cleanup={cleanup:?}; exit_confirmed={}",
-                    unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0,
-                )));
-            };
-            if input.is_none() {
-                let close = close_game(pid, started);
-                let cleanup = finish_failed_cleanup(close, &target, &mut child);
-                return Err(Error::input(format!(
-                    "bridge stop pipe unavailable; cleanup={cleanup:?}; exit_confirmed={}",
-                    unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0,
-                )));
-            }
+            let stdout = child.stdout.take();
             let (sender, lines) = mpsc::channel();
-            std::thread::spawn(move || {
-                for line in BufReader::new(stdout).lines() {
-                    let Ok(line) = line else { break };
-                    if sender.send(line).is_err() {
-                        break;
-                    }
-                }
-            });
+            // Establish RAII ownership before any readiness error or caller
+            // cleanup callback can unwind, including missing-pipe branches.
             let mut session = Self {
-                child,
+                child: child.into(),
                 input,
                 lines,
                 artifact,
                 pid,
                 created,
                 started,
-                target,
-                close_game,
+                target: target.into(),
+                close_game: close_game.into(),
                 finished: false,
                 mode,
                 assignment_subject: None,
@@ -1217,6 +1239,20 @@ mod platform {
                 bootstrap,
                 bootstrap_root: false,
             };
+            let Some(stdout) = stdout else {
+                return Err(session.failed_start("bridge stdout unavailable"));
+            };
+            if session.input.is_none() {
+                return Err(session.failed_start("bridge stop pipe unavailable"));
+            }
+            std::thread::spawn(move || {
+                for line in BufReader::new(stdout).lines() {
+                    let Ok(line) = line else { break };
+                    if sender.send(line).is_err() {
+                        break;
+                    }
+                }
+            });
             let wait = readiness_deadline.map_or(Duration::from_secs(30), |deadline| {
                 deadline
                     .saturating_duration_since(Instant::now())
@@ -1226,23 +1262,50 @@ mod platform {
                 Ok(line) if readiness_deadline.is_none_or(|deadline| Instant::now() < deadline)
                     && line.starts_with(&format!("READY pid={pid} ")) && (!bootstrap || line==format!("READY pid={pid} created={created} bootstrap=v2 prepared=true runtime_installed=false")) => Ok(session),
                 _ => {
-                    let close = session.close_target();
-                    let cleanup = finish_failed_cleanup(close, &session.target, &mut session.child);
-                    session.finished = unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0
-                        && matches!(session.child.try_wait(), Ok(Some(_)));
-                    let mut diagnostic = String::new();
-                    if session.finished {
-                        if let Some(stderr) = session.child.stderr.take() {
-                            let _ = stderr.take(16_384).read_to_string(&mut diagnostic);
-                        }
-                    }
-                    Err(Error::input(format!(
-                        "native bridge did not prove bounded readiness; cleanup={cleanup:?}; controller_exit_confirmed={}; controller diagnostic={}",
-                        session.finished,
-                        diagnostic.trim()
-                    )))
+                    Err(session.failed_start("native bridge did not prove bounded readiness"))
                 }
             }
+        }
+
+        fn failed_start(&mut self, reason: &str) -> Error {
+            let close = self.close_target();
+            let cleanup = finish_failed_cleanup(close, &self.target, &mut self.child);
+            let target_exited = unsafe { WaitForSingleObject(self.target.0, 0) } == WAIT_OBJECT_0;
+            let controller_exited = matches!(self.child.try_wait(), Ok(Some(_)));
+            self.finished = target_exited && controller_exited;
+            let mut diagnostic = String::new();
+            if self.finished {
+                if let Some(stderr) = self.child.stderr.take() {
+                    let _ = stderr.take(16_384).read_to_string(&mut diagnostic);
+                }
+            }
+            let recovery = if self.finished {
+                None
+            } else {
+                self.retain_unresolved()
+            };
+            Error::input(format!("{reason}; cleanup={cleanup:?}; target_exit_confirmed={target_exited}; controller_exit_confirmed={controller_exited}; retained_recovery={recovery:?}; controller diagnostic={}", diagnostic.trim()))
+        }
+
+        fn retain_unresolved(&mut self) -> Option<u64> {
+            if !self.child.is_present() {
+                return None;
+            }
+            // Closing our stop pipe requests EOF without granting authority to
+            // terminate a live target. The recovery owner holds every resource.
+            drop(self.input.take());
+            retain_failed_controller(
+                self.child.take_owned(),
+                self.target.take_owned(),
+                std::mem::take(&mut self._binary_pins),
+                self.close_game.take_owned(),
+                format!(
+                    "native bridge target {}/{} artifact {}",
+                    self.pid,
+                    self.created,
+                    self.artifact.display()
+                ),
+            )
         }
 
         fn close_target(&mut self) -> Result<()> {
@@ -1383,8 +1446,11 @@ mod platform {
 
     impl Drop for Session {
         fn drop(&mut self) {
-            if !self.finished {
-                let _ = self.stop();
+            if !self.finished && self.child.is_present() {
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.stop()));
+                if !self.finished {
+                    self.retain_unresolved();
+                }
             }
         }
     }
@@ -1459,6 +1525,270 @@ mod platform {
             let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, child.id()) };
             assert!(!handle.is_null());
             PinnedTarget(handle)
+        }
+
+        #[test]
+        #[ignore = "owned recovery fixture, invoked by its parent test"]
+        fn recovery_controller_worker() {
+            if std::env::var_os("CIV6_RECOVERY_CONTROLLER_FIXTURE").is_none() {
+                return;
+            }
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                fn GetStdHandle(which: u32) -> HANDLE;
+            }
+            unsafe { CloseHandle(GetStdHandle((-10i32) as u32)) };
+            println!("NOT_READY");
+            std::io::stdout().flush().unwrap();
+            std::thread::sleep(Duration::from_secs(60));
+        }
+
+        struct RecoveryFixture(Child);
+        impl RecoveryFixture {
+            fn spawn() -> Self {
+                Self(
+                    Command::new("powershell.exe")
+                        .args([
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            "Start-Sleep -Seconds 60",
+                        ])
+                        .stdin(Stdio::null())
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .creation_flags(CREATE_NO_WINDOW)
+                        .spawn()
+                        .unwrap(),
+                )
+            }
+            fn stop(&mut self) {
+                if self.0.try_wait().unwrap().is_none() {
+                    self.0.kill().unwrap();
+                }
+                self.0.wait().unwrap();
+            }
+        }
+        impl Drop for RecoveryFixture {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+        fn recovery_controller() -> Child {
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "native_bridge::platform::tests::recovery_controller_worker",
+                    "--nocapture",
+                ])
+                .env("CIV6_RECOVERY_CONTROLLER_FIXTURE", "1")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap()
+        }
+        fn recovery_pin(path: &Path) -> std::fs::File {
+            use std::os::windows::fs::OpenOptionsExt;
+            std::fs::write(path, [7u8; 48]).unwrap();
+            std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(path)
+                .unwrap()
+        }
+        fn reap_fixture_controller(handle: &std::os::windows::io::OwnedHandle) {
+            let handle = handle.as_raw_handle() as HANDLE;
+            if unsafe { WaitForSingleObject(handle, 0) } != WAIT_OBJECT_0 {
+                let _ =
+                    unsafe { windows_sys::Win32::System::Threading::TerminateProcess(handle, 1) };
+            }
+            assert_eq!(unsafe { WaitForSingleObject(handle, 3_000) }, WAIT_OBJECT_0);
+        }
+
+        #[test]
+        fn failed_readiness_retains_binary_pin_until_owned_processes_exit() {
+            use std::os::windows::io::AsHandle;
+            let mut target = RecoveryFixture::spawn();
+            let mut peer = RecoveryFixture::spawn();
+            let controller = recovery_controller();
+            let controller_handle = controller.as_handle().try_clone_to_owned().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("owned-candidate.bin");
+            let pin = recovery_pin(&path);
+            let result = Session::from_child(
+                controller,
+                dir.path().join("not-ready.jsonl"),
+                target.0.id(),
+                1,
+                0.0,
+                test_target(&target.0),
+                BridgeMode::CanEver,
+                Box::new(|_, _| Err(Error::input("fixture close refused"))),
+                false,
+                vec![pin],
+                false,
+                Some(Instant::now() + Duration::from_millis(100)),
+            );
+            let failed = result.is_err();
+            let target_alive = target.0.try_wait().unwrap().is_none();
+            let controller_alive =
+                unsafe { WaitForSingleObject(controller_handle.as_raw_handle() as HANDLE, 0) }
+                    == WAIT_TIMEOUT;
+            let pin_retained = std::fs::OpenOptions::new().write(true).open(&path).is_err();
+            let peer_alive = peer.0.try_wait().unwrap().is_none();
+            target.stop();
+            reap_fixture_controller(&controller_handle);
+            peer.stop();
+            crate::native_recovery::reap_completed_recoveries().unwrap();
+            let pin_released = std::fs::OpenOptions::new().write(true).open(&path).is_ok();
+            assert!(failed);
+            assert!(target_alive && controller_alive && peer_alive);
+            assert!(
+                pin_retained,
+                "failed readiness discarded its binary pin before target/controller exit"
+            );
+            assert!(
+                pin_released,
+                "completed recovery must release its binary pin"
+            );
+        }
+
+        #[test]
+        fn failed_session_drop_retains_binary_pin_until_owned_processes_exit() {
+            use std::os::windows::io::AsHandle;
+            let mut target = RecoveryFixture::spawn();
+            let mut peer = RecoveryFixture::spawn();
+            let mut controller = recovery_controller();
+            let controller_handle = controller.as_handle().try_clone_to_owned().unwrap();
+            let input = controller.stdin.take();
+            let (_, lines) = mpsc::channel();
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("owned-drop-candidate.bin");
+            let pin = recovery_pin(&path);
+            let session = Session {
+                child: controller.into(),
+                input,
+                lines,
+                artifact: dir.path().join("drop.jsonl"),
+                pid: target.0.id(),
+                created: 1,
+                started: 0.0,
+                target: test_target(&target.0).into(),
+                close_game: (Box::new(|_, _| Err(Error::input("fixture close refused")))
+                    as Box<dyn FnMut(u32, f64) -> Result<()> + Send>)
+                    .into(),
+                finished: false,
+                mode: BridgeMode::CanEver,
+                assignment_subject: None,
+                resident_runtime: false,
+                _binary_pins: vec![pin],
+                bootstrap: false,
+                bootstrap_root: false,
+            };
+            drop(session);
+            let target_alive = target.0.try_wait().unwrap().is_none();
+            let controller_alive =
+                unsafe { WaitForSingleObject(controller_handle.as_raw_handle() as HANDLE, 0) }
+                    == WAIT_TIMEOUT;
+            let pin_retained = std::fs::OpenOptions::new().write(true).open(&path).is_err();
+            let peer_alive = peer.0.try_wait().unwrap().is_none();
+            target.stop();
+            reap_fixture_controller(&controller_handle);
+            peer.stop();
+            crate::native_recovery::reap_completed_recoveries().unwrap();
+            let pin_released = std::fs::OpenOptions::new().write(true).open(&path).is_ok();
+            assert!(target_alive && controller_alive && peer_alive);
+            assert!(
+                pin_retained,
+                "failed Drop discarded its binary pin before target/controller exit"
+            );
+            assert!(
+                pin_released,
+                "completed Drop recovery must release its binary pin"
+            );
+        }
+
+        #[test]
+        fn missing_startup_pipes_and_panicking_close_retain_ownership() {
+            use std::os::windows::io::AsHandle;
+            // Missing stdout, missing stdin, and panic before readiness are
+            // distinct branches. Every process is an owned sleeper fixture.
+            for case in 0..3 {
+                let mut target = RecoveryFixture::spawn();
+                let mut peer = RecoveryFixture::spawn();
+                let controller = Command::new("powershell.exe")
+                    .args([
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "Start-Sleep -Seconds 60",
+                    ])
+                    .stdin(if case == 1 {
+                        Stdio::null()
+                    } else {
+                        Stdio::piped()
+                    })
+                    .stdout(if case == 1 {
+                        Stdio::piped()
+                    } else {
+                        Stdio::null()
+                    })
+                    .stderr(Stdio::null())
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .spawn()
+                    .unwrap();
+                let controller_handle = controller.as_handle().try_clone_to_owned().unwrap();
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("owned-startup-pin.bin");
+                let pin = recovery_pin(&path);
+                let target_pin = test_target(&target.0);
+                let pid = target.0.id();
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    Session::from_child(
+                        controller,
+                        dir.path().join("incomplete.jsonl"),
+                        pid,
+                        1,
+                        0.0,
+                        target_pin,
+                        BridgeMode::CanEver,
+                        Box::new(move |_, _| {
+                            if case == 2 {
+                                panic!("owned fixture cleanup panic");
+                            }
+                            Err(Error::input("owned fixture cleanup refused"))
+                        }),
+                        false,
+                        vec![pin],
+                        false,
+                        Some(Instant::now() + Duration::from_millis(50)),
+                    )
+                }));
+                let failed = match outcome {
+                    Ok(result) => result.is_err(),
+                    Err(_) => case == 2,
+                };
+                let pin_retained = std::fs::OpenOptions::new().write(true).open(&path).is_err();
+                let target_alive = target.0.try_wait().unwrap().is_none();
+                let peer_alive = peer.0.try_wait().unwrap().is_none();
+                target.stop();
+                reap_fixture_controller(&controller_handle);
+                peer.stop();
+                crate::native_recovery::reap_completed_recoveries().unwrap();
+                let pin_released = std::fs::OpenOptions::new().write(true).open(&path).is_ok();
+                assert!(
+                    failed && target_alive && peer_alive,
+                    "startup branch {case}"
+                );
+                assert!(
+                    pin_retained && pin_released,
+                    "startup ownership branch {case}"
+                );
+            }
         }
 
         #[test]
@@ -1583,15 +1913,17 @@ mod platform {
             .unwrap();
             let (_, lines) = mpsc::channel();
             let mut session = Session {
-                child: controller,
+                child: controller.into(),
                 input,
                 lines,
                 artifact: artifact.clone(),
                 pid: 7,
                 created: 123,
                 started: 0.0,
-                target: pinned,
-                close_game: Box::new(|_, _| Err(Error::input("must not close fixture target"))),
+                target: pinned.into(),
+                close_game: (Box::new(|_, _| Err(Error::input("must not close fixture target")))
+                    as Box<dyn FnMut(u32, f64) -> Result<()> + Send>)
+                    .into(),
                 finished: false,
                 mode: BridgeMode::ProductionAdmission,
                 assignment_subject: None,
