@@ -190,6 +190,9 @@ fn allocate() -> *mut u8 {
     p
 }
 fn setup() -> (u64, SessionLease, [usize; 9], Vec<*mut u8>) {
+    setup_with_transport_offset(0)
+}
+fn setup_with_transport_offset(offset: usize) -> (u64, SessionLease, [usize; 9], Vec<*mut u8>) {
     let tables = unsafe { VirtualAlloc(null(), 0x40000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
         as *mut u8;
     assert!(!tables.is_null());
@@ -198,7 +201,8 @@ fn setup() -> (u64, SessionLease, [usize; 9], Vec<*mut u8>) {
     super::super::EXE.store(base, Ordering::Release);
     let session = allocate() as u64;
     let callback = allocate() as u64;
-    let p = allocate() as u64;
+    let transport_region = allocate();
+    let p = transport_region as u64 + offset as u64;
     let n = allocate() as u64;
     let t = allocate() as u64;
     unsafe {
@@ -247,11 +251,84 @@ fn setup() -> (u64, SessionLease, [usize; 9], Vec<*mut u8>) {
             tables,
             session as *mut u8,
             callback as *mut u8,
-            p as *mut u8,
+            transport_region,
             n as *mut u8,
             t as *mut u8,
         ],
     )
+}
+#[test]
+fn input_relationship_requires_active_flag_one_and_rejects_other_values() {
+    if !child("input_relationship_requires_active_flag_one_and_rejects_other_values") {
+        return;
+    }
+    let (session, lease, _, owned) = setup();
+    unsafe { transport_fixture_driver(session) };
+    let transport = super::super::state().transport(lease).unwrap();
+    let active = from_network(transport.network);
+    unsafe { *((transport.pointer + 0x45) as *mut u8) = 0 };
+    let inactive = from_network(transport.network);
+    unsafe { *((transport.pointer + 0x45) as *mut u8) = 2 };
+    let unknown = from_network(transport.network);
+    unsafe { *((transport.pointer + 0x45) as *mut u8) = 1 };
+    let active_again = from_network(transport.network);
+    unsafe { restore().unwrap() };
+    for pointer in owned {
+        assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
+    }
+    assert_eq!(active, Ok(Some((lease, transport))));
+    assert_eq!(inactive, Ok(None));
+    assert_eq!(
+        active_again, active,
+        "a refused observation must not permanently disable a valid transport"
+    );
+    assert_eq!(
+        unknown,
+        Ok(None),
+        "an observed non-active value cannot issue an input relationship"
+    );
+}
+#[test]
+fn unreadable_active_flag_never_issues_an_input_relationship() {
+    if !child("unreadable_active_flag_never_issues_an_input_relationship") {
+        return;
+    }
+    let (session, lease, _, owned) = setup_with_transport_offset(4096 - 0x40);
+    unsafe { transport_fixture_driver(session) };
+    let transport = super::super::state().transport(lease).unwrap();
+    let active = from_network(transport.network);
+    let flag_page = (transport.pointer + 0x45) & !4095;
+    let mut previous = 0;
+    assert_ne!(
+        unsafe { VirtualProtect(flag_page as _, 4096, PAGE_NOACCESS, &mut previous) },
+        0
+    );
+    let observed = copy_current::<1>(transport.pointer + 0x45);
+    let still_readable = read64(transport.pointer + 0x10);
+    let unknown = from_network(transport.network);
+    let mut replaced = 0;
+    assert_ne!(
+        unsafe { VirtualProtect(flag_page as _, 4096, previous, &mut replaced) },
+        0
+    );
+    let active_again = from_network(transport.network);
+    unsafe { restore().unwrap() };
+    for pointer in owned {
+        assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
+    }
+    assert_eq!(active, Ok(Some((lease, transport))));
+    assert_eq!(observed, None, "the real read must fail at the flag itself");
+    assert_eq!(
+        still_readable,
+        Ok(transport.network),
+        "unrelated fields remain readable"
+    );
+    assert_eq!(active_again, active);
+    assert_eq!(
+        unknown,
+        Ok(None),
+        "unknown is not a live producer observation"
+    );
 }
 #[test]
 fn actual_gateway_binds_thread_before_start_then_publishes_before_c0_and_disconnects_only_transport(

@@ -110,10 +110,19 @@ pub(in super::super) fn from_network(
     let Some((lease, t)) = known else {
         return Ok(None);
     };
-    if copy_current::<1>(t.pointer + 0x45) == Some([0]) {
-        // A stopped/unknown worker state supplies no new input authority.
-        census::event(census::SemanticEvent::ReceiveInactive);
-        return Ok(None);
+    match copy_current::<1>(t.pointer + 0x45) {
+        Some([1]) => {}
+        Some([0]) => {
+            census::event(census::SemanticEvent::ReceiveInactive);
+            return Ok(None);
+        }
+        _ => {
+            // Missing/foreign flag values are neither an active producer nor
+            // an observed inactive one. Preserve native polling, issue no
+            // input relationship and keep this distinct in diagnostics.
+            diagnostic(2071);
+            return Ok(None);
+        }
     }
     let (_, session, callback, _) = state().snapshot(Birth(t.incarnation))?;
     if super::existing_transport_owner(session, callback)? != Some(lease)

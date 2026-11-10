@@ -290,12 +290,19 @@ pub(super) fn completed(lease: WorldLease) -> bool {
 /// Missing birth evidence denies a closure certificate. It does not mean an
 /// owned executing frame or reservation was lost, and cannot poison ordinary
 /// native frame accounting into an unrelated process abort.
-pub(super) fn unobserved_close() {
+pub(super) fn unobserved_close() -> Option<u64> {
+    let token = BINDINGS
+        .lock()
+        .unwrap_or_else(|_| fault())
+        .start_unproven(0, true);
+    diagnostic(2062);
+    token
+}
+pub(super) fn unobserved_close_returned(token: u64, exceptional: bool) -> bool {
     BINDINGS
         .lock()
         .unwrap_or_else(|_| fault())
-        .note_gap(0, true);
-    diagnostic(2062);
+        .finish_unproven(token, 0, true, exceptional)
 }
 #[cfg(test)]
 fn unobserved_birth() {

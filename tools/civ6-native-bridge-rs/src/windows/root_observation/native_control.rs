@@ -11,6 +11,8 @@ static CLOSURE_COMPLETE: AtomicBool = AtomicBool::new(false);
 static WORLD: AtomicU64 = AtomicU64::new(0);
 static WORLD_BIRTH: Mutex<Option<worlds::WorldLease>> = Mutex::new(None);
 static CORE: AtomicU64 = AtomicU64::new(0);
+// This observation token never grants a World/Wait/shutdown receipt.
+const UNOBSERVED_CLOSE: u64 = 0xd730;
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 pub(super) fn hook_entries_owned() -> bool {
     owns_hook_entries(&HOOKS, NATIVE_CONTROL_CONTINUE.len())
@@ -113,7 +115,10 @@ extern "system" fn begin(raw: *mut Saved) {
                 raw.invocation.world = raw.gpr[0];
                 if worlds::installed() {
                     let Some(birth) = worlds::birth(raw.gpr[0]) else {
-                        worlds::unobserved_close();
+                        if let Some(token) = worlds::unobserved_close() {
+                            raw.invocation.errors = UNOBSERVED_CLOSE;
+                            raw.invocation.token = token;
+                        }
                         return;
                     };
                     if Some(birth) != worlds::closing(raw.gpr[0]) {
@@ -178,6 +183,18 @@ extern "system" fn begin(raw: *mut Saved) {
 fn finish(raw: &mut Saved, exceptional: bool) {
     if exceptional {
         census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
+    if raw.invocation.errors == UNOBSERVED_CLOSE {
+        if raw.invocation.kind != 30 || raw.invocation.cookie != 0 {
+            fault();
+        }
+        let token = raw.invocation.token;
+        raw.invocation.errors = 0;
+        raw.invocation.token = 0;
+        if !worlds::unobserved_close_returned(token, exceptional) {
+            fault();
+        }
+        return;
     }
     if raw.invocation.cookie != COOKIE {
         return;
@@ -1016,6 +1033,8 @@ mod tests {
         CORE.store(core, Ordering::Release);
         worlds::fixture_cold_observer(core);
         let frames = FRAMES.get().unwrap();
+        HOST_PREPARED.store(true, Ordering::Release);
+        let prior = worlds::capture_birth_window().unwrap();
         request_close();
         let mut world = vec![0u64; 0x2b0 / 8];
         let manager = vec![0u64; 0x500 / 8];
@@ -1025,6 +1044,15 @@ mod tests {
         let mut w = raw(30, world.as_ptr() as u64, core + 0x471c2);
         begin(&mut w);
         assert_eq!(w.invocation.cookie, 0);
+        assert!(worlds::capture_birth_window().is_none());
+        assert!(!worlds::unobserved_close_returned(
+            w.invocation.token + 1,
+            false
+        ));
+        assert!(
+            worlds::capture_birth_window().is_none(),
+            "wrong completion must retain the original interval"
+        );
         let mut m = raw(31, key, core + 0x63e1d5);
         begin(&mut m);
         let mut wait = raw(32, key + 0x400, core + 0x4a1196);
@@ -1032,6 +1060,8 @@ mod tests {
         finish(&mut wait, false);
         finish(&mut m, false);
         finish(&mut w, false);
+        assert_ne!(worlds::capture_birth_window().unwrap(), prior);
+        HOST_PREPARED.store(false, Ordering::Release);
         assert!(STACK.with(|s| s.borrow().is_empty()));
         assert!(!WAITED.load(Ordering::Acquire));
         assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
@@ -1042,6 +1072,120 @@ mod tests {
         assert!(frames.healthy());
         let later = frames.enter().unwrap();
         frames.leave(later).unwrap();
+    }
+    static UNKNOWN_BODY_HITS: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_WINDOW_BLOCKED: AtomicBool = AtomicBool::new(false);
+    static UNKNOWN_INPUT_ERROR: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_UNWIND: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_LANDING: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_NORMAL_RETURNS: AtomicU64 = AtomicU64::new(0);
+    extern "system" fn unobserved_original_body() -> u64 {
+        UNKNOWN_INPUT_ERROR.store(u64::from(unsafe { GetLastError() }), Ordering::Release);
+        UNKNOWN_BODY_HITS.fetch_add(1, Ordering::AcqRel);
+        UNKNOWN_WINDOW_BLOCKED.store(worlds::capture_birth_window().is_none(), Ordering::Release);
+        unsafe { SetLastError(0x24681357) };
+        0x1122334455667788
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn RtlUnwindEx(
+            frame: *const c_void,
+            ip: *const c_void,
+            record: *const EXCEPTION_RECORD,
+            value: *const c_void,
+            context: *const CONTEXT,
+            history: *const c_void,
+        );
+    }
+    global_asm!(
+        ".p2align 4",".globl control_unknown_driver",".seh_proc control_unknown_driver","control_unknown_driver:",
+        "push rbx",".seh_pushreg rbx","sub rsp,0x80",".seh_stackalloc 0x80",".seh_endprologue",
+        "mov [rcx],rsp","lea rax,[rip+control_unknown_landed]","mov [rcx+8],rax","mov rcx,rdx",
+        "call {gateway}",".globl control_unknown_return","control_unknown_return:","jmp 2f",
+        "control_unknown_landed:","mov rax,0x9988776655443322","2:","lea rsp,[rsp+0x80]","pop rbx","ret",".seh_endproc",
+        ".p2align 4",".globl control_unknown_original",".seh_proc control_unknown_original","control_unknown_original:",
+        ".byte 0x40,0x53",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",
+        "sub rsp,0x530",".seh_stackalloc 0x530",".seh_endprologue","call {body}",
+        "cmp qword ptr [rip+{unwind}],0","je 3f",
+        "mov r10,[rip+{landing}]","mov rcx,[r10]","mov rdx,[r10+8]",
+        "lea r10,[rsp+0x40]","mov r11d,0x9a","1:","mov qword ptr [r10],0","lea r10,[r10+8]","dec r11d","jnz 1b",
+        "lea r10,[rsp+0x40]","mov [rsp+0x20],r10","mov qword ptr [rsp+0x28],0","xor r8d,r8d","xor r9d,r9d","call {unwind_ex}","int3",
+        "3:","inc qword ptr [rip+{normal_returns}]","lea rsp,[rsp+0x550]","pop rbx","ret",".seh_endproc",
+        gateway=sym native_control_world_gateway,body=sym unobserved_original_body,
+        unwind=sym UNKNOWN_UNWIND,landing=sym UNKNOWN_LANDING,normal_returns=sym UNKNOWN_NORMAL_RETURNS,unwind_ex=sym RtlUnwindEx,
+    );
+    unsafe extern "system" {
+        fn control_unknown_driver(state: *mut u64, world: *mut u64) -> u64;
+        fn control_unknown_return();
+        fn control_unknown_original();
+    }
+    fn unobserved_gateway_interval(exceptional: bool) {
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let core = control_unknown_return as *const () as u64 - 0x471c2;
+        CORE.store(core, Ordering::Release);
+        worlds::fixture_cold_observer(core);
+        HOST_PREPARED.store(true, Ordering::Release);
+        let before = worlds::capture_birth_window()
+            .expect("the observation window must be armed before testing its exclusion");
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut landing = [0u64; 2];
+        UNKNOWN_LANDING.store(landing.as_mut_ptr() as u64, Ordering::Release);
+        UNKNOWN_UNWIND.store(u64::from(exceptional), Ordering::Release);
+        NATIVE_CONTROL_CONTINUE[0].store(
+            control_unknown_original as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        unsafe { SetLastError(0x87654321) };
+        let result = unsafe { control_unknown_driver(landing.as_mut_ptr(), world.as_mut_ptr()) };
+        let output_error = unsafe { GetLastError() };
+        let during_blocked = UNKNOWN_WINDOW_BLOCKED.load(Ordering::Acquire);
+        let after = worlds::capture_birth_window();
+        NATIVE_CONTROL_CONTINUE[0].store(0, Ordering::Release);
+        HOST_PREPARED.store(false, Ordering::Release);
+        assert_eq!(UNKNOWN_BODY_HITS.load(Ordering::Acquire), 1);
+        assert_eq!(UNKNOWN_INPUT_ERROR.load(Ordering::Acquire), 0x87654321);
+        assert_eq!(
+            UNKNOWN_NORMAL_RETURNS.load(Ordering::Acquire),
+            u64::from(!exceptional)
+        );
+        assert_eq!(
+            result,
+            if exceptional {
+                0x9988776655443322
+            } else {
+                0x1122334455667788
+            }
+        );
+        if !exceptional {
+            assert_eq!(output_error, 0x24681357);
+        }
+        assert!(
+            after.is_some(),
+            "a completed observation interval must permit a fresh window"
+        );
+        assert_ne!(after, Some(before), "the old empty window is invalidated");
+        assert!(!WAITED.load(Ordering::Acquire) && !SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!observed_shutdown_complete() && !FAILED.load(Ordering::Acquire));
+        assert!(FRAMES.get().unwrap().healthy());
+        assert!(STACK.with(|stack| stack.borrow().is_empty()));
+        assert!(
+            during_blocked,
+            "an original unobserved close still executing cannot issue a new birth window"
+        );
+    }
+    #[test]
+    fn unobserved_shutdown_blocks_birth_window_inside_original_until_normal_return() {
+        if child("unobserved_shutdown_blocks_birth_window_inside_original_until_normal_return") {
+            unobserved_gateway_interval(false);
+        }
+    }
+    #[test]
+    fn unobserved_shutdown_blocks_birth_window_until_real_native_unwind() {
+        if child("unobserved_shutdown_blocks_birth_window_until_real_native_unwind") {
+            unobserved_gateway_interval(true);
+        }
     }
     #[test]
     fn shutdown_outside_the_tracked_world_close_is_recorded_without_a_closing_certificate() {
