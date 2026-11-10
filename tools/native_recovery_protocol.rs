@@ -54,14 +54,23 @@ mod tests {
             pid: 42,
             created: 71,
         };
-        let line = format_notice("123-abc-def", target).unwrap();
-        assert!(line.len() <= MAX_LINE);
-        assert_eq!(
-            parse_notice(line.as_bytes(), "123-abc-def"),
-            Ok(Some(target))
+        // Use a fresh call-correlation tag, as the supervisor does. This is
+        // neither cryptographic key material nor process-control authority.
+        let nonce = format!(
+            "{:x}-{:x}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         );
-        assert_eq!(parse_notice(line.as_bytes(), "123-abc-eee"), Ok(None));
-        assert!(parse_notice(format!("{REQUIRED} abc 0 71").as_bytes(), "abc").is_err());
+        let different = format!("{nonce}-0");
+        assert!(valid_nonce(&nonce) && valid_nonce(&different));
+        let line = format_notice(&nonce, target).unwrap();
+        assert!(line.len() <= MAX_LINE);
+        assert_eq!(parse_notice(line.as_bytes(), &nonce), Ok(Some(target)));
+        assert_eq!(parse_notice(line.as_bytes(), &different), Ok(None));
+        assert!(parse_notice(format!("{REQUIRED} {nonce} 0 71").as_bytes(), &nonce).is_err());
     }
     #[test]
     fn missing_invalid_and_oversized_nonce_never_produce_a_notification() {
