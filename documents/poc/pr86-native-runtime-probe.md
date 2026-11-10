@@ -50,7 +50,7 @@ RIP不一致・debug registerの不一致・context取得失敗は両モード�
 
 `path_candidate`は既存の逆アセンブルで得た呼出し箇所との照合名であり、AI実手番の文脈を単独で証明しない。主な候補はUI getter `0xBA51E`、公式要求 `0x30DA56`と`0x2DCFFE`、AI解析領域 `0x4A8114`、未分類 `0x21B9E4`。`owner_id_candidate`と`property_interface_candidate`も実機での同一性と寿命を確定した値ではない。親のシナリオがAI実手番・公式要求・UI getterを別の区間で起動し、同じ本体関数の実呼出しと戻り値を突き合わせる。
 
-シナリオで `mode=property` を指定すると、runnerは子プロセスへ `--mode property` を渡し、identityにも同じmodeを要求する。4つの固定breakpointをPlayer getter `0x6EDC76`、試験用文字列キー `0x15339`、property getter前後 `0x1535E/0x15361` に割り当てる。このモードは本体資格の戻りALを採らない。Player getterとproperty getterが同じスレッド・同じPlayerのinterfaceで一致した2つの試験用キーだけ、値ポインタの先頭16バイトを記録する。停止後に各キーの読取・更新・削除の欠測があれば失敗する。実機診断と次コマンドは[加入資格の実装記録](pr86-native-admission.md#task853の実装候補と実機待ちの境界2026-10-03)にある。
+シナリオで `mode=property` を指定すると、runnerは子プロセスへ `--mode property` を渡し、identityにも同じmodeを要求する。4つの固定breakpointをPlayer getter `0x6EDC76`、試験用文字列キー `0x15339`、property getter前後 `0x1535E/0x15361` に割り当てる。このモードは本体資格の戻りALを採らない。Player getterとproperty getterが同じスレッド・同じPlayerのinterfaceで一致した2つの試験用キーだけ、値ポインタの先頭16バイトを記録する。停止後に各キーの読取・更新・削除の欠測があれば失敗する。実機診断と次コマンドは[加入資格の実装記録](pr86-native-admission.md#配置資格の実装候補と実機待ちの境界2026-10-03)にある。
 
 ## live_chainからの接続
 
