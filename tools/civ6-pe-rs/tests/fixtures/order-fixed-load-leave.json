@@ -1,5 +1,5 @@
 {
-  "name": "ToDo880 fixed load sites: attach after saved Gameplay, observe LeaveGame only",
+  "name": "Fixed load sites: attach after saved Gameplay, observe LeaveGame only",
   "judge_profile": "generic",
   "strict_lua_errors": true,
   "steps": [

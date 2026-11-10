@@ -20,7 +20,7 @@ OSが送ったattach breakpointは「最初のfirst-chance」という順番だ�
 
 合成Rust子プロセスでは、OSのattach thread開始位置、`NtQueryInformationThread`の実開始位置、breakpoint例外アドレス、停止中RIP=`DbgBreakPoint+1`を対象側`ntdll`のexport RVAと照合した。先行アプリbreakpointの回帰は、実子へattachしたdispatcherへ合成イベントを先に渡し、元handler向けの続行状態とready不成立を確認した。その合成イベントを子プロセス自身が発生させた証明ではない。続く実際のOS attach breakpointでreadyになり、ready後の子プロセス由来の外国例外は元のhandlerへ届いた。
 
-親担当がレビューを通し、新しいrelease版とhelperを配置した後の有限実験は次の1コマンド。7手順のシナリオは実機82と同じ最初のnumber/text property Luaを使い、観測器だけをbreakpointなしに替える。成功はattach・通常Lua・正常detachの証拠に限る。失敗では`process_exit`のコードと受け取った例外行の有無を区別する。
+レビュー済みの新しいrelease版とhelperを配置した後の有限実験は次の1コマンド。7手順のシナリオは実機82と同じ最初のnumber/text property Luaを使い、観測器だけをbreakpointなしに替える。成功はattach・通常Lua・正常detachの証拠に限る。失敗では`process_exit`のコードと受け取った例外行の有無を区別する。
 
 ```powershell
 D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-lifecycle-15km.json --stop-on-failure
@@ -71,9 +71,9 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 
 ## 独立検査と限界
 
-### Windows全件検査の停止と復元処理の修正（ToDo1765、2026-10-05）
+### Windows全件検査の停止と復元処理の修正（2026-10-05）
 
-この節の115試験群・1790件の成功は、子担当の修正候補 `5daaef17` の検査である。親ToDo158へ統合した `64a84927` の全件検査は別に実行し、以後のレビュー修正を旧候補の合格に含めない。
+この節の115試験群・1790件の成功は、修正候補 `5daaef17` の検査である。統合後の `64a84927` の全件検査は別に実行し、以後のレビュー修正を旧候補の合格に含めない。
 
 基準 `750274db` のWindows全件検査は、観測器のテストで復元期限を超えた後、子の応答・終了・観測スレッドの合流を無期限に待っていた。親の16:58開始の検査では8子が残った。同じ検査実行ファイルを専用作業領域へコピーすると、標準の並列数で40秒後も7子が残り、並列数12では42件が18.79秒で完了した。再現用の子はすべて回収した。
 
@@ -87,9 +87,9 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 
 各実子テストは、専用のWindows Jobに所属する別の検査プロセスで動かす。所属の設定を確認するまで子を作らせない。応答は8秒、観測スレッドの合流は40秒、検査プロセスは50秒、終了要求後の回収は15秒を上限にする。OS呼出しそのものが戻らない場合も、外側が所有する検査プロセスと子だけを終了する。Jobの件数が0でも終了シグナルがまだ立たない事例を実測したため、実行中から各プロセスのハンドルを保持し、件数と終了シグナルを両方確認する。子の標準エラーは検査のファイルへ流し、panic出力で未読のpipeを満たさない。タイムアウト、panic、回収前の残存子を正常な検査へ読み替えない。
 
-無応答の合成子、controller側のpanic、保留中の実ハードウェア例外におけるpanic、続行APIの一時拒否、永続的な復元拒否を検査する。意図的に停止した検査を終了して失敗を保持すること、同時に動く別の合成子を閉じないことも実証する。ゲーム・Civ6・Steamの起動、共有DLLの配置・編集、実ゲームへのattachは行っていない。実ゲームのAI検証と、統合後の別モデルレビューは親担当が進める。
+無応答の合成子、controller側のpanic、保留中の実ハードウェア例外におけるpanic、続行APIの一時拒否、永続的な復元拒否を検査する。意図的に停止した検査を終了して失敗を保持すること、同時に動く別の合成子を閉じないことも実証する。ゲーム・Civ6・Steamの起動、共有DLLの配置・編集、実ゲームへのattachは行っていない。実ゲームのAI検証と、統合後の別モデルレビューは引き続き確認する。
 
-子担当の候補 `5daaef17` は専用targetを使い、Rust製の `cargo_gate.exe` 経由で検査した。Windowsの主ワークスペース全件は115試験群・1790件が成功し、失敗・除外・フィルター適用は0件だった。観測器の51件は全件実行中に7.46秒で完了し、単独実行でも3.15秒で成功した。ワークスペース全体の形式検査も成功した。検査コマンドは `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` と `cargo fmt --manifest-path tools/Cargo.toml --all -- --check` である。全件検査後に所有プロセスの残存がないことを確認した。
+修正候補 `5daaef17` は専用targetを使い、Rust製の `cargo_gate.exe` 経由で検査した。Windowsの主ワークスペース全件は115試験群・1790件が成功し、失敗・除外・フィルター適用は0件だった。観測器の51件は全件実行中に7.46秒で完了し、単独実行でも3.15秒で成功した。ワークスペース全体の形式検査も成功した。検査コマンドは `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` と `cargo fmt --manifest-path tools/Cargo.toml --all -- --check` である。全件検査後に所有プロセスの残存がないことを確認した。
 
 追加の厳格Clippy検査は、既存の指摘が残っている。依存する加入資格クレートには `?` 記法の指摘があり、観測器には引数数・分岐・初期化の文体に関する指摘がある。主ワークスペースCIで指定された全件テストと形式検査の成功とは区別し、厳格Clippyの成功とは報告しない。
 
@@ -102,6 +102,6 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 - `tools/civ6-pe-rs`はこのworktreeにある。観測器は既知の6停止位置のファイルオフセットを固定してバイト比較し、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移す。
 - 静的gateの実機43では484組が偽、21AIは称号各3・使用0・任命0、正式Join後の公式APPOINT1回も同期barrier後に本体任命なし・使用0だった。この観測器はその原因を切り分ける測定器であり、本体の動的資格機能は未実装のまま。
 
-前提と元の静的解析は、親担当のworktreeにある`documents/poc/pr86-native-admission.md`と[枠診断](native-slots-diagnostic.md)に記録されている。SSOT 4・9・16の挙動は変更していない。
+前提と元の静的解析は、[本体接続の記録](pr86-native-admission.md)と[枠診断](native-slots-diagnostic.md)に記録されている。SSOT 4・9・16の挙動は変更していない。
 
 Windows APIの根拠はMicrosoftの[稼働中プロセスへのattachとdetach](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-a-running-process)、[終了時のdetach設定](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-debugsetprocesskillonexit)、[debug eventで受け取るhandleの扱い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-waitfordebugeventex)、[例外レコードのアドレスとfirst chance](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-exception_debug_info)、[続行状態による例外処理の違い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-continuedebugevent)に従う。DR6のbitの意味は[Intelのプロセッサ文書](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developers-manual.pdf)を参照したが、実機53でWindowsが返したDR6の値は不明である。

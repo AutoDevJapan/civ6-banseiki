@@ -1,5 +1,5 @@
 {
-  "name": "ToDo158: actual AI merit, skill purchases and immutable choices after save/load (cost-one fixture only)",
+  "name": "Actual AI merit, skill purchases and immutable choices after save/load (cost-one fixture only)",
   "judge_profile": "generic",
   "strict_lua_errors": true,
   "steps": [

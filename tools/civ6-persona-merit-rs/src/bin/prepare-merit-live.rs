@@ -76,5 +76,5 @@ fn main() {
         r#"{"action":"load","name":"JAC-Todo181-Settled","exact_name":true,"checkpoint":true,"timeout":300}"#.into(),wait.into(),
         core("notify(false); return serial(snapshot())", ",\"equals_capture\":\"TODO181_SETTLED\""),check_native,menu,
     ];
-    fs::write(out, format!("{{\"name\":\"ToDo181 qualified pending: event-time capture, save/load settlement once, second load and duplicate\",\"judge_profile\":\"generic\",\"strict_lua_errors\":true,\"steps\":[{}]}}\n", steps.join(",\n"))).unwrap();
+    fs::write(out, format!("{{\"name\":\"Qualified pending: event-time capture, save/load settlement once, second load and duplicate\",\"judge_profile\":\"generic\",\"strict_lua_errors\":true,\"steps\":[{}]}}\n", steps.join(",\n"))).unwrap();
 }

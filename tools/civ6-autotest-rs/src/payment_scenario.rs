@@ -122,7 +122,7 @@ return 'PAYMENT1720 real civic titles reserved for one person; automatic screen 
 }
 
 /// Normal UI bindings measure every promotion of the selected real Governor.
-/// The final marker also matches the cost-neutral verifier owned by ToDo1595.
+/// The final marker also matches the existing cost-neutral verifier.
 pub fn snapshot_code(p: Person, paid: u8, final_receipt: bool) -> String {
     let mut code = header(p);
     code.push_str(&format!(r#"

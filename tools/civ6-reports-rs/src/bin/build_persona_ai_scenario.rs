@@ -131,7 +131,7 @@ fn scenario() -> Value {
     steps.push(json!({"action":"end_turn","timeout":300}));
     steps.push(lua(CHECK));
     steps.push(json!({"action":"exit_to_menu"}));
-    json!({"name":"ToDo158: actual AI merit, skill purchases and immutable choices after save/load (cost-one fixture only)","judge_profile":"generic","strict_lua_errors":true,"steps":steps})
+    json!({"name":"Actual AI merit, skill purchases and immutable choices after save/load (cost-one fixture only)","judge_profile":"generic","strict_lua_errors":true,"steps":steps})
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

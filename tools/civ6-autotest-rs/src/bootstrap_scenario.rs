@@ -102,7 +102,7 @@ pub fn scene(
         json!({"action":"stop_native_bootstrap","timeout":45}),
     ]);
     let mut output = prefix.clone();
-    output["name"] = json!("ToDo880 cold-menu resident bootstrap and same-PID reload");
+    output["name"] = json!("Cold-menu resident bootstrap and same-PID reload");
     output["steps"] = json!(steps);
     crate::scenario::validate_scenario(&output)?;
     Ok(output)

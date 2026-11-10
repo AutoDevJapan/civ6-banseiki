@@ -1,5 +1,5 @@
 {
-  "name": "ToDo880 fixed load sites: same-process LeaveGame then reload the same physical save",
+  "name": "Fixed load sites: same-process LeaveGame then reload the same physical save",
   "judge_profile": "generic",
   "strict_lua_errors": true,
   "steps": [

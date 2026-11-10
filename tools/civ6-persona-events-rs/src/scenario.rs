@@ -181,6 +181,6 @@ return 'one official TITLE_1 PROMOTE sent'
     steps.push(ui("return 'EVENTS324 finite opt-in Gameplay callback/payment/save diagnostic only; normal rollout, AI, native placement and old partial-save recovery remain unproved'"));
     steps.push(json!({"action":"exit_to_menu"}));
     Ok(
-        json!({"name":"ToDo324 fresh cost-two Gameplay receipts, official Index/Spent comparison and reload without payment replay","judge_profile":"generic","strict_lua_errors":true,"steps":steps}),
+        json!({"name":"Fresh cost-two Gameplay receipts, official Index/Spent comparison and reload without payment replay","judge_profile":"generic","strict_lua_errors":true,"steps":steps}),
     )
 }
