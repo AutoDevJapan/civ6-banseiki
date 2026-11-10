@@ -363,6 +363,63 @@ mod tests {
         );
     }
     #[test]
+    fn mixed_flag_lengths_preserve_bulk_words_tail_and_the_exact_published_bound() {
+        for count in [
+            1, 7, 8, 9, 63, 64, 65, 255, 256, 257, 263, 264, 265, 271, 272, 4095, 4096,
+        ] {
+            let mut memory = fixture();
+            put(&mut memory, 0x3878, &(count as u32).to_le_bytes());
+            for index in 0..PROMOTION_LIMIT {
+                memory.bytes[0x4000 + index] = u8::from(index % 7 == 0);
+            }
+            let before = memory.bytes;
+            let snapshot = read_current(&memory, 0x1000, 0x3800).unwrap();
+            assert_eq!(snapshot.count, count as u32);
+            for index in 0..count {
+                assert_eq!(
+                    snapshot.has(index as u32),
+                    Some(index % 7 == 0),
+                    "count={count} index={index}"
+                );
+            }
+            assert_eq!(
+                snapshot.has(count as u32),
+                None,
+                "the first unpublished flag is unknown, not unpaid"
+            );
+            assert_eq!(memory.bytes, before);
+        }
+    }
+    #[test]
+    fn every_repeated_owner_and_container_identity_must_remain_current_individually() {
+        for address in [0x1070, 0x20d8, 0x1058, 0x3800, 0x3818, 0x3868] {
+            let memory = fixture();
+            memory.mutate.set(Some(address));
+            assert_eq!(
+                read_current(&memory, 0x1000, 0x3800),
+                Err(ReadFailure::Changed),
+                "identity address={address:#x}"
+            );
+        }
+    }
+    #[test]
+    fn null_and_overflowing_reads_are_refused_before_calling_the_memory_provider() {
+        struct Provider(Cell<usize>);
+        impl CurrentMemory for Provider {
+            fn copy<const N: usize>(&self, _: u64) -> Option<[u8; N]> {
+                self.0.set(self.0.get() + 1);
+                Some([0; N])
+            }
+        }
+        let provider = Provider(Cell::new(0));
+        for address in [0, u64::MAX - 2] {
+            assert_eq!(copy::<4>(&provider, address), Err(ReadFailure::Unreadable));
+            assert_eq!(provider.0.get(), 0);
+        }
+        assert_eq!(copy::<4>(&provider, 8), Ok([0; 4]));
+        assert_eq!(provider.0.get(), 1);
+    }
+    #[test]
     fn rejects_wrong_owner_nonmember_and_invalid_lengths_without_getters() {
         let mut m = fixture();
         put(&mut m, 0x3818, &8u32.to_le_bytes());
@@ -554,6 +611,70 @@ mod tests {
             governor_index: person,
             count: 64,
             owned: words,
+        }
+    }
+    #[test]
+    fn each_saved_cost_requires_exactly_its_own_title_definition_shape() {
+        let snapshot = snapshot_with(7, 22, &[10, 11, 12]);
+        for cost in 1..=3 {
+            for first in [false, true] {
+                for second in [false, true] {
+                    let definition = PaymentDefinition {
+                        governor_index: 22,
+                        cost,
+                        base: 10,
+                        titles: [first.then_some(11), second.then_some(12)],
+                    };
+                    let paid = snapshot.diagnostic_paid(7, definition);
+                    if first == (cost >= 2) && second == (cost == 3) {
+                        assert_eq!(paid, Ok(cost));
+                    } else {
+                        assert_eq!(
+                            paid,
+                            Err(PaymentFailure::Definition),
+                            "cost={cost} first={first} second={second}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    #[test]
+    fn nonzero_original_al_never_bypasses_personal_promotion_policy_or_changes_upper_rax() {
+        let snapshot = snapshot_with(7, 22, &[10]);
+        let definition = PaymentDefinition {
+            governor_index: 22,
+            cost: 2,
+            base: 10,
+            titles: [Some(11), None],
+        };
+        for upper in [0, 0xaabb_ccdd_1122_3300] {
+            for al in [0, 1, 2, 0xff] {
+                let original = upper | al;
+                for joined in [false, true] {
+                    for requested in [11, 20] {
+                        let subject = PromotionSubject::Persona {
+                            definition,
+                            owner: 7,
+                            snapshot: Some(&snapshot),
+                            joined,
+                        };
+                        let expected = if joined && requested == 11 {
+                            original
+                        } else {
+                            original & !0xff
+                        };
+                        assert_eq!(
+                            restrict_promotion(original, subject, requested, true),
+                            expected
+                        );
+                    }
+                }
+                assert_eq!(
+                    restrict_promotion(original, PromotionSubject::Standard, 20, true),
+                    original
+                );
+            }
         }
     }
 
