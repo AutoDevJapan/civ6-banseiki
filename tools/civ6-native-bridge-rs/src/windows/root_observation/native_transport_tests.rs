@@ -585,6 +585,126 @@ fn local_restart_allocation_failure_keeps_the_next_observed_attempt_eligible() {
         2
     );
 }
+fn repeated_restart_case(published_first: bool, allocation_failure: bool, failed_restart: bool) {
+    let (session, lease, _, owned) = setup();
+    super::super::state()
+        .bind_world(
+            lease,
+            WorldReceipt {
+                binding_id: 8,
+                epoch: 1,
+            },
+        )
+        .unwrap();
+    if published_first {
+        enable_reset_join();
+    }
+    START_OK.store(published_first, Ordering::Release);
+    unsafe {
+        SetLastError(0x1234);
+        transport_fixture_driver(session);
+    }
+    let pointer = POINTER.load(Ordering::Acquire);
+    let first = state().pointer_birth(pointer).unwrap();
+    let old_ticket = if published_first {
+        let old = super::super::state().transport(lease).unwrap();
+        Some(
+            super::super::state()
+                .reserve_input(lease, old)
+                .unwrap()
+                .unwrap(),
+        )
+    } else {
+        None
+    };
+    let local: unsafe extern "system" fn(u64, u64) -> u64 =
+        unsafe { std::mem::transmute(transport_fixture_local as *const ()) };
+    if allocation_failure {
+        NETWORK_ALLOC_OK.store(false, Ordering::Release);
+        assert_eq!(unsafe { local(pointer, 0x1234) }, 0);
+        assert_eq!(super::super::state().transport(lease), Err(Error::Unbound));
+        NETWORK_ALLOC_OK.store(true, Ordering::Release);
+    }
+    START_OK.store(!failed_restart, Ordering::Release);
+    unsafe {
+        SetLastError(0x1234);
+    }
+    // The native local-start return means that network allocation succeeded;
+    // only actual publication establishes that its thread was started.
+    assert_eq!(unsafe { local(pointer, 0x1234) }, 1);
+    let middle = state().pointer_birth(pointer).unwrap();
+    let middle_publication = super::super::state().transport(lease);
+    assert_eq!(middle_publication.is_ok(), !failed_restart);
+    START_OK.store(true, Ordering::Release);
+    unsafe {
+        SetLastError(0x1234);
+    }
+    eprintln!("REPEATED_RESET second reset after failed_restart={failed_restart} allocation_failure={allocation_failure}");
+    assert_eq!(unsafe { local(pointer, 0x1234) }, 1);
+    let error = unsafe { GetLastError() };
+    let current = super::super::state().transport(lease).unwrap();
+    assert!(current.incarnation > middle.0 && middle.0 > first.0);
+    assert_eq!(state().snapshot(first), Err(Error::Stale));
+    assert_eq!(state().snapshot(middle), Err(Error::Stale));
+    assert_eq!(from_network(current.network), Ok(Some((lease, current))));
+    if let Some(ticket) = old_ticket {
+        let mut sessions = super::super::state();
+        assert_eq!(
+            sessions.message_world(ticket),
+            Ok(WorldReceipt {
+                binding_id: 8,
+                epoch: 1
+            })
+        );
+        assert_eq!(
+            sessions.take_reset_input(ticket, value(session + 0x30), 17),
+            Ok(Some(lease))
+        );
+        assert_eq!(
+            sessions.take_reset_input(ticket, value(session + 0x30), 17),
+            Err(Error::Unknown)
+        );
+        assert_eq!(
+            sessions.drained(WorldReceipt {
+                binding_id: 8,
+                epoch: 1
+            }),
+            Err(Error::Unresolved)
+        );
+    }
+    assert_eq!(error, 0x1234);
+    assert!(!FAILED.load(Ordering::Acquire));
+    unsafe {
+        restore().unwrap();
+    }
+    for region in owned {
+        assert_ne!(unsafe { VirtualFree(region.cast(), 0, MEM_RELEASE) }, 0);
+    }
+}
+#[test]
+fn published_failed_restart_can_reset_again_without_losing_old_packet_identity() {
+    if child("published_failed_restart_can_reset_again_without_losing_old_packet_identity") {
+        repeated_restart_case(true, false, true);
+    }
+}
+#[test]
+fn published_allocation_then_start_failure_can_reset_again_and_publish() {
+    if child("published_allocation_then_start_failure_can_reset_again_and_publish") {
+        repeated_restart_case(true, true, true);
+    }
+}
+#[test]
+fn published_repeated_successful_resets_keep_fresh_bindings() {
+    if child("published_repeated_successful_resets_keep_fresh_bindings") {
+        repeated_restart_case(true, false, false);
+    }
+}
+#[test]
+fn unpublished_repeated_failed_starts_keep_later_publication_valid() {
+    if child("unpublished_repeated_failed_starts_keep_later_publication_valid") {
+        repeated_restart_case(false, false, true);
+    }
+}
 #[test]
 fn local_restart_join_al0_stops_before_native_destructive_continuation() {
     const NAME: &str = "local_restart_join_al0_stops_before_native_destructive_continuation";

@@ -389,6 +389,13 @@ mod tests {
             );
             assert_eq!(memory.bytes, before);
         }
+        // The public snapshot type can also be constructed by a caller. A
+        // corrupt count must not turn an out-of-range index into array access.
+        let mut corrupt = snapshot_with(7, 22, &[]);
+        corrupt.count = PROMOTION_LIMIT as u32 + 1;
+        assert_eq!(corrupt.has(PROMOTION_LIMIT as u32 - 1), Some(false));
+        assert_eq!(corrupt.has(PROMOTION_LIMIT as u32), None);
+        assert_eq!(corrupt.has(u32::MAX), None);
     }
     #[test]
     fn every_repeated_owner_and_container_identity_must_remain_current_individually() {
@@ -616,6 +623,20 @@ mod tests {
     #[test]
     fn each_saved_cost_requires_exactly_its_own_title_definition_shape() {
         let snapshot = snapshot_with(7, 22, &[10, 11, 12]);
+        for (cost, governor_index) in [(0, 22), (4, 22), (u8::MAX, 22), (1, 256), (1, u32::MAX)] {
+            assert_eq!(
+                snapshot.diagnostic_paid(
+                    7,
+                    PaymentDefinition {
+                        governor_index,
+                        cost,
+                        base: 10,
+                        titles: [None, None]
+                    }
+                ),
+                Err(PaymentFailure::Definition)
+            );
+        }
         for cost in 1..=3 {
             for first in [false, true] {
                 for second in [false, true] {

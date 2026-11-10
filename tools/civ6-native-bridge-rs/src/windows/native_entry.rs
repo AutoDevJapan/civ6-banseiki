@@ -266,6 +266,30 @@ pub(super) fn owned(hook: &Hook) -> bool {
 mod tests {
     use super::*;
     use windows_sys::Win32::System::Diagnostics::Debug::RemoveVectoredExceptionHandler;
+    fn owned_child(name: &str) -> bool {
+        const ENV: &str = "CIV6_NATIVE_ENTRY_OWNER_CHILD";
+        if std::env::var(ENV).ok().as_deref() == Some(name) {
+            return true;
+        }
+        let output = test_child_output::run(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .env(ENV, name)
+                .args([
+                    "--exact",
+                    &format!("windows::native_entry::tests::{name}"),
+                    "--nocapture",
+                ]),
+            std::time::Duration::from_secs(20),
+        )
+        .unwrap();
+        assert!(
+            output.status.success(),
+            "owned entry child: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        false
+    }
     struct Page(*mut u8);
     impl Page {
         fn new() -> Self {
@@ -292,6 +316,113 @@ mod tests {
     impl Drop for Page {
         fn drop(&mut self) {
             assert_ne!(unsafe { VirtualFree(self.0.cast(), 0, MEM_RELEASE) }, 0);
+        }
+    }
+    #[test]
+    fn first_trap_registration_pins_both_the_target_and_its_handler() {
+        if !owned_child("first_trap_registration_pins_both_the_target_and_its_handler") {
+            return;
+        }
+        let page = Page::new();
+        let target = unsafe { page.0.add(32) };
+        let relay = unsafe { page.0.add(128) };
+        unsafe {
+            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+            ptr::copy_nonoverlapping(
+                (owned_module_gateway as *const () as u64)
+                    .to_le_bytes()
+                    .as_ptr(),
+                relay.add(6),
+                8,
+            );
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        assert!(HANDLER.load(Ordering::Acquire).is_null());
+        assert!(resident_module::take_pin_calls().is_empty());
+        register_trap(target, relay).unwrap();
+        assert_eq!(
+            resident_module::take_pin_calls(),
+            [target as usize, breakpoint as *const () as usize]
+        );
+        assert!(!HANDLER.load(Ordering::Acquire).is_null());
+        assert_eq!(
+            trap_gateway(target as u64),
+            Some(owned_module_gateway as *const () as u64)
+        );
+        // No breakpoint was published or executed in this fixture. There are
+        // no fetched traps requiring the private allocation after it returns.
+    }
+    fn changed_before_publish(padding: bool) {
+        let page = Page::new();
+        let target = unsafe { page.0.add(32) };
+        let relay = unsafe { page.0.add(128) };
+        let original = [0x48, 0x8b, 0xc4, 0x53, 0x55, 0x56, 0x57, 0x90];
+        unsafe {
+            ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+            ptr::copy_nonoverlapping(
+                (owned_module_gateway as *const () as u64)
+                    .to_le_bytes()
+                    .as_ptr(),
+                relay.add(6),
+                8,
+            );
+            if padding {
+                ptr::copy_nonoverlapping(
+                    PROPERTY_PREFIX_PAD.as_ptr(),
+                    target.sub(PROPERTY_PREFIX_LEN),
+                    PROPERTY_PREFIX_LEN,
+                );
+            }
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        let (patched, prefix) = plan(target, original, relay).unwrap();
+        let hook = Hook {
+            target,
+            original,
+            patched,
+            prefix,
+            _code: relay,
+        };
+        page.protect(PAGE_READWRITE);
+        unsafe {
+            *target ^= 1;
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        assert!(HANDLER.load(Ordering::Acquire).is_null());
+        assert_eq!(trap_gateway(target as u64), None);
+        let result = unsafe { publish(&hook) };
+        if let Some((slot, _)) = prefix {
+            assert_eq!(
+                copy_current::<PROPERTY_PREFIX_LEN>(slot as u64),
+                Some(PROPERTY_PREFIX_PAD),
+                "a changed entry must be refused before any prefix publication"
+            );
+        }
+        assert_eq!(
+            trap_gateway(target as u64),
+            None,
+            "a changed entry must not acquire a trap owner"
+        );
+        assert!(
+            HANDLER.load(Ordering::Acquire).is_null(),
+            "no resident handler is needed for a refused publication"
+        );
+        assert!(matches!(
+            result,
+            Err("critical: native entry changed before publication")
+        ));
+    }
+    #[test]
+    fn changed_entry_is_refused_before_any_prefix_publication() {
+        if owned_child("changed_entry_is_refused_before_any_prefix_publication") {
+            changed_before_publish(true);
+        }
+    }
+    #[test]
+    fn changed_entry_is_refused_before_any_breakpoint_registration() {
+        if owned_child("changed_entry_is_refused_before_any_breakpoint_registration") {
+            changed_before_publish(false);
         }
     }
     #[test]

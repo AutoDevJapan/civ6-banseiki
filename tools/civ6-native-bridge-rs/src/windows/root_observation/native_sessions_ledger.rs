@@ -526,13 +526,30 @@ impl Ledger {
             return Err(Error::Unresolved);
         }
         let record = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
-        if record.phase != Phase::Open || record.native_reset.is_some() {
+        // After a published binding was reset, a new attempt may allocate a
+        // network but fail before publication. Its next native reset is legal
+        // only under a newer, never-published identity at the same pointer.
+        // Earlier reset packet groups remain in reset_inputs independently of
+        // this current reset marker; replacing it must not adopt their work.
+        let unpublished_retry = matches!(record.native_reset, Some(NativeReset::Returned(previous))
+            if record.transport.is_none()
+                && !record.transport_closed
+                && old.pointer == previous.pointer
+                && old.incarnation > previous.incarnation
+                && old.network != 0
+                && !self.transport_ids.contains(&old.incarnation));
+        if record.phase != Phase::Open
+            || record.transport_closing
+            || (record.native_reset.is_some() && !unpublished_retry)
+        {
             return Err(Error::Stale);
         }
         if record.transport.is_none() && record.transport_closed {
             return Ok(());
         }
-        if record.transport != Some(old) || record.unproven_transport.is_some() {
+        if (!unpublished_retry && record.transport != Some(old))
+            || record.unproven_transport.is_some()
+        {
             return Err(Error::Stale);
         }
         record.native_reset = Some(NativeReset::Closing(old));

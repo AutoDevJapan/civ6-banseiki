@@ -9,6 +9,99 @@ fn unbound(s: &mut Ledger, record_window: bool) -> Lease {
     s.published(lease, 7).unwrap();
     lease
 }
+#[test]
+fn repeated_reset_accepts_only_new_unpublished_bindings_and_retains_older_packets() {
+    let mut ledger = Ledger::default();
+    let lease = unbound(&mut ledger, true);
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    let original = ledger.publish_transport(lease, 900, 90, 100, 110).unwrap();
+    let packet = ledger.reserve_input(lease, original).unwrap().unwrap();
+    ledger.native_reset_begin(lease, original).unwrap();
+    ledger.native_reset_returned(lease, original).unwrap();
+    assert_eq!(
+        ledger.drained(WorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        }),
+        Err(Error::Unresolved),
+        "reset return alone must retain the World gap, before any packet settles"
+    );
+    let other = ledger.birth(2, Some(3), 31, 2).unwrap();
+    ledger.factory(other, 8, 31, 41, 51).unwrap();
+    ledger.published(other, 8).unwrap();
+    ledger.publish_transport(other, 950, 190, 200, 210).unwrap();
+    for invalid in [
+        Transport {
+            incarnation: 0,
+            ..original
+        },
+        Transport {
+            incarnation: 899,
+            ..original
+        },
+        original,
+        Transport {
+            incarnation: 901,
+            pointer: 91,
+            ..original
+        },
+        Transport {
+            incarnation: 950,
+            ..original
+        },
+    ] {
+        assert_eq!(ledger.native_reset_begin(lease, invalid), Err(Error::Stale));
+        assert!(
+            matches!(ledger.records[&lease.0].native_reset, Some(NativeReset::Returned(old)) if old == original)
+        );
+    }
+    let pending = Transport {
+        incarnation: 901,
+        thread: 0,
+        ..original
+    };
+    ledger.native_reset_begin(lease, pending).unwrap();
+    assert_eq!(
+        ledger.publish_transport(lease, 902, 90, 100, 110),
+        Err(Error::Stale)
+    );
+    assert_eq!(
+        ledger.native_reset_begin(
+            lease,
+            Transport {
+                incarnation: 902,
+                ..pending
+            }
+        ),
+        Err(Error::Stale)
+    );
+    assert_eq!(
+        ledger.native_reset_returned(lease, original),
+        Err(Error::Stale)
+    );
+    ledger.native_reset_returned(lease, pending).unwrap();
+    assert!(!ledger.records[&lease.0].transport_joined);
+    assert!(!ledger.records[&lease.0].joined);
+    let current = ledger.publish_transport(lease, 902, 90, 100, 110).unwrap();
+    assert_eq!(ledger.transport(lease), Ok(current));
+    assert_eq!(
+        ledger.message_world(packet),
+        Ok(WorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        })
+    );
+    assert_eq!(ledger.take_reset_input(packet, 51, 7), Err(Error::Stale));
+    assert_eq!(ledger.take_reset_input(packet, 50, 7), Ok(Some(lease)));
+    assert_eq!(
+        ledger.drained(WorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        }),
+        Err(Error::Unresolved)
+    );
+}
 fn world(serial: u64, epoch: u64) -> WorldLease {
     WorldLease {
         serial,
