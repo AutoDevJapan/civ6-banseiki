@@ -812,11 +812,7 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
         {
             return Err("deferred relay publication");
         }
-        let mut patched = word;
-        patched[..5].copy_from_slice(
-            &rel32_jump(p as usize, relay as usize).ok_or("deferred relay range")?,
-        );
-        patched[5..stolen].fill(0x90);
+        let (patched, prefix) = native_entry::plan(p, word, relay)?;
         // A51F90 displaced its complete MOV+tailJMP; its continuation is the
         // original9825F0 target, not the next unrelated function's padding.
         let continuation = if i == 4 {
@@ -830,14 +826,15 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
                 target: p,
                 original: word,
                 patched,
-                prefix: None,
+                prefix,
                 _code: relay,
             },
             protection: info.Protect,
         });
         unpublished.0 = null_mut();
-        let r =
-            unsafe { exchange_entry(p, u64::from_le_bytes(word), u64::from_le_bytes(patched)) }?;
+        let r = unsafe {
+            native_entry::publish(&hooks.last().ok_or("native hook owner missing")?.hook)
+        }?;
         if !r.exchanged
             || !r.protection_restored
             || !r.cache_flushed

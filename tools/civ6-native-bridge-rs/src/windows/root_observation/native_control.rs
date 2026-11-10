@@ -427,29 +427,21 @@ pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
             {
                 return Err("native control relay publication");
             }
-            let mut patched = expected;
-            patched[..5].copy_from_slice(
-                &rel32_jump(entry as usize, code as usize).ok_or("native control range")?,
-            );
-            patched[5..n].fill(0x90);
+            let (patched, prefix) = native_entry::plan(entry, expected, code)?;
             NATIVE_CONTROL_CONTINUE[i].store((core + rva + n) as u64, Ordering::Release);
             owners.push(OwnedHook {
                 hook: Hook {
                     target: entry,
                     original: expected,
                     patched,
-                    prefix: None,
+                    prefix,
                     _code: code,
                 },
                 protection,
             });
             unpublished.0 = null_mut();
             let r = unsafe {
-                exchange_entry(
-                    entry,
-                    u64::from_le_bytes(expected),
-                    u64::from_le_bytes(patched),
-                )
+                native_entry::publish(&owners.last().ok_or("native hook owner missing")?.hook)
             }?;
             if !r.exchanged || !r.protection_restored || !r.cache_flushed {
                 return Err("critical: native control publication");

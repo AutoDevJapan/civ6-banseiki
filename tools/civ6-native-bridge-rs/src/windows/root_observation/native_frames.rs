@@ -16,10 +16,7 @@ static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 fn owns_hook_entries(owners: &Mutex<Vec<OwnedHook>>, expected: usize) -> bool {
     expected != 0
         && owners.lock().is_ok_and(|owners| {
-            owners.len() == expected
-                && owners.iter().all(|owned| {
-                    copy_current::<8>(owned.hook.target as u64) == Some(owned.hook.patched)
-                })
+            owners.len() == expected && owners.iter().all(|owned| native_entry::owned(&owned.hook))
         })
 }
 fn all_hook_entries_owned() -> bool {
@@ -584,31 +581,21 @@ unsafe fn install_at(core: usize, dependencies: bool) -> Result<(), &'static str
         {
             return Err("native frame relay publication");
         }
-        let mut patched = expected;
-        patched[..5].copy_from_slice(
-            &rel32_jump(entry as usize, code as usize).ok_or("native frame relay range")?,
-        );
-        // Preserve suffix bytes when the original resumes inside the CAS
-        // word; for larger whole instructions only the first 8 bytes change.
-        patched[5..displaced.min(8)].fill(0x90);
+        let (patched, prefix) = native_entry::plan(entry, expected, code)?;
         NATIVE_FRAME_CONTINUE[i].store((core + rva + displaced) as u64, Ordering::Release);
         hooks.push(OwnedHook {
             hook: Hook {
                 target: entry,
                 original: expected,
                 patched,
-                prefix: None,
+                prefix,
                 _code: code,
             },
             protection: info.Protect,
         });
         unpublished.0 = null_mut();
         let result = unsafe {
-            exchange_entry(
-                entry,
-                u64::from_le_bytes(expected),
-                u64::from_le_bytes(patched),
-            )
+            native_entry::publish(&hooks.last().ok_or("native hook owner missing")?.hook)
         }?;
         if !result.exchanged
             || !result.protection_restored
@@ -901,7 +888,7 @@ mod tests {
             let deadline = Instant::now() + Duration::from_secs(30);
             loop {
                 if let Some(status) = child.try_wait().unwrap() {
-                    assert!(status.success());
+                    assert!(status.success(), "owned native CAS child {status:?}");
                     break;
                 }
                 if Instant::now() >= deadline {
@@ -968,6 +955,11 @@ mod tests {
         );
         unsafe { fixture_install(base) }.unwrap();
         assert_eq!(TRACE.0[7].load(Ordering::Acquire), (1 << SITES.len()) - 1);
+        assert_eq!(
+            &copy_current::<8>((base+SITES[0].0) as u64).unwrap()[2..],
+            &entries[0][2..],
+            "a caller already past the first two-byte instruction must see unchanged original instructions"
+        );
         for (i, (rva, _, _)) in SITES.into_iter().enumerate() {
             let invoke: unsafe extern "system" fn(*mut u64) -> u64 =
                 unsafe { std::mem::transmute(base + rva) };

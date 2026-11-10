@@ -383,18 +383,14 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
         {
             return Err("native job relay publication");
         }
-        let mut patched = expected;
-        patched[..5].copy_from_slice(
-            &rel32_jump(entry as usize, code as usize).ok_or("native job relay range")?,
-        );
-        patched[5..displaced].fill(0x90);
+        let (patched, prefix) = native_entry::plan(entry, expected, code)?;
         NATIVE_JOB_CONTINUE[i].store((exe + rva + displaced) as u64, Ordering::Release);
         owners.push(OwnedHook {
             hook: Hook {
                 target: entry,
                 original: expected,
                 patched,
-                prefix: None,
+                prefix,
                 _code: code,
             },
             protection: info.Protect,
@@ -402,11 +398,7 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
         unpublished.0 = null_mut();
         diagnostic(stage + 4);
         let o = unsafe {
-            exchange_entry(
-                entry,
-                u64::from_le_bytes(expected),
-                u64::from_le_bytes(patched),
-            )
+            native_entry::publish(&owners.last().ok_or("native hook owner missing")?.hook)
         }?;
         diagnostic(stage + 5);
         if !o.exchanged || !o.protection_restored || !o.cache_flushed {
@@ -761,7 +753,9 @@ mod tests {
                 NATIVE_JOB_CONTINUE[i].load(Ordering::Acquire),
                 (base + rva + n) as u64
             );
-            assert_eq!(copy_current::<1>((base + rva) as u64), Some([0xe9]));
+            let owners = HOOKS.lock().unwrap();
+            assert_eq!(owners[i].hook.target as usize, base + rva);
+            assert!(native_entry::owned(&owners[i].hook));
         }
         unsafe { restore() }.unwrap();
         assert!(HOOKS.lock().unwrap().is_empty());

@@ -711,18 +711,14 @@ unsafe fn install_at(core: usize) -> Result<(), &'static str> {
             {
                 return Err("World relay publication");
             }
-            let mut patch = expected;
-            patch[..5].copy_from_slice(
-                &rel32_jump(p as usize, code as usize).ok_or("World relay range")?,
-            );
-            patch[5] = 0x90;
+            let (patch, prefix) = native_entry::plan(p, expected, code)?;
             NATIVE_WORLD_CONTINUE[i].store((core + rva + 6) as u64, Ordering::Release);
             hooks.push(OwnedHook {
                 hook: Hook {
                     target: p,
                     original: expected,
                     patched: patch,
-                    prefix: None,
+                    prefix,
                     _code: code,
                 },
                 protection,
@@ -731,7 +727,7 @@ unsafe fn install_at(core: usize) -> Result<(), &'static str> {
             #[cfg(test)]
             tests::before_exchange(core, i);
             let r = unsafe {
-                exchange_entry(p, u64::from_le_bytes(expected), u64::from_le_bytes(patch))
+                native_entry::publish(&hooks.last().ok_or("native hook owner missing")?.hook)
             }?;
             if !r.exchanged || !r.cache_flushed || !r.protection_restored {
                 return Err("critical: World hook publication");
@@ -824,7 +820,10 @@ mod tests {
         FAIL_CAS_SITE.store(1, Ordering::Release);
         let result = unsafe { install_at(memory.base) };
         FAIL_CAS_SITE.store(usize::MAX, Ordering::Release);
-        assert_eq!(result, Err("critical: World hook publication"));
+        assert_eq!(
+            result,
+            Err("critical: native entry changed before publication")
+        );
         assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
         assert_eq!(HOOKS.lock().unwrap().len(), 2);
         assert_ne!(memory.bytes(SITES[0].0), SITES[0].1);
@@ -1332,7 +1331,9 @@ mod tests {
         unsafe { install_at(base) }.unwrap();
         assert_eq!(HOOKS.lock().unwrap().len(), 3);
         for (i, (rva, _)) in SITES.into_iter().enumerate() {
-            assert_eq!(copy_current::<1>((base + rva) as u64), Some([0xe9]));
+            let owners = HOOKS.lock().unwrap();
+            assert_eq!(owners[i].hook.target as usize, base + rva);
+            assert!(native_entry::owned(&owners[i].hook));
             assert_eq!(
                 NATIVE_WORLD_CONTINUE[i].load(Ordering::Acquire),
                 (base + rva + 6) as u64

@@ -289,28 +289,22 @@ unsafe fn install_at(address: usize) -> Result<(), &'static str> {
     {
         return Err("wire relay publication");
     }
-    let mut patched = ORIGINAL;
-    patched[..5].copy_from_slice(&rel32_jump(address, relay as usize).ok_or("wire relay range")?);
+    let (patched, prefix) = native_entry::plan(target, ORIGINAL, relay)?;
     NATIVE_WIRE_CONTINUE.store((address + 5) as u64, Ordering::Release);
     hooks.push(OwnedHook {
         hook: Hook {
             target,
             original: ORIGINAL,
             patched,
-            prefix: None,
+            prefix,
             _code: relay,
         },
         protection: info.Protect,
     });
     unpublished.0 = null_mut();
     EXE.store((address - 0x80f230) as u64, Ordering::Release);
-    let result = unsafe {
-        exchange_entry(
-            target,
-            u64::from_le_bytes(ORIGINAL),
-            u64::from_le_bytes(patched),
-        )
-    }?;
+    let result =
+        unsafe { native_entry::publish(&hooks.last().ok_or("native hook owner missing")?.hook) }?;
     if !result.exchanged || !result.protection_restored || !result.cache_flushed {
         return Err("critical: wire publication");
     }

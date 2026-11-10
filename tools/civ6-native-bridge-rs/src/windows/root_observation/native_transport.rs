@@ -731,29 +731,21 @@ unsafe fn install_at(
         {
             return Err("transport relay publication");
         }
-        let mut patched = expected;
-        patched[..5].copy_from_slice(
-            &rel32_jump(target as usize, relay as usize).ok_or("transport relay range")?,
-        );
-        patched[5..stolen.min(8)].fill(0x90);
+        let (patched, prefix) = native_entry::plan(target, expected, relay)?;
         NATIVE_TRANSPORT_CONTINUE[i].store((module + rva + stolen) as u64, Ordering::Release);
         hooks.push(OwnedHook {
             hook: Hook {
                 target,
                 original: expected,
                 patched,
-                prefix: None,
+                prefix,
                 _code: relay,
             },
             protection: info.Protect,
         });
         unpublished.0 = null_mut();
         let result = unsafe {
-            exchange_entry(
-                target,
-                u64::from_le_bytes(expected),
-                u64::from_le_bytes(patched),
-            )
+            native_entry::publish(&hooks.last().ok_or("native hook owner missing")?.hook)
         }?;
         if !result.exchanged || !result.protection_restored || !result.cache_flushed {
             return Err("critical: transport publication unverified");

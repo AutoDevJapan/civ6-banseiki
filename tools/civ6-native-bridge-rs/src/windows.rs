@@ -30,6 +30,8 @@ mod composite;
 pub use composite::CompositeTrace;
 #[path = "windows/lifecycle.rs"]
 mod lifecycle;
+#[path = "windows/native_entry.rs"]
+mod native_entry;
 #[path = "windows/property_log.rs"]
 mod property_log;
 #[path = "windows/runtime.rs"]
@@ -3922,6 +3924,150 @@ mod tests {
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
+    static NATIVE_ENTRY_TEST_HITS: AtomicU64 = AtomicU64::new(0);
+    extern "system" fn native_entry_test_gateway(argument: usize) -> u32 {
+        NATIVE_ENTRY_TEST_HITS.fetch_add(1, Ordering::Relaxed);
+        argument.wrapping_add(0x30) as u32
+    }
+    #[test]
+    fn native_short_and_breakpoint_entries_preserve_paused_prologues_and_concurrent_callers() {
+        use windows_sys::Win32::Foundation::{GetLastError, SetLastError};
+        let Some(_executed) = atomic_fixture::require(
+            "native_short_and_breakpoint_entries_preserve_paused_prologues_and_concurrent_callers",
+        ) else {
+            return;
+        };
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let mut pages = Vec::new();
+        for short in [true, false] {
+            let page = unsafe {
+                VirtualAlloc(
+                    null_mut(),
+                    CODE_PAGE,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_READWRITE,
+                )
+            }
+            .cast::<u8>();
+            assert!(!page.is_null());
+            pages.push(page);
+            let target = unsafe { page.add(16) };
+            let relay = unsafe { page.add(128) };
+            let original = [0x48, 0x8b, 0xc4, 0x8d, 0x41, 0x30, 0xc3, 0xcc];
+            unsafe {
+                ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+                if short {
+                    ptr::copy_nonoverlapping(
+                        PROPERTY_PREFIX_PAD.as_ptr(),
+                        target.sub(PROPERTY_PREFIX_LEN),
+                        PROPERTY_PREFIX_LEN,
+                    );
+                }
+                ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+                ptr::copy_nonoverlapping(
+                    (native_entry_test_gateway as *const () as u64)
+                        .to_le_bytes()
+                        .as_ptr(),
+                    relay.add(6),
+                    8,
+                );
+            }
+            let mut previous = 0;
+            assert_ne!(
+                unsafe { VirtualProtect(page.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut previous) },
+                0
+            );
+            assert_ne!(
+                unsafe { FlushInstructionCache(GetCurrentProcess(), page.cast(), CODE_PAGE) },
+                0
+            );
+            let (patched, prefix) = native_entry::plan(target, original, relay).unwrap();
+            assert_eq!(prefix.is_some(), short);
+            assert_eq!(patched[0], if short { 0xeb } else { 0xcc });
+            let hook = Hook {
+                target,
+                original,
+                patched,
+                prefix,
+                _code: relay,
+            };
+            let argument = 0x12340000usize;
+            let expected = argument.wrapping_add(0x30) as u32;
+            let second: unsafe extern "system" fn(*mut c_void) -> u32 =
+                unsafe { std::mem::transmute(target.add(3)) };
+            let mut thread_id = 0;
+            let paused = unsafe {
+                CreateThread(
+                    null_mut(),
+                    0,
+                    Some(second),
+                    argument as *const c_void,
+                    THREAD_CREATE_SUSPENDED,
+                    &mut thread_id,
+                )
+            };
+            assert!(!paused.is_null() && thread_id != 0);
+            let phase = Arc::new(AtomicU32::new(0));
+            let address = target as usize;
+            let (mut workers, progress) = spawn_synthetic_callers(&phase, move |_| {
+                let first: unsafe extern "system" fn(usize) -> u32 =
+                    unsafe { std::mem::transmute(address) };
+                let second: unsafe extern "system" fn(usize) -> u32 =
+                    unsafe { std::mem::transmute(address + 3) };
+                unsafe { SetLastError(0x87654321) };
+                let a = unsafe { first(argument) };
+                let error = unsafe { GetLastError() };
+                let b = unsafe { second(argument) };
+                assert_eq!(a, expected);
+                assert_eq!(b, expected);
+                assert_eq!(error, 0x87654321);
+            });
+            let before = wait_for_synthetic_phase(&progress, 0);
+            NATIVE_ENTRY_TEST_HITS.store(0, Ordering::Release);
+            let published = unsafe { native_entry::publish(&hook) }.unwrap();
+            assert!(
+                published.exchanged && published.protection_restored && published.cache_flushed
+            );
+            assert!(native_entry::owned(&hook));
+            phase.store(1, Ordering::Release);
+            let during = wait_for_synthetic_phase(&progress, 1);
+            assert_eq!(
+                &copy_current::<8>(target as u64).unwrap()[3..],
+                &original[3..]
+            );
+            assert_eq!(unsafe { ResumeThread(paused) }, 1);
+            assert_eq!(unsafe { WaitForSingleObject(paused, 5000) }, WAIT_OBJECT_0);
+            let mut result = 0;
+            assert_ne!(unsafe { GetExitCodeThread(paused, &mut result) }, 0);
+            assert_ne!(unsafe { CloseHandle(paused) }, 0);
+            let restored = unsafe {
+                exchange_entry(
+                    target,
+                    u64::from_le_bytes(patched),
+                    u64::from_le_bytes(original),
+                )
+            }
+            .unwrap();
+            assert!(restored.exchanged && restored.protection_restored && restored.cache_flushed);
+            phase.store(2, Ordering::Release);
+            let after = wait_for_synthetic_phase(&progress, 2);
+            assert!(workers.stop_and_join().unwrap() > 0);
+            assert_eq!(result, expected);
+            assert!(before && during && after);
+            assert!(
+                NATIVE_ENTRY_TEST_HITS.load(Ordering::Acquire) > 0,
+                "actual gateway must run while entry is published"
+            );
+            assert!(!native_entry::owned(&hook));
+            assert_eq!(copy_current::<8>(target as u64), Some(original));
+            if let Some((slot, jump)) = prefix {
+                assert_eq!(copy_current::<PROPERTY_PREFIX_LEN>(slot as u64), Some(jump));
+            }
+        }
+        for page in pages {
+            assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+        }
+    }
     #[test]
     fn suspended_second_instruction_and_concurrent_callers_survive_property_patch_cycle() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();

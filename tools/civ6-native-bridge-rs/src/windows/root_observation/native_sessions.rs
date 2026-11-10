@@ -1309,23 +1309,21 @@ unsafe fn install_at(exe: usize) -> Result<(), &'static str> {
         {
             return Err("session relay publication");
         }
-        let mut patched = expected;
-        patched[..5]
-            .copy_from_slice(&rel32_jump(p as usize, relay as usize).ok_or("session relay range")?);
+        let (patched, prefix) = native_entry::plan(p, expected, relay)?;
         NATIVE_SESSION_CONTINUE[i].store((exe + rva + stolen) as u64, Ordering::Release);
         hooks.push(OwnedHook {
             hook: Hook {
                 target: p,
                 original: expected,
                 patched,
-                prefix: None,
+                prefix,
                 _code: relay,
             },
             protection: info.Protect,
         });
         unpublished.0 = null_mut();
         let r = unsafe {
-            exchange_entry(p, u64::from_le_bytes(expected), u64::from_le_bytes(patched))
+            native_entry::publish(&hooks.last().ok_or("native hook owner missing")?.hook)
         }?;
         if !r.exchanged
             || !r.protection_restored

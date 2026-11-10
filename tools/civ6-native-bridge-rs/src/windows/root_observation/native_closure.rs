@@ -590,28 +590,21 @@ unsafe fn install_at(core: usize) -> Result<(), &'static str> {
     {
         return Err("closure relay publication");
     }
-    let mut patched = ENTRY;
-    patched[..5]
-        .copy_from_slice(&rel32_jump(entry as usize, relay as usize).ok_or("closure range")?);
+    let (patched, prefix) = native_entry::plan(entry, ENTRY, relay)?;
     NATIVE_CLOSURE_CONTINUE.store((core + INIT + 5) as u64, Ordering::Release);
     owners.push(OwnedHook {
         hook: Hook {
             target: entry,
             original: ENTRY,
             patched,
-            prefix: None,
+            prefix,
             _code: relay,
         },
         protection: info.Protect,
     });
     unpublished.0 = null_mut();
-    let outcome = unsafe {
-        exchange_entry(
-            entry,
-            u64::from_le_bytes(ENTRY),
-            u64::from_le_bytes(patched),
-        )
-    }?;
+    let outcome =
+        unsafe { native_entry::publish(&owners.last().ok_or("native hook owner missing")?.hook) }?;
     if !outcome.exchanged || !outcome.protection_restored || !outcome.cache_flushed {
         return Err("critical: closure init publication unverified");
     }

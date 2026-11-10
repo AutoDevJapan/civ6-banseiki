@@ -820,14 +820,8 @@ unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'sta
             // Unreachable allocation; do not mutate any entry.
             return Err(site_error(i, 12, "root relay publication"));
         }
-        let mut patched = expected[i];
-        patched[..5].copy_from_slice(
-            &rel32_jump(entry as usize, code as usize)
-                .ok_or_else(|| site_error(i, 13, "root relay range"))?,
-        );
-        if displaced == 6 {
-            patched[5] = 0x90;
-        } // 6-byte displaced prologue, cmp starts at+6
+        let (patched, prefix) = native_entry::plan(entry, expected[i], code)
+            .map_err(|error| site_error(i, 13, error))?;
         let continuation = core + sites[i] + displaced;
         ROOT_CONTINUE[i].store(continuation as u64, Ordering::Release);
         // Ownership MUST precede a CAS that might succeed then report failure.
@@ -838,18 +832,17 @@ unsafe fn install_sites(core: usize, expected: [[u8; 8]; 3]) -> Result<(), &'sta
                 target: entry,
                 original: expected[i],
                 patched,
-                prefix: None,
+                prefix,
                 _code: code,
             },
             protection: info.Protect,
         });
         unpublished.0 = null_mut();
         let result = unsafe {
-            exchange_entry(
-                entry,
-                u64::from_le_bytes(expected[i]),
-                u64::from_le_bytes(patched),
-            )
+            let owner = HOOKS[i]
+                .lock()
+                .map_err(|_| site_error(i, 14, "root hook owner poisoned"))?;
+            native_entry::publish(&owner.as_ref().ok_or("root hook owner missing")?.hook)
         }
         .map_err(|e| site_error(i, 15, e))?;
         if result.exchanged {
