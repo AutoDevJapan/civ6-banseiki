@@ -11,25 +11,61 @@ use windows_sys::Win32::System::Memory::{
 fn native_census_sample(
     pid: u32,
     created: u64,
-    read: impl FnOnce(&mut [u8]) -> Result<(), String>,
-    save: impl FnOnce(&[u8]) -> Result<(), String>,
+    mut read: impl FnMut(&mut [u8]) -> Result<(), String>,
+    mut save: impl FnMut(usize, &[u8]) -> Result<(), String>,
 ) -> Value {
-    let mut bytes = vec![0; wire::NATIVE_CENSUS_BYTES];
-    if let Err(error) = read(&mut bytes) {
-        return json!({"type":"native_gateway_census","status":"read failed","error":error});
+    let mut raw = Vec::with_capacity(2);
+    let mut samples = Vec::with_capacity(2);
+    for index in 0..2 {
+        let mut bytes = vec![0; wire::NATIVE_CENSUS_BYTES];
+        let sample = match read(&mut bytes) {
+            Err(error) => {
+                raw.push(None);
+                json!({"sample":index+1,"status":"read failed","raw_preserved":false,"error":error})
+            }
+            Ok(()) => {
+                let sample = match save(index, &bytes) {
+                    Err(error) => {
+                        json!({"sample":index+1,"status":"preservation failed","raw_preserved":false,"error":error})
+                    }
+                    Ok(()) => match wire::native_census(&bytes, pid, created) {
+                        Ok(census) => {
+                            json!({"sample":index+1,"status":"captured","raw_preserved":true,"census":census})
+                        }
+                        Err(error) => {
+                            json!({"sample":index+1,"status":"invalid snapshot","raw_preserved":true,"error":error})
+                        }
+                    },
+                };
+                raw.push(Some(bytes));
+                sample
+            }
+        };
+        samples.push(sample);
     }
-    if let Err(error) = save(&bytes) {
-        return json!({"type":"native_gateway_census","status":"preservation failed","error":error});
+    let mut result = samples[0]
+        .get("census")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    result["type"] = json!("native_gateway_census");
+    if let Some(failed) = samples.iter().find(|sample| sample["status"] != "captured") {
+        result["status"] = failed["status"].clone();
+        result["error"] = failed["error"].clone();
+    } else {
+        result["status"] = json!("captured");
     }
-    match wire::native_census(&bytes, pid, created) {
-        Ok(mut census) => {
-            census["type"] = json!("native_gateway_census");
-            census["status"] = json!("captured");
-            census
-        }
-        Err(error) => json!({"type":"native_gateway_census","status":"invalid snapshot",
-            "raw_preserved":true,"error":error}),
-    }
+    result["raw_preserved"] = json!(samples.iter().all(|sample| sample["raw_preserved"] == true));
+    result["raw_samples_equal"] = match (&raw[0], &raw[1]) {
+        (Some(a), Some(b)) => json!(a == b),
+        _ => Value::Null,
+    };
+    result["samples"] = json!(samples);
+    result["sampling"] = json!(
+        "two independent reads; equal bytes do not prove a sealed or quiescent native interval"
+    );
+    result["boundary_order_proven"] = json!(false);
+    result["product_acceptance"] = json!(false);
+    result
 }
 fn capture_native_census(
     game: &Handle,
@@ -37,12 +73,24 @@ fn capture_native_census(
     request: &wire::Request,
     extension: &str,
 ) -> Value {
-    native_census_sample(
+    let second = format!(
+        "{}-second.bin",
+        extension.strip_suffix(".bin").unwrap_or(extension)
+    );
+    let mut result = native_census_sample(
         request.pid,
         request.created,
         |bytes| read_remote(game, address, bytes),
-        |bytes| preserve(&request.output, extension, bytes),
-    )
+        |index, bytes| {
+            preserve(
+                &request.output,
+                if index == 0 { extension } else { &second },
+                bytes,
+            )
+        },
+    );
+    result["raw_sample_extensions"] = json!([extension, second]);
+    result
 }
 
 fn typed_exports(path: &Path, names: &[(&[u8], bool)]) -> Result<Vec<usize>, String> {
@@ -1058,7 +1106,7 @@ mod tests {
                 bytes[0] = 7;
                 Ok(())
             },
-            |bytes| {
+            |_, bytes| {
                 saved = Some(bytes.to_vec());
                 Ok(())
             },
@@ -1071,7 +1119,7 @@ mod tests {
             12,
             34,
             |_| Err("OS 5".into()),
-            |_| {
+            |_, _| {
                 saves += 1;
                 Ok(())
             },
@@ -1079,8 +1127,97 @@ mod tests {
         assert_eq!(read["status"], "read failed");
         assert_eq!(read["error"], "OS 5");
         assert_eq!(saves, 0);
-        let save = native_census_sample(12, 34, |_| Ok(()), |_| Err("disk full".into()));
+        let save = native_census_sample(12, 34, |_| Ok(()), |_, _| Err("disk full".into()));
         assert_eq!(save["status"], "preservation failed");
+    }
+    fn census_fixture() -> Vec<u8> {
+        let mut bytes = vec![0; wire::NATIVE_CENSUS_BYTES];
+        for (word, value) in [
+            (0, 2u64),
+            (1, wire::NATIVE_CENSUS_BYTES as u64),
+            (2, 12),
+            (3, 34),
+            (4, 16),
+            (5, 160),
+        ] {
+            bytes[word * 8..word * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        for (word, value) in [
+            (0, 1u64),
+            (1, wire::NATIVE_SEMANTIC_BYTES as u64),
+            (2, 12),
+            (3, 34),
+        ] {
+            let offset = wire::NATIVE_GATEWAY_CENSUS_BYTES + word * 8;
+            bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        bytes
+    }
+    #[test]
+    fn census_preserves_two_distinct_reads_and_equal_samples_never_seal_native_work() {
+        let mut reads = 0;
+        let mut saved = Vec::new();
+        let changing = native_census_sample(
+            12,
+            34,
+            |bytes| {
+                bytes.copy_from_slice(&census_fixture());
+                reads += 1u64;
+                let offset = wire::NATIVE_GATEWAY_CENSUS_BYTES + 128;
+                bytes[offset..offset + 8].copy_from_slice(&reads.to_le_bytes());
+                Ok(())
+            },
+            |index, bytes| {
+                saved.push((index, bytes.to_vec()));
+                Ok(())
+            },
+        );
+        assert_eq!(changing["status"], "captured");
+        assert_eq!(saved.len(), 2);
+        assert_eq!(saved[0].0, 0);
+        assert_eq!(saved[1].0, 1);
+        assert_ne!(saved[0].1, saved[1].1);
+        assert_eq!(changing["raw_samples_equal"], false);
+        assert_eq!(
+            changing["samples"][1]["census"]["session_facts"]["counters"]["birth_kind_0"],
+            2
+        );
+        let equal = native_census_sample(
+            12,
+            34,
+            |bytes| {
+                bytes.copy_from_slice(&census_fixture());
+                Ok(())
+            },
+            |_, _| Ok(()),
+        );
+        assert_eq!(equal["raw_samples_equal"], true);
+        assert_eq!(equal["boundary_order_proven"], false);
+        assert_eq!(equal["product_acceptance"], false);
+    }
+    #[test]
+    fn census_second_sample_failure_keeps_first_raw_and_refuses_captured_status() {
+        let mut saved = Vec::new();
+        let row = native_census_sample(
+            12,
+            34,
+            |bytes| {
+                bytes.copy_from_slice(&census_fixture());
+                Ok(())
+            },
+            |index, bytes| {
+                if index == 1 {
+                    return Err("second disk full".into());
+                }
+                saved.push(bytes.to_vec());
+                Ok(())
+            },
+        );
+        assert_eq!(saved.len(), 1);
+        assert_eq!(row["status"], "preservation failed");
+        assert_eq!(row["samples"][0]["raw_preserved"], true);
+        assert_eq!(row["samples"][1]["raw_preserved"], false);
+        assert_eq!(row["boundary_order_proven"], false);
     }
     #[test]
     fn bootstrap_prepare_host_substages_do_not_turn_unknown_response_into_success() {

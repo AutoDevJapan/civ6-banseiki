@@ -299,6 +299,7 @@ impl Ledger {
         };
         Ok(())
     }
+    #[cfg(test)]
     pub fn has_unproven_close(&self) -> bool {
         self.unproven_close
     }

@@ -1,10 +1,16 @@
 //! Diagnostic-only gateway census. Counts never grant World authority or
 //! certify quiescence; a read may overlap concurrent native calls.
 use super::*;
+pub(in super::super) use civ6_bootstrap_rs::protocol::SemanticEvent;
 
 pub(in super::super) const MODULES: usize = 16;
 pub(in super::super) const KINDS: usize = 160;
-pub(in super::super) const SIZE: usize = 128 + MODULES * KINDS * 24;
+pub(in super::super) const SIZE: usize = civ6_bootstrap_rs::protocol::NATIVE_CENSUS_BYTES;
+#[repr(C)]
+pub struct Semantic {
+    header: [AtomicU64; 16],
+    counters: [AtomicU64; civ6_bootstrap_rs::protocol::NATIVE_SEMANTIC_COUNTERS],
+}
 #[repr(C)]
 struct Counters {
     entered: AtomicU64,
@@ -15,10 +21,11 @@ struct Counters {
 pub struct Census {
     header: [AtomicU64; 16],
     rows: [Counters; MODULES * KINDS],
+    semantic: Semantic,
 }
 static DATA: Census = Census {
     header: [
-        AtomicU64::new(1),
+        AtomicU64::new(2),
         AtomicU64::new(SIZE as u64),
         AtomicU64::new(0),
         AtomicU64::new(0),
@@ -42,6 +49,28 @@ static DATA: Census = Census {
             terminal: AtomicU64::new(0),
         }
     }; MODULES * KINDS],
+    semantic: Semantic {
+        header: [
+            AtomicU64::new(1),
+            AtomicU64::new(civ6_bootstrap_rs::protocol::NATIVE_SEMANTIC_BYTES as u64),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+            AtomicU64::new(0),
+        ],
+        counters: [const { AtomicU64::new(0) };
+            civ6_bootstrap_rs::protocol::NATIVE_SEMANTIC_COUNTERS],
+    },
 };
 #[unsafe(no_mangle)]
 pub static BRIDGE_RUNTIME_NATIVE_CENSUS: &Census = &DATA;
@@ -108,18 +137,34 @@ pub(in super::super) const fn module(path: &str) -> usize {
 pub(in super::super) fn identity(pid: u64, created: u64) {
     DATA.header[2].store(pid, Ordering::Release);
     DATA.header[3].store(created, Ordering::Release);
+    DATA.semantic.header[2].store(pid, Ordering::Release);
+    DATA.semantic.header[3].store(created, Ordering::Release);
 }
 pub(in super::super) fn prepared() {
     DATA.header[8].store(1, Ordering::Release);
+    DATA.semantic.header[4].store(1, Ordering::Release);
 }
 pub(in super::super) fn installed() {
     DATA.header[9].store(1, Ordering::Release);
+    DATA.semantic.header[5].store(1, Ordering::Release);
 }
 pub(in super::super) fn restored() {
     DATA.header[10].store(1, Ordering::Release);
 }
 pub(in super::super) fn observation_resumed() {
-    DATA.header[12].fetch_add(1, Ordering::Relaxed);
+    increment(&DATA.header[12]);
+}
+fn increment(counter: &AtomicU64) {
+    let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+        Some(value.saturating_add(1))
+    });
+}
+pub(in super::super) fn event(kind: SemanticEvent) {
+    increment(&DATA.semantic.counters[kind as usize]);
+}
+#[cfg(test)]
+pub(in super::super) fn event_count(kind: SemanticEvent) -> u64 {
+    DATA.semantic.counters[kind as usize].load(Ordering::Acquire)
 }
 #[cfg(test)]
 pub(super) fn observation_resumes_for_test() -> u64 {
@@ -136,20 +181,20 @@ fn row(module: usize, kind: u64) -> Option<&'static Counters> {
 pub(in super::super) unsafe extern "system" fn entered(raw: *const Saved, module: usize) {
     let kind = unsafe { (*raw).invocation.kind };
     if let Some(row) = row(module, kind) {
-        row.entered.fetch_add(1, Ordering::Relaxed);
+        increment(&row.entered);
         if DATA.header[8].load(Ordering::Acquire) == 0 {
-            DATA.header[11].fetch_add(1, Ordering::Relaxed);
+            increment(&DATA.header[11]);
         }
     }
 }
 pub(in super::super) unsafe extern "system" fn returned(raw: *const Saved, module: usize) {
     if let Some(row) = row(module, unsafe { (*raw).invocation.kind }) {
-        row.returned.fetch_add(1, Ordering::Relaxed);
+        increment(&row.returned);
     }
 }
 pub(in super::super) fn terminal(module: usize, kind: u64) {
     if let Some(row) = row(module, kind) {
-        row.terminal.fetch_add(1, Ordering::Relaxed);
+        increment(&row.terminal);
     }
 }
 pub(in super::super) fn fault(module: usize, line: u32) {
@@ -165,6 +210,18 @@ pub(in super::super) fn fault(module: usize, line: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn saturated_counters_never_wrap_into_an_apparent_empty_observation() {
+        let counter = AtomicU64::new(u64::MAX - 1);
+        let error = unsafe { GetLastError() };
+        unsafe { SetLastError(0x87654321) };
+        increment(&counter);
+        increment(&counter);
+        let preserved = unsafe { GetLastError() };
+        unsafe { SetLastError(error) };
+        assert_eq!(counter.load(Ordering::Acquire), u64::MAX);
+        assert_eq!(preserved, 0x87654321);
+    }
     #[test]
     fn nested_native_modules_have_distinct_census_rows() {
         assert_eq!(module("c::windows::root_observation"), 0);

@@ -264,6 +264,10 @@ fn actual_gateway_binds_thread_before_start_then_publishes_before_c0_and_disconn
     assert_eq!(OBSERVED.load(Ordering::Acquire), 15);
     assert_eq!(HIT.load(Ordering::Acquire), 1);
     assert_eq!(EXTRA.load(Ordering::Acquire), 0);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::TransportPublished),
+        1
+    );
     let t = super::super::state().transport(lease).unwrap();
     assert_eq!(value(t.network + 0xc0), t.thread);
     assert_eq!(from_network(t.network).unwrap(), Some((lease, t)));
@@ -423,6 +427,22 @@ fn unproven_close_gateway_case(failed_start: bool) {
     assert_eq!(transport, Err(Error::Unbound));
     assert_eq!(capture, Ok(None));
     assert!(healthy && !FAILED.load(Ordering::Acquire));
+    assert_eq!(
+        census::event_count(census::SemanticEvent::CloseFlag0),
+        u64::from(!failed_start)
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::CloseFlag1),
+        u64::from(failed_start)
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::CloseUnpublished),
+        u64::from(failed_start)
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::TransportPublished),
+        u64::from(!failed_start)
+    );
     let mut later: Saved = unsafe { std::mem::zeroed() };
     super::super::super::begin(&mut later);
     super::super::super::finish(&mut later, false);

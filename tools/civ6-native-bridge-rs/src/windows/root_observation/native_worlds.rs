@@ -1,7 +1,7 @@
 //! Native Context -> CGame -> World births before their original publication.
 //! These identities do not identify a network session or certify its seal.
 use super::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 static CORE: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
@@ -41,6 +41,7 @@ impl BirthWindow {
                     && world.epoch == self.epoch))
     }
 }
+#[derive(Clone, Copy)]
 struct ContextBirth {
     serial: u64,
     epoch: u64,
@@ -48,6 +49,7 @@ struct ContextBirth {
     world: Option<WorldLease>,
     closing: bool,
     closed: bool,
+    uncertain: bool,
 }
 #[derive(Default)]
 struct Bindings {
@@ -55,6 +57,10 @@ struct Bindings {
     contexts: HashMap<u64, ContextBirth>,
     unobserved_close: bool,
     unobserved_birth: bool,
+    observation: u64,
+    exhausted: bool,
+    uncertain_games: HashSet<u64>,
+    active_unproven: HashMap<u64, (u64, bool)>,
 }
 static BINDINGS: std::sync::LazyLock<Mutex<Bindings>> =
     std::sync::LazyLock::new(|| Mutex::new(Bindings::default()));
@@ -79,13 +85,76 @@ fn value(address: u64) -> u64 {
 }
 impl Bindings {
     fn coverage_gap(&self) -> bool {
-        self.unobserved_close || self.unobserved_birth
+        self.exhausted || !self.active_unproven.is_empty()
+    }
+    fn uncertain_game(&self, game: u64) -> bool {
+        self.uncertain_games.contains(&game)
+            || self
+                .contexts
+                .values()
+                .any(|b| b.game == game && !b.closed && b.uncertain)
+    }
+    fn note_gap(&mut self, game: u64, close: bool) -> Option<u64> {
+        census::event(if close {
+            census::SemanticEvent::UnobservedWorldClose
+        } else {
+            census::SemanticEvent::UnobservedWorldBirth
+        });
+        census::event(census::SemanticEvent::WindowInvalidated);
+        self.unobserved_close |= close;
+        self.unobserved_birth |= !close;
+        let (Some(observation), Some(next)) =
+            (self.observation.checked_add(1), self.next.checked_add(1))
+        else {
+            self.exhausted = true;
+            return None;
+        };
+        self.observation = observation;
+        self.next = next;
+        if game != 0 {
+            self.uncertain_games.insert(game);
+            for birth in self
+                .contexts
+                .values_mut()
+                .filter(|birth| birth.game == game && !birth.closed)
+            {
+                birth.uncertain = true;
+            }
+        }
+        Some(observation)
+    }
+    fn start_unproven(&mut self, game: u64, close: bool) -> Option<u64> {
+        let token = self.note_gap(game, close)?;
+        self.active_unproven.insert(token, (game, close));
+        Some(token)
+    }
+    fn finish_unproven(&mut self, token: u64, game: u64, close: bool, exceptional: bool) -> bool {
+        if self.active_unproven.get(&token) != Some(&(game, close)) {
+            return false;
+        }
+        self.active_unproven.remove(&token);
+        if close && !exceptional {
+            for birth in self
+                .contexts
+                .values_mut()
+                .filter(|birth| birth.game == game && !birth.closed && birth.uncertain)
+            {
+                birth.closing = true;
+                birth.closed = true;
+            }
+            self.uncertain_games.remove(&game);
+        }
+        true
     }
     fn birth_window(&self) -> Option<BirthWindow> {
         if self.coverage_gap() {
             return None;
         }
-        let live: Vec<_> = self.contexts.iter().filter(|(_, b)| !b.closed).collect();
+        let live: Vec<_> = self
+            .contexts
+            .iter()
+            .filter(|(_, b)| !b.closed && !b.uncertain)
+            .collect();
         if live.is_empty() {
             return Some(BirthWindow {
                 serial: self.next.checked_add(1)?,
@@ -110,6 +179,7 @@ impl Bindings {
         if context == 0
             || game == 0
             || epoch == 0
+            || self.uncertain_game(game)
             || self.contexts.get(&context).is_some_and(|b| !b.closed)
             || self.contexts.values().any(|b| b.game == game && !b.closed)
         {
@@ -125,6 +195,7 @@ impl Bindings {
                 world: None,
                 closing: false,
                 closed: false,
+                uncertain: false,
             },
         );
         Ok(())
@@ -141,7 +212,7 @@ impl Bindings {
         let Some((context, b)) = self
             .contexts
             .iter_mut()
-            .find(|(_, b)| b.game == game && !b.closed && !b.closing)
+            .find(|(_, b)| b.game == game && !b.closed && !b.closing && !b.uncertain)
         else {
             return Err("unborn Game");
         };
@@ -196,7 +267,7 @@ pub(super) fn birth(world: u64) -> Option<WorldLease> {
         .ok()?
         .contexts
         .values()
-        .filter(|b| !b.closed)
+        .filter(|b| !b.closed && !b.uncertain)
         .find_map(|b| b.world.filter(|w| w.world == world))
 }
 pub(super) fn installed() -> bool {
@@ -207,6 +278,7 @@ pub(super) fn completed(lease: WorldLease) -> bool {
         !bindings.coverage_gap()
             && bindings.contexts.get(&lease.context).is_some_and(|birth| {
                 birth.serial == lease.serial
+                    && !birth.uncertain
                     && birth.epoch == lease.epoch
                     && birth.game == lease.game
                     && birth.world == Some(lease)
@@ -219,12 +291,33 @@ pub(super) fn completed(lease: WorldLease) -> bool {
 /// owned executing frame or reservation was lost, and cannot poison ordinary
 /// native frame accounting into an unrelated process abort.
 pub(super) fn unobserved_close() {
-    BINDINGS.lock().unwrap_or_else(|_| fault()).unobserved_close = true;
+    BINDINGS
+        .lock()
+        .unwrap_or_else(|_| fault())
+        .note_gap(0, true);
     diagnostic(2062);
 }
+#[cfg(test)]
 fn unobserved_birth() {
-    BINDINGS.lock().unwrap_or_else(|_| fault()).unobserved_birth = true;
+    BINDINGS
+        .lock()
+        .unwrap_or_else(|_| fault())
+        .note_gap(0, false);
     diagnostic(2063);
+}
+const UNPROVEN_BOUNDARY: u64 = 0xd706;
+fn begin_unproven(raw: &mut Saved, bindings: &mut Bindings, close: bool) {
+    let game = if raw.invocation.kind == 60 {
+        raw.gpr[1]
+    } else {
+        raw.gpr[0]
+    };
+    if let Some(token) = bindings.start_unproven(game, close) {
+        raw.invocation.errors = UNPROVEN_BOUNDARY;
+        raw.invocation.token = token;
+        raw.invocation.manager = game;
+    }
+    diagnostic(if close { 2062 } else { 2063 });
 }
 pub(super) fn capture_birth_window() -> Option<BirthWindow> {
     if !HOST_PREPARED.load(Ordering::Acquire) {
@@ -258,74 +351,74 @@ extern "system" fn begin(raw: *mut Saved) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
         let core = CORE.load(Ordering::Acquire);
-        if matches!(raw.invocation.kind, 60 | 61)
-            && BINDINGS.lock().unwrap_or_else(|_| fault()).coverage_gap()
-        {
-            // Missing lifetime evidence denies new tickets. Continue the
-            // original engine path without adopting a newer birth instead.
-            return;
-        }
         match raw.invocation.kind {
             60 => {
                 if raw.invocation.caller != core + 0x58fcc3 {
                     return;
                 }
                 raw.invocation.world = raw.gpr[0];
+                raw.invocation.manager = raw.gpr[1];
             }
             61 => {
-                if raw.invocation.caller != core + 0x46d30 {
-                    unobserved_birth();
+                let qualified = raw.invocation.caller == core + 0x46d30
+                    && copy_current::<8>(raw.gpr[0]).map(u64::from_le_bytes)
+                        == Some(core + 0xa44f70)
+                    && copy_current::<8>(raw.gpr[0] + 0x60).map(u64::from_le_bytes) == Some(0);
+                let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
+                let known = b
+                    .contexts
+                    .values()
+                    .any(|birth| birth.game == raw.gpr[0] && !birth.closed && !birth.uncertain);
+                if !qualified || !known {
+                    begin_unproven(raw, &mut b, false);
                     return;
                 }
                 raw.invocation.manager = raw.gpr[0];
-                if copy_current::<8>(raw.gpr[0]).map(u64::from_le_bytes) != Some(core + 0xa44f70)
-                    || copy_current::<8>(raw.gpr[0] + 0x60).map(u64::from_le_bytes) != Some(0)
-                {
-                    unobserved_birth();
-                    return;
-                }
             }
             62 => {
-                match copy_current::<1>(raw.gpr[0] + 0x40) {
-                    Some([0]) => return,
-                    Some([1]) => {}
-                    _ => {
-                        unobserved_close();
-                        return;
-                    }
+                let active = copy_current::<1>(raw.gpr[0] + 0x40);
+                if active == Some([0]) {
+                    return;
                 }
-                if copy_current::<8>(raw.gpr[0]).map(u64::from_le_bytes) != Some(core + 0xa44f70) {
-                    unobserved_close();
+                if active != Some([1])
+                    || copy_current::<8>(raw.gpr[0]).map(u64::from_le_bytes)
+                        != Some(core + 0xa44f70)
+                {
+                    let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
+                    begin_unproven(raw, &mut b, true);
                     return;
                 }
                 let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
-                let Some(birth) = b
+                let birth = b
                     .contexts
                     .values()
-                    .find(|b| b.game == raw.gpr[0] && !b.closed)
-                else {
-                    b.unobserved_close = true;
-                    diagnostic(2062);
+                    .find(|birth| birth.game == raw.gpr[0] && !birth.closed)
+                    .copied();
+                let Some(birth) = birth.filter(|birth| !birth.uncertain) else {
+                    begin_unproven(raw, &mut b, true);
                     return;
                 };
-                raw.invocation.parent = birth.serial;
-                raw.invocation.manager = raw.gpr[0];
-                let world = value(raw.gpr[0] + 0x60);
+                let Some(world) = copy_current::<8>(raw.gpr[0] + 0x60).map(u64::from_le_bytes)
+                else {
+                    if birth.world.is_some() {
+                        fault();
+                    }
+                    begin_unproven(raw, &mut b, true);
+                    return;
+                };
                 if world == 0 {
                     return;
                 }
                 let identity = b
                     .contexts
                     .values()
-                    .find_map(|r| r.world.filter(|w| w.world == world));
+                    .filter(|birth| !birth.closed)
+                    .find_map(|record| record.world.filter(|w| w.world == world));
                 let Some(identity) = identity else {
-                    // A previously issued World receipt cannot disappear.
-                    // Without one, this is missing coverage, not corruption.
                     if birth.world.is_some() {
                         fault();
                     }
-                    b.unobserved_close = true;
-                    diagnostic(2062);
+                    begin_unproven(raw, &mut b, true);
                     return;
                 };
                 if identity.game != raw.gpr[0] {
@@ -335,6 +428,8 @@ extern "system" fn begin(raw: *mut Saved) {
                 if lease.world != world {
                     fault();
                 }
+                raw.invocation.parent = birth.serial;
+                raw.invocation.manager = raw.gpr[0];
                 raw.invocation.world = world;
                 raw.invocation.epoch = lease.epoch;
                 raw.invocation.cookie = COOKIE;
@@ -342,8 +437,17 @@ extern "system" fn begin(raw: *mut Saved) {
             }
             _ => fault(),
         }
+        let observation = {
+            let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
+            if b.coverage_gap() || b.uncertain_game(raw.invocation.manager) {
+                begin_unproven(raw, &mut b, false);
+                return;
+            }
+            b.observation
+        };
         let f = FRAMES.get().unwrap_or_else(|| fault());
         let (hold, epoch) = f.begin_native_birth().unwrap_or_else(|_| fault());
+        raw.invocation.parent = observation;
         raw.invocation.epoch = epoch;
         raw.invocation.token = hold;
         raw.invocation.cookie = COOKIE;
@@ -357,6 +461,18 @@ extern "system" fn begin(raw: *mut Saved) {
 fn finish(raw: &mut Saved, exceptional: bool) {
     if exceptional {
         census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
+    if raw.invocation.errors == UNPROVEN_BOUNDARY {
+        raw.invocation.errors = 0;
+        if !BINDINGS.lock().unwrap_or_else(|_| fault()).finish_unproven(
+            raw.invocation.token,
+            raw.invocation.manager,
+            raw.invocation.kind == 62,
+            exceptional,
+        ) {
+            fault();
+        }
+        return;
     }
     if raw.invocation.cookie != COOKIE {
         return;
@@ -382,9 +498,15 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     if !exceptional {
         let core = CORE.load(Ordering::Acquire);
         let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
-        if b.coverage_gap() {
+        if b.coverage_gap()
+            || raw.invocation.parent != b.observation
+            || b.uncertain_game(raw.invocation.manager)
+        {
             // Another boundary may have become unobserved while this original
             // ran. Settle the owned frame below without issuing a birth ticket.
+            if raw.invocation.manager != 0 {
+                b.uncertain_games.insert(raw.invocation.manager);
+            }
         } else if raw.invocation.kind == 60 {
             if raw.gpr[4] != raw.invocation.world || value(raw.gpr[4]) != core + 0xa101e8 {
                 fault();
@@ -804,6 +926,51 @@ mod tests {
         assert!(next.matches(second));
         assert!(!initial.matches(second) && !pending.matches(second));
     }
+    #[test]
+    fn unproven_interval_invalidates_old_window_and_allows_a_fresh_observed_lifetime() {
+        let mut b = Bindings::default();
+        let before = b.birth_window().unwrap();
+        let token = b.start_unproven(999, true).unwrap();
+        assert!(b.birth_window().is_none());
+        assert!(!b.finish_unproven(token, 998, true, false));
+        assert!(
+            b.birth_window().is_none(),
+            "invalid completion cannot lose the active interval"
+        );
+        assert!(b.finish_unproven(token, 999, true, false));
+        let after = b.birth_window().unwrap();
+        assert_ne!(before, after);
+        b.context(10, 20, 1).unwrap();
+        let w = b.world(20, 30, 1).unwrap();
+        assert!(!before.matches(w));
+        assert!(after.matches(w));
+        assert!(
+            b.unobserved_close,
+            "history is diagnostic and is not silently cleared"
+        );
+    }
+    #[test]
+    fn uncertainty_marks_only_the_affected_game_and_never_reuses_its_old_ticket() {
+        let mut b = Bindings::default();
+        b.context(10, 20, 1).unwrap();
+        let first = b.world(20, 30, 1).unwrap();
+        b.context(100, 200, 1).unwrap();
+        let other = b.world(200, 300, 1).unwrap();
+        let token = b.start_unproven(20, true).unwrap();
+        assert!(b.contexts[&10].uncertain);
+        assert!(!b.contexts[&100].uncertain);
+        assert!(b.context(10, 20, 2).is_err());
+        assert!(b.finish_unproven(token, 20, true, false));
+        assert!(b.contexts[&10].closed && b.contexts[&10].uncertain);
+        assert!(!b.contexts[&100].closed && !b.contexts[&100].uncertain);
+        assert_eq!(b.close(200), Some(other));
+        assert!(b.closed(200, other.serial));
+        b.context(10, 20, 2).unwrap();
+        let fresh = b.world(20, 30, 2).unwrap();
+        assert_ne!(fresh.serial, first.serial);
+        assert_ne!(fresh.epoch, first.epoch);
+        assert!(!b.contexts[&10].uncertain);
+    }
     fn child(name: &str) -> bool {
         const ENV: &str = "CIV6_NATIVE_WORLD_OWNED_CHILD";
         if std::env::var_os(ENV).is_some() {
@@ -915,11 +1082,22 @@ mod tests {
         assert_eq!(game[0x68 / 8], 2, "each original runs exactly once");
         assert_eq!(game[0x60 / 8], 0);
         assert!(
-            !completed(known),
-            "an unseen lifetime denies all-World closure"
+            completed(known),
+            "an unrelated gap cannot rewrite an older local lifetime fact"
         );
         assert_eq!(TRACE.0[13].load(Ordering::Acquire), 2062);
-        assert!(BINDINGS.lock().unwrap().birth_window().is_none());
+        assert_eq!(
+            census::event_count(census::SemanticEvent::UnobservedWorldClose),
+            1
+        );
+        assert_eq!(
+            census::event_count(census::SemanticEvent::WindowInvalidated),
+            1
+        );
+        assert!(
+            BINDINGS.lock().unwrap().birth_window().is_some(),
+            "normal return ends only the unproven observation interval"
+        );
         assert!(!FAILED.load(Ordering::Acquire));
         assert!(frames.healthy());
         // A coverage gap alone must not abort a later unrelated native frame.
@@ -927,7 +1105,22 @@ mod tests {
         super::super::begin(&mut later);
         super::super::finish(&mut later, false);
         assert_eq!(frames.observation_state_for_test().2, 0);
-        assert!(!completed(known), "ordinary traffic cannot erase the gap");
+        assert!(
+            BINDINGS.lock().unwrap().unobserved_close,
+            "ordinary traffic cannot erase historical uncertainty"
+        );
+        let fresh = {
+            let mut b = BINDINGS.lock().unwrap();
+            b.context(100, 200, 2).unwrap();
+            let fresh = b.world(200, 300, 2).unwrap();
+            b.close(200).unwrap();
+            assert!(b.closed(200, fresh.serial));
+            fresh
+        };
+        assert!(
+            completed(fresh),
+            "a fully observed new lifetime must not inherit an unrelated old gap"
+        );
         NATIVE_WORLD_CONTINUE[2].store(0, Ordering::Release);
         assert_ne!(unsafe { VirtualFree(page, 0, MEM_RELEASE) }, 0);
     }
@@ -997,8 +1190,11 @@ mod tests {
             calls, 1,
             "unproven entry must still execute its original exactly once"
         );
-        assert!(!completed(known));
-        assert!(BINDINGS.lock().unwrap().birth_window().is_none());
+        assert!(
+            completed(known),
+            "this local receipt belongs to a different fully observed Game"
+        );
+        assert!(BINDINGS.lock().unwrap().birth_window().is_some());
         assert!(!FAILED.load(Ordering::Acquire));
         assert!(frames.healthy());
         // An unrelated ordinary frame must not inherit an uncertainty abort.

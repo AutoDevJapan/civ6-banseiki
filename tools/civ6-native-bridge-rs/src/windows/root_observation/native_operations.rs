@@ -33,6 +33,14 @@ extern "system" fn begin(raw: *mut Saved) {
     let e = unsafe { GetLastError() };
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
+        if sessions::message72_active() {
+            match raw.invocation.kind {
+                40 => census::event(census::SemanticEvent::Operation40),
+                42 => census::event(census::SemanticEvent::Operation42),
+                43 => census::event(census::SemanticEvent::Operation43),
+                _ => {}
+            }
+        }
         let f = FRAMES.get().unwrap_or_else(|| fault());
         // Native input without a World receipt must keep executing. Retain
         // its queue work as explicitly unproven instead of adopting this

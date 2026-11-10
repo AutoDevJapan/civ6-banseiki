@@ -83,7 +83,7 @@ pub(super) struct Ledger {
     transport_ids: HashSet<u64>,
     input_worlds: HashMap<u64, Option<WorldReceipt>>,
     unresolved: bool,
-    transport_proof_gap: bool,
+    transport_proof_gaps: HashSet<(u64, u64)>,
 }
 impl Ledger {
     fn id(&mut self) -> Result<u64, Error> {
@@ -579,7 +579,10 @@ impl Ledger {
         r.transport_closing = true;
         r.transport_closed = false;
         r.transport_joined = false;
-        self.transport_proof_gap = true;
+        if let Some(world) = r.world {
+            self.transport_proof_gaps
+                .insert((world.binding_id, world.epoch));
+        }
         Ok(())
     }
     pub fn unproven_transport_close_end(
@@ -959,7 +962,11 @@ impl Ledger {
         }
     }
     pub fn drained(&self, world: WorldReceipt) -> Result<(), Error> {
-        if self.unresolved || self.transport_proof_gap {
+        if self.unresolved
+            || self
+                .transport_proof_gaps
+                .contains(&(world.binding_id, world.epoch))
+        {
             return Err(Error::Unresolved);
         }
         let mut found = false;

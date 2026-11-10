@@ -30,6 +30,9 @@ pub(super) struct PacketReceipt {
     pub transport: u64,
     pub world: Option<SessionWorldReceipt>,
 }
+pub(super) fn message72_active() -> bool {
+    CALLS.with(|calls| calls.borrow().iter().any(|call| call.kind == 72))
+}
 pub(super) fn admitted_source_world(session: u64) -> Option<SessionWorldReceipt> {
     CALLS
         .with(|calls| {
@@ -240,9 +243,6 @@ impl NativeSessionApi {
         })
     }
     pub fn drained(world: SessionWorldReceipt) -> Result<(), SessionError> {
-        if transports::has_unproven_close() {
-            return Err(Error::Unresolved);
-        }
         if deferred::pending().map_err(|_| Error::Unresolved)? != 0
             || input::pending().map_err(|_| Error::Unresolved)? != 0
         {
@@ -331,7 +331,13 @@ pub(super) fn loaded_world(
     previous: Option<SessionWorldReceipt>,
     world: SessionWorldReceipt,
 ) -> Result<(), SessionError> {
-    state().loaded_world(lease, previous, world)
+    let result = state().loaded_world(lease, previous, world);
+    census::event(if result.is_ok() {
+        census::SemanticEvent::BindWorld
+    } else {
+        census::SemanticEvent::BindRejected
+    });
+    result
 }
 /// Only the exact native snapshot owner and a Session born in the observed
 /// pre-World window can propose an initial binding. The input remains
@@ -374,7 +380,13 @@ pub(super) fn bind_bootstrap_world(
     target: BootstrapTarget,
     world: worlds::WorldLease,
 ) -> Result<(), SessionError> {
-    state().bind_bootstrap_world(target, world)
+    let result = state().bind_bootstrap_world(target, world);
+    census::event(if result.is_ok() {
+        census::SemanticEvent::BindWorld
+    } else {
+        census::SemanticEvent::BindRejected
+    });
+    result
 }
 pub(super) fn retire_world(world: SessionWorldReceipt) -> Result<(), SessionError> {
     if deferred::pending().map_err(|_| Error::Unresolved)? != 0
@@ -397,7 +409,11 @@ pub(super) fn publish_transport(
     network: u64,
     thread: u64,
 ) -> Result<SessionTransport, SessionError> {
-    state().publish_transport(lease, incarnation, pointer, network, thread)
+    let result = state().publish_transport(lease, incarnation, pointer, network, thread);
+    if result.is_ok() {
+        census::event(census::SemanticEvent::TransportPublished);
+    }
+    result
 }
 pub(super) fn transport_disconnect_begin(
     lease: SessionLease,
@@ -567,6 +583,14 @@ extern "system" fn begin(raw: *mut Saved) {
         };
         match c.kind {
             70 => {
+                census::event(match raw.gpr[1] as u32 {
+                    0 => census::SemanticEvent::Birth0,
+                    1 => census::SemanticEvent::Birth1,
+                    2 => census::SemanticEvent::Birth2,
+                    3 => census::SemanticEvent::Birth3,
+                    4 => census::SemanticEvent::Birth4,
+                    _ => census::SemanticEvent::BirthOther,
+                });
                 c.registry = raw.gpr[0];
                 c.owner = raw.gpr[2];
                 let table = read64(c.registry).ok();
@@ -693,6 +717,18 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
             }
             74 => {
+                // Diagnostic reads grant no ownership and never change the
+                // close decision. Zero/unreadable remains distinct from AL1.
+                census::event(match read64(raw.gpr[0].wrapping_add(0x28)).ok() {
+                    Some(0) => census::SemanticEvent::CloseNull,
+                    Some(pointer) => match copy_current::<1>(pointer.wrapping_add(0x45)) {
+                        Some([0]) => census::SemanticEvent::CloseFlag0,
+                        Some([1]) => census::SemanticEvent::CloseFlag1,
+                        Some(_) => census::SemanticEvent::CloseFlagOther,
+                        None => census::SemanticEvent::CloseFlagUnreadable,
+                    },
+                    None => census::SemanticEvent::CloseFlagUnreadable,
+                });
                 let close = transports::disconnect_begin(raw.gpr[0]).unwrap_or_else(|_| fault());
                 #[cfg(test)]
                 let manual = matches!(&close, transports::Disconnect::Untracked);
@@ -770,6 +806,13 @@ extern "system" fn begin(raw: *mut Saved) {
             71 | 75 => {}
             _ => fault(),
         }
+        if c.kind == 72 {
+            census::event(if c.message.is_some() {
+                census::SemanticEvent::AdmissionQualified
+            } else {
+                census::SemanticEvent::AdmissionUnqualified
+            });
+        }
         if matches!(c.kind, 72 | 73) && c.message.is_none() {
             if let Some(frames) = FRAMES.get() {
                 c.unproven_hold = Some(
@@ -845,7 +888,24 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         }
     } else if let Some(lease) = c.lease {
         let result = match c.kind {
-            70 => state().published(lease, raw.gpr[4] as u32),
+            70 => {
+                let result = state().published(lease, raw.gpr[4] as u32);
+                let publication = {
+                    let state = state();
+                    state
+                        .snapshot(lease)
+                        .is_ok()
+                        .then(|| state.world(lease).is_ok())
+                };
+                if let Some(bound) = publication.filter(|_| result.is_ok()) {
+                    census::event(if bound {
+                        census::SemanticEvent::PublishedWorldBound
+                    } else {
+                        census::SemanticEvent::PublishedWorldUnbound
+                    });
+                }
+                result
+            }
             71 => {
                 let session = raw.gpr[4];
                 let callback = if session != 0 {

@@ -155,7 +155,11 @@ pub(super) fn destroy_end(token: u64, exceptional: bool) -> Result<(), Error> {
 }
 fn retire_target(target: Target) -> Result<(), Error> {
     if target.unproven.is_some() {
-        super::state().retire_unproven_native(target.lease)
+        let result = super::state().retire_unproven_native(target.lease);
+        if result.is_ok() {
+            census::event(census::SemanticEvent::UnprovenSessionRetired);
+        }
+        result
     } else {
         super::terminal_remove_end(target.lease)
     }

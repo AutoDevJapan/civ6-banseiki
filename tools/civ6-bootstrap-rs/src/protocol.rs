@@ -2241,7 +2241,74 @@ pub fn native_frames(b: &[u8], pid: u32, created: u64) -> Result<Value, String> 
     )
 }
 
-pub const NATIVE_CENSUS_BYTES: usize = 128 + 16 * 160 * 24;
+pub const NATIVE_GATEWAY_CENSUS_BYTES: usize = 128 + 16 * 160 * 24;
+pub const NATIVE_SEMANTIC_BYTES: usize = 512;
+pub const NATIVE_SEMANTIC_COUNTERS: usize = 48;
+pub const NATIVE_CENSUS_BYTES: usize = NATIVE_GATEWAY_CENSUS_BYTES + NATIVE_SEMANTIC_BYTES;
+#[repr(usize)]
+#[derive(Clone, Copy)]
+pub enum SemanticEvent {
+    Birth0 = 0,
+    Birth1 = 1,
+    Birth2 = 2,
+    Birth3 = 3,
+    Birth4 = 4,
+    BirthOther = 5,
+    BindWorld = 6,
+    BindRejected = 7,
+    TransportPublished = 8,
+    CloseFlag0 = 9,
+    CloseFlag1 = 10,
+    CloseFlagOther = 11,
+    CloseFlagUnreadable = 12,
+    CloseNull = 13,
+    CloseUnpublished = 14,
+    CloseUnknown = 15,
+    AdmissionQualified = 16,
+    AdmissionUnqualified = 17,
+    Operation40 = 18,
+    Operation42 = 19,
+    Operation43 = 20,
+    RetiredInput = 21,
+    UnobservedWorldClose = 22,
+    UnobservedWorldBirth = 23,
+    WindowInvalidated = 24,
+    UnprovenSessionRetired = 25,
+    PublishedWorldBound = 26,
+    PublishedWorldUnbound = 27,
+    ReceiveInactive = 28,
+}
+pub const NATIVE_SEMANTIC_NAMES: [&str; 29] = [
+    "birth_kind_0",
+    "birth_kind_1",
+    "birth_kind_2",
+    "birth_kind_3",
+    "birth_kind_4",
+    "birth_kind_other",
+    "world_binding",
+    "binding_rejected",
+    "transport_published",
+    "close_flag_0",
+    "close_flag_1",
+    "close_flag_other",
+    "close_flag_unreadable",
+    "close_null_transport",
+    "close_unpublished",
+    "close_unknown",
+    "admission_qualified",
+    "admission_unqualified",
+    "operation_40_under_72",
+    "operation_42_under_72",
+    "operation_43_under_72",
+    "retired_window_input",
+    "unobserved_world_close",
+    "unobserved_world_birth",
+    "birth_window_invalidated",
+    "unproven_session_retired",
+    "published_world_bound",
+    "published_world_unbound",
+    "receive_inactive_transport",
+];
 const NATIVE_CENSUS_MODULES: [&str; 16] = [
     "unused",
     "frames",
@@ -2265,7 +2332,7 @@ const NATIVE_CENSUS_MODULES: [&str; 16] = [
 pub fn native_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
     let w = |i: usize| word(b, i * 8);
     if b.len() != NATIVE_CENSUS_BYTES
-        || w(0)? != 1
+        || w(0)? != 2
         || w(1)? != NATIVE_CENSUS_BYTES as u64
         || w(2)? != u64::from(pid)
         || w(3)? != created
@@ -2298,12 +2365,37 @@ pub fn native_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> 
         }
     }
     Ok(
-        json!({"schema":"native-gateway-census-v1","pid":pid,"created_filetime":created,
+        json!({"schema":"native-gateway-census-v2","pid":pid,"created_filetime":created,
         "first_fault":(fault != 0).then(|| json!({"module":NATIVE_CENSUS_MODULES[fault_module],
             "module_id":fault_module,"source_line":fault_line})),
         "host_prepared":w(8)? == 1,"core_installed":w(9)? == 1,"restore_attempted":w(10)? == 1,
         "entries_before_host_prepared":w(11)?,"unqualified_observation_reopens":w(12)?,"rows":rows,
+        "session_facts":native_semantic_census(&b[NATIVE_GATEWAY_CENSUS_BYTES..],pid,created)?,
         "sampling":"independent atomic counters; concurrent changes permitted",
+        "boundary_order_proven":false,"product_acceptance":false}),
+    )
+}
+pub fn native_semantic_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    if b.len() != NATIVE_SEMANTIC_BYTES
+        || word(b, 0)? != 1
+        || word(b, 8)? != NATIVE_SEMANTIC_BYTES as u64
+        || word(b, 16)? != u64::from(pid)
+        || word(b, 24)? != created
+        || (4..6).any(|i| word(b, i * 8).is_ok_and(|v| v > 1))
+        || (6..16).any(|i| word(b, i * 8) != Ok(0))
+        || (NATIVE_SEMANTIC_NAMES.len()..NATIVE_SEMANTIC_COUNTERS)
+            .any(|i| word(b, 128 + i * 8) != Ok(0))
+    {
+        return Err("native semantic census identity/version/layout differs".into());
+    }
+    let mut counters = serde_json::Map::new();
+    for (i, name) in NATIVE_SEMANTIC_NAMES.iter().enumerate() {
+        counters.insert((*name).to_owned(), json!(word(b, 128 + i * 8)?));
+    }
+    Ok(
+        json!({"schema":"native-session-facts-v1","pid":pid,"created_filetime":created,
+        "host_window_armed":word(b,32)?==1,"core_window_armed":word(b,40)?==1,"counters":counters,
+        "sampling":"independent saturating atomics; zero is not absence without an armed observation window",
         "boundary_order_proven":false,"product_acceptance":false}),
     )
 }
@@ -2342,7 +2434,7 @@ mod native_frame_tests {
     fn census_fixture() -> Vec<u8> {
         let mut bytes = vec![0; NATIVE_CENSUS_BYTES];
         for (i, value) in [
-            (0, 1u64),
+            (0, 2u64),
             (1, NATIVE_CENSUS_BYTES as u64),
             (2, 12),
             (3, 34),
@@ -2352,6 +2444,15 @@ mod native_frame_tests {
             (9, 1),
         ] {
             bytes[i * 8..i * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        for (i, value) in [
+            (0, 1u64),
+            (1, NATIVE_SEMANTIC_BYTES as u64),
+            (2, 12),
+            (3, 34),
+        ] {
+            let offset = NATIVE_GATEWAY_CENSUS_BYTES + i * 8;
+            bytes[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
         }
         bytes
     }
@@ -2397,7 +2498,7 @@ mod native_frame_tests {
         assert!(native_census(&bytes, 12, 35).is_err());
         assert!(native_census(&bytes[..bytes.len() - 1], 12, 34).is_err());
         for (offset, value) in [
-            (0, 2u64),
+            (0, 1u64),
             (8, 128),
             (32, 15),
             (40, 159),
@@ -2415,6 +2516,47 @@ mod native_frame_tests {
                 "offset {offset} value {value}"
             );
         }
+    }
+    #[test]
+    fn census_version_two_rejects_mixed_abi_and_keeps_unarmed_zero_unknown() {
+        let bytes = census_fixture();
+        let v = native_census(&bytes, 12, 34).unwrap();
+        assert_eq!(v["session_facts"]["host_window_armed"], false);
+        assert_eq!(v["session_facts"]["core_window_armed"], false);
+        assert_eq!(v["session_facts"]["counters"]["birth_kind_2"], 0);
+        assert_eq!(v["session_facts"]["boundary_order_proven"], false);
+        assert!(native_census(&bytes[..NATIVE_GATEWAY_CENSUS_BYTES], 12, 34).is_err());
+        for (word, value) in [
+            (0, 2u64),
+            (1, 128),
+            (2, 13),
+            (3, 35),
+            (4, 2),
+            (5, 2),
+            (6, 1),
+            (16 + 29, 1),
+        ] {
+            let mut bad = bytes.clone();
+            let offset = NATIVE_GATEWAY_CENSUS_BYTES + word * 8;
+            bad[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+            assert!(native_census(&bad, 12, 34).is_err(), "semantic word {word}");
+        }
+        let mut armed = bytes;
+        for (word, value) in [
+            (4, 1u64),
+            (5, 1),
+            (16 + SemanticEvent::CloseUnpublished as usize, u64::MAX),
+        ] {
+            let offset = NATIVE_GATEWAY_CENSUS_BYTES + word * 8;
+            armed[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        let v = native_census(&armed, 12, 34).unwrap();
+        assert_eq!(v["session_facts"]["core_window_armed"], true);
+        assert_eq!(
+            v["session_facts"]["counters"]["close_unpublished"],
+            u64::MAX
+        );
+        assert_eq!(v["product_acceptance"], false);
     }
     #[test]
     fn observation_only_rebuild_status_is_not_a_successful_bootstrap_acceptance() {

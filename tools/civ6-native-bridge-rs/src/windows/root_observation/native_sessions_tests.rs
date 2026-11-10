@@ -351,6 +351,11 @@ fn actual_birth_before_publication_delayed_dispatch_join_and_stale_ticket() {
     }
     let mut x = Fixture::new();
     let lease = x.birth(true).unwrap();
+    assert_eq!(census::event_count(census::SemanticEvent::Birth2), 1);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::PublishedWorldUnbound),
+        1
+    );
     x.bind(lease);
     let ticket = NativeSessionApi::reserve_message(lease).unwrap();
     assert_eq!(
@@ -360,6 +365,14 @@ fn actual_birth_before_publication_delayed_dispatch_join_and_stale_ticket() {
     assert_eq!(ARG5.load(Ordering::Acquire), 0x8877665544332211);
     assert_eq!(unsafe { GetLastError() }, 0x7788);
     assert_eq!(ADMISSION_HITS.load(Ordering::Acquire), 1);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionQualified),
+        1
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionUnqualified),
+        0
+    );
     assert_eq!(
         ADMISSION_OBSERVED.load(Ordering::Acquire),
         7,
@@ -395,6 +408,15 @@ fn actual_unbound_birth_and_unknown_dispatch_forward_original_once() {
     let mut x = Fixture::new();
     assert!(x.birth(false).is_none());
     assert_eq!(x.incoming(), 0x445566);
+    assert_eq!(census::event_count(census::SemanticEvent::Birth2), 1);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionQualified),
+        0
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionUnqualified),
+        1
+    );
     assert_eq!(ADMISSION_HITS.load(Ordering::Acquire), 1);
     assert!(NativeSessionApi::current_world().is_none());
     assert_eq!(
@@ -1068,6 +1090,52 @@ fn native_transport_disconnect_preserves_session_and_replacement_incarnation() {
     );
     let next = s.reserve(lease).unwrap();
     assert_eq!(s.message_world(next), Ok(world));
+}
+#[test]
+fn unproven_transport_gap_is_scoped_and_cannot_disable_a_fresh_complete_world() {
+    let mut s = Ledger::default();
+    let old = s.birth(10, Some(11), 20, 2).unwrap();
+    s.factory(old, 17, 20, 30, 40).unwrap();
+    s.published(old, 17).unwrap();
+    let first = WorldReceipt {
+        binding_id: 8,
+        epoch: 1,
+    };
+    s.bind_world(old, first).unwrap();
+    let t = s.publish_transport(old, 100, 50, 60, 70).unwrap();
+    s.unproven_transport_close_begin(old, t).unwrap();
+    assert_eq!(s.world(old), Err(Error::Unresolved));
+    assert_eq!(s.reserve(old), Err(Error::Unresolved));
+    s.unproven_transport_close_end(old, t, false).unwrap();
+    s.terminal_remove_begin(10, 11, 17, 30).unwrap();
+    assert_eq!(s.terminal_remove_end(old), Err(Error::Unresolved));
+    s.retire_unproven_native(old).unwrap();
+    assert_eq!(s.drained(first), Err(Error::Unresolved));
+
+    let fresh = s.birth(10, Some(11), 20, 2).unwrap();
+    s.factory(fresh, 17, 20, 30, 40).unwrap();
+    s.published(fresh, 17).unwrap();
+    let second = WorldReceipt {
+        binding_id: 9,
+        epoch: 2,
+    };
+    s.bind_world(fresh, second).unwrap();
+    let t = s.publish_transport(fresh, 101, 50, 60, 70).unwrap();
+    s.transport_disconnect_begin(fresh).unwrap();
+    s.transport_join_result(fresh, t, 70, 1).unwrap();
+    s.transport_disconnect_end(fresh).unwrap();
+    s.terminal_remove_begin(10, 11, 17, 30).unwrap();
+    s.terminal_remove_end(fresh).unwrap();
+    assert_eq!(
+        s.drained(second),
+        Ok(()),
+        "a distinct fully observed World is a positive control"
+    );
+    assert_eq!(
+        s.drained(first),
+        Err(Error::Unresolved),
+        "new success cannot erase old missing proof"
+    );
 }
 #[test]
 fn actual_fixed_join_body_waits_on_owned_os_handle_before_disconnect_receipt() {

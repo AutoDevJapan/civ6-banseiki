@@ -19,9 +19,6 @@ pub(super) enum Disconnect {
     Published(SessionLease, SessionTransport),
     Unproven(UnprovenClose),
 }
-pub(super) fn has_unproven_close() -> bool {
-    state().has_unproven_close()
-}
 static EXE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static STATE: std::sync::LazyLock<Mutex<Ledger>> =
@@ -115,6 +112,7 @@ pub(in super::super) fn from_network(
     };
     if copy_current::<1>(t.pointer + 0x45) == Some([0]) {
         // A stopped/unknown worker state supplies no new input authority.
+        census::event(census::SemanticEvent::ReceiveInactive);
         return Ok(None);
     }
     let (_, session, callback, _) = state().snapshot(Birth(t.incarnation))?;
@@ -379,12 +377,18 @@ pub(super) fn disconnect_begin(session: u64) -> Result<Disconnect, SessionError>
     let pointer = read64(session + 0x28)?;
     let known = state().pointer_birth(pointer);
     let Some(id) = known else {
+        if pointer != 0 {
+            census::event(census::SemanticEvent::CloseUnknown);
+        }
         return Ok(Disconnect::Untracked);
     };
     let (saved_lease, _, _, expected) = state().snapshot(id)?;
     let published = state().published(id)?;
     let inactive = copy_current::<1>(expected.pointer + 0x45) != Some([1]);
     if !published || inactive {
+        if !published {
+            census::event(census::SemanticEvent::CloseUnpublished);
+        }
         super::state().unproven_transport_close_begin(saved_lease, expected)?;
         state().unproven_begin(id)?;
         diagnostic(2070);

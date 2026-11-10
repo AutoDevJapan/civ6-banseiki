@@ -442,6 +442,13 @@ fn pending_packet_and_poll_after_rebind_never_use_new_session_world() {
     let ut = s.publish_transport(unknown, 2, 50, 60, 70).unwrap();
     s.bind_world(unknown, new).unwrap();
     assert_eq!(s.reserve_input(unknown, ut), Ok(None));
+    drop(s);
+    let before = census::event_count(census::SemanticEvent::RetiredInput);
+    assert_eq!(reserve(l, t), Ok(None));
+    assert_eq!(
+        census::event_count(census::SemanticEvent::RetiredInput),
+        before + 1
+    );
 }
 #[link(name = "kernel32")]
 unsafe extern "system" {
