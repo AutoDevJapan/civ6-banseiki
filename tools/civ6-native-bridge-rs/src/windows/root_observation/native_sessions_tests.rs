@@ -315,6 +315,9 @@ impl Fixture {
         })
     }
     fn bind(&self, lease: Lease) {
+        self.bind_at(lease, self.transport.as_ptr() as u64);
+    }
+    fn bind_at(&self, lease: Lease, transport: u64) {
         NativeSessionApi::bind_world(
             lease,
             WorldReceipt {
@@ -325,7 +328,7 @@ impl Fixture {
         .unwrap();
         NativeSessionApi::bind_transport(
             lease,
-            self.transport.as_ptr() as u64,
+            transport,
             self.network.as_ptr() as u64,
             self.thread.as_ptr() as u64,
         )
@@ -432,7 +435,20 @@ fn actual_unbound_birth_and_unknown_dispatch_forward_original_once() {
 }
 #[test]
 fn queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers() {
-    if !child("queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers") {
+    queued_input_flag_fixture(
+        0,
+        "queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers",
+    );
+}
+#[test]
+fn queued_input_with_invalid_active_flag_never_enters_world_scope_and_recovers() {
+    queued_input_flag_fixture(
+        2,
+        "queued_input_with_invalid_active_flag_never_enters_world_scope_and_recovers",
+    );
+}
+fn queued_input_flag_fixture(flag: u8, name: &str) {
+    if !child(name) {
         return;
     }
     let mut fixture = Fixture::new();
@@ -450,7 +466,7 @@ fn queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers
         "qualified admission is the positive control"
     );
     let queued = NativeSessionApi::reserve_message(lease).unwrap();
-    fixture.transport[8] = 0; // only the observed active flag changes
+    fixture.transport[8] = u64::from(flag) << 40; // only the observed active flag changes
     ADMISSION_OBSERVED.store(0, Ordering::Release);
     let inactive = NativeSessionApi::with_message(queued, || fixture.incoming());
     let inactive_scope = ADMISSION_OBSERVED.load(Ordering::Acquire);
@@ -492,6 +508,147 @@ fn queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers
         Err(Error::Unresolved),
         "a missing qualified dispatch must not become a drain proof"
     );
+}
+#[test]
+fn inactive_transport_cannot_supply_a_strict_close_snapshot_but_active_close_succeeds() {
+    if !child("inactive_transport_cannot_supply_a_strict_close_snapshot_but_active_close_succeeds")
+    {
+        return;
+    }
+    let mut fixture = Fixture::new();
+    let lease = fixture.birth(true).unwrap();
+    fixture.bind(lease);
+    for flag in [0, 2] {
+        fixture.transport[8] = flag << 40;
+        assert_eq!(snapshot_transport_active(lease), Ok(false));
+        assert_eq!(
+            snapshot_transport(lease),
+            Err(Error::Unbound),
+            "an inactive snapshot cannot authorize the strict close path"
+        );
+    }
+    fixture.transport[8] = 1 << 40;
+    assert_eq!(snapshot_transport_active(lease), Ok(true));
+    assert_eq!(snapshot_transport(lease), Ok(()));
+    fixture.close();
+    assert!(LATE_CONTINUATION.load(Ordering::Acquire));
+    assert_eq!(
+        NativeSessionApi::drained(WorldReceipt {
+            binding_id: 8,
+            epoch: 1
+        }),
+        Ok(())
+    );
+}
+#[test]
+fn unreadable_active_flag_uses_original_queued_callback_without_world_authority_then_recovers() {
+    if !child("unreadable_active_flag_uses_original_queued_callback_without_world_authority_then_recovers") { return; }
+    let mut fixture = Fixture::new();
+    ADMISSION_CHECK_SEAL.store(false, Ordering::Release);
+    struct Pages(*mut c_void);
+    impl Drop for Pages {
+        fn drop(&mut self) {
+            assert_ne!(unsafe { VirtualFree(self.0, 0, MEM_RELEASE) }, 0);
+        }
+    }
+    let pages = Pages(unsafe {
+        VirtualAlloc(
+            null_mut(),
+            2 * CODE_PAGE,
+            MEM_COMMIT | MEM_RESERVE,
+            PAGE_READWRITE,
+        )
+    });
+    assert!(!pages.0.is_null());
+    let pointer = pages.0 as usize + CODE_PAGE - 0x40;
+    unsafe {
+        ptr::copy_nonoverlapping(
+            fixture.transport.as_ptr().cast::<u8>(),
+            pointer as *mut u8,
+            0x40,
+        );
+        *((pointer + 0x45) as *mut u8) = 1;
+    }
+    fixture.session[5] = pointer as u64;
+    let lease = fixture.birth(true).unwrap();
+    fixture.bind_at(lease, pointer as u64);
+    let first = NativeSessionApi::reserve_message(lease).unwrap();
+    assert_eq!(
+        NativeSessionApi::with_message(first, || fixture.incoming()),
+        Ok(0x445566)
+    );
+    assert_eq!(ADMISSION_OBSERVED.load(Ordering::Acquire), 5);
+    let queued = NativeSessionApi::reserve_message(lease).unwrap();
+    let mut old = 0;
+    assert_ne!(
+        unsafe {
+            VirtualProtect(
+                (pages.0 as usize + CODE_PAGE) as _,
+                CODE_PAGE,
+                PAGE_NOACCESS,
+                &mut old,
+            )
+        },
+        0
+    );
+    assert_eq!(copy_current::<1>(pointer as u64 + 0x45), None);
+    assert_eq!(
+        read64(pointer as u64 + 0x10),
+        Ok(fixture.network.as_ptr() as u64)
+    );
+    assert_eq!(
+        read64(fixture.network.as_ptr() as u64 + 0xc0),
+        Ok(fixture.thread.as_ptr() as u64)
+    );
+    assert_eq!(snapshot_transport_active(lease), Ok(false));
+    assert_eq!(snapshot_transport(lease), Err(Error::Unbound));
+    ADMISSION_OBSERVED.store(0, Ordering::Release);
+    let unreadable = NativeSessionApi::with_message(queued, || fixture.incoming());
+    let scope = ADMISSION_OBSERVED.load(Ordering::Acquire);
+    let error = unsafe { GetLastError() };
+    assert_ne!(
+        unsafe {
+            VirtualProtect(
+                (pages.0 as usize + CODE_PAGE) as _,
+                CODE_PAGE,
+                old,
+                &mut old,
+            )
+        },
+        0
+    );
+    assert_eq!(unreadable, Ok(0x445566));
+    assert_eq!(scope, 0);
+    assert_eq!(error, 0x7788);
+    assert_eq!(snapshot_transport(lease), Ok(()));
+    let next = NativeSessionApi::reserve_message(lease).unwrap();
+    assert_eq!(
+        NativeSessionApi::with_message(next, || fixture.incoming()),
+        Ok(0x445566)
+    );
+    assert_eq!(ADMISSION_OBSERVED.load(Ordering::Acquire), 1);
+    assert_eq!(ADMISSION_HITS.load(Ordering::Acquire), 3);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionQualified),
+        2
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionUnqualified),
+        1
+    );
+    assert_eq!(
+        NativeSessionApi::with_message(queued, || ()),
+        Err(Error::Unknown)
+    );
+    assert_eq!(
+        NativeSessionApi::drained(WorldReceipt {
+            binding_id: 8,
+            epoch: 1
+        }),
+        Err(Error::Unresolved)
+    );
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    assert!(FRAMES.get().unwrap().healthy() && !FAILED.load(Ordering::Acquire));
 }
 #[test]
 fn reset_packets_keep_the_old_identity_and_only_new_publication_enters_world_scope() {
