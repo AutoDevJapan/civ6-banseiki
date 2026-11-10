@@ -178,6 +178,37 @@ fn native_waiter_alive(_: &Value, _: &Path) -> Result<bool> {
     Ok(false)
 }
 
+#[cfg(any(windows, test))]
+fn chain_waiter_name(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "live_chain.exe" || (name.starts_with("live_chain_") && name.ends_with(".exe"))
+}
+
+#[cfg(any(windows, test))]
+fn denied_waiter_image(image: Option<&str>) -> Result<bool> {
+    // A snapshot can exclude a different program after PID reuse. It cannot
+    // prove the creation time, exit or ownership of a possible chain process.
+    match image {
+        Some(name) if !name.is_empty() && !chain_waiter_name(name) => Ok(false),
+        _ => Err(refused("cannot verify live queue process identity")),
+    }
+}
+
+#[cfg(any(windows, test))]
+fn waiter_image_matches(actual: &str, lock: &Path) -> bool {
+    let Some(parent) = lock.parent() else {
+        return false;
+    };
+    let actual = actual.replace('\\', "/").to_lowercase();
+    let Some((directory, name)) = actual.rsplit_once('/') else {
+        return false;
+    };
+    // Count the same renamed chains as the supervisor for fairness only.
+    // This neither authorizes game control nor changes the owner's image check.
+    directory == parent.to_string_lossy().replace('\\', "/").to_lowercase()
+        && chain_waiter_name(name)
+}
+
 #[cfg(windows)]
 fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
     use windows_sys::Win32::{
@@ -208,10 +239,19 @@ fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
             pid,
         ));
         if process.0.is_null() {
-            if std::io::Error::last_os_error().raw_os_error() == Some(87) {
-                return Ok(false);
+            match std::io::Error::last_os_error().raw_os_error() {
+                Some(87) => return Ok(false),
+                Some(5) => {
+                    let rows = crate::startup::process_rows()
+                        .map_err(|_| refused("cannot inspect denied live queue process"))?;
+                    return denied_waiter_image(
+                        rows.iter()
+                            .find(|row| row.pid == pid)
+                            .map(|row| row.name.as_str()),
+                    );
+                }
+                _ => return Err(refused("cannot verify live queue process")),
             }
-            return Err(refused("cannot verify live queue process"));
         }
         // A terminated process can itself return STILL_ACTIVE (259).
         // The process object's signal state is independent of its exit code.
@@ -226,10 +266,7 @@ fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
             return Err(refused("cannot verify live queue executable"));
         }
         let actual = String::from_utf16_lossy(&name[..size as usize]);
-        let expected = lock.parent().unwrap().join("live_chain.exe");
-        if actual.replace('\\', "/").to_lowercase()
-            != expected.to_string_lossy().replace('\\', "/").to_lowercase()
-        {
+        if !waiter_image_matches(&actual, lock) {
             return Ok(false);
         }
         let mut created: FILETIME = std::mem::zeroed();
@@ -316,6 +353,63 @@ mod tests {
             let mut r = record();
             r["acquired_at"] = value;
             assert!(record_budget(&r, 7, 2000.0).is_err());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn protected_non_chain_process_is_not_a_live_waiter() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        // The System process cannot be a chain waiter. A stale queue entry
+        // must not stop an unrelated run merely because OpenProcess is denied.
+        assert!(!native_waiter_alive(
+            &json!({"chain_pid":4,"live_chain":true,"since":now}),
+            Path::new(crate::startup::SHARED_LOCK_PATH),
+        )
+        .expect("a protected non-chain process is unrelated, not an unknown chain"));
+    }
+
+    #[test]
+    fn denied_snapshot_excludes_only_known_other_images() {
+        for name in ["System", "Registry", "MsMpEng.exe", "codex.exe"] {
+            assert!(!denied_waiter_image(Some(name)).unwrap());
+        }
+        for image in [
+            None,
+            Some(""),
+            Some("live_chain.exe"),
+            Some("LIVE_CHAIN_PR86_AMD.EXE"),
+        ] {
+            assert_eq!(
+                denied_waiter_image(image).unwrap_err().kind,
+                ErrorKind::LiveLease
+            );
+        }
+    }
+
+    #[test]
+    fn renamed_chain_waiters_in_the_shared_directory_receive_fairness() {
+        let lock = Path::new(crate::startup::SHARED_LOCK_PATH);
+        for name in [
+            "live_chain.exe",
+            "live_chain_pr86_amd.exe",
+            "LIVE_CHAIN_RELIABILITY_1.EXE",
+        ] {
+            assert!(
+                waiter_image_matches(&format!("D:/CC/Tools/civ6-live/{name}"), lock),
+                "{name}"
+            );
+        }
+        for actual in [
+            "C:/other/live_chain.exe",
+            "D:/CC/Tools/civ6-live/extra/live_chain.exe",
+            "D:/CC/Tools/civ6-live/other.exe",
+            "D:/CC/Tools/civ6-live/live_chain.exe.bak",
+        ] {
+            assert!(!waiter_image_matches(actual, lock), "{actual}");
         }
     }
 

@@ -28,6 +28,31 @@ pub fn verify_control_path(actual: &Path, expected: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod control_image_tests {
+    use super::*;
+
+    #[test]
+    fn recovery_control_requires_the_standard_chain_image() {
+        for image in [
+            CHAIN_IMAGE_PATH,
+            r"\\?\D:\CC\Tools\civ6-live\LIVE_CHAIN.EXE",
+        ] {
+            verify_control_path(Path::new(image), CHAIN_IMAGE_PATH).unwrap();
+        }
+        // A renamed chain can be a fairness waiter without becoming the
+        // standard runner's startup/recovery control authority.
+        for image in [
+            "D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe",
+            "D:/CC/Tools/civ6-live/live_chain_reliability_1.exe",
+            "C:/other/live_chain.exe",
+            "D:/CC/Tools/civ6-live/extra/live_chain.exe",
+        ] {
+            assert!(verify_control_path(Path::new(image), CHAIN_IMAGE_PATH).is_err());
+        }
+    }
+}
+
 /// Bind the lease to the process and acquisition recorded by live_chain, not
 /// merely to a PID that could already have been reused before we arrived.
 pub fn verify_control_record(
@@ -366,6 +391,8 @@ pub fn verify_lock_record(record: &Value, chain_pid: u32) -> Result<()> {
 #[cfg(windows)]
 #[path = "startup_windows.rs"]
 mod platform;
+#[cfg(windows)]
+pub(crate) use platform::process_rows;
 #[cfg(windows)]
 pub use platform::{
     collect_diagnostics, diagnostic_worker, loading_evidence, pin_launched_process,

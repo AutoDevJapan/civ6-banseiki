@@ -68,7 +68,7 @@ fn unix_start(handle: HANDLE) -> Result<f64> {
     Ok(created(handle)? as f64 / 10_000_000.0 - 11_644_473_600.0)
 }
 
-fn process_rows() -> Result<Vec<crate::restart::ProcessRow>> {
+pub(crate) fn process_rows() -> Result<Vec<crate::restart::ProcessRow>> {
     let handle = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if handle.is_null() || handle == INVALID_HANDLE_VALUE {
         return Err(Error::input("process snapshot unavailable"));
