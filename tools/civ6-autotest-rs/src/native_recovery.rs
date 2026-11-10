@@ -5,7 +5,7 @@
 /// Keep native recovery ownership alive through normal CLI exit and unwinding.
 /// Entry points using a native Session must drop this guard before process::exit.
 pub struct ExitGuard;
-pub const RECOVERY_REQUIRED: &str = "CIV6_NATIVE_RECOVERY_REQUIRED_V1";
+pub use crate::recovery_protocol::REQUIRED as RECOVERY_REQUIRED;
 impl Drop for ExitGuard {
     fn drop(&mut self) {
         wait_for_pending_recoveries();
@@ -231,13 +231,10 @@ mod platform {
         wait_for(&REGISTRY);
     }
     fn notify_supervisor(owner: &Mutex<Registry>) {
-        let Ok(nonce) = std::env::var("CIV6_NATIVE_RECOVERY_NONCE") else {
+        let Ok(nonce) = std::env::var(crate::recovery_protocol::NONCE_ENV) else {
             return;
         };
-        if nonce.is_empty()
-            || nonce.len() > 64
-            || !nonce.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
-        {
+        if !crate::recovery_protocol::valid_nonce(&nonce) {
             return;
         }
         let targets = {
@@ -262,10 +259,13 @@ mod platform {
                 .collect::<Vec<_>>()
         };
         for (pid, created) in targets {
-            diagnostic(format_args!(
-                "{} {nonce} {pid} {created}",
-                super::RECOVERY_REQUIRED
-            ));
+            if let Some(line) = crate::recovery_protocol::format_notice(
+                &nonce,
+                crate::recovery_protocol::Target { pid, created },
+            ) {
+                // A single bounded buffer avoids separate formatting writes.
+                let _ = std::io::stderr().lock().write_all(line.as_bytes());
+            }
         }
     }
     fn wait_for(owner: &Mutex<Registry>) {
@@ -388,6 +388,177 @@ mod platform {
             entered: Mutex<Option<mpsc::SyncSender<()>>>,
             release: Mutex<mpsc::Receiver<()>>,
         }
+        #[test]
+        #[ignore = "owned producer fixture, invoked by its parent test"]
+        fn recovery_notice_producer_worker() {
+            use std::io::{Read, Write};
+            let mut target = Fixture::spawn();
+            let mut controller = Fixture::spawn();
+            let target_handle = target.0.as_handle().try_clone_to_owned().unwrap();
+            let controller_guard =
+                ControllerGuard(controller.0.as_handle().try_clone_to_owned().unwrap());
+            let pid = target.0.id();
+            let mut created = FILETIME::default();
+            let mut exited = FILETIME::default();
+            let mut kernel = FILETIME::default();
+            let mut user = FILETIME::default();
+            assert_ne!(
+                unsafe {
+                    GetProcessTimes(
+                        target_handle.as_raw_handle() as HANDLE,
+                        &mut created,
+                        &mut exited,
+                        &mut kernel,
+                        &mut user,
+                    )
+                },
+                0
+            );
+            let created =
+                (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime);
+            retain(
+                controller.0.take_owned(),
+                target_handle,
+                "actual producer fixture".into(),
+            );
+            let closer = std::thread::spawn(move || {
+                let mut byte = [0u8];
+                let _ = std::io::stdin().read_exact(&mut byte);
+                target.stop();
+            });
+            println!("NOTICE_EXPECTED {pid} {created}");
+            println!("NOTICE_WAIT_BEGIN");
+            std::io::stdout().flush().unwrap();
+            wait_for_pending();
+            closer.join().unwrap();
+            assert_eq!(
+                unsafe { WaitForSingleObject(controller_guard.0.as_raw_handle() as HANDLE, 0) },
+                WAIT_OBJECT_0
+            );
+        }
+
+        #[test]
+        fn actual_exit_wait_producer_emits_one_bound_notice_and_none_without_valid_nonce() {
+            use crate::recovery_protocol::{self as wire, Target};
+            use std::io::{BufRead, BufReader, Write};
+            for nonce in [Some("123-abc-def"), None, Some("bad!nonce")] {
+                let mut command = Command::new(std::env::current_exe().unwrap());
+                command
+                    .args([
+                        "--ignored",
+                        "--exact",
+                        "native_recovery::platform::tests::recovery_notice_producer_worker",
+                        "--nocapture",
+                    ])
+                    .env_remove(wire::NONCE_ENV)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                if let Some(nonce) = nonce {
+                    command.env(wire::NONCE_ENV, nonce);
+                }
+                let (mut child, mut tree) =
+                    crate::native_recovery_test_tree::Tree::spawn(&mut command, 0x08000000, true)
+                        .unwrap();
+                let input = child.stdin.take();
+                let stdout = child.stdout.take().unwrap();
+                let stderr = child.stderr.take().unwrap();
+                let (sender, receiver) = mpsc::channel();
+                let send_out = sender.clone();
+                let out_reader = std::thread::spawn(move || {
+                    let mut lines = Vec::new();
+                    for line in BufReader::new(stdout).lines() {
+                        let line = line.unwrap();
+                        let _ = send_out.send((false, line.clone()));
+                        lines.push(line);
+                    }
+                    lines
+                });
+                let err_reader = std::thread::spawn(move || {
+                    let mut lines = Vec::new();
+                    for line in BufReader::new(stderr).lines() {
+                        let line = line.unwrap();
+                        let _ = sender.send((true, line.clone()));
+                        lines.push(line);
+                    }
+                    lines
+                });
+                let valid = nonce.is_some_and(wire::valid_nonce);
+                let mut expected = None;
+                let mut entered = false;
+                let mut notice_seen = false;
+                let end = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < end {
+                    if expected.is_some() && entered && (!valid || notice_seen) {
+                        break;
+                    }
+                    let Ok((error, line)) =
+                        receiver.recv_timeout(end.saturating_duration_since(Instant::now()))
+                    else {
+                        break;
+                    };
+                    if !error {
+                        if let Some(fields) = line.strip_prefix("NOTICE_EXPECTED ") {
+                            let fields = fields.split(' ').collect::<Vec<_>>();
+                            if fields.len() == 2 {
+                                expected = Some(Target {
+                                    pid: fields[0].parse().unwrap(),
+                                    created: fields[1].parse().unwrap(),
+                                });
+                            }
+                        }
+                        entered |= line == "NOTICE_WAIT_BEGIN";
+                    } else {
+                        notice_seen |= line.starts_with(wire::REQUIRED);
+                    }
+                }
+                // Always unblock the owned target before asserting, including
+                // a producer-deletion mutation or broken protocol fixture.
+                if let Some(mut input) = input {
+                    let _ = input.write_all(&[1]);
+                }
+                let end = Instant::now() + Duration::from_secs(8);
+                let mut done = false;
+                while Instant::now() < end {
+                    if child.try_wait().unwrap().is_some() {
+                        done = true;
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                if !done {
+                    tree.stop(&mut child).unwrap();
+                }
+                let status = child.wait().unwrap();
+                drop(tree);
+                let out = out_reader.join().unwrap();
+                let err = err_reader.join().unwrap();
+                assert!(
+                    done && status.success(),
+                    "producer fixture: {nonce:?} {out:?} {err:?}"
+                );
+                let expected = expected.expect("held target identity report");
+                assert!(entered);
+                let notices = err
+                    .iter()
+                    .filter(|line| line.starts_with(wire::REQUIRED))
+                    .collect::<Vec<_>>();
+                assert_eq!(notices.len(), usize::from(valid), "{nonce:?}: {err:?}");
+                if valid {
+                    let line = notices[0];
+                    assert_eq!(
+                        wire::parse_notice(line.as_bytes(), nonce.unwrap()),
+                        Ok(Some(expected))
+                    );
+                    assert_eq!(
+                        line.as_str(),
+                        wire::format_notice(nonce.unwrap(), expected)
+                            .unwrap()
+                            .trim_end()
+                    );
+                }
+            }
+        }
         impl AsHandle for HookedTarget {
             fn as_handle(&self) -> BorrowedHandle<'_> {
                 if let Some(entered) = self.entered.lock().unwrap().take() {
@@ -435,6 +606,11 @@ mod platform {
                 .pending
                 .len();
             let held = OpenOptions::new().write(true).open(&path).is_err();
+            let interrupt_priority = crate::time::with_test_interrupt(|| {
+                crate::native_recovery::require_idle()
+                    .err()
+                    .map(|error| error.kind)
+            });
             // A failed native owner must block another native attachment,
             // while leaving unrelated ordinary game paths alone.
             let close = || Box::new(|_, _| Ok(())) as crate::native_recovery::CloseAuthority;
@@ -491,6 +667,7 @@ mod platform {
                 assert!(error.contains("unresolved native ownership"), "{error}");
             }
             assert!(can_attach_after_exit);
+            assert_eq!(interrupt_priority, Some(crate::ErrorKind::Interrupted));
         }
 
         #[test]

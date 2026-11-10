@@ -7,6 +7,21 @@ mod fixed;
 #[path = "native_transport_ledger.rs"]
 mod ledger;
 use ledger::{Birth, Ledger};
+#[derive(Clone, Copy)]
+pub(super) struct UnprovenClose {
+    birth: Option<Birth>,
+    pub session: u64,
+    pub lease: SessionLease,
+    pub transport: SessionTransport,
+}
+pub(super) enum Disconnect {
+    Untracked,
+    Published(SessionLease, SessionTransport),
+    Unproven(UnprovenClose),
+}
+pub(super) fn has_unproven_close() -> bool {
+    state().has_unproven_close()
+}
 static EXE: AtomicU64 = AtomicU64::new(0);
 static NEXT: AtomicU64 = AtomicU64::new(0);
 static STATE: std::sync::LazyLock<Mutex<Ledger>> =
@@ -98,6 +113,10 @@ pub(in super::super) fn from_network(
     let Some((lease, t)) = known else {
         return Ok(None);
     };
+    if copy_current::<1>(t.pointer + 0x45) == Some([0]) {
+        // A stopped/unknown worker state supplies no new input authority.
+        return Ok(None);
+    }
     let (_, session, callback, _) = state().snapshot(Birth(t.incarnation))?;
     if super::existing_transport_owner(session, callback)? != Some(lease)
         || read64(session + 0x28)? != t.pointer
@@ -135,14 +154,17 @@ extern "system" fn begin(raw: *mut Saved) {
                     fault()
                 }
                 c.callback = value(c.pointer + 0x30);
-                if let Some(lease) = super::existing_transport_owner(c.pointer, c.callback)
-                    .unwrap_or_else(|_| fault())
-                {
-                    c.birth = Some(
-                        state()
-                            .factory(lease, c.pointer, c.callback)
-                            .unwrap_or_else(|_| fault()),
-                    );
+                let capture_allowed = state().capture_allowed(c.pointer);
+                if capture_allowed {
+                    if let Some(lease) = super::existing_transport_owner(c.pointer, c.callback)
+                        .unwrap_or_else(|_| fault())
+                    {
+                        c.birth = Some(
+                            state()
+                                .factory(lease, c.pointer, c.callback)
+                                .unwrap_or_else(|_| fault()),
+                        );
+                    }
                 }
             }
             103 => {
@@ -353,23 +375,81 @@ pub(super) fn terminal_closing(
     }
     Ok(())
 }
-pub(super) fn disconnect_begin(
-    session: u64,
-) -> Result<Option<(SessionLease, SessionTransport)>, SessionError> {
+pub(super) fn disconnect_begin(session: u64) -> Result<Disconnect, SessionError> {
     let pointer = read64(session + 0x28)?;
     let known = state().pointer_birth(pointer);
-    let Some(id) = known else { return Ok(None) };
+    let Some(id) = known else {
+        return Ok(Disconnect::Untracked);
+    };
     let (saved_lease, _, _, expected) = state().snapshot(id)?;
+    let published = state().published(id)?;
+    let inactive = copy_current::<1>(expected.pointer + 0x45) != Some([1]);
+    if !published || inactive {
+        super::state().unproven_transport_close_begin(saved_lease, expected)?;
+        state().unproven_begin(id)?;
+        diagnostic(2070);
+        return Ok(Disconnect::Unproven(UnprovenClose {
+            birth: Some(id),
+            session,
+            lease: saved_lease,
+            transport: expected,
+        }));
+    }
     if from_network(expected.network)? != Some((saved_lease, expected)) {
         return Err(Error::Stale);
     }
     let Some((lease, t)) = state().close(session)? else {
-        return Ok(None);
+        return Ok(Disconnect::Untracked);
     };
     if super::transport_disconnect_begin(lease)? != Some(t) {
         return Err(Error::Stale);
     }
-    Ok(Some((lease, t)))
+    Ok(Disconnect::Published(lease, t))
+}
+pub(super) fn unproven_disconnect_end(
+    token: UnprovenClose,
+    exceptional: bool,
+) -> Result<(), SessionError> {
+    super::state().unproven_transport_close_end(token.lease, token.transport, exceptional)?;
+    if let Some(birth) = token.birth {
+        state().unproven_end(birth, token.lease, token.transport, exceptional)
+    } else {
+        state().unproven_session_end(token.session, exceptional)
+    }
+}
+pub(super) fn prepare_terminal_unproven(
+    lease: SessionLease,
+    session: u64,
+) -> Result<UnprovenClose, SessionError> {
+    let pointer = read64(session + 0x28).unwrap_or(0);
+    let marker = super::state().unproven_transport_marker(lease);
+    let known = state().pointer_birth(pointer);
+    let mut birth = None;
+    let transport = if let Some(id) = known {
+        let (owner, actual, _, transport) = state().snapshot(id)?;
+        if owner != lease || actual != session {
+            return Err(Error::Stale);
+        }
+        state().unproven_begin(id)?;
+        birth = Some(id);
+        transport
+    } else {
+        marker.unwrap_or(SessionTransport {
+            incarnation: 0,
+            pointer,
+            network: 0,
+            thread: 0,
+        })
+    };
+    super::state().unproven_transport_close_begin(lease, transport)?;
+    state().note_unproven();
+    diagnostic(2070);
+    Ok(UnprovenClose {
+        birth,
+        session,
+        lease,
+        transport,
+    })
 }
 /// Existing98C650 owner supplies original AL under exact caller8573C9.
 pub(super) fn join_returned(

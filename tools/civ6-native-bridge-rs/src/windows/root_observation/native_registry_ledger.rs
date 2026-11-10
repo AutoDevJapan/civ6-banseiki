@@ -9,6 +9,7 @@ pub(super) struct Target {
     pub id: u32,
     pub session: u64,
     pub transport: Option<Transport>,
+    pub unproven: Option<super::super::transports::UnprovenClose>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
@@ -30,6 +31,7 @@ struct Record {
 pub(super) struct Ledger {
     next: u64,
     roots: HashMap<u64, Record>,
+    abandoned: HashMap<u64, Vec<Target>>,
     failed: bool,
 }
 impl Ledger {
@@ -148,5 +150,33 @@ impl Ledger {
     }
     pub fn unresolved(&mut self) {
         self.failed = true;
+    }
+    pub fn only_unproven(&self, root: Root) -> bool {
+        self.abandoned.contains_key(&root.0)
+            || self.roots.get(&root.0).is_some_and(|record| {
+                !record.items.is_empty()
+                    && record
+                        .items
+                        .values()
+                        .all(|item| item.target.unproven.is_some())
+            })
+    }
+    pub fn abandon_unproven(&mut self, root: Root) -> Result<Vec<Target>, Error> {
+        if let Some(targets) = self.abandoned.get(&root.0) {
+            return Ok(targets.clone());
+        }
+        if !self.only_unproven(root) {
+            return Err(Error::Stale);
+        }
+        let targets = self
+            .roots
+            .remove(&root.0)
+            .ok_or(Error::Unknown)?
+            .items
+            .into_values()
+            .map(|item| item.target)
+            .collect::<Vec<_>>();
+        self.abandoned.insert(root.0, targets.clone());
+        Ok(targets)
     }
 }

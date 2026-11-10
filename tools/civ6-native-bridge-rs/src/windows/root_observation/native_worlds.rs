@@ -54,6 +54,7 @@ struct Bindings {
     next: u64,
     contexts: HashMap<u64, ContextBirth>,
     unobserved_close: bool,
+    unobserved_birth: bool,
 }
 static BINDINGS: std::sync::LazyLock<Mutex<Bindings>> =
     std::sync::LazyLock::new(|| Mutex::new(Bindings::default()));
@@ -77,8 +78,11 @@ fn value(address: u64) -> u64 {
         .unwrap_or_else(|| fault())
 }
 impl Bindings {
+    fn coverage_gap(&self) -> bool {
+        self.unobserved_close || self.unobserved_birth
+    }
     fn birth_window(&self) -> Option<BirthWindow> {
-        if self.unobserved_close {
+        if self.coverage_gap() {
             return None;
         }
         let live: Vec<_> = self.contexts.iter().filter(|(_, b)| !b.closed).collect();
@@ -200,7 +204,7 @@ pub(super) fn installed() -> bool {
 }
 pub(super) fn completed(lease: WorldLease) -> bool {
     BINDINGS.lock().is_ok_and(|bindings| {
-        !bindings.unobserved_close
+        !bindings.coverage_gap()
             && bindings.contexts.get(&lease.context).is_some_and(|birth| {
                 birth.serial == lease.serial
                     && birth.epoch == lease.epoch
@@ -217,6 +221,10 @@ pub(super) fn completed(lease: WorldLease) -> bool {
 pub(super) fn unobserved_close() {
     BINDINGS.lock().unwrap_or_else(|_| fault()).unobserved_close = true;
     diagnostic(2062);
+}
+fn unobserved_birth() {
+    BINDINGS.lock().unwrap_or_else(|_| fault()).unobserved_birth = true;
+    diagnostic(2063);
 }
 pub(super) fn capture_birth_window() -> Option<BirthWindow> {
     if !HOST_PREPARED.load(Ordering::Acquire) {
@@ -250,6 +258,13 @@ extern "system" fn begin(raw: *mut Saved) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let raw = unsafe { &mut *raw };
         let core = CORE.load(Ordering::Acquire);
+        if matches!(raw.invocation.kind, 60 | 61)
+            && BINDINGS.lock().unwrap_or_else(|_| fault()).coverage_gap()
+        {
+            // Missing lifetime evidence denies new tickets. Continue the
+            // original engine path without adopting a newer birth instead.
+            return;
+        }
         match raw.invocation.kind {
             60 => {
                 if raw.invocation.caller != core + 0x58fcc3 {
@@ -259,18 +274,28 @@ extern "system" fn begin(raw: *mut Saved) {
             }
             61 => {
                 if raw.invocation.caller != core + 0x46d30 {
-                    fault();
+                    unobserved_birth();
+                    return;
                 }
                 raw.invocation.manager = raw.gpr[0];
-                if value(raw.gpr[0]) != core + 0xa44f70 || value(raw.gpr[0] + 0x60) != 0 {
-                    fault();
+                if copy_current::<8>(raw.gpr[0]).map(u64::from_le_bytes) != Some(core + 0xa44f70)
+                    || copy_current::<8>(raw.gpr[0] + 0x60).map(u64::from_le_bytes) != Some(0)
+                {
+                    unobserved_birth();
+                    return;
                 }
             }
             62 => {
-                if value(raw.gpr[0]) != core + 0xa44f70 {
-                    fault();
+                match copy_current::<1>(raw.gpr[0] + 0x40) {
+                    Some([0]) => return,
+                    Some([1]) => {}
+                    _ => {
+                        unobserved_close();
+                        return;
+                    }
                 }
-                if copy_current::<1>(raw.gpr[0] + 0x40) != Some([1]) {
+                if copy_current::<8>(raw.gpr[0]).map(u64::from_le_bytes) != Some(core + 0xa44f70) {
+                    unobserved_close();
                     return;
                 }
                 let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
@@ -292,8 +317,17 @@ extern "system" fn begin(raw: *mut Saved) {
                 let identity = b
                     .contexts
                     .values()
-                    .find_map(|r| r.world.filter(|w| w.world == world))
-                    .unwrap_or_else(|| fault());
+                    .find_map(|r| r.world.filter(|w| w.world == world));
+                let Some(identity) = identity else {
+                    // A previously issued World receipt cannot disappear.
+                    // Without one, this is missing coverage, not corruption.
+                    if birth.world.is_some() {
+                        fault();
+                    }
+                    b.unobserved_close = true;
+                    diagnostic(2062);
+                    return;
+                };
                 if identity.game != raw.gpr[0] {
                     fault();
                 }
@@ -348,7 +382,10 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     if !exceptional {
         let core = CORE.load(Ordering::Acquire);
         let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
-        if raw.invocation.kind == 60 {
+        if b.coverage_gap() {
+            // Another boundary may have become unobserved while this original
+            // ran. Settle the owned frame below without issuing a birth ticket.
+        } else if raw.invocation.kind == 60 {
             if raw.gpr[4] != raw.invocation.world || value(raw.gpr[4]) != core + 0xa101e8 {
                 fault();
             }
@@ -785,7 +822,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_secs(20);
         loop {
             if let Some(s) = p.try_wait().unwrap() {
-                assert!(s.success());
+                assert!(s.success(), "owned World fixture exited with {s}");
                 break;
             }
             if Instant::now() >= deadline {
@@ -893,6 +930,132 @@ mod tests {
         assert!(!completed(known), "ordinary traffic cannot erase the gap");
         NATIVE_WORLD_CONTINUE[2].store(0, Ordering::Release);
         assert_ne!(unsafe { VirtualFree(page, 0, MEM_RELEASE) }, 0);
+    }
+    fn unproven_world_gateway_case(case: u8) {
+        let frames = FRAMES.get_or_init(NativeFrames::new);
+        let core = 0x180000000u64;
+        CORE.store(core, Ordering::Release);
+        let known = fixture_world_birth();
+        fixture_world_close(known);
+        let mut game = [0u64; 0x80 / 8];
+        game[0] = if case == 1 {
+            core + 0x123456
+        } else {
+            core + 0xa44f70
+        };
+        game[0x40 / 8] = 1;
+        game[0x60 / 8] = if case == 0 { 0 } else { 0x1234 };
+        if case == 2 {
+            // Context/Game was observed, but this World was never observed.
+            BINDINGS
+                .lock()
+                .unwrap()
+                .context(0x1000, game.as_ptr() as u64, 2)
+                .unwrap();
+        }
+        let mut code = vec![0x48, 0xff, 0x41, 0x68, 0x48, 0xb8];
+        code.extend(0x1122334455667788u64.to_le_bytes());
+        code.extend([
+            0x48,
+            0x83,
+            0xc4,
+            if case == 0 { 0x30 } else { 0x20 },
+            0x5b,
+            0xc3,
+        ]);
+        let page =
+            unsafe { VirtualAlloc(null_mut(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
+        assert!(!page.is_null());
+        unsafe { ptr::copy_nonoverlapping(code.as_ptr(), page.cast(), code.len()) };
+        let mut protection = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(page, 4096, PAGE_EXECUTE_READ, &mut protection) },
+            0
+        );
+        assert_ne!(
+            unsafe { FlushInstructionCache(GetCurrentProcess(), page, code.len()) },
+            0
+        );
+        let slot = if case == 0 { 1 } else { 2 };
+        NATIVE_WORLD_CONTINUE[slot].store(page as u64, Ordering::Release);
+        let entry = if case == 0 {
+            native_world_factory_gateway as *const ()
+        } else {
+            native_world_close_gateway as *const ()
+        };
+        let original: unsafe extern "system" fn(*mut u64) -> u64 =
+            unsafe { std::mem::transmute(entry) };
+        unsafe { SetLastError(0x87654321) };
+        let returned = unsafe { original(game.as_mut_ptr()) };
+        let error = unsafe { GetLastError() };
+        let calls = game[0x68 / 8];
+        NATIVE_WORLD_CONTINUE[slot].store(0, Ordering::Release);
+        assert_ne!(unsafe { VirtualFree(page, 0, MEM_RELEASE) }, 0);
+        assert_eq!(returned, 0x1122334455667788);
+        assert_eq!(error, 0x87654321);
+        assert_eq!(
+            calls, 1,
+            "unproven entry must still execute its original exactly once"
+        );
+        assert!(!completed(known));
+        assert!(BINDINGS.lock().unwrap().birth_window().is_none());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert!(frames.healthy());
+        // An unrelated ordinary frame must not inherit an uncertainty abort.
+        let mut later: Saved = unsafe { std::mem::zeroed() };
+        super::super::begin(&mut later);
+        super::super::finish(&mut later, false);
+        assert_eq!(frames.observation_state_for_test().2, 0);
+    }
+    #[test]
+    fn unknown_world_factory_caller_keeps_original_and_denies_receipt() {
+        if child("unknown_world_factory_caller_keeps_original_and_denies_receipt") {
+            unproven_world_gateway_case(0)
+        }
+    }
+    #[test]
+    fn unrecognised_game_close_receiver_keeps_original_and_denies_receipt() {
+        if child("unrecognised_game_close_receiver_keeps_original_and_denies_receipt") {
+            unproven_world_gateway_case(1)
+        }
+    }
+    #[test]
+    fn observed_game_missing_world_keeps_original_and_denies_receipt() {
+        if child("observed_game_missing_world_keeps_original_and_denies_receipt") {
+            unproven_world_gateway_case(2)
+        }
+    }
+    #[test]
+    fn an_unobserved_boundary_settles_inflight_birth_without_poisoning_later_birth() {
+        if !child("an_unobserved_boundary_settles_inflight_birth_without_poisoning_later_birth") {
+            return;
+        }
+        let frames = FRAMES.get_or_init(NativeFrames::new);
+        let core = 0x180000000u64;
+        CORE.store(core, Ordering::Release);
+        let mut original: Saved = unsafe { std::mem::zeroed() };
+        original.invocation.kind = 60;
+        original.invocation.caller = core + 0x58fcc3;
+        original.gpr[0] = 0x1234;
+        begin(&mut original);
+        assert_eq!(original.invocation.cookie, COOKIE);
+        unobserved_birth();
+        // The output cannot be adopted after a concurrent coverage gap.
+        // Its invalid address also detects an accidental post-return read.
+        original.gpr[4] = 1;
+        finish(&mut original, false);
+        let mut later: Saved = unsafe { std::mem::zeroed() };
+        later.invocation.kind = 61;
+        later.invocation.caller = core + 0x46d30;
+        later.gpr[0] = 1;
+        begin(&mut later);
+        assert_eq!(later.invocation.cookie, 0);
+        finish(&mut later, false);
+        assert!(BINDINGS.lock().unwrap().contexts.is_empty());
+        assert!(capture_birth_window().is_none());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert!(frames.healthy());
+        assert_eq!(frames.observation_state_for_test().2, 0);
     }
     #[test]
     fn original_context_and_world_return_bind_before_cgame_publication() {

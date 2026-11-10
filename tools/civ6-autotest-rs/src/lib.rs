@@ -21,9 +21,14 @@ pub mod native_carrier_witness;
 mod native_inventory;
 pub mod native_order;
 pub mod native_recovery;
+#[cfg(all(test, windows))]
+#[path = "../../cc-live-rs/src/process_tree.rs"]
+pub(crate) mod native_recovery_test_tree;
 pub mod native_trace;
 pub mod payment_scenario;
 pub mod persona_payment;
+#[path = "../../native_recovery_protocol.rs"]
+pub mod recovery_protocol;
 pub mod reliability;
 pub mod restart;
 pub mod runner;

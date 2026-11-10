@@ -92,15 +92,17 @@ fn native_slot(registry: u64, id: u32) -> Result<(u64, u64), Error> {
     }
     Err(Error::Unbound)
 }
-fn start_root(registry: u64, lifetime: u64, targets: Vec<Target>) -> Result<Root, Error> {
-    for t in &targets {
+fn start_root(registry: u64, lifetime: u64, mut targets: Vec<Target>) -> Result<Root, Error> {
+    for t in &mut targets {
         if native_slot(registry, t.id)?.1 != t.session {
             return Err(Error::Stale);
         }
         if let Some(transport) = t.transport {
             transports::terminal_closing(t.lease, transport)?;
-        } else if read64(t.session + 0x28)? != 0 {
-            return Err(Error::Unbound);
+        } else if read64(t.session + 0x28).ok() != Some(0)
+            || super::state().unproven_transport_marker(t.lease).is_some()
+        {
+            t.unproven = Some(transports::prepare_terminal_unproven(t.lease, t.session)?);
         }
     }
     state().begin(registry, lifetime, targets)
@@ -113,6 +115,7 @@ pub(super) fn destroy_begin(registry: u64, lifetime: u64) -> Result<u64, Error> 
             id,
             session,
             transport,
+            unproven: None,
         })
         .collect();
     let token = start_root(registry, lifetime, targets)?;
@@ -133,15 +136,39 @@ pub(super) fn destroy_end(token: u64, exceptional: bool) -> Result<(), Error> {
         return Err(Error::Stale);
     }
     if exceptional {
+        if state().only_unproven(d.token) {
+            return abandon_unproven(d.token);
+        }
         state().unresolved();
         super::unresolved(None);
         return Ok(());
     }
     let targets = state().finish(d.token, d.registry, d.lifetime)?;
     for target in targets {
-        super::terminal_remove_end(target.lease)?;
+        retire_target(target)?;
     }
-    super::terminal_registry_end(d.registry, d.lifetime)
+    if super::terminal_registry_end(d.registry, d.lifetime) == Err(Error::Unresolved) {
+        super::state().retired_registry_metadata(d.registry, d.lifetime)
+    } else {
+        super::terminal_registry_end(d.registry, d.lifetime)
+    }
+}
+fn retire_target(target: Target) -> Result<(), Error> {
+    if target.unproven.is_some() {
+        super::state().retire_unproven_native(target.lease)
+    } else {
+        super::terminal_remove_end(target.lease)
+    }
+}
+fn abandon_unproven(root: Root) -> Result<(), Error> {
+    let targets = state().abandon_unproven(root)?;
+    for target in targets {
+        if let Some(token) = target.unproven {
+            transports::unproven_disconnect_end(token, true)?;
+            super::state().unproven_native_unwind(target.lease)?;
+        }
+    }
+    Ok(())
 }
 fn current_target() -> Option<(Root, Target)> {
     CALLS.with(|s| {
@@ -156,6 +183,11 @@ pub(super) fn join_candidate(thread: u64) -> Option<(SessionLease, SessionTransp
     let (_, target) = current_target()?;
     let t = target.transport?;
     (t.thread == thread).then_some((target.lease, t))
+}
+pub(super) fn unproven_join_candidate(thread: u64) -> bool {
+    current_target()
+        .and_then(|(_, target)| target.unproven)
+        .is_some_and(|token| token.transport.thread == thread)
 }
 pub(super) fn join_returned(
     lease: SessionLease,
@@ -208,6 +240,7 @@ extern "system" fn begin(raw: *mut Saved) {
                                 id: c.id,
                                 session,
                                 transport,
+                                unproven: None,
                             };
                             c.root = Some(
                                 start_root(c.registry, lifetime, vec![target])
@@ -275,6 +308,11 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     }
     let Some(root) = c.root else { return };
     if exceptional {
+        let unproven = state().only_unproven(root);
+        if unproven {
+            abandon_unproven(root).unwrap_or_else(|_| fault());
+            return;
+        }
         state().unresolved();
         super::unresolved(c.target.map(|t| t.lease));
         return;
@@ -289,12 +327,14 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         if targets.len() != 1 {
             fault()
         }
-        super::terminal_remove_end(targets[0].lease)
+        retire_target(targets[0])
     } else if let Some(target) = c.target {
         if raw.gpr[4] != target.session {
             fault()
         }
-        if let Some(t) = target.transport {
+        if let Some(token) = target.unproven {
+            transports::unproven_disconnect_end(token, false).unwrap_or_else(|_| fault());
+        } else if let Some(t) = target.transport {
             transports::disconnect_end(target.lease, t, false).unwrap_or_else(|_| fault());
         }
         state().returned(root, target.session).map(|_| ())

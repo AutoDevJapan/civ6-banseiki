@@ -267,7 +267,10 @@ fn actual_gateway_binds_thread_before_start_then_publishes_before_c0_and_disconn
     let t = super::super::state().transport(lease).unwrap();
     assert_eq!(value(t.network + 0xc0), t.thread);
     assert_eq!(from_network(t.network).unwrap(), Some((lease, t)));
-    let pair = disconnect_begin(session).unwrap().unwrap();
+    let Disconnect::Published(a, b) = disconnect_begin(session).unwrap() else {
+        panic!("published transport close missing")
+    };
+    let pair = (a, b);
     assert_eq!(pair, (lease, t));
     assert_eq!(join_returned(lease, t, t.thread, 0), Err(Error::NotJoined));
     assert_eq!(disconnect_end(lease, t, false), Err(Error::NotJoined));
@@ -349,6 +352,82 @@ fn failed_native_start_preserves_null_and_never_publishes_a_transport() {
         unsafe { VirtualFree(p.cast(), 0, MEM_RELEASE) };
     }
 }
+extern "system" fn unpublished_close_original(session: u64) -> u64 {
+    assert_eq!(unsafe { GetLastError() }, 0x87654321);
+    HIT.fetch_add(1, Ordering::AcqRel);
+    unsafe {
+        *((session + 0x28) as *mut u64) = 0;
+    }
+    assert_ne!(
+        unsafe { VirtualFree(POINTER.load(Ordering::Acquire) as *mut _, 0, MEM_RELEASE) },
+        0
+    );
+    unsafe { SetLastError(0x02468ace) };
+    0x1122334455667788
+}
+#[test]
+fn failed_start_close_executes_original_without_join_certificate_or_frame_poison() {
+    if !child("failed_start_close_executes_original_without_join_certificate_or_frame_poison") {
+        return;
+    }
+    unproven_close_gateway_case(true);
+}
+#[test]
+fn inactive_published_close_executes_original_without_inventing_a_join() {
+    if child("inactive_published_close_executes_original_without_inventing_a_join") {
+        unproven_close_gateway_case(false);
+    }
+}
+fn unproven_close_gateway_case(failed_start: bool) {
+    let frames = FRAMES.get_or_init(NativeFrames::new);
+    let (session, lease, _, owned) = setup();
+    unsafe {
+        *((exe(0x1047e60) + 0x40) as *mut u64) = exe(0x84ebd0);
+        *((exe(0x1047e60) + 0x58) as *mut u64) = exe(0x84ec00);
+        *(exe(0x106d060) as *mut u64) = exe(0x98c650);
+    }
+    START_OK.store(!failed_start, Ordering::Release);
+    unsafe { transport_fixture_driver(session) };
+    if !failed_start {
+        assert_eq!(
+            super::super::snapshot_transport(lease),
+            Ok(()),
+            "active snapshot is a positive control before the flag changes"
+        );
+        unsafe {
+            *((POINTER.load(Ordering::Acquire) + 0x45) as *mut u8) = 0;
+        }
+    }
+    HIT.store(0, Ordering::Release);
+    super::super::NATIVE_SESSION_CONTINUE[4].store(
+        unpublished_close_original as *const () as u64,
+        Ordering::Release,
+    );
+    let close: unsafe extern "system" fn(u64) -> u64 =
+        unsafe { std::mem::transmute(super::super::native_session_close_gateway as *const ()) };
+    unsafe { SetLastError(0x87654321) };
+    let result = unsafe { close(session) };
+    let error = unsafe { GetLastError() };
+    let calls = HIT.load(Ordering::Acquire);
+    let transport = super::super::state().transport(lease);
+    let capture = from_network(NETWORK.load(Ordering::Acquire));
+    let healthy = frames.healthy();
+    super::super::NATIVE_SESSION_CONTINUE[4].store(0, Ordering::Release);
+    unsafe { restore().unwrap() };
+    for p in owned {
+        unsafe { VirtualFree(p.cast(), 0, MEM_RELEASE) };
+    }
+    assert_eq!(result, 0x1122334455667788);
+    assert_eq!(error, 0x02468ace);
+    assert_eq!(calls, 1);
+    assert_eq!(transport, Err(Error::Unbound));
+    assert_eq!(capture, Ok(None));
+    assert!(healthy && !FAILED.load(Ordering::Acquire));
+    let mut later: Saved = unsafe { std::mem::zeroed() };
+    super::super::super::begin(&mut later);
+    super::super::super::finish(&mut later, false);
+    assert_eq!(frames.observation_state_for_test().2, 0);
+}
 #[test]
 fn staged_birth_rejects_wrong_receiver_duplicate_thread_and_receive_active_join() {
     let mut s = Ledger::default();
@@ -371,6 +450,48 @@ fn staged_birth_rejects_wrong_receiver_duplicate_thread_and_receive_active_join(
     assert_eq!(s.enter(4), Ok(None));
     let second = s.factory(lease, 1, 2).unwrap();
     assert_ne!(second, id);
+}
+#[test]
+fn unproven_close_retires_only_after_original_return_and_never_implies_join() {
+    let mut s = Ledger::default();
+    let lease = SessionLease(123);
+    let first = s.factory(lease, 1, 2).unwrap();
+    s.transport(first, 3, 2).unwrap();
+    s.network(first, 4).unwrap();
+    let t = s.snapshot(first).unwrap().3;
+    s.unproven_begin(first).unwrap();
+    assert!(!s.capture_allowed(1));
+    s.unproven_end(first, lease, t, false).unwrap();
+    assert!(s.capture_allowed(1));
+    assert!(s.snapshot(first).is_err());
+    assert!(s.joined(lease, t, 0, 1).is_err());
+    assert_eq!(s.closed(lease, t), Err(Error::NotJoined));
+    let second = s.factory(lease, 1, 2).unwrap();
+    assert_ne!(first, second);
+    s.transport(second, 3, 2).unwrap();
+    s.network(second, 4).unwrap();
+    s.thread(second, 5).unwrap();
+    let t = s.publish(second, 5).unwrap();
+    s.close(1).unwrap();
+    s.joined(lease, t, 5, 1).unwrap();
+    s.closed(lease, t).unwrap();
+    assert!(
+        s.has_unproven_close(),
+        "a later valid lifetime cannot erase an earlier coverage gap"
+    );
+}
+#[test]
+fn unproven_close_exception_retains_uncertainty_without_poisoning_other_births() {
+    let mut s = Ledger::default();
+    let lease = SessionLease(123);
+    let id = s.factory(lease, 1, 2).unwrap();
+    s.transport(id, 3, 2).unwrap();
+    let t = s.snapshot(id).unwrap().3;
+    s.unproven_begin(id).unwrap();
+    s.unproven_end(id, lease, t, true).unwrap();
+    assert!(!s.capture_allowed(1));
+    assert!(s.has_unproven_close());
+    assert!(s.factory(SessionLease(456), 10, 20).is_ok());
 }
 #[test]
 fn unknown_receiver_has_no_birth_or_world_authority() {

@@ -486,6 +486,20 @@ fn require_native_generation(
 mod native_recovery_generation_tests {
     use super::*;
     #[test]
+    fn generated_call_nonce_satisfies_the_shared_producer_consumer_contract() {
+        let nonce = new_lock_token();
+        let target = crate::recovery_protocol::Target {
+            pid: 42,
+            created: 71,
+        };
+        let line = crate::recovery_protocol::format_notice(&nonce, target)
+            .expect("generated nonce must be accepted by producer");
+        assert_eq!(
+            crate::recovery_protocol::parse_notice(line.as_bytes(), &nonce),
+            Ok(Some(target))
+        );
+    }
+    #[test]
     fn recovery_scope_accepts_only_the_original_generation_or_its_confirmed_absence() {
         let target = process::NativeTarget {
             pid: 42,

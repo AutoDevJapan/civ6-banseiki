@@ -432,15 +432,23 @@ pub(super) fn world_created(world: worlds::WorldLease) {
             state().binding_rejections.insert(request.0, reason);
         }
     } else if let Some((lease, previous)) = source.session.filter(|_| accepted) {
-        sessions::loaded_world(
+        let result = sessions::loaded_world(
             lease,
             previous,
             sessions::SessionWorldReceipt {
                 binding_id: world.serial,
                 epoch: world.epoch,
             },
-        )
-        .unwrap_or_else(|_| fault());
+        );
+        match result {
+            Ok(()) => {}
+            Err(sessions::SessionError::Unresolved) => {
+                state()
+                    .binding_rejections
+                    .insert(request.0, sessions::SessionError::Unresolved);
+            }
+            Err(_) => fault(),
+        }
     }
 }
 extern "system" fn begin(raw: *mut Saved) {

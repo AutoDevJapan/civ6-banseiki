@@ -86,6 +86,8 @@ pub(super) fn fixture_snapshot_message<R>(lease: SessionLease, body: impl FnOnce
             id: 0,
             transport: None,
             native_transport: false,
+            unproven_transport: None,
+            unproven_join: false,
             thread: 0,
             unproven_hold: None,
             packet: None,
@@ -238,6 +240,9 @@ impl NativeSessionApi {
         })
     }
     pub fn drained(world: SessionWorldReceipt) -> Result<(), SessionError> {
+        if transports::has_unproven_close() {
+            return Err(Error::Unresolved);
+        }
         if deferred::pending().map_err(|_| Error::Unresolved)? != 0
             || input::pending().map_err(|_| Error::Unresolved)? != 0
         {
@@ -296,6 +301,8 @@ struct Call {
     id: u32,
     transport: Option<Transport>,
     native_transport: bool,
+    unproven_transport: Option<transports::UnprovenClose>,
+    unproven_join: bool,
     thread: u64,
     unproven_hold: Option<u64>,
     packet: Option<PacketReceipt>,
@@ -552,6 +559,8 @@ extern "system" fn begin(raw: *mut Saved) {
             id: 0,
             transport: None,
             native_transport: false,
+            unproven_transport: None,
+            unproven_join: false,
             thread: 0,
             unproven_hold: None,
             packet: None,
@@ -684,18 +693,23 @@ extern "system" fn begin(raw: *mut Saved) {
                 }
             }
             74 => {
-                if let Some((lease, transport)) =
-                    transports::disconnect_begin(raw.gpr[0]).unwrap_or_else(|_| fault())
-                {
-                    snapshot_transport(lease).unwrap_or_else(|_| fault());
-                    c.lease = Some(lease);
-                    c.transport = Some(transport);
-                    c.native_transport = true;
+                let close = transports::disconnect_begin(raw.gpr[0]).unwrap_or_else(|_| fault());
+                #[cfg(test)]
+                let manual = matches!(&close, transports::Disconnect::Untracked);
+                match close {
+                    transports::Disconnect::Untracked => {}
+                    transports::Disconnect::Unproven(token) => c.unproven_transport = Some(token),
+                    transports::Disconnect::Published(lease, transport) => {
+                        snapshot_transport(lease).unwrap_or_else(|_| fault());
+                        c.lease = Some(lease);
+                        c.transport = Some(transport);
+                        c.native_transport = true;
+                    }
                 }
                 // Synthetic callers may exercise the public manual API. The
                 // production transport close never terminally closes Session.
                 #[cfg(test)]
-                if !c.native_transport {
+                if manual {
                     let lease = state().session(raw.gpr[0]);
                     if let Some(lease) = lease {
                         // Unbound and alternate transports have no product authority.
@@ -729,6 +743,19 @@ extern "system" fn begin(raw: *mut Saved) {
                             .find(|c| c.kind == 74)
                             .is_some_and(|c| c.native_transport)
                     });
+                } else if let Some(token) = CALLS.with(|s| {
+                    s.borrow()
+                        .iter()
+                        .rev()
+                        .find(|call| call.kind == 74)
+                        .and_then(|call| call.unproven_transport)
+                }) {
+                    // This is a safety guard only. Even AL1 does not grant a
+                    // join/World certificate for an unproven transport.
+                    c.unproven_join =
+                        raw.gpr[0] == token.transport.thread && raw.gpr[1] as u32 == u32::MAX;
+                } else if registry::unproven_join_candidate(raw.gpr[0]) {
+                    c.unproven_join = raw.gpr[1] as u32 == u32::MAX;
                 } else if let Some((lease, transport)) = registry::join_candidate(raw.gpr[0]) {
                     if raw.gpr[1] as u32 != u32::MAX || raw.gpr[0] != transport.thread {
                         fault();
@@ -777,6 +804,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         .with(|s| s.borrow_mut().pop())
         .unwrap_or_else(|| fault());
     if c.serial != raw.invocation.token || c.kind != raw.invocation.kind {
+        fault();
+    }
+    if let Some(token) = c.unproven_transport {
+        transports::unproven_disconnect_end(token, exceptional).unwrap_or_else(|_| fault());
+    }
+    if c.unproven_join && !exceptional && raw.gpr[4] as u8 != 1 {
+        // Known AL0 must still stop before the destructive continuation.
         fault();
     }
     if exceptional {

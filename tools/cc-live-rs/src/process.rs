@@ -27,12 +27,8 @@ pub struct Call {
     pub lease: Option<LeaseLimit>,
     pub native_recovery: Option<NativeRecovery>,
 }
-pub const NATIVE_RECOVERY_REQUIRED: &str = "CIV6_NATIVE_RECOVERY_REQUIRED_V1";
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct NativeTarget {
-    pub pid: u32,
-    pub created: u64,
-}
+pub use crate::recovery_protocol::Target as NativeTarget;
+pub use crate::recovery_protocol::REQUIRED as NATIVE_RECOVERY_REQUIRED;
 type RecoveryNotice = Mutex<Option<Result<NativeTarget, String>>>;
 #[derive(Clone, Debug)]
 pub struct NativeRecovery {
@@ -64,11 +60,14 @@ impl PartialEq for NativeRecovery {
 }
 impl NativeRecovery {
     pub(crate) fn target(&self) -> Result<Option<NativeTarget>, String> {
-        self.notice
+        // Invalid data grants no target. Its failure is retained by the wait
+        // loop; ordinary owned cleanup keeps its original lock protocol.
+        Ok(self
+            .notice
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .clone()
-            .transpose()
+            .as_ref()
+            .and_then(|result| result.as_ref().ok().copied()))
     }
 }
 #[derive(Clone, Debug)]
@@ -901,7 +900,7 @@ impl Runner for RealRunner {
         };
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
         if let Some(scope) = &call.native_recovery {
-            cmd.env("CIV6_NATIVE_RECOVERY_NONCE", &scope.nonce);
+            cmd.env(crate::recovery_protocol::NONCE_ENV, &scope.nonce);
         }
         cmd.args(&call.args[1..])
             .envs(&call.env)
@@ -1038,8 +1037,7 @@ fn read_driver_output(
         source.read_to_end(&mut bytes)?;
         return Ok(bytes);
     };
-    let prefix = format!("{NATIVE_RECOVERY_REQUIRED} {nonce} ");
-    let mut line = Vec::with_capacity(256);
+    let mut line = Vec::with_capacity(crate::recovery_protocol::MAX_LINE);
     let mut oversized = false;
     let mut chunk = [0u8; 8192];
     loop {
@@ -1055,8 +1053,12 @@ fn read_driver_output(
             if byte == b'\n' {
                 if !oversized {
                     let message = line.strip_suffix(b"\r").unwrap_or(&line);
-                    if let Some(payload) = message.strip_prefix(prefix.as_bytes()) {
-                        let parsed = parse_native_target(payload);
+                    let parsed = match crate::recovery_protocol::parse_notice(message, nonce) {
+                        Ok(None) => None,
+                        Ok(Some(target)) => Some(Ok(target)),
+                        Err(error) => Some(Err(error.to_owned())),
+                    };
+                    if let Some(parsed) = parsed {
                         let mut current = notice.lock().unwrap_or_else(|e| e.into_inner());
                         match current.as_ref() {
                             None => *current = Some(parsed),
@@ -1071,7 +1073,7 @@ fn read_driver_output(
                 }
                 line.clear();
                 oversized = false;
-            } else if line.len() < 256 && !oversized {
+            } else if line.len() < crate::recovery_protocol::MAX_LINE && !oversized {
                 line.push(byte);
             } else {
                 oversized = true;
@@ -1079,23 +1081,6 @@ fn read_driver_output(
             }
         }
     }
-}
-fn parse_native_target(payload: &[u8]) -> Result<NativeTarget, String> {
-    let payload = std::str::from_utf8(payload).map_err(|_| "invalid native recovery identity")?;
-    let fields = payload.split(' ').collect::<Vec<_>>();
-    if fields.len() != 2 {
-        return Err("invalid native recovery identity".into());
-    }
-    let pid = fields[0]
-        .parse::<u32>()
-        .map_err(|_| "invalid native recovery PID")?;
-    let created = fields[1]
-        .parse::<u64>()
-        .map_err(|_| "invalid native recovery creation time")?;
-    if pid == 0 || created == 0 {
-        return Err("empty native recovery identity".into());
-    }
-    Ok(NativeTarget { pid, created })
 }
 fn wait_driver(
     child: &mut std::process::Child,
@@ -1154,11 +1139,12 @@ fn wait_with_recovery(
 ) -> Result<i32, String> {
     let mut next_probe = Instant::now();
     let mut recovery_error = None;
+    let mut notice_failure = None;
     let mut retained_target = None;
     let mut driver_grace = None;
     let mut ownership_announced = false;
     loop {
-        if recovery_error.is_none() {
+        if recovery_error.is_none() && notice_failure.is_none() {
             if let Some((target, reserved_end)) = recovery.and_then(|(notice, end)| {
                 notice
                     .lock()
@@ -1166,33 +1152,52 @@ fn wait_with_recovery(
                     .clone()
                     .map(|target| (target, end))
             }) {
-                let end = lease
-                    .and_then(LeaseLimit::hard_deadline)
-                    .map_or(reserved_end, |d| reserved_end.min(d));
-                retained_target = target.as_ref().ok().copied();
-                let result = if RealRunner.monotonic() >= end {
-                    Err("original cleanup deadline exhausted".into())
-                } else {
-                    match child.try_wait() {
-                        Ok(Some(_)) => Err("driver exited before native recovery dispatch".into()),
-                        Err(error) => Err(format!(
-                            "native recovery driver exit state unknown: {error}"
-                        )),
-                        Ok(None) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            target.and_then(|target| cleanup(target, end))
-                        }))
-                        .unwrap_or_else(|_| Err("native recovery cleanup panicked".into())),
+                match target {
+                    Err(error) => notice_failure = Some(error),
+                    Ok(target) => {
+                        let end = lease
+                            .and_then(LeaseLimit::hard_deadline)
+                            .map_or(reserved_end, |d| reserved_end.min(d));
+                        retained_target = Some(target);
+                        let result =
+                            if RealRunner.monotonic() >= end {
+                                Err("original cleanup deadline exhausted".into())
+                            } else {
+                                match child.try_wait() {
+                                    Ok(Some(_)) => {
+                                        Err("driver exited before native recovery dispatch".into())
+                                    }
+                                    Err(error) => Err(format!(
+                                        "native recovery driver exit state unknown: {error}"
+                                    )),
+                                    Ok(None) => std::panic::catch_unwind(
+                                        std::panic::AssertUnwindSafe(|| cleanup(target, end)),
+                                    )
+                                    .unwrap_or_else(|_| {
+                                        Err("native recovery cleanup panicked".into())
+                                    }),
+                                }
+                            };
+                        recovery_error = Some(format!(
+                            "{NATIVE_RECOVERY_FAILURE}; owned target cleanup: {result:?}"
+                        ));
+                        deadline = Some(end);
                     }
-                };
-                recovery_error = Some(format!(
-                    "{NATIVE_RECOVERY_FAILURE}; owned target cleanup: {result:?}"
-                ));
-                deadline = Some(end);
+                }
             }
         }
         if recovery_error.is_some() {
             if let Some(hard) = lease.and_then(LeaseLimit::hard_deadline) {
                 deadline = Some(deadline.unwrap_or(hard).min(hard));
+            }
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                // Driver loss already released its in-process pins. Hand the
+                // failure to the original same-generation outer cleanup.
+                // Do not explicitly stop controllers on an unconfirmed target.
+                return Err(format!(
+                    "{}; driver exited after native recovery notification",
+                    recovery_error.take().unwrap()
+                ));
             }
             let known_exit =
                 retained_target.is_some_and(|target| matches!(exited(target), Ok(true)));
@@ -1200,9 +1205,7 @@ fn wait_with_recovery(
             if known_exit {
                 let grace = driver_grace
                     .get_or_insert_with(|| (now + 5.0).min(deadline.unwrap_or(f64::MAX)));
-                if child.try_wait().map_err(|e| e.to_string())?.is_some() || now >= *grace {
-                    // Only an OS-confirmed exit of this generation permits
-                    // stopping its remaining native controllers/job tree.
+                if now >= *grace {
                     tree.stop(child)?;
                     let _ = child.kill();
                     let _ = child.wait();
@@ -1217,83 +1220,75 @@ fn wait_with_recovery(
                 }
             } else if let Some(limit) = lease.filter(|_| Instant::now() >= next_probe) {
                 next_probe = Instant::now() + Duration::from_secs(2);
-                // Observation can shorten the existing cleanup budget. It
-                // cannot dispatch scenario work or grant a fresh lease.
                 let _ = observe_lease(&mut RealRunner, limit);
             }
             thread::sleep(Duration::from_millis(50));
             continue;
         }
+        // Invalid data grants neither a target nor an indefinite retention
+        // reason. Keep its failure while the ordinary bounded loop runs.
         if deadline.is_some_and(|deadline| RealRunner.monotonic() >= deadline) {
             tree.stop(child)?;
             let _ = child.kill();
             let _ = child.wait();
-            return Err(recovery_error.unwrap_or_else(|| "command timed out".into()));
+            return with_notice_failure(Err("command timed out".into()), notice_failure.as_deref());
         }
-        if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             tree.stop(child)?;
-            return match recovery_error {
-                Some(error) => Err(error),
-                None => Ok(s.code().unwrap_or(1)),
-            };
+            return with_notice_failure(Ok(status.code().unwrap_or(1)), notice_failure.as_deref());
         }
         let mut lease_error = None;
         if let Some(limit) = lease {
-            if recovery_error.is_none()
-                && limit
-                    .work_deadline()
-                    .is_some_and(|d| RealRunner.monotonic() >= d)
+            if limit
+                .work_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
             {
-                lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
+                lease_error = Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
             } else if Instant::now() >= next_probe {
                 next_probe = Instant::now() + Duration::from_secs(2);
-                let observed = if recovery_error.is_some() {
-                    observe_lease(&mut RealRunner, limit).map(|_| ())
-                } else {
-                    monitor_lease(&mut RealRunner, limit)
-                };
-                if let Err(error) = observed {
+                if let Err(error) = monitor_lease(&mut RealRunner, limit) {
                     lease_error = Some(error);
                 }
             }
-            if recovery_error.is_none()
-                && limit
-                    .observation_deadline()
-                    .is_some_and(|d| RealRunner.monotonic() >= d)
+            if limit
+                .observation_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
                 && lease_error.is_none()
             {
                 lease_error = Some(LEASE_OBSERVATION_EXHAUSTED.into());
             }
-            if recovery_error.is_none()
-                && limit
-                    .work_deadline()
-                    .is_some_and(|d| RealRunner.monotonic() >= d)
+            if limit
+                .work_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
             {
-                lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
+                lease_error = Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
             }
         }
         if lease_error.is_some()
-            || (recovery_error.is_none() && interrupted().is_err())
+            || interrupted().is_err()
             || deadline.is_some_and(|deadline| RealRunner.monotonic() >= deadline)
         {
             tree.stop(child)?;
             let _ = child.kill();
             let _ = child.wait();
-            if let Some(error) = lease_error {
-                return Err(recovery_error
-                    .map_or_else(|| error.clone(), |recovery| format!("{recovery}; {error}")));
-            }
-            if let Some(error) = recovery_error {
-                return Err(error);
-            }
-            return Err(if INTERRUPTED.load(Ordering::SeqCst) {
-                "interrupted"
-            } else {
-                "command timed out"
-            }
-            .into());
+            let error = lease_error.unwrap_or_else(|| {
+                if INTERRUPTED.load(Ordering::SeqCst) {
+                    "interrupted".into()
+                } else {
+                    "command timed out".into()
+                }
+            });
+            return with_notice_failure(Err(error), notice_failure.as_deref());
         }
         thread::sleep(Duration::from_millis(50));
+    }
+}
+fn with_notice_failure(result: Result<i32, String>, notice: Option<&str>) -> Result<i32, String> {
+    match notice {
+        None => result,
+        Some(error) => Err(format!(
+            "{NATIVE_RECOVERY_FAILURE}; invalid notification: {error}; driver outcome: {result:?}"
+        )),
     }
 }
 
@@ -1331,6 +1326,127 @@ mod native_recovery_tests {
             notice: Arc::new(Mutex::new(None)),
             outcome: Arc::new(Mutex::new(None)),
         }
+    }
+
+    #[test]
+    #[ignore = "owned bounded recovery-wait fixture, invoked by parent tests"]
+    fn recovery_wait_termination_worker() {
+        let case = std::env::var("CC_RECOVERY_WAIT_CASE").expect("parent fixture case");
+        let mut target = Owned(
+            Command::new("powershell.exe")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Start-Sleep -Seconds 60",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap(),
+        );
+        let identity = native_process_identity(target.0.id()).unwrap().unwrap();
+        let expected = NativeTarget {
+            pid: target.0.id(),
+            created: identity.created_filetime.unwrap(),
+        };
+        let mut command = Command::new("cmd.exe");
+        command
+            .args(["/d", "/c", "exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let (mut driver, mut tree) =
+            crate::process_tree::Tree::spawn(&mut command, CREATE_NO_WINDOW, true).unwrap();
+        driver.wait().unwrap();
+        let notice = Mutex::new(Some(if case == "invalid" {
+            Err("conflicting native recovery target identities".into())
+        } else {
+            Ok(expected)
+        }));
+        let now = RealRunner.monotonic();
+        let mut called = false;
+        let result = wait_with_recovery(
+            &mut driver,
+            &mut tree,
+            Some(now + 0.5),
+            None,
+            Some((&notice, now + 0.5)),
+            &mut |_, _| {
+                called = true;
+                Err("unstarted cleanup".into())
+            },
+            &mut native_target_exited,
+        );
+        let still_alive = target.0.try_wait().unwrap().is_none();
+        drop(target);
+        assert!(result.is_err() && !called && still_alive, "{result:?}");
+        println!("RECOVERY_WAIT_RETURNED_WITH_LIVE_TARGET {case}");
+    }
+
+    fn assert_terminated_driver_wait_returns(case: &str) {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--ignored",
+                "--exact",
+                "process::native_recovery_tests::recovery_wait_termination_worker",
+                "--nocapture",
+            ])
+            .env("CC_RECOVERY_WAIT_CASE", case)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let (mut child, mut tree) =
+            crate::process_tree::Tree::spawn(&mut command, CREATE_NO_WINDOW, true).unwrap();
+        let mut output = child.stdout.take().unwrap();
+        let mut error = child.stderr.take().unwrap();
+        let out_reader = thread::spawn(move || {
+            let mut bytes = Vec::new();
+            output.read_to_end(&mut bytes).unwrap();
+            bytes
+        });
+        let err_reader = thread::spawn(move || {
+            let mut bytes = Vec::new();
+            error.read_to_end(&mut bytes).unwrap();
+            bytes
+        });
+        let end = Instant::now() + Duration::from_secs(5);
+        let mut returned = false;
+        while Instant::now() < end {
+            if child.try_wait().unwrap().is_some() {
+                returned = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        if !returned {
+            tree.stop(&mut child).unwrap();
+        }
+        let status = child.wait().unwrap();
+        drop(tree);
+        let stdout = decode(&out_reader.join().unwrap());
+        let stderr = decode(&err_reader.join().unwrap());
+        assert!(
+            returned && status.success(),
+            "dead driver left an unbounded wait ({case}); {stdout}; {stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("RECOVERY_WAIT_RETURNED_WITH_LIVE_TARGET {case}")),
+            "{stdout}"
+        );
+    }
+
+    #[test]
+    fn exited_driver_does_not_wait_for_an_unconfirmed_target() {
+        assert_terminated_driver_wait_returns("valid");
+    }
+
+    #[test]
+    fn invalid_notice_cannot_hold_an_exited_driver_forever() {
+        assert_terminated_driver_wait_returns("invalid");
     }
 
     #[test]

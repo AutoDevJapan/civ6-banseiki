@@ -221,6 +221,60 @@ fn existing_registry_root_holds_every_session_until_full_wrapper_return() {
     assert!(super::super::state().retired_slot(f.registry, 17, f.session));
     assert_eq!(HITS.load(Ordering::Acquire), 1);
 }
+fn unproven_registry_case(destroy: bool) {
+    let mut f = Fixture::new();
+    let p =
+        unsafe { VirtualAlloc(null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) } as *mut u8;
+    assert!(!p.is_null());
+    f.owned.push(p);
+    unsafe {
+        *((f.session + 0x28) as *mut u64) = p as u64;
+    }
+    let world = super::super::SessionWorldReceipt {
+        binding_id: 17,
+        epoch: 2,
+    };
+    super::super::state().bind_world(f.lease, world).unwrap();
+    assert_eq!(super::super::state().world(f.lease), Ok(world));
+    if destroy {
+        let root = destroy_begin(f.registry, 7).unwrap();
+        assert_eq!(unsafe { registry_fixture_destroy(f.registry) }, f.registry);
+        destroy_end(root, false).unwrap();
+    } else {
+        assert_eq!(unsafe { registry_fixture_remove(f.registry, 17) }, 0x8877);
+    }
+    let mut s = super::super::state();
+    assert_eq!(s.terminal_remove_end(f.lease), Err(Error::Unresolved));
+    assert_eq!(
+        s.terminal_registry_end(f.registry, 7),
+        Err(Error::Unresolved)
+    );
+    assert_eq!(s.world(f.lease), Err(Error::Unresolved));
+    assert_eq!(s.drained(world), Err(Error::Unresolved));
+    assert!(s.retired_slot(f.registry, 17, f.session));
+    let next = s.birth(f.registry, Some(7), 9, 1).unwrap();
+    s.factory(next, 17, 9, f.session, 0x991).unwrap();
+    s.published(next, 17).unwrap();
+    assert_ne!(next, f.lease);
+    assert_eq!(
+        s.world(next),
+        Err(Error::Unbound),
+        "new incarnation cannot inherit old World authority"
+    );
+    assert!(!FAILED.load(Ordering::Acquire));
+}
+#[test]
+fn unproven_transport_remove_retires_lookup_without_world_or_join_proof() {
+    if child("unproven_transport_remove_retires_lookup_without_world_or_join_proof") {
+        unproven_registry_case(false);
+    }
+}
+#[test]
+fn unproven_transport_registry_destroy_keeps_strict_proof_denied() {
+    if child("unproven_transport_registry_destroy_keeps_strict_proof_denied") {
+        unproven_registry_case(true);
+    }
+}
 #[test]
 fn tombstone_needs_every_typed_return_and_real_join_not_count_or_null() {
     let mut s = Ledger::default();
@@ -241,12 +295,14 @@ fn tombstone_needs_every_typed_return_and_real_join_not_count_or_null() {
                     id: 17,
                     session: 6,
                     transport: Some(t),
+                    unproven: None,
                 },
                 Target {
                     lease: l,
                     id: 18,
                     session: 7,
                     transport: None,
+                    unproven: None,
                 },
             ],
         )
@@ -274,6 +330,7 @@ fn terminal_seh_retains_tombstone_and_rejects_next_incarnation() {
                 id: 3,
                 session: 4,
                 transport: None,
+                unproven: None,
             }],
         )
         .unwrap();

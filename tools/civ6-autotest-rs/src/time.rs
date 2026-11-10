@@ -19,6 +19,17 @@ fn is_interrupted() -> bool {
     let interrupted = interrupted || TEST_INTERRUPTED.with(Cell::get);
     interrupted
 }
+#[cfg(all(test, windows))]
+pub(crate) fn with_test_interrupt<T>(action: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_INTERRUPTED.with(|state| state.set(self.0));
+        }
+    }
+    let _restore = Restore(TEST_INTERRUPTED.with(|state| state.replace(true)));
+    action()
+}
 
 /// Permit only the bounded cleanup call on this thread; keep Ctrl-C pending.
 pub(crate) fn with_interrupt_cleanup<T>(action: impl FnOnce() -> T) -> T {
