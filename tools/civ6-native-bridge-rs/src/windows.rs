@@ -34,8 +34,16 @@ mod lifecycle;
 mod native_entry;
 #[path = "windows/property_log.rs"]
 mod property_log;
+#[path = "windows/resident_module.rs"]
+mod resident_module;
+#[cfg(test)]
+#[path = "windows/resident_module_tests.rs"]
+mod resident_module_tests;
 #[path = "windows/runtime.rs"]
 mod runtime;
+#[cfg(test)]
+#[path = "../../cc-live-rs/src/process_tree.rs"]
+mod test_process_tree;
 #[path = "windows/trace_init.rs"]
 mod trace_init;
 pub use root_observation::native_frames::sessions::{

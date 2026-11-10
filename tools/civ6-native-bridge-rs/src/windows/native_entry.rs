@@ -9,9 +9,6 @@ use windows_sys::Win32::Foundation::{GetLastError, SetLastError};
 use windows_sys::Win32::System::Diagnostics::Debug::{
     AddVectoredExceptionHandler, RtlLookupFunctionEntry, EXCEPTION_POINTERS,
 };
-use windows_sys::Win32::System::LibraryLoader::{
-    GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
-};
 
 const TRAP_SLOTS: usize = 128;
 struct Trap {
@@ -183,14 +180,7 @@ fn register_trap(target: *mut u8, relay: *mut u8) -> Result<(), &'static str> {
     if unsafe { windows_sys::Win32::System::Diagnostics::Debug::IsDebuggerPresent() } != 0 {
         return Err("native breakpoint entry cannot be published with an attached debugger");
     }
-    let mut target_module = null_mut();
-    let target_pinned = unsafe {
-        GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-            target.cast(),
-            &mut target_module,
-        )
-    } != 0;
+    let target_pinned = resident_module::pin_module(target.cast());
     if !target_pinned {
         #[cfg(not(test))]
         return Err("native breakpoint target module pin failed");
@@ -218,15 +208,7 @@ fn register_trap(target: *mut u8, relay: *mut u8) -> Result<(), &'static str> {
     if HANDLER.load(Ordering::Acquire).is_null() {
         // Handler code, tables, gateways and delayed exception destinations
         // must outlive restored entries. Never unregister/free them on drain.
-        let mut module = null_mut();
-        if unsafe {
-            GetModuleHandleExW(
-                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                breakpoint as *const () as *const u16,
-                &mut module,
-            )
-        } == 0
-        {
+        if !resident_module::pin_module(breakpoint as *const () as *const c_void) {
             return Err("native breakpoint module pin failed");
         }
         let handler = unsafe { AddVectoredExceptionHandler(1, Some(breakpoint)) };
@@ -284,6 +266,246 @@ pub(super) fn owned(hook: &Hook) -> bool {
 mod tests {
     use super::*;
     use windows_sys::Win32::System::Diagnostics::Debug::RemoveVectoredExceptionHandler;
+    struct Page(*mut u8);
+    impl Page {
+        fn new() -> Self {
+            let pointer = unsafe {
+                VirtualAlloc(
+                    null_mut(),
+                    CODE_PAGE,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_READWRITE,
+                )
+            }
+            .cast::<u8>();
+            assert!(!pointer.is_null());
+            Self(pointer)
+        }
+        fn protect(&self, protection: u32) {
+            let mut previous = 0;
+            assert_ne!(
+                unsafe { VirtualProtect(self.0.cast(), CODE_PAGE, protection, &mut previous) },
+                0
+            );
+        }
+    }
+    impl Drop for Page {
+        fn drop(&mut self) {
+            assert_ne!(unsafe { VirtualFree(self.0.cast(), 0, MEM_RELEASE) }, 0);
+        }
+    }
+    #[test]
+    fn pinned_instruction_widths_keep_every_following_instruction_unchanged() {
+        let page = Page::new();
+        let target = unsafe { page.0.add(32) };
+        let relay = unsafe { page.0.add(128) };
+        for (original, width) in [
+            ([0x40, 0x53, 0x48, 0x83, 0xec, 0x30, 0x90, 0xc3], 2),
+            ([0x48, 0x8b, 0xc4, 0x53, 0x55, 0x56, 0x57, 0x90], 3),
+            ([0x4c, 0x8b, 0xdc, 0x55, 0x56, 0x57, 0x90, 0xc3], 3),
+            ([0x48, 0x85, 0xd2, 0x74, 0x08, 0x90, 0x90, 0xc3], 3),
+            ([0x48, 0x83, 0xec, 0x38, 0x48, 0x8b, 0xc1, 0x90], 4),
+            ([0x48, 0x8b, 0x49, 0x08, 0x48, 0x85, 0xc9, 0xc3], 4),
+            ([0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x90, 0xc3], 5),
+            ([0x8b, 0x81, 0x34, 0x12, 0x00, 0x00, 0x90, 0xc3], 6),
+            ([0x48, 0x8b, 0x81, 0x34, 0x12, 0x00, 0x00, 0xc3], 7),
+        ] {
+            page.protect(PAGE_READWRITE);
+            unsafe {
+                ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+                ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+            }
+            page.protect(PAGE_EXECUTE_READ);
+            assert_eq!(first_instruction(&original), Some(width));
+            let (patched, prefix) = plan(target, original, relay).unwrap();
+            assert!(prefix.is_none());
+            assert_eq!(&patched[width..], &original[width..]);
+            if width >= 5 {
+                assert_eq!(
+                    &patched[..5],
+                    &rel32_jump(target as usize, relay as usize).unwrap()
+                );
+            } else {
+                assert_eq!(patched[0], 0xcc);
+                assert_eq!(&patched[1..], &original[1..]);
+            }
+        }
+    }
+    #[test]
+    fn unknown_instruction_changed_bytes_alignment_and_relay_are_refused_before_publication() {
+        let page = Page::new();
+        let target = unsafe { page.0.add(32) };
+        let relay = unsafe { page.0.add(128) };
+        let original = [0x48, 0x8b, 0xc4, 0x53, 0x55, 0x56, 0x57, 0x90];
+        unsafe {
+            ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        assert!(plan(target, original, relay).is_ok());
+        assert!(plan(null_mut(), original, relay).is_err());
+        assert!(plan(target, original, null_mut()).is_err());
+        let unaligned = unsafe { target.add(1) };
+        page.protect(PAGE_READWRITE);
+        unsafe {
+            ptr::copy_nonoverlapping(original.as_ptr(), unaligned, 8);
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        let unaligned_plan = plan(unaligned, original, relay);
+        page.protect(PAGE_READWRITE);
+        unsafe {
+            ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        assert!(
+            unaligned_plan.is_err(),
+            "a valid instruction at a misaligned entry must be refused for alignment itself"
+        );
+        let mut changed = original;
+        changed[7] ^= 1;
+        assert!(plan(target, changed, relay).is_err());
+        page.protect(PAGE_READWRITE);
+        unsafe {
+            *relay = 0x90;
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        assert!(plan(target, original, relay).is_err());
+        for unknown in [
+            [0x90; 8],
+            [0xe9, 1, 2, 3, 4, 0x90, 0x90, 0xc3],
+            [0x48, 0x8b, 0x49, 0x09, 0x90, 0x90, 0x90, 0xc3],
+        ] {
+            page.protect(PAGE_READWRITE);
+            unsafe {
+                ptr::copy_nonoverlapping(unknown.as_ptr(), target, 8);
+            }
+            page.protect(PAGE_EXECUTE_READ);
+            assert!(
+                plan(target, unknown, relay).is_err(),
+                "unknown instruction must never be treated as a 5-byte overwrite"
+            );
+            assert_eq!(copy_current::<8>(target as u64), Some(unknown));
+        }
+    }
+    #[test]
+    fn padding_requires_read_execute_protection_and_owned_checks_its_exact_published_bytes() {
+        let page = Page::new();
+        let target = unsafe { page.0.add(32) };
+        let slot = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+        let relay = unsafe { page.0.add(128) };
+        let original = [0x48, 0x8b, 0xc4, 0x53, 0x55, 0x56, 0x57, 0x90];
+        unsafe {
+            ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), slot, PROPERTY_PREFIX_LEN);
+            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+        }
+        for protection in [PAGE_READWRITE, PAGE_EXECUTE_READWRITE, PAGE_READONLY] {
+            page.protect(protection);
+            assert_eq!(padding_slot(target), None);
+        }
+        page.protect(PAGE_EXECUTE_READ);
+        assert_eq!(padding_slot(target), Some(slot));
+        let (patched, prefix) = plan(target, original, relay).unwrap();
+        let (_, jump) = prefix.unwrap();
+        assert_eq!(patched[0], 0xeb);
+        let hook = Hook {
+            target,
+            original,
+            patched,
+            prefix,
+            _code: relay,
+        };
+        page.protect(PAGE_READWRITE);
+        unsafe {
+            ptr::copy_nonoverlapping(patched.as_ptr(), target, 8);
+            ptr::copy_nonoverlapping(jump.as_ptr(), slot, PROPERTY_PREFIX_LEN);
+        }
+        assert!(owned(&hook));
+        unsafe {
+            *slot ^= 1;
+        }
+        assert!(
+            !owned(&hook),
+            "matching entry bytes cannot hide a foreign prefix"
+        );
+        unsafe {
+            *slot ^= 1;
+            *target ^= 1;
+        }
+        assert!(!owned(&hook));
+        unsafe {
+            *target ^= 1;
+        }
+        assert!(owned(&hook));
+    }
+    #[test]
+    fn adjacent_padding_in_another_allocation_is_never_borrowed() {
+        const GRANULARITY: usize = 65536;
+        let mut pair = None;
+        for _ in 0..5 {
+            let reserved =
+                unsafe { VirtualAlloc(null_mut(), 2 * GRANULARITY, MEM_RESERVE, PAGE_NOACCESS) };
+            assert!(!reserved.is_null());
+            assert_ne!(unsafe { VirtualFree(reserved, 0, MEM_RELEASE) }, 0);
+            let left = unsafe {
+                VirtualAlloc(
+                    reserved,
+                    GRANULARITY,
+                    MEM_RESERVE | MEM_COMMIT,
+                    PAGE_READWRITE,
+                )
+            }
+            .cast::<u8>();
+            let right = unsafe {
+                VirtualAlloc(
+                    (reserved as usize + GRANULARITY) as _,
+                    GRANULARITY,
+                    MEM_RESERVE | MEM_COMMIT,
+                    PAGE_READWRITE,
+                )
+            }
+            .cast::<u8>();
+            if !left.is_null() && !right.is_null() {
+                pair = Some((Page(left), Page(right)));
+                break;
+            }
+            for pointer in [left, right]
+                .into_iter()
+                .filter(|pointer| !pointer.is_null())
+            {
+                assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
+            }
+        }
+        let (left, right) =
+            pair.expect("owned adjacent allocations must be established, not skipped");
+        let target = right.0;
+        let slot = unsafe { left.0.add(GRANULARITY - PROPERTY_PREFIX_LEN) };
+        let relay = unsafe { right.0.add(128) };
+        let original = [0x48, 0x8b, 0xc4, 0x53, 0x55, 0x56, 0x57, 0x90];
+        unsafe {
+            ptr::copy_nonoverlapping(original.as_ptr(), target, 8);
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), slot, PROPERTY_PREFIX_LEN);
+            ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+        }
+        for page in [&left, &right] {
+            let mut previous = 0;
+            assert_ne!(
+                unsafe {
+                    VirtualProtect(page.0.cast(), GRANULARITY, PAGE_EXECUTE_READ, &mut previous)
+                },
+                0
+            );
+        }
+        assert_eq!(slot as usize + PROPERTY_PREFIX_LEN, target as usize);
+        assert_eq!(
+            copy_current::<PROPERTY_PREFIX_LEN>(slot as u64),
+            Some(PROPERTY_PREFIX_PAD)
+        );
+        assert_eq!(padding_slot(target), None);
+        let (patched, prefix) = plan(target, original, relay).unwrap();
+        assert!(prefix.is_none());
+        assert_eq!(patched[0], 0xcc);
+    }
     static PROBE_TARGET: AtomicU64 = AtomicU64::new(0);
     static PROBE_RIP: AtomicU64 = AtomicU64::new(u64::MAX);
     #[test]
@@ -403,6 +625,26 @@ mod tests {
         unsafe { SetLastError(0x87654321) };
         let result = unsafe { native_entry_owned_module_fixture(0x12340000) };
         let error = unsafe { GetLastError() };
+        assert!(owned(&hook));
+        // An unchanged entry cannot prove ownership when its late exception
+        // destination no longer matches the retained mapping.
+        let destination = unsafe { ptr::read_unaligned(relay.add(6).cast::<u64>()) };
+        assert_ne!(
+            unsafe { VirtualProtect(relay.cast(), CODE_PAGE, PAGE_READWRITE, &mut previous) },
+            0
+        );
+        unsafe {
+            ptr::write_unaligned(relay.add(6).cast::<u64>(), destination ^ 8);
+        }
+        let mismatched_destination_owned = owned(&hook);
+        unsafe {
+            ptr::write_unaligned(relay.add(6).cast::<u64>(), destination);
+        }
+        assert_ne!(
+            unsafe { VirtualProtect(relay.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut previous) },
+            0
+        );
+        assert!(!mismatched_destination_owned);
         assert!(owned(&hook));
         let restored = unsafe {
             exchange_entry(

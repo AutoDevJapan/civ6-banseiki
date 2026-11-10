@@ -6,6 +6,21 @@ static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 pub(super) fn hook_entries_owned() -> bool {
     owns_hook_entries(&HOOKS, SITES.len())
 }
+#[cfg(test)]
+pub(super) fn fixture_entry_owners() -> Vec<(usize, [u8; 8], bool)> {
+    HOOKS
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|owned| {
+            (
+                owned.hook.target as usize,
+                owned.hook.patched,
+                native_entry::owned(&owned.hook),
+            )
+        })
+        .collect()
+}
 
 static CORE: AtomicU64 = AtomicU64::new(0);
 static EXE: AtomicU64 = AtomicU64::new(0);

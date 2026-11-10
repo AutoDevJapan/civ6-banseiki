@@ -786,6 +786,10 @@ pub(in super::super) unsafe fn fixture_host_jobs(exe: usize) -> Result<(), &'sta
 pub(in super::super) fn fixture_host_job_sites() -> [(usize, [u8; 8], usize); 4] {
     jobs::fixture_host_sites()
 }
+#[cfg(test)]
+pub(in super::super) fn fixture_host_job_owners() -> Vec<(usize, [u8; 8], bool)> {
+    jobs::fixture_entry_owners()
+}
 
 /// Restore every owned entry, retaining each relay for already fetched jumps.
 /// Failed compares retain responsibility and do not prevent later restores.

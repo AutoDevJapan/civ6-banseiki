@@ -1213,13 +1213,32 @@ mod tests {
 
     #[test]
     fn partial_host_prepare_failure_restores_published_entries_and_allows_retry() {
+        partial_host_prepare_fixture(
+            false,
+            "partial_host_prepare_failure_restores_published_entries_and_allows_retry",
+        );
+    }
+    #[test]
+    fn partial_host_prepare_failure_restores_short_entries_and_allows_retry() {
+        partial_host_prepare_fixture(
+            true,
+            "partial_host_prepare_failure_restores_short_entries_and_allows_retry",
+        );
+    }
+    fn partial_host_prepare_fixture(padding: bool, name: &str) {
         const ENV: &str = "CIV6_RUNTIME_PARTIAL_HOST_CHILD";
         if std::env::var_os(ENV).is_none() {
             use std::os::windows::process::CommandExt;
             let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-                .creation_flags(0x08000000).env(ENV, "1")
-                .args(["--exact", "windows::runtime::tests::partial_host_prepare_failure_restores_published_entries_and_allows_retry", "--nocapture"])
-                .spawn().unwrap();
+                .creation_flags(0x08000000)
+                .env(ENV, "1")
+                .args([
+                    "--exact",
+                    &format!("windows::runtime::tests::{name}"),
+                    "--nocapture",
+                ])
+                .spawn()
+                .unwrap();
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
             loop {
                 if let Some(status) = child.try_wait().unwrap() {
@@ -1244,6 +1263,13 @@ mod tests {
         for (rva, bytes, _) in sites {
             unsafe {
                 ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, 8);
+                if padding {
+                    ptr::copy_nonoverlapping(
+                        PROPERTY_PREFIX_PAD.as_ptr(),
+                        (base + rva - PROPERTY_PREFIX_LEN) as *mut u8,
+                        PROPERTY_PREFIX_LEN,
+                    );
+                }
             }
         }
         let bad = (base + sites[3].0) as *mut u8;
@@ -1264,12 +1290,20 @@ mod tests {
                 true,
                 std::panic::AssertUnwindSafe(|| {
                     let result = unsafe { native::fixture_host_jobs(base) };
+                    let owners = native::fixture_host_job_owners();
                     published.set(Some((
                         result,
-                        sites
-                            .iter()
-                            .take(3)
-                            .all(|(rva, _, _)| (unsafe { *((base + rva) as *const u8) }) == 0xe9),
+                        owners.len() == 3
+                            && owners.iter().zip(sites.iter()).all(
+                                |((target, patched, owned), (rva, original, _))| {
+                                    *target == base + rva
+                                        && *owned
+                                        && *patched != *original
+                                        && patched[0] == if padding { 0xeb } else { 0xcc }
+                                        && unsafe { ptr::read(*target as *const [u8; 8]) }
+                                            == *patched
+                                },
+                            ),
                     )));
                     result
                 })
