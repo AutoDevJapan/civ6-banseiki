@@ -1108,6 +1108,10 @@ controller は独立した2回の読取を、元の `.bin` と `-second.bin` へ
 
 既に予約した入力が実行される前にフラグ観測を失った場合も、正確なSession・callback・registry・Worldの生存条件は照合する。正規の元callbackはWorld資格なしで実行し、そのticketの会計だけを精算して、診断2072とWorld別の不足を残す。別の正常な入力の資格を恒久的には閉じず、この不足を排出完了へ変えない。退役World、異なるcallbackやregistryなどの不正な対応は引き続き拒否する。
 
+localの開始処理RVA `0x84e4e0` は、先にvtableの `+0x58` を呼ぶ。固定した `0x84ec00` の全命令・unwind情報とslotを照合し、元処理がnetwork欄を消した後の固定constructor入口、または新規割当がなかった場合の呼出し元正常復帰を、次のbinding試行へ移る境界として扱う。終了前に旧入力の資格を閉じるが、旧graphの会計はその境界まで保持する。同じ物理アドレスを再利用しても新しいbinding incarnationを割り当て、新しいconstructor・thread・公開の実観測がそろってから関係を返す。古い未公開状態を新しい公開やjoin成功へ変えない。
+
+旧bindingのticketとそのコピーは旧IDを保ち、WorldとSessionが生存する場合だけ資格なしの元callbackへ渡す。Session所有者の正常復帰後も残る取消・byte storageのコピーには退役済みの印を残し、新しいWorldへ移さず、取消を一度だけ精算する。旧graphの不足はWorld別に保持する。割当失敗後の次の試行、未公開receiverの通常復帰、旧会計が残る間の退役拒否と、AL0のjoinから破壊的処理へ戻らないことを所有fixtureで検査する。これらは実Game全域の停止・保存読込・製品受入の証明ではない。
+
 出生を確認できないWorldのcontrol終了も、元処理の開始から正常復帰またはWindowsのterminal unwindまで、別の観測区間を保持する。その間は出生窓を発行しない。誤った終了tokenは区間を消さず、正しい終了後には新しい窓を発行できる。閉鎖cookie・Wait・shutdownの証明は発行しない。実gatewayの所有stub内部の窓照会と実unwind、元処理一回・全幅戻り値・LastErrorを検査し、区間解放を削る変異が正常復帰後の恒久拒否を起こすことも検出する。
 
 ### native 入口を命令の途中で置き換えない

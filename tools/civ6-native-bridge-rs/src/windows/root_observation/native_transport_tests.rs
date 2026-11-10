@@ -9,9 +9,36 @@ static NETWORK: AtomicU64 = AtomicU64::new(0);
 static POINTER: AtomicU64 = AtomicU64::new(0);
 static THREAD: AtomicU64 = AtomicU64::new(0);
 static START_OK: AtomicBool = AtomicBool::new(true);
+static NETWORK_ALLOC_OK: AtomicBool = AtomicBool::new(true);
+static RESET_JOIN_ENABLED: AtomicBool = AtomicBool::new(false);
+static RESET_JOIN_AL: AtomicU64 = AtomicU64::new(1);
+pub(super) fn reset_join_caller() -> Option<u64> {
+    (FIXTURE.load(Ordering::Acquire) && RESET_JOIN_ENABLED.load(Ordering::Acquire))
+        .then_some(transport_fixture_reset_join_return as *const () as u64)
+}
+extern "system" fn reset_join_original(_: u64, _: u64) -> u64 {
+    let error = unsafe { GetLastError() };
+    let al = RESET_JOIN_AL.load(Ordering::Acquire);
+    if std::env::var_os("CIV6_NATIVE_RESET_EXPECT_AL0").is_some() {
+        eprintln!("reset-original-join-AL{al}-reached");
+    }
+    unsafe { SetLastError(error) };
+    al
+}
+extern "system" fn reset_destructive_continuation() {
+    if std::env::var_os("CIV6_NATIVE_RESET_EXPECT_AL0").is_some() {
+        eprintln!("reset-destructive-continuation-reached");
+    }
+}
+fn enable_reset_join() {
+    RESET_JOIN_ENABLED.store(true, Ordering::Release);
+    super::super::NATIVE_SESSION_CONTINUE[5]
+        .store(reset_join_original as *const () as u64, Ordering::Release);
+}
 static OBSERVED: AtomicU64 = AtomicU64::new(0);
 static HIT: AtomicU64 = AtomicU64::new(0);
 static EXTRA: AtomicU64 = AtomicU64::new(99);
+static UNQUALIFIED_RECEIVE: AtomicBool = AtomicBool::new(false);
 pub(super) fn caller_override(rva: u64) -> Option<u64> {
     if !FIXTURE.load(Ordering::Acquire) {
         return None;
@@ -102,6 +129,12 @@ extern "system" fn before_start(functor: u64, thread: u64, extra: u64) -> u64 {
     thread
 }
 extern "system" fn receive_body(network: u64) -> u64 {
+    if UNQUALIFIED_RECEIVE.load(Ordering::Acquire) {
+        let birth = CALLS.with(|calls| calls.borrow().last().and_then(|call| call.birth));
+        OBSERVED.store(u64::from(birth.is_none()), Ordering::Release);
+        HIT.fetch_add(1, Ordering::AcqRel);
+        return 0x8899;
+    }
     let id = CALLS
         .with(|s| s.borrow().last().and_then(|c| c.birth))
         .unwrap();
@@ -113,6 +146,18 @@ extern "system" fn receive_body(network: u64) -> u64 {
     HIT.fetch_add(1, Ordering::AcqRel);
     unsafe { SetLastError(0x1234) };
     0x8899
+}
+extern "system" fn reset_body(pointer: u64) -> u64 {
+    let error = unsafe { GetLastError() };
+    let network = value(pointer + 0x10);
+    if network != 0 {
+        unsafe {
+            *((network + 0xc0) as *mut u64) = 0;
+            *((pointer + 0x10) as *mut u64) = 0;
+        }
+    }
+    unsafe { SetLastError(error) };
+    u64::from(network != 0)
 }
 extern "system" fn unused_body() -> u64 {
     0
@@ -134,9 +179,10 @@ global_asm!(
     "call {factory_body}","lea rsp,[rsp+0x30]","pop rbx","ret",".seh_endproc",
     ".p2align 4",".globl transport_fixture_local",".seh_proc transport_fixture_local","transport_fixture_local:",
     "mov [rsp+8],rbx",".seh_savereg rbx,8","push rdi",".seh_pushreg rdi","sub rsp,0x30",".seh_stackalloc 0x30",".seh_endprologue",
-    "mov rbx,rcx","mov rcx,[rip+{network}]","call {network_ctor}",".globl transport_fixture_network_return","transport_fixture_network_return:",
-    "mov [rbx+0x10],rax","mov rcx,rax","call {start}",".globl transport_fixture_start_return","transport_fixture_start_return:",
-    "mov eax,1","mov rbx,[rsp+0x40]","lea rsp,[rsp+0x30]","pop rdi","ret",".seh_endproc",
+    "mov rbx,rcx","call {reset}","cmp byte ptr [rip+{network_alloc}],0","je 3f","mov rcx,[rip+{network}]","call {network_ctor}",".globl transport_fixture_network_return","transport_fixture_network_return:",
+    "mov [rbx+0x10],rax","mov rcx,rax","test rcx,rcx","je 4f","call {start}",".globl transport_fixture_start_return","transport_fixture_start_return:",
+    "4:","cmp qword ptr [rbx+0x10],0","setne al","movzx eax,al","mov rbx,[rsp+0x40]","lea rsp,[rsp+0x30]","pop rdi","ret",
+    "3:","xor eax,eax","jmp transport_fixture_network_return",".seh_endproc",
     ".p2align 4",".globl transport_fixture_network",".seh_proc transport_fixture_network","transport_fixture_network:",
     "mov [rsp+0x10],rbx",".seh_savereg rbx,0x10","sub rsp,0x28",".seh_stackalloc 0x28",".seh_endprologue",
     "call {network_body}","mov rbx,[rsp+0x38]","lea rsp,[rsp+0x28]","ret",".seh_endproc",
@@ -158,11 +204,18 @@ global_asm!(
     ".p2align 4",".globl transport_fixture_receive",".seh_proc transport_fixture_receive","transport_fixture_receive:",
     "mov [rsp+0x10],rbx",".seh_savereg rbx,0x10","sub rsp,0x28",".seh_stackalloc 0x28",".seh_endprologue",
     "call {receive_body}","mov rbx,[rsp+0x38]","lea rsp,[rsp+0x28]","ret",".seh_endproc",
+    ".p2align 4",".globl transport_fixture_reset",".seh_proc transport_fixture_reset","transport_fixture_reset:",
+    ".byte 0x40,0x53",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",".seh_endprologue",
+    "mov rbx,rcx","cmp byte ptr [rip+{reset_join}],0","je 5f","mov rcx,[rbx+0x10]","test rcx,rcx","je 5f","mov rcx,[rcx+0xc0]","test rcx,rcx","je 5f",
+    "mov edx,0xffffffff","call {join_gateway}",".globl transport_fixture_reset_join_return","transport_fixture_reset_join_return:","call {destructive}",
+    "5:","mov rcx,rbx","call {reset_body}","lea rsp,[rsp+0x20]","pop rbx","ret",".seh_endproc",
     factory=sym transport_fixture_factory_c,local=sym transport_fixture_local,factory_body=sym factory_body,
     network=sym NETWORK,network_ctor=sym transport_fixture_network,network_body=sym network_body,
     start=sym transport_fixture_start,creator=sym transport_fixture_creator,callback=sym FIXTURE_CALLBACK,
     thread=sym THREAD,thread_ctor=sym transport_fixture_thread,thread_body=sym thread_body,
     before_start=sym before_start,receive_body=sym receive_body,unused=sym unused_body,
+    reset=sym transport_fixture_reset,reset_body=sym reset_body,network_alloc=sym NETWORK_ALLOC_OK,
+    reset_join=sym RESET_JOIN_ENABLED,join_gateway=sym super::super::native_session_join_gateway,destructive=sym reset_destructive_continuation,
 );
 #[unsafe(no_mangle)]
 static FIXTURE_CALLBACK: AtomicU64 = AtomicU64::new(0);
@@ -177,6 +230,8 @@ unsafe extern "system" {
     fn transport_fixture_creator();
     fn transport_fixture_thread();
     fn transport_fixture_receive(network: u64) -> u64;
+    fn transport_fixture_reset();
+    fn transport_fixture_reset_join_return();
     fn transport_fixture_factory_return();
     fn transport_fixture_network_return();
     fn transport_fixture_start_return();
@@ -209,6 +264,8 @@ fn setup_with_transport_offset(offset: usize) -> (u64, SessionLease, [usize; 9],
         *(session as *mut u64) = exe(0x1045bd8);
         *((session + 0x30) as *mut u64) = callback;
         *((exe(0x1045bd8) + 0x408) as *mut u64) = exe(0x83ade0);
+        *((exe(0x1047e60) + 0x40) as *mut u64) = exe(0x84ebd0);
+        *((exe(0x1047e60) + 0x58) as *mut u64) = exe(0x84ec00);
         *((exe(0x106d030) + 8) as *mut u64) = exe(0x98c170);
     }
     POINTER.store(p, Ordering::Release);
@@ -432,6 +489,199 @@ fn failed_native_start_preserves_null_and_never_publishes_a_transport() {
     for p in owned {
         unsafe { VirtualFree(p.cast(), 0, MEM_RELEASE) };
     }
+}
+fn restart_case(published_first: bool) {
+    let (session, lease, _, owned) = setup();
+    if published_first {
+        enable_reset_join();
+    }
+    START_OK.store(published_first, Ordering::Release);
+    unsafe {
+        SetLastError(0x1234);
+        transport_fixture_driver(session)
+    };
+    let pointer = POINTER.load(Ordering::Acquire);
+    let old = state().pointer_birth(pointer).unwrap();
+    let original: unsafe extern "system" fn(u64, u64) -> u64 =
+        unsafe { std::mem::transmute(transport_fixture_local as *const ()) };
+    START_OK.store(true, Ordering::Release);
+    unsafe { SetLastError(0x1234) };
+    let result = unsafe { original(pointer, 0x1234) };
+    let error = unsafe { GetLastError() };
+    let current = super::super::state().transport(lease).unwrap();
+    let old_snapshot = state().snapshot(old);
+    let qualified = from_network(current.network);
+    unsafe { restore().unwrap() };
+    for region in owned {
+        assert_ne!(unsafe { VirtualFree(region.cast(), 0, MEM_RELEASE) }, 0);
+    }
+    assert_eq!(result, 1);
+    assert_eq!(error, 0x1234);
+    assert_ne!(
+        current.incarnation, old.0,
+        "a normal reset needs a new binding identity even when addresses are reused"
+    );
+    assert_eq!(
+        old_snapshot,
+        Err(Error::Stale),
+        "old metadata retirement is not a join certificate"
+    );
+    assert_eq!(qualified, Ok(Some((lease, current))));
+    assert_eq!(
+        census::event_count(census::SemanticEvent::TransportPublished),
+        1 + u64::from(published_first)
+    );
+    assert!(!FAILED.load(Ordering::Acquire));
+}
+#[test]
+fn local_restart_after_failed_start_reaches_original_and_publishes_a_fresh_binding() {
+    if child("local_restart_after_failed_start_reaches_original_and_publishes_a_fresh_binding") {
+        restart_case(false);
+    }
+}
+#[test]
+fn local_restart_after_publication_keeps_original_and_renews_the_binding() {
+    if child("local_restart_after_publication_keeps_original_and_renews_the_binding") {
+        restart_case(true);
+    }
+}
+#[test]
+fn local_restart_allocation_failure_keeps_the_next_observed_attempt_eligible() {
+    if !child("local_restart_allocation_failure_keeps_the_next_observed_attempt_eligible") {
+        return;
+    }
+    let (session, lease, _, owned) = setup();
+    enable_reset_join();
+    unsafe {
+        SetLastError(0x1234);
+        transport_fixture_driver(session)
+    };
+    let pointer = POINTER.load(Ordering::Acquire);
+    let old = super::super::state().transport(lease).unwrap();
+    let local: unsafe extern "system" fn(u64, u64) -> u64 =
+        unsafe { std::mem::transmute(transport_fixture_local as *const ()) };
+    NETWORK_ALLOC_OK.store(false, Ordering::Release);
+    let failed = unsafe { local(pointer, 0x1234) };
+    let next = state().pointer_birth(pointer).unwrap();
+    let candidate = state().snapshot(next).unwrap().3;
+    let no_publication = super::super::state().transport(lease);
+    NETWORK_ALLOC_OK.store(true, Ordering::Release);
+    unsafe { SetLastError(0x1234) };
+    let success = unsafe { local(pointer, 0x1234) };
+    let current = super::super::state().transport(lease).unwrap();
+    unsafe { restore().unwrap() };
+    for region in owned {
+        assert_ne!(unsafe { VirtualFree(region.cast(), 0, MEM_RELEASE) }, 0);
+    }
+    assert_eq!(failed, 0);
+    assert_eq!(success, 1);
+    assert_eq!(candidate.network, 0);
+    assert_eq!(candidate.thread, 0);
+    assert_ne!(next.0, old.incarnation);
+    assert_eq!(current.incarnation, next.0);
+    assert_eq!(no_publication, Err(Error::Unbound));
+    assert_eq!(
+        census::event_count(census::SemanticEvent::TransportPublished),
+        2
+    );
+}
+#[test]
+fn local_restart_join_al0_stops_before_native_destructive_continuation() {
+    const NAME: &str = "local_restart_join_al0_stops_before_native_destructive_continuation";
+    const ENV: &str = "CIV6_NATIVE_RESET_EXPECT_AL0";
+    if std::env::var_os(ENV).is_some() {
+        unsafe { windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode(3) };
+        let (session, _, _, _owned) = setup();
+        enable_reset_join();
+        unsafe {
+            SetLastError(0x1234);
+            transport_fixture_driver(session)
+        };
+        RESET_JOIN_AL.store(0, Ordering::Release);
+        let local: unsafe extern "system" fn(u64, u64) -> u64 =
+            unsafe { std::mem::transmute(transport_fixture_local as *const ()) };
+        unsafe { local(POINTER.load(Ordering::Acquire), 0x1234) };
+        panic!("reset AL0 reached the original continuation");
+    }
+    let output = crate::windows::test_child_output::run(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args([
+                "--exact",
+                &format!(
+                    "windows::root_observation::native_frames::sessions::transports::tests::{NAME}"
+                ),
+                "--nocapture",
+            ]),
+        Duration::from_secs(15),
+    )
+    .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code().map(|value| value as u32),
+        Some(0xc0000409)
+    );
+    assert!(
+        stderr.contains("reset-original-join-AL0-reached"),
+        "wrong failure: {stderr}"
+    );
+    assert!(
+        !stderr.contains("reset-destructive-continuation-reached") && !stderr.contains("panicked"),
+        "unsafe or fixture failure: {stderr}"
+    );
+}
+#[test]
+fn unpublished_receive_executes_original_without_an_input_relationship() {
+    if !child("unpublished_receive_executes_original_without_an_input_relationship") {
+        return;
+    }
+    let (session, lease, _, owned) = setup();
+    START_OK.store(false, Ordering::Release);
+    unsafe { transport_fixture_driver(session) };
+    UNQUALIFIED_RECEIVE.store(true, Ordering::Release);
+    HIT.store(0, Ordering::Release);
+    let result = unsafe { transport_fixture_receive(NETWORK.load(Ordering::Acquire)) };
+    let qualified = from_network(NETWORK.load(Ordering::Acquire));
+    let transport = super::super::state().transport(lease);
+    unsafe { restore().unwrap() };
+    for region in owned {
+        assert_ne!(unsafe { VirtualFree(region.cast(), 0, MEM_RELEASE) }, 0);
+    }
+    assert_eq!(result, 0x8899);
+    assert_eq!(HIT.load(Ordering::Acquire), 1);
+    assert_eq!(OBSERVED.load(Ordering::Acquire), 1);
+    assert_eq!(qualified, Ok(None));
+    assert_eq!(transport, Err(Error::Unbound));
+}
+#[test]
+fn reset_retirement_waits_for_old_executions_and_never_joins_the_old_binding() {
+    let mut ledger = Ledger::default();
+    let old = ledger.factory(SessionLease(1), 2, 3).unwrap();
+    ledger.transport(old, 4, 3).unwrap();
+    ledger.network(old, 5).unwrap();
+    ledger.thread(old, 6).unwrap();
+    let transport = ledger.publish(old, 6).unwrap();
+    assert_eq!(ledger.enter(5), Ok(Some(old)));
+    ledger.reset_begin(old).unwrap();
+    assert_eq!(ledger.published_network(5), Ok(None));
+    assert_eq!(ledger.reset_returned(old), Err(Error::Busy));
+    ledger.leave(old).unwrap();
+    let fresh = ledger.reset_returned(old).unwrap();
+    assert_ne!(fresh, old);
+    assert_eq!(
+        ledger.joined(SessionLease(1), transport, 6, 1),
+        Err(Error::Stale)
+    );
+    assert_eq!(ledger.snapshot(old), Err(Error::Stale));
+    ledger.network(fresh, 5).unwrap();
+    ledger.thread(fresh, 6).unwrap();
+    let new = ledger.publish(fresh, 6).unwrap();
+    assert_ne!(new.incarnation, transport.incarnation);
+    assert_eq!(
+        ledger.published_network(5),
+        Ok(Some((SessionLease(1), new)))
+    );
 }
 extern "system" fn unpublished_close_original(session: u64) -> u64 {
     assert_eq!(unsafe { GetLastError() }, 0x87654321);

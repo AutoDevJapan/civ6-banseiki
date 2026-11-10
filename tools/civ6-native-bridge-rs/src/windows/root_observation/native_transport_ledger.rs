@@ -17,6 +17,7 @@ enum Phase {
     UnprovenClosing,
     Unproven,
     UnprovenClosed,
+    Resetting,
 }
 struct Record {
     lease: Lease,
@@ -107,6 +108,7 @@ impl Ledger {
                         | Phase::UnprovenClosing
                         | Phase::Unproven
                         | Phase::UnprovenClosed
+                        | Phase::Resetting
                 )
             })
         })
@@ -121,6 +123,7 @@ impl Ledger {
                         | Phase::UnprovenClosing
                         | Phase::Unproven
                         | Phase::UnprovenClosed
+                        | Phase::Resetting
                 )
             })
         })
@@ -201,6 +204,62 @@ impl Ledger {
         r.phase = Phase::Network;
         Ok(())
     }
+    pub fn reset_begin(&mut self, id: Birth) -> Result<(), Error> {
+        if self.failed {
+            return Err(Error::Unresolved);
+        }
+        let record = self.records.get_mut(&id.0).ok_or(Error::Unknown)?;
+        if !matches!(record.phase, Phase::Network | Phase::Published) {
+            return Err(Error::Stale);
+        }
+        record.phase = Phase::Resetting;
+        self.unproven_close = true;
+        Ok(())
+    }
+    /// A verified original reset returned before the next native constructor
+    /// (or before the complete caller returned with no new network). This is
+    /// a fresh binding attempt under the still-live physical transport, not
+    /// a successful join or a replay of its earlier unpublished attempt.
+    pub fn reset_returned(&mut self, id: Birth) -> Result<Birth, Error> {
+        self.reset_ready(id)?;
+        if self.failed {
+            return Err(Error::Unresolved);
+        }
+        let old = self.records.get(&id.0).ok_or(Error::Unknown)?;
+        let next = self.next.checked_add(1).ok_or(Error::Exhausted)?;
+        let (lease, session, callback, pointer) =
+            (old.lease, old.session, old.callback, old.pointer);
+        self.records.get_mut(&id.0).unwrap().phase = Phase::UnprovenClosed;
+        self.records.get_mut(&id.0).unwrap().joined = false;
+        let fresh = Birth(next);
+        self.next = next;
+        self.records.insert(
+            next,
+            Record {
+                lease,
+                session,
+                callback,
+                pointer,
+                network: 0,
+                thread: 0,
+                phase: Phase::Transport,
+                active: 0,
+                joined: false,
+            },
+        );
+        self.pointers.insert(pointer, fresh);
+        Ok(fresh)
+    }
+    pub fn reset_ready(&self, id: Birth) -> Result<(), Error> {
+        if self.failed {
+            return Err(Error::Unresolved);
+        }
+        let old = self.records.get(&id.0).ok_or(Error::Unknown)?;
+        if old.phase != Phase::Resetting || old.active != 0 || old.pointer == 0 {
+            return Err(Error::Busy);
+        }
+        Ok(())
+    }
     pub fn enter(&mut self, network: u64) -> Result<Option<Birth>, Error> {
         let Some(id) = self.network_birth(network) else {
             return Ok(None);
@@ -210,7 +269,7 @@ impl Ledger {
         }
         let r = self.records.get_mut(&id.0).unwrap();
         if !matches!(r.phase, Phase::Thread | Phase::Published | Phase::Closing) {
-            return Err(Error::Stale);
+            return Ok(None);
         }
         r.active = r.active.checked_add(1).ok_or(Error::Exhausted)?;
         Ok(Some(id))
@@ -237,13 +296,21 @@ impl Ledger {
         let r = self.records.get(&id.0).ok_or(Error::Unknown)?;
         match r.phase {
             Phase::Published => Ok(true),
-            Phase::Transport | Phase::Network | Phase::Thread | Phase::Unproven => Ok(false),
+            Phase::Transport
+            | Phase::Network
+            | Phase::Thread
+            | Phase::Unproven
+            | Phase::Resetting => Ok(false),
             _ => Err(Error::Stale),
         }
     }
     pub fn capture_allowed(&self, session: u64) -> bool {
         !self.records.values().any(|r| {
-            r.session == session && matches!(r.phase, Phase::UnprovenClosing | Phase::Unproven)
+            r.session == session
+                && matches!(
+                    r.phase,
+                    Phase::UnprovenClosing | Phase::Unproven | Phase::Resetting
+                )
         })
     }
     pub fn unproven_begin(&mut self, id: Birth) -> Result<(), Error> {

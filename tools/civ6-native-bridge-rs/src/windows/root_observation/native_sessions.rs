@@ -415,6 +415,18 @@ pub(super) fn publish_transport(
     }
     result
 }
+pub(super) fn native_transport_reset_begin(
+    lease: SessionLease,
+    transport: SessionTransport,
+) -> Result<(), SessionError> {
+    state().native_reset_begin(lease, transport)
+}
+pub(super) fn native_transport_reset_returned(
+    lease: SessionLease,
+    transport: SessionTransport,
+) -> Result<(), SessionError> {
+    state().native_reset_returned(lease, transport)
+}
 pub(super) fn transport_disconnect_begin(
     lease: SessionLease,
 ) -> Result<Option<SessionTransport>, SessionError> {
@@ -501,6 +513,12 @@ fn read32(p: u64) -> Result<u32, Error> {
 }
 fn caller(raw: &Saved, rva: u64) -> bool {
     #[cfg(test)]
+    if rva == 0x8573c9 {
+        if let Some(pc) = transports::fixture_reset_join_caller() {
+            return raw.invocation.caller == pc;
+        }
+    }
+    #[cfg(test)]
     if let Some(pc) = tests::caller_override(rva) {
         return raw.invocation.caller == pc;
     }
@@ -537,6 +555,16 @@ fn snapshot_transport(lease: Lease) -> Result<(), Error> {
     } else {
         Err(Error::Unbound)
     }
+}
+fn validate_dispatch_owner(lease: Lease, id: u32) -> Result<(), Error> {
+    let (session, _, _) = state().snapshot(lease)?;
+    let registry = state().registry(lease)?;
+    if read64(EXE.load(Ordering::Acquire) + 0x235b878)? != registry
+        || registry_slot(registry, id)? != session
+    {
+        return Err(Error::Stale);
+    }
+    Ok(())
 }
 fn snapshot_transport_active(lease: Lease) -> Result<bool, Error> {
     let (session, _, _) = state().snapshot(lease)?;
@@ -655,27 +683,30 @@ extern "system" fn begin(raw: *mut Saved) {
                     .unwrap_or_else(|| INPUT.with(|s| s.borrow().last().copied()));
                 if let Some(message) = message {
                     let id = read32(raw.gpr[0] + 8).unwrap_or_else(|_| fault());
-                    let lease = state()
-                        .dispatch(message, raw.gpr[0], id)
+                    let reset_input = state()
+                        .take_reset_input(message, raw.gpr[0], id)
                         .unwrap_or_else(|_| fault());
-                    let active = snapshot_transport_active(lease).unwrap_or_else(|_| fault());
-                    let (session, _, _) = state().snapshot(lease).unwrap_or_else(|_| fault());
-                    let registry = state().registry(lease).unwrap_or_else(|_| fault());
-                    if read64(EXE.load(Ordering::Acquire) + 0x235b878).ok() != Some(registry)
-                        || registry_slot(registry, id).ok() != Some(session)
-                    {
-                        fault();
-                    }
-                    if active {
-                        c.hold = Some(enter_scope(message).unwrap_or_else(|_| fault()));
-                        c.lease = Some(lease);
-                        c.message = Some(message);
-                    } else {
-                        state()
-                            .dispatched_unproven(message)
-                            .unwrap_or_else(|_| fault());
+                    if let Some(lease) = reset_input {
+                        validate_dispatch_owner(lease, id).unwrap_or_else(|_| fault());
                         c.packet = None;
-                        diagnostic(2072);
+                        diagnostic(2074);
+                    } else {
+                        let lease = state()
+                            .dispatch(message, raw.gpr[0], id)
+                            .unwrap_or_else(|_| fault());
+                        let active = snapshot_transport_active(lease).unwrap_or_else(|_| fault());
+                        validate_dispatch_owner(lease, id).unwrap_or_else(|_| fault());
+                        if active {
+                            c.hold = Some(enter_scope(message).unwrap_or_else(|_| fault()));
+                            c.lease = Some(lease);
+                            c.message = Some(message);
+                        } else {
+                            state()
+                                .dispatched_unproven(message)
+                                .unwrap_or_else(|_| fault());
+                            c.packet = None;
+                            diagnostic(2072);
+                        }
                     }
                 }
             }
@@ -804,6 +835,11 @@ extern "system" fn begin(raw: *mut Saved) {
                     // join/World certificate for an unproven transport.
                     c.unproven_join =
                         raw.gpr[0] == token.transport.thread && raw.gpr[1] as u32 == u32::MAX;
+                } else if transports::reset_join_candidate(raw.gpr[0]) {
+                    c.unproven_join = raw.gpr[1] as u32 == u32::MAX;
+                    if !c.unproven_join {
+                        fault();
+                    }
                 } else if registry::unproven_join_candidate(raw.gpr[0]) {
                     c.unproven_join = raw.gpr[1] as u32 == u32::MAX;
                 } else if let Some((lease, transport)) = registry::join_candidate(raw.gpr[0]) {

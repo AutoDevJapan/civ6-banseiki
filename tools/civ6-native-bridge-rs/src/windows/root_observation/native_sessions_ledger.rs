@@ -38,6 +38,11 @@ enum Phase {
     Null,
     UnprovenRetired,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NativeReset {
+    Closing(Transport),
+    Returned(Transport),
+}
 struct Record {
     registry: u64,
     registry_lifetime: Option<u64>,
@@ -56,6 +61,7 @@ struct Record {
     transport_closed: bool,
     transport_joined: bool,
     unproven_transport: Option<Transport>,
+    native_reset: Option<NativeReset>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Transport {
@@ -84,6 +90,8 @@ pub(super) struct Ledger {
     input_worlds: HashMap<u64, Option<WorldReceipt>>,
     unresolved: bool,
     transport_proof_gaps: HashSet<(u64, u64)>,
+    reset_inputs: HashSet<(u64, u64)>,
+    retired_reset_packets: HashSet<u64>,
 }
 impl Ledger {
     fn id(&mut self) -> Result<u64, Error> {
@@ -124,6 +132,7 @@ impl Ledger {
                 transport_closed: true,
                 transport_joined: false,
                 unproven_transport: None,
+                native_reset: None,
             },
         );
         Ok(Lease(id))
@@ -310,7 +319,10 @@ impl Ledger {
         }
         if r.phase != Phase::Open
             || r.active != 0
-            || self.packets.values().any(|p| p.lease == lease)
+            || self
+                .packets
+                .values()
+                .any(|p| p.lease == lease && !self.reset_inputs.contains(&(lease.0, p.transport)))
         {
             return Err(Error::Busy);
         }
@@ -342,7 +354,11 @@ impl Ledger {
             .collect::<Vec<_>>();
         if self.unresolved
             || candidates.iter().any(|(l, _, _)| {
-                self.records[&l.0].active != 0 || self.packets.values().any(|p| p.lease == *l)
+                self.records[&l.0].active != 0
+                    || self
+                        .packets
+                        .values()
+                        .any(|p| p.lease == *l && !self.reset_inputs.contains(&(l.0, p.transport)))
             })
         {
             return Err(Error::Busy);
@@ -368,11 +384,15 @@ impl Ledger {
             || (!r.transport_closed && r.unproven_transport.is_none())
             || r.transport_closing
             || r.active != 0
-            || self.packets.values().any(|p| p.lease == lease)
+            || self
+                .packets
+                .values()
+                .any(|p| p.lease == lease && !self.reset_inputs.contains(&(lease.0, p.transport)))
         {
             return Err(Error::Busy);
         }
         r.phase = Phase::Closed;
+        self.retire_reset_packets(lease);
         Ok(())
     }
     pub fn terminal_registry_end(&self, registry: u64, lifetime: u64) -> Result<(), Error> {
@@ -402,11 +422,14 @@ impl Ledger {
             || r.unproven_transport.is_none()
             || r.transport_closing
             || r.active != 0
-            || self.packets.values().any(|packet| packet.lease == lease)
+            || self.packets.values().any(|packet| {
+                packet.lease == lease && !self.reset_inputs.contains(&(lease.0, packet.transport))
+            })
         {
             return Err(Error::Busy);
         }
         r.phase = Phase::UnprovenRetired;
+        self.retire_reset_packets(lease);
         Ok(())
     }
     pub fn unproven_native_unwind(&mut self, lease: Lease) -> Result<(), Error> {
@@ -436,7 +459,22 @@ impl Ledger {
         Ok(())
     }
     pub fn unproven_transport_marker(&self, lease: Lease) -> Option<Transport> {
-        self.records.get(&lease.0)?.unproven_transport
+        let record = self.records.get(&lease.0)?;
+        record
+            .unproven_transport
+            .or(match record.native_reset {
+                Some(NativeReset::Closing(old) | NativeReset::Returned(old)) => Some(old),
+                None => None,
+            })
+            .or_else(|| {
+                record
+                    .world
+                    .filter(|world| {
+                        self.transport_proof_gaps
+                            .contains(&(world.binding_id, world.epoch))
+                    })
+                    .and(record.transport)
+            })
     }
     pub fn publish_transport(
         &mut self,
@@ -450,16 +488,20 @@ impl Ledger {
             return Err(Error::Unresolved);
         }
         let r = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        let reset = matches!(r.native_reset,Some(NativeReset::Returned(old)) if old.pointer==pointer && old.incarnation!=incarnation);
         if r.phase != Phase::Open
             || r.kind == 4
             || r.transport_closing
-            || !r.transport_closed
+            || (!r.transport_closed && !reset)
             || incarnation == 0
             || pointer == 0
             || network == 0
             || thread == 0
             || self.transport_ids.contains(&incarnation)
-            || self.packets.values().any(|p| p.lease == lease)
+            || self
+                .packets
+                .values()
+                .any(|p| p.lease == lease && !self.reset_inputs.contains(&(lease.0, p.transport)))
         {
             return Err(Error::Stale);
         }
@@ -474,9 +516,85 @@ impl Ledger {
         let r = self.records.get_mut(&lease.0).unwrap();
         r.transport = Some(transport);
         r.unproven_transport = None;
+        r.native_reset = None;
         r.transport_closed = false;
         r.transport_joined = false;
         Ok(transport)
+    }
+    pub fn native_reset_begin(&mut self, lease: Lease, old: Transport) -> Result<(), Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let record = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
+        if record.phase != Phase::Open || record.native_reset.is_some() {
+            return Err(Error::Stale);
+        }
+        if record.transport.is_none() && record.transport_closed {
+            return Ok(());
+        }
+        if record.transport != Some(old) || record.unproven_transport.is_some() {
+            return Err(Error::Stale);
+        }
+        record.native_reset = Some(NativeReset::Closing(old));
+        record.transport = None;
+        record.transport_closing = true;
+        record.transport_joined = false;
+        self.reset_inputs.insert((lease.0, old.incarnation));
+        if let Some(world) = record.world {
+            self.transport_proof_gaps
+                .insert((world.binding_id, world.epoch));
+        }
+        Ok(())
+    }
+    pub fn native_reset_returned(&mut self, lease: Lease, old: Transport) -> Result<(), Error> {
+        let record = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
+        if record.native_reset.is_none() && record.transport.is_none() && record.transport_closed {
+            return Ok(());
+        }
+        if record.native_reset != Some(NativeReset::Closing(old)) || record.transport.is_some() {
+            return Err(Error::Stale);
+        }
+        record.native_reset = Some(NativeReset::Returned(old));
+        record.transport_closing = false;
+        // The prior binding is not asserted closed or joined. Only a newly
+        // observed publication may replace it, under a different incarnation.
+        Ok(())
+    }
+    pub fn take_reset_input(
+        &mut self,
+        message: Message,
+        callback: u64,
+        id: u32,
+    ) -> Result<Option<Lease>, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let packet = self.packets.get(&message.0).ok_or(Error::Unknown)?;
+        if !self
+            .reset_inputs
+            .contains(&(packet.lease.0, packet.transport))
+        {
+            return Ok(None);
+        }
+        let record = self.records.get(&packet.lease.0).ok_or(Error::Unknown)?;
+        if packet.active
+            || record.phase != Phase::Open
+            || record.callback != callback
+            || record.native_id != Some(id)
+            || self.callbacks.get(&callback) != Some(&packet.lease)
+            || self.sessions.get(&record.session) != Some(&packet.lease)
+            || self
+                .retired_worlds
+                .contains(&(packet.world.binding_id, packet.world.epoch))
+        {
+            return Err(Error::Stale);
+        }
+        let lease = packet.lease;
+        let world = packet.world;
+        self.packets.remove(&message.0);
+        self.transport_proof_gaps
+            .insert((world.binding_id, world.epoch));
+        Ok(Some(lease))
     }
     pub fn reserve_input(
         &mut self,
@@ -524,16 +642,26 @@ impl Ledger {
         if self.unresolved {
             return Err(Error::Unresolved);
         }
+        if self.retired_reset_packets.contains(&parent.0) {
+            // Byte storage can outlive its native Session owner. Copies keep
+            // an explicitly retired identity and never adopt a current World.
+            let copy = self.id()?;
+            self.retired_reset_packets.insert(copy);
+            return Ok(Message(copy));
+        }
         let p = self.packets.get(&parent.0).ok_or(Error::Unknown)?;
+        let reset = self.reset_inputs.contains(&(p.lease.0, p.transport));
         if p.active
-            || self
-                .retired_worlds
-                .contains(&(p.world.binding_id, p.world.epoch))
+            || (!reset
+                && self
+                    .retired_worlds
+                    .contains(&(p.world.binding_id, p.world.epoch)))
         {
             return Err(Error::Stale);
         }
         let r = self.records.get(&p.lease.0).ok_or(Error::Unknown)?;
-        if r.transport.map(|t| t.incarnation) != Some(p.transport) || r.transport_closed {
+        if !reset && (r.transport.map(|t| t.incarnation) != Some(p.transport) || r.transport_closed)
+        {
             return Err(Error::Stale);
         }
         let packet = Packet {
@@ -566,15 +694,18 @@ impl Ledger {
         let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
         if !matches!(r.phase, Phase::Open | Phase::Closing)
             || r.transport.is_some_and(|current| current != t)
-            || (r.transport_closing && r.unproven_transport.is_none())
+            || (r.transport_closing && r.unproven_transport.is_none() && r.phase != Phase::Closing)
             || r.active != 0
-            || self.packets.values().any(|packet| packet.lease == lease)
+            || self.packets.values().any(|packet| {
+                packet.lease == lease && !self.reset_inputs.contains(&(lease.0, packet.transport))
+            })
         {
             return Err(Error::Busy);
         }
         // Revoke lookup/dispatch authority before the original closes it.
         // Neither the phase nor the later return is a join certificate.
         r.unproven_transport = Some(t);
+        r.native_reset = None;
         r.transport = None;
         r.transport_closing = true;
         r.transport_closed = false;
@@ -594,7 +725,9 @@ impl Ledger {
         let r = self.records.get_mut(&lease.0).ok_or(Error::Unknown)?;
         if r.unproven_transport != Some(t)
             || r.active != 0
-            || self.packets.values().any(|packet| packet.lease == lease)
+            || self.packets.values().any(|packet| {
+                packet.lease == lease && !self.reset_inputs.contains(&(lease.0, packet.transport))
+            })
         {
             return Err(Error::Stale);
         }
@@ -617,7 +750,12 @@ impl Ledger {
         if al != 1 {
             return Err(Error::NotJoined);
         }
-        if r.active != 0 || self.packets.values().any(|p| p.lease == lease) {
+        if r.active != 0
+            || self
+                .packets
+                .values()
+                .any(|p| p.lease == lease && !self.reset_inputs.contains(&(lease.0, p.transport)))
+        {
             return Err(Error::Busy);
         }
         self.records.get_mut(&lease.0).unwrap().transport_joined = true;
@@ -719,6 +857,9 @@ impl Ledger {
     pub fn pending(&self, message: Message) -> Result<(), Error> {
         if self.unresolved {
             return Err(Error::Unresolved);
+        }
+        if self.retired_reset_packets.contains(&message.0) {
+            return Err(Error::Closed);
         }
         let p = self.packets.get(&message.0).ok_or(Error::Unknown)?;
         if p.active {
@@ -922,11 +1063,28 @@ impl Ledger {
     }
     /// Only an actual pre-dispatch native cancellation owner may use this.
     pub fn cancel_before_dispatch(&mut self, message: Message) -> Result<(), Error> {
+        if self.retired_reset_packets.remove(&message.0) {
+            return Ok(());
+        }
         if self.packets.get(&message.0).is_none_or(|p| p.active) {
             return Err(Error::Busy);
         }
         self.packets.remove(&message.0);
         Ok(())
+    }
+    fn retire_reset_packets(&mut self, lease: Lease) {
+        let ids: Vec<_> = self
+            .packets
+            .iter()
+            .filter(|(_, packet)| {
+                packet.lease == lease && self.reset_inputs.contains(&(lease.0, packet.transport))
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for id in ids {
+            self.packets.remove(&id);
+            self.retired_reset_packets.insert(id);
+        }
     }
     #[cfg(test)]
     pub fn close(&mut self, lease: Lease) -> Result<Option<Transport>, Error> {

@@ -494,6 +494,120 @@ fn queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers
     );
 }
 #[test]
+fn reset_packets_keep_the_old_identity_and_only_new_publication_enters_world_scope() {
+    if !child("reset_packets_keep_the_old_identity_and_only_new_publication_enters_world_scope") {
+        return;
+    }
+    let mut fixture = Fixture::new();
+    ADMISSION_CHECK_SEAL.store(false, Ordering::Release);
+    let lease = fixture.birth(true).unwrap();
+    fixture.bind(lease);
+    let old = state().transport(lease).unwrap();
+    let queued = NativeSessionApi::reserve_message(lease).unwrap();
+    let fresh = {
+        let mut ledger = state();
+        ledger.native_reset_begin(lease, old).unwrap();
+        assert_eq!(
+            ledger.publish_transport(
+                lease,
+                old.incarnation + 1,
+                old.pointer,
+                old.network,
+                old.thread
+            ),
+            Err(Error::Stale),
+            "publication before original reset return must fail"
+        );
+        ledger.native_reset_returned(lease, old).unwrap();
+        let new = ledger
+            .publish_transport(
+                lease,
+                old.incarnation + 1,
+                old.pointer,
+                old.network,
+                old.thread,
+            )
+            .unwrap();
+        assert_eq!(
+            ledger.take_reset_input(queued, fixture.callback.as_ptr() as u64 + 8, 17),
+            Err(Error::Stale)
+        );
+        assert_eq!(
+            ledger.pending(queued),
+            Ok(()),
+            "wrong owner must not consume the old ticket"
+        );
+        new
+    };
+    assert_ne!(old.incarnation, fresh.incarnation);
+    let copied = state().fork_input(queued).unwrap();
+    assert_eq!(
+        NativeSessionApi::with_message(copied, || fixture.incoming()),
+        Ok(0x445566)
+    );
+    assert_eq!(ADMISSION_OBSERVED.load(Ordering::Acquire), 0);
+    assert_eq!(
+        NativeSessionApi::with_message(queued, || fixture.incoming()),
+        Ok(0x445566)
+    );
+    assert_eq!(ADMISSION_OBSERVED.load(Ordering::Acquire), 0);
+    let next = NativeSessionApi::reserve_message(lease).unwrap();
+    assert_eq!(
+        NativeSessionApi::with_message(next, || fixture.incoming()),
+        Ok(0x445566)
+    );
+    assert_eq!(ADMISSION_OBSERVED.load(Ordering::Acquire), 1);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionQualified),
+        1
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionUnqualified),
+        2
+    );
+    assert!(FRAMES.get().unwrap().healthy() && !FAILED.load(Ordering::Acquire));
+}
+#[test]
+fn reset_ticket_cancellation_after_actual_owner_retirement_is_exactly_once() {
+    let mut ledger = Ledger::default();
+    let lease = ledger.birth(1, Some(2), 3, 2).unwrap();
+    ledger.factory(lease, 17, 3, 4, 5).unwrap();
+    ledger.published(lease, 17).unwrap();
+    let world = WorldReceipt {
+        binding_id: 8,
+        epoch: 1,
+    };
+    ledger.bind_world(lease, world).unwrap();
+    let old = ledger.publish_transport(lease, 101, 6, 7, 8).unwrap();
+    let ticket = ledger.reserve(lease).unwrap();
+    ledger.native_reset_begin(lease, old).unwrap();
+    ledger.native_reset_returned(lease, old).unwrap();
+    let current = ledger.publish_transport(lease, 102, 6, 7, 8).unwrap();
+    assert_eq!(ledger.pending(ticket), Ok(()));
+    ledger.terminal_remove_begin(1, 2, 17, 4).unwrap().unwrap();
+    ledger
+        .unproven_transport_close_begin(lease, current)
+        .unwrap();
+    ledger
+        .unproven_transport_close_end(lease, current, false)
+        .unwrap();
+    assert_eq!(
+        ledger.pending(ticket),
+        Ok(()),
+        "keep the ticket until its native owner actually returns"
+    );
+    assert_eq!(ledger.terminal_remove_end(lease), Err(Error::Unresolved));
+    ledger.retire_unproven_native(lease).unwrap();
+    assert_eq!(ledger.pending(ticket), Err(Error::Closed));
+    let copied = ledger.fork_input(ticket).unwrap();
+    assert_eq!(ledger.pending(copied), Err(Error::Closed));
+    assert_eq!(ledger.cancel_before_dispatch(copied), Ok(()));
+    assert_eq!(ledger.cancel_before_dispatch(copied), Err(Error::Busy));
+    assert_eq!(ledger.cancel_before_dispatch(ticket), Ok(()));
+    assert_eq!(ledger.cancel_before_dispatch(ticket), Err(Error::Busy));
+    assert_eq!(ledger.drained(world), Err(Error::Unresolved));
+}
+#[test]
 fn unbound_birth_never_uses_message_or_current_world_as_authority() {
     let mut s = Ledger::default();
     let l = s.birth(0x10, None, 0x20, 2).unwrap();

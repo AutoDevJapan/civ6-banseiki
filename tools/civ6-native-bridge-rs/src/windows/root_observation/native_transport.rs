@@ -34,6 +34,7 @@ struct Call {
     serial: u64,
     kind: u64,
     birth: Option<Birth>,
+    reset: Option<Birth>,
     pointer: u64,
     callback: u64,
 }
@@ -80,6 +81,34 @@ fn parent(kind: u64) -> Option<Birth> {
             .find(|c| c.kind == kind)
             .and_then(|c| c.birth)
     })
+}
+pub(super) fn reset_join_candidate(thread: u64) -> bool {
+    let id = CALLS.with(|calls| {
+        calls
+            .borrow()
+            .iter()
+            .rev()
+            .find(|call| call.kind == 103)
+            .and_then(|call| call.reset)
+    });
+    id.is_some_and(|id| {
+        state()
+            .snapshot(id)
+            .is_ok_and(|(_, _, _, transport)| transport.thread != 0 && transport.thread == thread)
+    })
+}
+#[cfg(test)]
+pub(super) fn fixture_reset_join_caller() -> Option<u64> {
+    tests::reset_join_caller()
+}
+fn complete_reset(id: Birth) -> Result<Birth, SessionError> {
+    let (lease, _, _, old) = state().snapshot(id)?;
+    if read64(old.pointer + 0x10)? != 0 {
+        return Err(Error::Stale);
+    }
+    state().reset_ready(id)?;
+    super::native_transport_reset_returned(lease, old)?;
+    state().reset_returned(id)
 }
 /// Only the live original861550 invocation supplies this receiver carrier.
 pub(in super::super) fn current_receiver() -> Option<(u64, u64)> {
@@ -144,6 +173,7 @@ extern "system" fn begin(raw: *mut Saved) {
             serial: serial(),
             kind: raw.invocation.kind,
             birth: None,
+            reset: None,
             pointer: raw.gpr[0],
             callback: 0,
         };
@@ -177,16 +207,53 @@ extern "system" fn begin(raw: *mut Saved) {
             103 => {
                 let known = state().pointer_birth(c.pointer);
                 if let Some(id) = known {
-                    let (_, _, _, t) = state().snapshot(id).unwrap_or_else(|_| fault());
-                    if t.network != 0 || value(c.pointer + 0x10) != 0 {
-                        fault()
+                    let (lease, session, callback, t) =
+                        state().snapshot(id).unwrap_or_else(|_| fault());
+                    if value(c.pointer + 8) != callback
+                        || value(session + 0x28) != c.pointer
+                        || value(value(c.pointer) + 0x58) != exe(0x84ec00)
+                    {
+                        fault();
                     }
-                    if read32(c.pointer + 0x40).unwrap_or_else(|_| fault()) == 1 {
+                    if t.network != 0 {
+                        if value(c.pointer + 0x10) != t.network {
+                            diagnostic(2075);
+                        }
+                        // The pinned original calls its virtual reset before
+                        // constructing another network. Revoke admission now,
+                        // but retire this graph only at the witnessed return.
+                        super::native_transport_reset_begin(lease, t).unwrap_or_else(|_| fault());
+                        state().reset_begin(id).unwrap_or_else(|_| fault());
+                        c.reset = Some(id);
+                    } else if value(c.pointer + 0x10) != 0 {
+                        fault();
+                    } else if read32(c.pointer + 0x40).unwrap_or_else(|_| fault()) == 1 {
                         c.birth = Some(id)
                     }
                 }
             }
             104 if caller(raw, 0x84e539) => {
+                let reset = CALLS.with(|calls| {
+                    calls
+                        .borrow()
+                        .iter()
+                        .rev()
+                        .find(|call| call.kind == 103)
+                        .and_then(|call| call.reset)
+                });
+                if let Some(old) = reset {
+                    let fresh = complete_reset(old).unwrap_or_else(|_| fault());
+                    CALLS.with(|calls| {
+                        let mut calls = calls.borrow_mut();
+                        let parent = calls
+                            .iter_mut()
+                            .rev()
+                            .find(|call| call.kind == 103 && call.reset == Some(old))
+                            .unwrap_or_else(|| fault());
+                        parent.birth = Some(fresh);
+                        parent.reset = None;
+                    });
+                }
                 c.birth = parent(103);
             }
             105 if caller(raw, 0x84e551) => {
@@ -252,6 +319,11 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     }
     if c.kind == 108 {
         super::input::receiver_returned(c.pointer, c.serial, exceptional);
+    }
+    if c.kind == 103 && !exceptional {
+        if let Some(old) = c.reset {
+            complete_reset(old).unwrap_or_else(|_| fault());
+        }
     }
     let Some(id) = c.birth else { return };
     if exceptional {
