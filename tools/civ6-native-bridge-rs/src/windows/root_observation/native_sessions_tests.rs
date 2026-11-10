@@ -91,6 +91,7 @@ static HOME: AtomicU64 = AtomicU64::new(0);
 static ARG5: AtomicU64 = AtomicU64::new(0);
 static FACTORY_OBSERVED: AtomicU64 = AtomicU64::new(0);
 static ADMISSION_OBSERVED: AtomicU64 = AtomicU64::new(0);
+static ADMISSION_CHECK_SEAL: AtomicBool = AtomicBool::new(true);
 extern "system" fn factory_body(id: u32, owner: u64) -> u64 {
     let session = SESSION.load(Ordering::Acquire);
     let callback = CALLBACK.load(Ordering::Acquire);
@@ -113,13 +114,15 @@ extern "system" fn admission_body() -> u64 {
     let world = NativeSessionApi::current_world();
     if let Some(world) = world {
         let mut observed = 1;
-        observed |= u64::from(
-            FRAMES
-                .get()
-                .unwrap()
-                .seal_and_wait(Instant::now() + Duration::from_secs(1))
-                == Err(crate::native_flight::Error::Reentrant),
-        ) << 1;
+        if ADMISSION_CHECK_SEAL.load(Ordering::Acquire) {
+            observed |= u64::from(
+                FRAMES
+                    .get()
+                    .unwrap()
+                    .seal_and_wait(Instant::now() + Duration::from_secs(1))
+                    == Err(crate::native_flight::Error::Reentrant),
+            ) << 1;
+        }
         observed |= u64::from(NativeSessionApi::drained(world) == Err(Error::Busy)) << 2;
         ADMISSION_OBSERVED.store(observed, Ordering::Release);
     }
@@ -425,6 +428,69 @@ fn actual_unbound_birth_and_unknown_dispatch_forward_original_once() {
             epoch: 1
         }),
         Err(Error::Unknown)
+    );
+}
+#[test]
+fn queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers() {
+    if !child("queued_input_becomes_unqualified_while_inactive_and_new_active_input_recovers") {
+        return;
+    }
+    let mut fixture = Fixture::new();
+    ADMISSION_CHECK_SEAL.store(false, Ordering::Release);
+    let lease = fixture.birth(true).unwrap();
+    fixture.bind(lease);
+    let first = NativeSessionApi::reserve_message(lease).unwrap();
+    assert_eq!(
+        NativeSessionApi::with_message(first, || fixture.incoming()).unwrap(),
+        0x445566
+    );
+    assert_eq!(
+        ADMISSION_OBSERVED.load(Ordering::Acquire),
+        5,
+        "qualified admission is the positive control"
+    );
+    let queued = NativeSessionApi::reserve_message(lease).unwrap();
+    fixture.transport[8] = 0; // only the observed active flag changes
+    ADMISSION_OBSERVED.store(0, Ordering::Release);
+    let inactive = NativeSessionApi::with_message(queued, || fixture.incoming());
+    let inactive_scope = ADMISSION_OBSERVED.load(Ordering::Acquire);
+    fixture.transport[8] = 0x10000000000;
+    let next = NativeSessionApi::reserve_message(lease).unwrap();
+    let active = NativeSessionApi::with_message(next, || fixture.incoming());
+    assert_eq!(
+        inactive,
+        Ok(0x445566),
+        "ordinary original callback must run without World authority"
+    );
+    assert_eq!(inactive_scope, 0);
+    assert_eq!(active, Ok(0x445566));
+    assert_eq!(
+        ADMISSION_OBSERVED.load(Ordering::Acquire),
+        1,
+        "fresh active input still enters the exact World scope despite the retained drain gap"
+    );
+    assert_eq!(ADMISSION_HITS.load(Ordering::Acquire), 3);
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionQualified),
+        2
+    );
+    assert_eq!(
+        census::event_count(census::SemanticEvent::AdmissionUnqualified),
+        1
+    );
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    assert!(FRAMES.get().unwrap().healthy() && !FAILED.load(Ordering::Acquire));
+    assert_eq!(
+        NativeSessionApi::with_message(queued, || ()),
+        Err(Error::Unknown)
+    );
+    assert_eq!(
+        NativeSessionApi::drained(WorldReceipt {
+            binding_id: 8,
+            epoch: 1
+        }),
+        Err(Error::Unresolved),
+        "a missing qualified dispatch must not become a drain proof"
     );
 }
 #[test]

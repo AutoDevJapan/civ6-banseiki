@@ -907,6 +907,19 @@ impl Ledger {
         self.packets.remove(&message.0);
         Ok(())
     }
+    /// The exact callback is still native-valid, but its producer's active
+    /// observation was lost. Settle only this ticket; preserve the missing
+    /// qualification as a World-scoped gap, never a completed drain.
+    pub fn dispatched_unproven(&mut self, message: Message) -> Result<(), Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let world = self.packets.get(&message.0).ok_or(Error::Unknown)?.world;
+        self.dispatched(message)?;
+        self.transport_proof_gaps
+            .insert((world.binding_id, world.epoch));
+        Ok(())
+    }
     /// Only an actual pre-dispatch native cancellation owner may use this.
     pub fn cancel_before_dispatch(&mut self, message: Message) -> Result<(), Error> {
         if self.packets.get(&message.0).is_none_or(|p| p.active) {

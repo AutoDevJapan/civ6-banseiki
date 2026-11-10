@@ -532,6 +532,13 @@ fn registry_slot(registry: u64, id: u32) -> Result<u64, Error> {
     Err(Error::Unbound)
 }
 fn snapshot_transport(lease: Lease) -> Result<(), Error> {
+    if snapshot_transport_active(lease)? {
+        Ok(())
+    } else {
+        Err(Error::Unbound)
+    }
+}
+fn snapshot_transport_active(lease: Lease) -> Result<bool, Error> {
     let (session, _, _) = state().snapshot(lease)?;
     let t = state().transport(lease)?;
     let exe = EXE.load(Ordering::Acquire);
@@ -545,13 +552,12 @@ fn snapshot_transport(lease: Lease) -> Result<(), Error> {
     if ![exe + 0x1047e60, exe + 0x10482c8].contains(&table)
         || read64(table + 0x40)? != exe + 0x84ebd0
         || read64(table + 0x58)? != exe + 0x84ec00
-        || copy_current::<1>(t.pointer + 0x45) != Some([1])
         || read64(t.thread)? != exe + 0x106d030
         || read64(exe + 0x106d060)? != exe + 0x98c650
     {
         return Err(Error::Unbound);
     }
-    Ok(())
+    Ok(copy_current::<1>(t.pointer + 0x45) == Some([1]))
 }
 fn enter_scope(message: Message) -> Result<u64, Error> {
     if CORE.load(Ordering::Acquire) == 0 {
@@ -652,7 +658,7 @@ extern "system" fn begin(raw: *mut Saved) {
                     let lease = state()
                         .dispatch(message, raw.gpr[0], id)
                         .unwrap_or_else(|_| fault());
-                    snapshot_transport(lease).unwrap_or_else(|_| fault());
+                    let active = snapshot_transport_active(lease).unwrap_or_else(|_| fault());
                     let (session, _, _) = state().snapshot(lease).unwrap_or_else(|_| fault());
                     let registry = state().registry(lease).unwrap_or_else(|_| fault());
                     if read64(EXE.load(Ordering::Acquire) + 0x235b878).ok() != Some(registry)
@@ -660,9 +666,17 @@ extern "system" fn begin(raw: *mut Saved) {
                     {
                         fault();
                     }
-                    c.hold = Some(enter_scope(message).unwrap_or_else(|_| fault()));
-                    c.lease = Some(lease);
-                    c.message = Some(message);
+                    if active {
+                        c.hold = Some(enter_scope(message).unwrap_or_else(|_| fault()));
+                        c.lease = Some(lease);
+                        c.message = Some(message);
+                    } else {
+                        state()
+                            .dispatched_unproven(message)
+                            .unwrap_or_else(|_| fault());
+                        c.packet = None;
+                        diagnostic(2072);
+                    }
                 }
             }
             76 => {
