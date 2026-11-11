@@ -93,6 +93,8 @@ static ADMISSION_PACKET: Mutex<Option<PacketReceipt>> = Mutex::new(None);
 static FULL_HOLD: AtomicBool = AtomicBool::new(false);
 static BEFORE_PUBLISH: AtomicBool = AtomicBool::new(false);
 static GROW_MAP: AtomicU64 = AtomicU64::new(0);
+static SNAPSHOT_EXE: AtomicU64 = AtomicU64::new(0);
+static SNAPSHOT_TARGET: Mutex<Option<super::super::BootstrapTarget>> = Mutex::new(None);
 extern "system" fn before_publication(queue: u64) {
     ENQUEUE_COUNT.fetch_add(1, Ordering::AcqRel);
     let address = DESTINATION.load(Ordering::Acquire);
@@ -105,6 +107,13 @@ extern "system" fn admission_body(session: u64, message: u64) {
     let _native_inputs = (session, message);
     *ADMISSION_WORLD.lock().unwrap() = super::super::NativeSessionApi::current_world();
     *ADMISSION_PACKET.lock().unwrap() = super::super::current_packet();
+    if SNAPSHOT_EXE.load(Ordering::Acquire) != 0 {
+        *SNAPSHOT_TARGET.lock().unwrap() = wire::fixture_packet_bootstrap_target(
+            SNAPSHOT_EXE.load(Ordering::Acquire),
+            message,
+            session,
+        );
+    }
     FULL_HOLD.store(
         FRAMES
             .get()
@@ -781,6 +790,107 @@ fn unknown_packet_identity_survives_native_serialization_free_and_delayed_dispat
     assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
     assert_eq!(pending(), Ok(0));
     assert!(!super::super::unproven_input_active());
+}
+fn pre_world_queue_snapshot_load(replace: bool) {
+    let mut fixture = Fixture::new();
+    let mut owner = [
+        fixture.exe as u64 + 0xfd35c8,
+        fixture.session.as_ptr() as u64,
+    ];
+    {
+        let mut ledger = state();
+        ledger.dispatched(fixture.message).unwrap();
+        let old = ledger.close(fixture.lease).unwrap().unwrap();
+        ledger.join(fixture.lease, old, old.thread, 1).unwrap();
+        ledger.closed(fixture.lease).unwrap();
+    }
+    let lease = super::super::fixture_bootstrap_session(
+        owner.as_mut_ptr() as u64,
+        fixture.session.as_ptr() as u64,
+    );
+    let packet = super::super::fixture_pre_world_packet(lease);
+    fixture.session[3] = owner.as_ptr() as u64;
+    let mut message = [0u64; 12];
+    message[0] = fixture.exe as u64 + 0x10417e8;
+    message[3] = (5u64 << 32) | 0x4e8;
+    message[4] = 7;
+    message[5] = (11u64 << 32) | 9;
+    message[7] = 13;
+    message[8] = 0x1000;
+    message[9] = 0x1100;
+    message[11] = 0x100;
+    DECODED.store(message.as_ptr() as u64, Ordering::Release);
+    SNAPSHOT_EXE.store(fixture.exe as u64, Ordering::Release);
+    super::super::CALLS.with(|calls| {
+        calls.borrow_mut().push(super::super::Call {
+            serial: 1,
+            kind: 73,
+            lease: None,
+            hold: None,
+            message: None,
+            registry: 0,
+            owner: 0,
+            id: 0,
+            transport: None,
+            native_transport: false,
+            unproven_transport: None,
+            unproven_join: false,
+            thread: 0,
+            unproven_hold: None,
+            packet: Some(packet),
+            birth: None,
+        })
+    });
+    unsafe {
+        queue_fixture_enqueue_caller(
+            fixture.session.as_ptr() as u64 + 0xd8,
+            fixture.source.as_ptr() as u64,
+        )
+    };
+    super::super::CALLS.with(|calls| {
+        calls.borrow_mut().pop().unwrap();
+    });
+    fixture.session[31] = 1;
+    assert_eq!(pending(), Ok(1));
+    assert_eq!(fixture.pump(), 0x8811);
+    assert_eq!(*ADMISSION_WORLD.lock().unwrap(), None);
+    assert_eq!(*ADMISSION_PACKET.lock().unwrap(), Some(packet));
+    assert_eq!(pending(), Ok(0));
+    assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
+    let target = SNAPSHOT_TARGET.lock().unwrap().take().unwrap();
+    assert_eq!(target.transport, Some(packet.transport));
+    if replace {
+        super::super::fixture_replace_pre_world_transport(lease);
+    }
+    let world = worlds::fixture_world_birth();
+    let rejection = loads::fixture_accept_pre_world_target(target, world);
+    if replace {
+        assert_eq!(rejection, Some(Error::Stale));
+        assert_eq!(super::super::fixture_bound_session_world(lease), None);
+    } else {
+        assert_eq!(rejection, None);
+        assert_eq!(
+            super::super::fixture_bound_session_world(lease),
+            Some(SessionWorldReceipt {
+                binding_id: world.serial,
+                epoch: world.epoch,
+            })
+        );
+    }
+}
+#[test]
+fn pre_world_deferred_packet_snapshot_load_keeps_its_transport_generation() {
+    if !child("pre_world_deferred_packet_snapshot_load_keeps_its_transport_generation") {
+        return;
+    }
+    pre_world_queue_snapshot_load(false);
+}
+#[test]
+fn pre_world_deferred_packet_snapshot_load_refuses_a_replaced_transport() {
+    if !child("pre_world_deferred_packet_snapshot_load_refuses_a_replaced_transport") {
+        return;
+    }
+    pre_world_queue_snapshot_load(true);
 }
 
 static CAS_HITS: AtomicUsize = AtomicUsize::new(0);

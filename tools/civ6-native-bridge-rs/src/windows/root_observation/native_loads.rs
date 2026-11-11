@@ -90,6 +90,50 @@ struct Call {
     allocation: Option<MutexGuard<'static, ()>>,
     joined: bool,
 }
+#[cfg(test)]
+pub(super) fn fixture_accept_pre_world_target(
+    target: sessions::BootstrapTarget,
+    world: worlds::WorldLease,
+) -> Option<sessions::SessionError> {
+    let request = {
+        let mut state = state();
+        let request = state.ledger.enter().unwrap();
+        state.sources.insert(
+            request.0,
+            Source {
+                session: None,
+                wire: None,
+                bootstrap: Some(target),
+            },
+        );
+        state.worlds.insert(request.0, world);
+        request
+    };
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 81;
+    raw.invocation.cookie = COOKIE;
+    raw.invocation.token = 1;
+    raw.gpr[4] = 0x1234_5601;
+    CALLS.with(|calls| {
+        calls.borrow_mut().push(Call {
+            serial: 1,
+            kind: 81,
+            source: None,
+            request: Some(request),
+            invocation: None,
+            pointer: 0,
+            descriptor: 0,
+            engine: 0,
+            allocation: None,
+            joined: false,
+        })
+    });
+    finish(&mut raw, false);
+    assert_eq!(raw.gpr[4], 0x1234_5601);
+    assert_eq!(raw.invocation.cookie, 0);
+    assert!(state().accepted.contains(&request.0));
+    state().binding_rejections.get(&request.0).copied()
+}
 thread_local! {
     static CALLS: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) };
     static JOB_CALLS: RefCell<Vec<JobCall>> = const { RefCell::new(Vec::new()) };

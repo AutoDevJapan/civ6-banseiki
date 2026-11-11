@@ -76,6 +76,18 @@ struct Call {
     rsp: u64,
     snapshot: Option<Snapshot>,
 }
+#[cfg(test)]
+pub(super) fn fixture_packet_bootstrap_target(
+    exe: u64,
+    message: u64,
+    session: u64,
+) -> Option<sessions::BootstrapTarget> {
+    EXE.store(exe, Ordering::Release);
+    let snapshot = capture(message, session, 1)?;
+    assert!(snapshot.session.is_none());
+    assert!(snapshot.packet.is_some());
+    snapshot.bootstrap_target(snapshot.owner, session)
+}
 thread_local! { static CALLS: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) }; }
 #[track_caller]
 fn fault() -> ! {
