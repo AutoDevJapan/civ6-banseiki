@@ -17,6 +17,35 @@ function CASES.test_two_partial_people_with_stock_spending_keep_only_unpaid_rese
  end
  api.Reconcile(); eq(3,Players[0].spent)
  eq(1,api.EventsGameplayStatus(0,DATE).paid); eq(1,api.EventsGameplayStatus(0,HOJO).paid)
+ local store='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'
+ local function image(v)
+  if type(v)~='table' then return v end
+  local out={}; for k,x in pairs(v) do out[k]=image(x) end; return out
+ end
+ local function readOnly(f)
+  local before=image(Game:GetProperty(store))
+  local gameSet=Game.SetProperty; local playerSets={}; local gameWrites,playerWrites=0,0
+  Game.SetProperty=function(...) gameWrites=gameWrites+1; return gameSet(...) end
+  for owner,p in pairs(Players) do
+   local setter=p.SetProperty; playerSets[owner]=setter
+   p.SetProperty=function(...) playerWrites=playerWrites+1; return setter(...) end
+  end
+  local ok,a,b=pcall(f)
+  Game.SetProperty=gameSet
+  for owner,setter in pairs(playerSets) do Players[owner].SetProperty=setter end
+  yes(ok); eq(0,gameWrites); eq(0,playerWrites); eq(before,Game:GetProperty(store))
+  return a,b
+ end
+ -- These controls must fail even when the store exposes mutable table aliases.
+ for _,mutate in ipairs({
+  function() Game:GetProperty(store).accounts[0].expected=99 end,
+  function() Game:SetProperty(store,Game:GetProperty(store)) end,
+  function() Players[0]:SetProperty('JAC_PERSONA_TEST_SAME',Players[0]:GetProperty('JAC_PERSONA_TEST_SAME')) end
+ }) do
+  local before=image(Game:GetProperty(store))
+  local accepted=pcall(function() readOnly(mutate) end)
+  no(accepted); Game:SetProperty(store,before)
+ end
  local third=ROWS[4].LeaderType
  eq('JOINED',api.Join(0,3))
  local function thirdDisabled(expected)
@@ -26,22 +55,20 @@ function CASES.test_two_partial_people_with_stock_spending_keep_only_unpaid_rese
   yes(target~=nil); eq(expected,target.disabled)
  end
  Players[0].points=7; thirdDisabled(false)
- local aggregateBefore=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1')
- local total,none=api.ReservedEvolutionTitles(0)
- eq(3,total); eq(0,none); eq(aggregateBefore,Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'))
+ local total,none=readOnly(function() return api.ReservedEvolutionTitles(0) end)
+ eq(3,total); eq(0,none)
  Players[0].points=6; thirdDisabled(true)
- local store='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'; local saved=Game:GetProperty(store)
+ local saved=image(Game:GetProperty(store))
  local base=saved.people[HOJO].acquired[1]
- local broken=Game:GetProperty(store); broken.people[HOJO].acquired[1]=nil
+ local broken=image(Game:GetProperty(store)); broken.people[HOJO].acquired[1]=nil
  Game:SetProperty(store,broken); Players[0].points=5
  no(appoint(DATE)); eq(0,#REQUESTS); eq(3,Players[0].spent)
  thirdDisabled(true)
  Game:SetProperty(store,nil); no(appoint(DATE)); eq(0,#REQUESTS); thirdDisabled(true)
  saved.people[HOJO].acquired[1]=base; Game:SetProperty(store,saved); api.Reconcile()
- local snapshot=Game:GetProperty(store)
- local reservations,own=api.ReservedEvolutionTitles(0,DATE)
- eq(3,reservations); eq(2,own); eq(snapshot,Game:GetProperty(store))
- local foreign,foreignOwn=api.ReservedEvolutionTitles(1,DATE)
+ local reservations,own=readOnly(function() return api.ReservedEvolutionTitles(0,DATE) end)
+ eq(3,reservations); eq(2,own)
+ local foreign,foreignOwn=readOnly(function() return api.ReservedEvolutionTitles(1,DATE) end)
  eq(math.huge,foreign); eq(0,foreignOwn)
  -- One available title belongs to the other pending person; do not take it.
  Players[0].points=4; no(appoint(DATE)); eq(0,#REQUESTS); eq(3,Players[0].spent)
