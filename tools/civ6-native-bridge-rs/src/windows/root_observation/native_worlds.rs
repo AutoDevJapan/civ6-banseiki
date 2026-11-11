@@ -98,7 +98,7 @@ impl Bindings {
             self.exhausted = true;
             return None;
         }
-        let window = self.birth_window();
+        let window = self.unpublished_window();
         if self
             .contexts
             .values()
@@ -187,7 +187,13 @@ impl Bindings {
         true
     }
     fn birth_window(&self) -> Option<BirthWindow> {
-        if self.coverage_gap() || !self.session_births.is_empty() {
+        if !self.session_births.is_empty() {
+            return None;
+        }
+        self.unpublished_window()
+    }
+    fn unpublished_window(&self) -> Option<BirthWindow> {
+        if self.coverage_gap() {
             return None;
         }
         let live: Vec<_> = self
@@ -1014,6 +1020,28 @@ mod tests {
             assert_eq!(owners, 0, "World preflight refusal retained an entry");
             assert_eq!(after, before, "World preflight refusal patched an entry");
         }
+    }
+    #[test]
+    fn concurrent_known_session_births_share_the_same_prepublication_window() {
+        let mut b = Bindings::default();
+        b.context(10, 20, 1).unwrap();
+        let initial = b.birth_window().unwrap();
+        let first = b.session_birth_begin(1, 2).unwrap();
+        let second = b.session_birth_begin(2, 3).unwrap();
+        assert_eq!(first.window, Some(initial));
+        assert_eq!(
+            second.window,
+            Some(initial),
+            "normal concurrent birth lost its original window"
+        );
+        assert!(b.birth_window().is_none());
+        assert!(b.session_birth_end(second, false, true));
+        assert!(b.birth_window().is_none());
+        assert!(b.session_birth_end(first, false, true));
+        let world = b.world(20, 30, 1).unwrap();
+        assert!(first.window.unwrap().matches(world));
+        assert!(second.window.unwrap().matches(world));
+        assert!(b.owns_birth(world));
     }
     #[test]
     fn every_session_kind_retains_its_prepublication_birth_until_original_return() {
