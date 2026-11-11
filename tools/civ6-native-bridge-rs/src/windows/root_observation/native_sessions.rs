@@ -376,6 +376,25 @@ pub(super) fn fixture_bootstrap_session(owner: u64, session: u64) -> SessionLeas
 pub(super) fn fixture_bound_session_world(lease: SessionLease) -> Option<SessionWorldReceipt> {
     state().world(lease).ok()
 }
+#[cfg(test)]
+pub(super) fn fixture_retire_load_world(
+    lease: SessionLease,
+    unproven_transport: bool,
+) -> SessionWorldReceipt {
+    let mut ledger = state();
+    let previous = ledger.world(lease).unwrap();
+    if unproven_transport {
+        let transport = ledger.publish_transport(lease, 100, 50, 60, 70).unwrap();
+        ledger
+            .unproven_transport_close_begin(lease, transport)
+            .unwrap();
+        ledger
+            .unproven_transport_close_end(lease, transport, false)
+            .unwrap();
+    }
+    ledger.retire_world(previous).unwrap();
+    previous
+}
 pub(super) fn bind_bootstrap_world(
     target: BootstrapTarget,
     world: worlds::WorldLease,

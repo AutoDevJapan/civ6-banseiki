@@ -246,6 +246,207 @@ fn child(name: &str) -> bool {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+fn accepted_request_with_world_order(unproven: bool, world_first: bool) {
+    // Pure observer/ledger state: no executable allocation, hook installation,
+    // copied native instructions, external process memory or game operation.
+    let lease = sessions::fixture_snapshot_session(20, 30);
+    let source = sessions::snapshot_owner(20, 30).unwrap();
+    let previous = sessions::fixture_retire_load_world(lease, unproven);
+    assert_eq!(source, (lease, Some(previous)));
+    let world = worlds::WorldLease {
+        serial: 11,
+        epoch: 4,
+        context: 80,
+        game: 90,
+        world: 100,
+    };
+    let frames = FRAMES.get_or_init(NativeFrames::new);
+    for _ in 1..world.epoch {
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        frames.reopen().unwrap();
+    }
+    let (request, invocation) = {
+        let mut s = state();
+        let request = s.ledger.enter().unwrap();
+        s.ledger.fixture_copied(request, 160).unwrap();
+        s.ledger.issued(request, 120, 130).unwrap();
+        s.ledger.consuming(120, 130).unwrap();
+        s.ledger.selected(request, 120, 140, 150).unwrap();
+        s.ledger.consumed(request, 120).unwrap();
+        let invocation = s.ledger.initialize(140, 150, 160).unwrap().unwrap();
+        s.ledger.initialized(invocation).unwrap();
+        s.ledger.reserve_worker(invocation).unwrap();
+        s.ledger.worker(150).unwrap();
+        s.sources.insert(
+            request.0,
+            Source {
+                session: Some(source),
+                wire: None,
+                bootstrap: None,
+            },
+        );
+        (request, invocation)
+    };
+    let born = || {
+        CALLS.with(|calls| {
+            calls.borrow_mut().push(Call {
+                serial: 2,
+                kind: 87,
+                source: None,
+                request: None,
+                invocation: Some(invocation),
+                pointer: 150,
+                descriptor: 0,
+                engine: 140,
+                allocation: None,
+                joined: false,
+            })
+        });
+        JOB_CALLS.with(|jobs| {
+            jobs.borrow_mut().push(JobCall {
+                rsp: 1,
+                kind: 21,
+                id: None,
+                invocation: Some(invocation),
+                view: 150,
+                group: 1,
+                hold: None,
+            })
+        });
+        world_created(world);
+        CALLS.with(|calls| {
+            calls.borrow_mut().pop().unwrap();
+        });
+        let (hold, epoch) = JOB_CALLS.with(|jobs| jobs.borrow_mut().pop().unwrap().hold.unwrap());
+        assert_eq!(epoch, world.epoch);
+        frames.leave(hold).unwrap();
+    };
+    if world_first {
+        born();
+    }
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 81;
+    raw.invocation.cookie = COOKIE;
+    raw.invocation.token = 1;
+    raw.gpr[4] = 0x1234_5601;
+    CALLS.with(|calls| {
+        calls.borrow_mut().push(Call {
+            serial: 1,
+            kind: 81,
+            source: None,
+            request: Some(request),
+            invocation: None,
+            pointer: 0,
+            descriptor: 0,
+            engine: 0,
+            allocation: None,
+            joined: false,
+        })
+    });
+    finish(&mut raw, false);
+    if !world_first {
+        born();
+    }
+    assert_eq!(raw.gpr[4], 0x1234_5601);
+    assert_eq!(raw.invocation.cookie, 0);
+    let s = state();
+    assert!(s.accepted.contains(&request.0));
+    if unproven {
+        assert_eq!(
+            s.binding_rejections.get(&request.0),
+            Some(&sessions::SessionError::Unresolved)
+        );
+        assert_eq!(sessions::fixture_bound_session_world(lease), None);
+        assert!(sessions::snapshot_owner(20, 30).is_none());
+        assert_eq!(
+            NativeSessionApi::drained(previous),
+            Err(sessions::SessionError::Unresolved)
+        );
+    } else {
+        assert!(s.binding_rejections.is_empty());
+        assert_eq!(
+            sessions::fixture_bound_session_world(lease),
+            Some(sessions::SessionWorldReceipt {
+                binding_id: 11,
+                epoch: 4
+            })
+        );
+    }
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    assert!(JOB_CALLS.with(|calls| calls.borrow().is_empty()));
+    drop(s);
+    let mut state = state();
+    state.ledger.worker_returned(invocation).unwrap();
+    state.ledger.release_worker(invocation).unwrap();
+    state.ledger.joined(invocation).unwrap();
+    drop(state);
+    frames
+        .seal_and_wait(Instant::now() + Duration::from_secs(1))
+        .unwrap();
+}
+
+#[test]
+fn world_before_load_return_keeps_unproven_session_as_rejection() {
+    if child("world_before_load_return_keeps_unproven_session_as_rejection") {
+        accepted_request_with_world_order(true, true);
+    }
+}
+
+#[test]
+fn world_before_load_return_binds_a_proven_session() {
+    if child("world_before_load_return_binds_a_proven_session") {
+        accepted_request_with_world_order(false, true);
+    }
+}
+
+#[test]
+fn load_return_before_world_keeps_unproven_session_as_rejection() {
+    if child("load_return_before_world_keeps_unproven_session_as_rejection") {
+        accepted_request_with_world_order(true, false);
+    }
+}
+
+#[test]
+fn load_return_before_world_binds_a_proven_session() {
+    if child("load_return_before_world_binds_a_proven_session") {
+        accepted_request_with_world_order(false, false);
+    }
+}
+
+#[test]
+fn known_session_binding_result_keeps_identity_errors_and_only_records_observation_loss() {
+    let mut state = State::default();
+    let request = state.ledger.enter().unwrap();
+    for error in [
+        sessions::SessionError::Unknown,
+        sessions::SessionError::Stale,
+        sessions::SessionError::Closed,
+        sessions::SessionError::Busy,
+        sessions::SessionError::Exhausted,
+        sessions::SessionError::Unbound,
+        sessions::SessionError::NotJoined,
+    ] {
+        assert_eq!(
+            state.known_session_binding_result(request, Err(error)),
+            Err(error)
+        );
+        assert!(state.binding_rejections.is_empty());
+    }
+    assert_eq!(state.known_session_binding_result(request, Ok(())), Ok(()));
+    assert!(state.binding_rejections.is_empty());
+    assert_eq!(
+        state.known_session_binding_result(request, Err(sessions::SessionError::Unresolved)),
+        Ok(())
+    );
+    assert_eq!(
+        state.binding_rejections.get(&request.0),
+        Some(&sessions::SessionError::Unresolved)
+    );
+}
+
 #[test]
 fn pathname_capture_preserves_native_utf16_cap_and_keeps_stream_inputs_separate() {
     let mut name = vec![0x3042u16; 270];

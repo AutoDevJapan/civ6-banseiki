@@ -194,6 +194,24 @@ fn denied_waiter_image(image: Option<&str>) -> Result<bool> {
     }
 }
 
+#[cfg(windows)]
+fn snapshot_excludes_waiter(pid: u32) -> Result<bool> {
+    snapshot_excludes_waiter_with(pid, crate::startup::process_rows())
+}
+
+#[cfg(any(windows, test))]
+fn snapshot_excludes_waiter_with(
+    pid: u32,
+    rows: Result<Vec<crate::restart::ProcessRow>>,
+) -> Result<bool> {
+    let rows = rows.map_err(|_| refused("cannot inspect unavailable live queue identity"))?;
+    denied_waiter_image(
+        rows.iter()
+            .find(|row| row.pid == pid)
+            .map(|row| row.name.as_str()),
+    )
+}
+
 #[cfg(any(windows, test))]
 fn waiter_image_matches(actual: &str, lock: &Path) -> bool {
     let Some(parent) = lock.parent() else {
@@ -211,11 +229,27 @@ fn waiter_image_matches(actual: &str, lock: &Path) -> bool {
 
 #[cfg(windows)]
 fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
+    native_waiter_alive_with_image_query(waiter, lock, |process, name, size| unsafe {
+        windows_sys::Win32::System::Threading::QueryFullProcessImageNameW(
+            process,
+            0,
+            name.as_mut_ptr(),
+            size,
+        ) != 0
+    })
+}
+
+#[cfg(windows)]
+fn native_waiter_alive_with_image_query(
+    waiter: &Value,
+    lock: &Path,
+    image_query: impl FnOnce(windows_sys::Win32::Foundation::HANDLE, &mut [u16], &mut u32) -> bool,
+) -> Result<bool> {
     use windows_sys::Win32::{
         Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::Threading::{
-            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            GetProcessTimes, OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+            PROCESS_SYNCHRONIZE,
         },
     };
     struct Owned(HANDLE);
@@ -241,15 +275,7 @@ fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
         if process.0.is_null() {
             match std::io::Error::last_os_error().raw_os_error() {
                 Some(87) => return Ok(false),
-                Some(5) => {
-                    let rows = crate::startup::process_rows()
-                        .map_err(|_| refused("cannot inspect denied live queue process"))?;
-                    return denied_waiter_image(
-                        rows.iter()
-                            .find(|row| row.pid == pid)
-                            .map(|row| row.name.as_str()),
-                    );
-                }
+                Some(5) => return snapshot_excludes_waiter(pid),
                 _ => return Err(refused("cannot verify live queue process")),
             }
         }
@@ -258,12 +284,12 @@ fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
         match WaitForSingleObject(process.0, 0) {
             WAIT_OBJECT_0 => return Ok(false),
             WAIT_TIMEOUT => {}
-            _ => return Err(refused("cannot read live queue process status")),
+            _ => return snapshot_excludes_waiter(pid),
         }
         let mut name = [0u16; 4096];
         let mut size = name.len() as u32;
-        if QueryFullProcessImageNameW(process.0, 0, name.as_mut_ptr(), &mut size) == 0 {
-            return Err(refused("cannot verify live queue executable"));
+        if !image_query(process.0, &mut name, &mut size) {
+            return snapshot_excludes_waiter(pid);
         }
         let actual = String::from_utf16_lossy(&name[..size as usize]);
         if !waiter_image_matches(&actual, lock) {
@@ -274,7 +300,7 @@ fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
         let mut kernel: FILETIME = std::mem::zeroed();
         let mut user: FILETIME = std::mem::zeroed();
         if GetProcessTimes(process.0, &mut created, &mut ended, &mut kernel, &mut user) == 0 {
-            return Err(refused("cannot verify live queue process creation time"));
+            return snapshot_excludes_waiter(pid);
         }
         let started = (((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
             as f64
@@ -372,6 +398,29 @@ mod tests {
         .expect("a protected non-chain process is unrelated, not an unknown chain"));
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn opened_non_chain_with_failed_image_query_is_not_a_live_waiter() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        let mut query_called = false;
+        let result = native_waiter_alive_with_image_query(
+            &json!({"chain_pid":std::process::id(),"live_chain":true,"since":now}),
+            Path::new(crate::startup::SHARED_LOCK_PATH),
+            |_, _, _| {
+                query_called = true;
+                false
+            },
+        );
+        assert!(
+            query_called,
+            "must reach the post-OpenProcess image-query failure"
+        );
+        assert!(!result.expect("complete snapshot identifies this test executable as unrelated"));
+    }
+
     #[test]
     fn denied_snapshot_excludes_only_known_other_images() {
         for name in ["System", "Registry", "MsMpEng.exe", "codex.exe"] {
@@ -387,6 +436,32 @@ mod tests {
                 denied_waiter_image(image).unwrap_err().kind,
                 ErrorKind::LiveLease
             );
+        }
+    }
+
+    #[test]
+    fn incomplete_or_missing_snapshot_never_excludes_a_possible_chain() {
+        let rows = || {
+            vec![
+                crate::restart::ProcessRow {
+                    pid: 7,
+                    parent_pid: 1,
+                    name: "live_chain_pr86_amd.exe".into(),
+                },
+                crate::restart::ProcessRow {
+                    pid: 8,
+                    parent_pid: 1,
+                    name: "System".into(),
+                },
+            ]
+        };
+        assert!(!snapshot_excludes_waiter_with(8, Ok(rows())).unwrap());
+        for result in [
+            snapshot_excludes_waiter_with(7, Ok(rows())),
+            snapshot_excludes_waiter_with(9, Ok(rows())),
+            snapshot_excludes_waiter_with(8, Err(refused("incomplete snapshot"))),
+        ] {
+            assert_eq!(result.unwrap_err().kind, ErrorKind::LiveLease);
         }
     }
 

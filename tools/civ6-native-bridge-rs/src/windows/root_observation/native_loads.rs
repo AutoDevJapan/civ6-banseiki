@@ -43,6 +43,24 @@ struct State {
     groups: HashMap<u64, u64>,
     binding_rejections: HashMap<u64, sessions::SessionError>,
 }
+impl State {
+    fn known_session_binding_result(
+        &mut self,
+        request: Request,
+        result: Result<(), sessions::SessionError>,
+    ) -> Result<(), sessions::SessionError> {
+        match result {
+            Err(sessions::SessionError::Unresolved) => {
+                // Observation loss refuses this relation in either ordering.
+                // It does not change the native request's successful return.
+                self.binding_rejections
+                    .insert(request.0, sessions::SessionError::Unresolved);
+                Ok(())
+            }
+            other => other,
+        }
+    }
+}
 struct Task {
     invocation: LoadInvocation,
     view: u64,
@@ -440,15 +458,9 @@ pub(super) fn world_created(world: worlds::WorldLease) {
                 epoch: world.epoch,
             },
         );
-        match result {
-            Ok(()) => {}
-            Err(sessions::SessionError::Unresolved) => {
-                state()
-                    .binding_rejections
-                    .insert(request.0, sessions::SessionError::Unresolved);
-            }
-            Err(_) => fault(),
-        }
+        state()
+            .known_session_binding_result(request, result)
+            .unwrap_or_else(|_| fault());
     }
 }
 extern "system" fn begin(raw: *mut Saved) {
@@ -821,15 +833,16 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                                 s.binding_rejections.insert(request.0, reason);
                             }
                         } else if let Some((lease, previous)) = source.session {
-                            sessions::loaded_world(
+                            let result = sessions::loaded_world(
                                 lease,
                                 previous,
                                 sessions::SessionWorldReceipt {
                                     binding_id: world.serial,
                                     epoch: world.epoch,
                                 },
-                            )
-                            .unwrap_or_else(|_| fault());
+                            );
+                            s.known_session_binding_result(request, result)
+                                .unwrap_or_else(|_| fault());
                         }
                     }
                 }
