@@ -105,3 +105,19 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 前提と元の静的解析は、[本体接続の記録](pr86-native-admission.md)と[枠診断](native-slots-diagnostic.md)に記録されている。SSOT 4・9・16の挙動は変更していない。
 
 Windows APIの根拠はMicrosoftの[稼働中プロセスへのattachとdetach](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-a-running-process)、[終了時のdetach設定](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-debugsetprocesskillonexit)、[debug eventで受け取るhandleの扱い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-waitfordebugeventex)、[例外レコードのアドレスとfirst chance](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-exception_debug_info)、[続行状態による例外処理の違い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-continuedebugevent)に従う。DR6のbitの意味は[Intelのプロセッサ文書](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developers-manual.pdf)を参照したが、実機53でWindowsが返したDR6の値は不明である。
+
+## 正常な再開に不足する証拠の診断
+
+`native_control::native_coverage_complete` は全native経路の証明が未達のため、引き続き成功を返しません。再開判定の診断番号2101と既存censusの追加カウンタは、不足を次のように区別します。これらは観測回数であり、ゼロ件を経路の不存在や許可へ変換しません。
+
+| カウンタ | 必要な実経路・identity |
+|---|---|
+| `reopen_missing_producer_seal` | managerのincarnation、list、同じsetへの全発行・copy・再発行・取消の閉鎖。`task_audit` のstate3やset+8だけでは証明しない。 |
+| `reopen_missing_receive_epoch` | Session leaseとtransport incarnationを保持するOS受信・remote送信元の世代境界。local pollとtracked packetの退役だけでは証明しない。 |
+| `reopen_missing_session_window` | 設置前からの出生を除外できる観測窓と、Worldのserial・epochに対応する全Session・Null・別種別の分類。空の台帳だけでは証明しない。 |
+| `reopen_missing_local_drain` | 一つのmutexで読んだNativeFramesの世代、seal、execution drain、frame数、保留storage数、unresolved。旧snapshotを新世代のreceiptとして使わない。 |
+| `reopen_missing_world_close` | 同じWorldLeaseの出生・終了と、Host Wait、元manager/listの回収、World shutdown正常復帰の順序。 |
+
+局所排出は、同じ管理部の実行・storageの両方が排出され、旧frameと保留jobがなく、不明状態でないときだけ成立します。その正例と、旧世代、保留job、不明状態の負例を純粋なRust状態テストで確認します。censusの新項目は既存の固定長領域を使い、従来のPID・生成時刻・予約領域の検証を保持します。
+
+これは不足を具体化する診断です。全producerの閉鎖、全受信世代、実Gameの同一process保存読込が成立した証明ではありません。製品の肯定受入は未達で、定数の変更や常時拒否を製品完成の代用にしません。

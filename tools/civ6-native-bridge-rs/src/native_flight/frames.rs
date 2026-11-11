@@ -34,6 +34,28 @@ struct Job {
     source_frames: Vec<u64>,
 }
 
+/// A single-lock observation of tracked work, never native entry coverage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DrainStatus {
+    pub generation: u64,
+    pub sealed: bool,
+    pub executions_drained: bool,
+    pub active_frames: usize,
+    pub retained_jobs: usize,
+    pub unresolved: bool,
+}
+
+impl DrainStatus {
+    pub fn locally_drained(self) -> bool {
+        self.generation != 0
+            && self.sealed
+            && self.executions_drained
+            && self.active_frames == 0
+            && self.retained_jobs == 0
+            && !self.unresolved
+    }
+}
+
 /// Accounts only for installed full-frame gateways. It is not a producer seal,
 /// pending-list receipt, same-set Wait receipt, or all-domain certificate.
 pub struct NativeFrames {
@@ -418,6 +440,17 @@ impl NativeFrames {
 
     pub fn healthy(&self) -> bool {
         self.state.lock().is_ok_and(|s| !s.unresolved)
+    }
+    pub fn drain_status(&self) -> Result<DrainStatus, Error> {
+        let s = self.state.lock().map_err(|_| Error::Poisoned)?;
+        Ok(DrainStatus {
+            generation: s.generation,
+            sealed: s.sealed,
+            executions_drained: s.executions_drained,
+            active_frames: s.frames.len(),
+            retained_jobs: s.jobs.len(),
+            unresolved: s.unresolved,
+        })
     }
     #[cfg(test)]
     pub(crate) fn observation_state_for_test(&self) -> (u64, bool, usize, usize) {
@@ -1487,5 +1520,60 @@ mod tests {
         f.queue_retired(retired).unwrap();
         f.leave(parent).unwrap();
         f.seal_and_wait(deadline()).unwrap();
+    }
+}
+#[cfg(test)]
+mod drain_status_tests {
+    use super::*;
+
+    #[test]
+    fn local_drain_status_requires_both_ordered_drains_and_retains_old_generation() {
+        let frames = NativeFrames::new();
+        let before = frames.drain_status().unwrap();
+        assert!(!before.locally_drained());
+        let id = frames.enter().unwrap();
+        assert_eq!(frames.drain_status().unwrap().active_frames, 1);
+        frames.leave(id).unwrap();
+        frames
+            .seal_and_wait(Instant::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        assert!(!frames.drain_status().unwrap().locally_drained());
+        frames
+            .seal_executions_and_wait(Instant::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        let drained = frames.drain_status().unwrap();
+        assert!(drained.locally_drained());
+        frames.reopen().unwrap();
+        let next = frames.drain_status().unwrap();
+        assert!(next.generation > drained.generation);
+        assert!(!next.locally_drained());
+        assert!(
+            drained.locally_drained(),
+            "the old snapshot is not a new epoch token"
+        );
+    }
+
+    #[test]
+    fn local_drain_status_retains_inert_jobs_and_unresolved_provenance() {
+        let frames = NativeFrames::new();
+        let outer = frames.enter().unwrap();
+        let job = frames.issue_on_set(100, 200).unwrap();
+        frames.pushed(job, 300).unwrap();
+        frames.leave(outer).unwrap();
+        let pending = frames.drain_status().unwrap();
+        assert_eq!(pending.retained_jobs, 1);
+        assert!(!pending.locally_drained());
+        frames.cancelled(300).unwrap();
+        frames
+            .seal_executions_and_wait(Instant::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        frames
+            .seal_and_wait(Instant::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        assert!(frames.drain_status().unwrap().locally_drained());
+        frames.mark_unresolved();
+        let unknown = frames.drain_status().unwrap();
+        assert!(unknown.unresolved);
+        assert!(!unknown.locally_drained());
     }
 }

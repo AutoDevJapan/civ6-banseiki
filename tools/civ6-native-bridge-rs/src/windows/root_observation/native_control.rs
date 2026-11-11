@@ -72,6 +72,23 @@ pub(super) fn observed_shutdown_complete() -> bool {
             .is_ok_and(|birth| birth.is_some_and(worlds::completed))
 }
 fn native_coverage_complete() -> bool {
+    // Explicitly absent producer/receive/window proofs, rather than mistaking
+    // owned hooks or balanced local counters for these native guarantees.
+    // These diagnostics grant no receipt and cannot make ready() successful.
+    census::event(census::SemanticEvent::ReopenMissingProducerSeal);
+    census::event(census::SemanticEvent::ReopenMissingReceiveEpoch);
+    census::event(census::SemanticEvent::ReopenMissingSessionWindow);
+    if FRAMES.get().is_none_or(|frames| {
+        !frames
+            .drain_status()
+            .is_ok_and(|status| status.locally_drained())
+    }) {
+        census::event(census::SemanticEvent::ReopenMissingLocalDrain);
+    }
+    if !observed_shutdown_complete() {
+        census::event(census::SemanticEvent::ReopenMissingWorldClose);
+    }
+    diagnostic(2101);
     false
 }
 pub(super) fn reopened() {
@@ -507,6 +524,37 @@ pub(super) fn fixture_observation_resume_guards(resume: fn() -> bool, complete: 
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn missing_native_domain_diagnostics_do_not_promote_a_locally_drained_epoch() {
+        if !child("missing_native_domain_diagnostics_do_not_promote_a_locally_drained_epoch") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(1, Ordering::Release);
+        let missing = census::SemanticEvent::ReopenMissingLocalDrain;
+        let before = census::event_count(missing);
+        assert!(!native_coverage_complete());
+        assert_eq!(census::event_count(missing), before + 1);
+        let frames = FRAMES.get().unwrap();
+        frames
+            .seal_executions_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        assert!(frames.drain_status().unwrap().locally_drained());
+        let local = census::event_count(missing);
+        let producers = census::event_count(census::SemanticEvent::ReopenMissingProducerSeal);
+        assert!(!native_coverage_complete());
+        assert_eq!(census::event_count(missing), local);
+        assert_eq!(
+            census::event_count(census::SemanticEvent::ReopenMissingProducerSeal),
+            producers + 1
+        );
+        assert!(!ready());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert_eq!(TRACE.0[13].load(Ordering::Acquire), 2101);
+    }
     #[test]
     fn entry_validation_rejects_unaligned_guarded_and_uncommitted_data() {
         worlds::install_fixture::rejects_invalid_entry_data(entry_protection);

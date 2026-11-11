@@ -2277,8 +2277,13 @@ pub enum SemanticEvent {
     PublishedWorldBound = 26,
     PublishedWorldUnbound = 27,
     ReceiveInactive = 28,
+    ReopenMissingProducerSeal = 29,
+    ReopenMissingReceiveEpoch = 30,
+    ReopenMissingSessionWindow = 31,
+    ReopenMissingLocalDrain = 32,
+    ReopenMissingWorldClose = 33,
 }
-pub const NATIVE_SEMANTIC_NAMES: [&str; 29] = [
+pub const NATIVE_SEMANTIC_NAMES: [&str; 34] = [
     "birth_kind_0",
     "birth_kind_1",
     "birth_kind_2",
@@ -2308,6 +2313,11 @@ pub const NATIVE_SEMANTIC_NAMES: [&str; 29] = [
     "published_world_bound",
     "published_world_unbound",
     "receive_inactive_transport",
+    "reopen_missing_producer_seal",
+    "reopen_missing_receive_epoch",
+    "reopen_missing_session_window",
+    "reopen_missing_local_drain",
+    "reopen_missing_world_close",
 ];
 const NATIVE_CENSUS_MODULES: [&str; 16] = [
     "unused",
@@ -2403,6 +2413,39 @@ pub fn native_semantic_census(b: &[u8], pid: u32, created: u64) -> Result<Value,
 #[cfg(test)]
 mod native_frame_tests {
     use super::*;
+    #[test]
+    fn census_reports_missing_domains_without_promoting_local_drain_or_zero_to_proof() {
+        let mut bytes = census_fixture();
+        for event in [
+            SemanticEvent::ReopenMissingProducerSeal,
+            SemanticEvent::ReopenMissingReceiveEpoch,
+            SemanticEvent::ReopenMissingSessionWindow,
+            SemanticEvent::ReopenMissingLocalDrain,
+            SemanticEvent::ReopenMissingWorldClose,
+        ] {
+            let at = NATIVE_GATEWAY_CENSUS_BYTES + 128 + event as usize * 8;
+            bytes[at..at + 8].copy_from_slice(&1u64.to_le_bytes());
+        }
+        let v = native_census(&bytes, 12, 34).unwrap();
+        for name in &NATIVE_SEMANTIC_NAMES[29..] {
+            assert_eq!(v["session_facts"]["counters"][name], 1);
+        }
+        assert_eq!(v["boundary_order_proven"], false);
+        assert_eq!(v["product_acceptance"], false);
+        let at =
+            NATIVE_GATEWAY_CENSUS_BYTES + 128 + SemanticEvent::ReopenMissingLocalDrain as usize * 8;
+        bytes[at..at + 8].fill(0);
+        let v = native_census(&bytes, 12, 34).unwrap();
+        assert_eq!(
+            v["session_facts"]["counters"]["reopen_missing_local_drain"],
+            0
+        );
+        assert_eq!(
+            v["session_facts"]["counters"]["reopen_missing_producer_seal"],
+            1
+        );
+        assert_eq!(v["product_acceptance"], false);
+    }
     #[test]
     fn synchronous_zero_snapshot_keeps_native_certificate_false_and_checks_identity() {
         let mut b = [0; 128];
@@ -2534,7 +2577,7 @@ mod native_frame_tests {
             (4, 2),
             (5, 2),
             (6, 1),
-            (16 + 29, 1),
+            (16 + NATIVE_SEMANTIC_NAMES.len(), 1),
         ] {
             let mut bad = bytes.clone();
             let offset = NATIVE_GATEWAY_CENSUS_BYTES + word * 8;
