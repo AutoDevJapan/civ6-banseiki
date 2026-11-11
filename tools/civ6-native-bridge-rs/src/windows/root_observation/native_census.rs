@@ -51,7 +51,7 @@ static DATA: Census = Census {
     }; MODULES * KINDS],
     semantic: Semantic {
         header: [
-            AtomicU64::new(1),
+            AtomicU64::new(2),
             AtomicU64::new(civ6_bootstrap_rs::protocol::NATIVE_SEMANTIC_BYTES as u64),
             AtomicU64::new(0),
             AtomicU64::new(0),

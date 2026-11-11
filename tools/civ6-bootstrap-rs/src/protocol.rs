@@ -2386,24 +2386,28 @@ pub fn native_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> 
     )
 }
 pub fn native_semantic_census(b: &[u8], pid: u32, created: u64) -> Result<Value, String> {
+    let version = word(b, 0)?;
+    let defined = match version {
+        1 => 29,
+        2 => NATIVE_SEMANTIC_NAMES.len(),
+        _ => return Err("native semantic census version differs".into()),
+    };
     if b.len() != NATIVE_SEMANTIC_BYTES
-        || word(b, 0)? != 1
         || word(b, 8)? != NATIVE_SEMANTIC_BYTES as u64
         || word(b, 16)? != u64::from(pid)
         || word(b, 24)? != created
         || (4..6).any(|i| word(b, i * 8).is_ok_and(|v| v > 1))
         || (6..16).any(|i| word(b, i * 8) != Ok(0))
-        || (NATIVE_SEMANTIC_NAMES.len()..NATIVE_SEMANTIC_COUNTERS)
-            .any(|i| word(b, 128 + i * 8) != Ok(0))
+        || (defined..NATIVE_SEMANTIC_COUNTERS).any(|i| word(b, 128 + i * 8) != Ok(0))
     {
         return Err("native semantic census identity/version/layout differs".into());
     }
     let mut counters = serde_json::Map::new();
-    for (i, name) in NATIVE_SEMANTIC_NAMES.iter().enumerate() {
+    for (i, name) in NATIVE_SEMANTIC_NAMES.iter().take(defined).enumerate() {
         counters.insert((*name).to_owned(), json!(word(b, 128 + i * 8)?));
     }
     Ok(
-        json!({"schema":"native-session-facts-v1","pid":pid,"created_filetime":created,
+        json!({"schema":if version==1 {"native-session-facts-v1"} else {"native-session-facts-v2"},"pid":pid,"created_filetime":created,
         "host_window_armed":word(b,32)?==1,"core_window_armed":word(b,40)?==1,"counters":counters,
         "sampling":"independent saturating atomics; zero is not absence without an armed observation window",
         "boundary_order_proven":false,"product_acceptance":false}),
@@ -2416,6 +2420,8 @@ mod native_frame_tests {
     #[test]
     fn census_reports_missing_domains_without_promoting_local_drain_or_zero_to_proof() {
         let mut bytes = census_fixture();
+        bytes[NATIVE_GATEWAY_CENSUS_BYTES..NATIVE_GATEWAY_CENSUS_BYTES + 8]
+            .copy_from_slice(&2u64.to_le_bytes());
         for event in [
             SemanticEvent::ReopenMissingProducerSeal,
             SemanticEvent::ReopenMissingReceiveEpoch,
@@ -2432,6 +2438,14 @@ mod native_frame_tests {
         }
         assert_eq!(v["boundary_order_proven"], false);
         assert_eq!(v["product_acceptance"], false);
+        assert_eq!(v["session_facts"]["schema"], "native-session-facts-v2");
+        let mut old_version = bytes.clone();
+        old_version[NATIVE_GATEWAY_CENSUS_BYTES..NATIVE_GATEWAY_CENSUS_BYTES + 8]
+            .copy_from_slice(&1u64.to_le_bytes());
+        assert!(
+            native_census(&old_version, 12, 34).is_err(),
+            "new fields cannot masquerade as legacy reserved data"
+        );
         let at =
             NATIVE_GATEWAY_CENSUS_BYTES + 128 + SemanticEvent::ReopenMissingLocalDrain as usize * 8;
         bytes[at..at + 8].fill(0);
@@ -2570,7 +2584,7 @@ mod native_frame_tests {
         assert_eq!(v["session_facts"]["boundary_order_proven"], false);
         assert!(native_census(&bytes[..NATIVE_GATEWAY_CENSUS_BYTES], 12, 34).is_err());
         for (word, value) in [
-            (0, 2u64),
+            (0, 3u64),
             (1, 128),
             (2, 13),
             (3, 35),
