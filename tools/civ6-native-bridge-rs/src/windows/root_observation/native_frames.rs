@@ -174,6 +174,15 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         return;
     }
     raw.invocation.cookie = 0;
+    if exceptional {
+        // Settle this frame's ticket while retaining the lost observation.
+        // Terminal unwind cannot certify a clean drain or a later reopen.
+        if let Some(frames) = FRAMES.get() {
+            frames.mark_unresolved();
+        }
+        FAILED.store(true, Ordering::Release);
+        TRACE.0[6].store(1, Ordering::Release);
+    }
     if FRAMES
         .get()
         .is_none_or(|f| f.leave(raw.invocation.token).is_err())
@@ -847,6 +856,59 @@ mod primary_image;
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    #[test]
+    fn exceptional_frame_return_settles_its_ticket_without_clearing_the_failure() {
+        const ENV: &str = "CIV6_NATIVE_FRAME_ACCOUNTING_CHILD";
+        let name = "windows::root_observation::native_frames::tests::exceptional_frame_return_settles_its_ticket_without_clearing_the_failure";
+        if std::env::var_os(ENV).is_none() {
+            let output = crate::windows::test_child_output::run(
+                std::process::Command::new(std::env::current_exe().unwrap())
+                    .creation_flags(0x08000000)
+                    .env(ENV, "1")
+                    .args(["--exact", name, "--nocapture"]),
+                Duration::from_secs(20),
+            )
+            .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(output.status.success(), "{stdout}\n{stderr}");
+            assert!(stdout.contains(name) && stdout.contains("1 passed; 0 failed;"));
+            print!("{stdout}");
+            return;
+        }
+        // Invoke only Rust accounting callbacks, with no installed entry,
+        // machine-code fixture, native exception, or game image.
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let frames = FRAMES.get().unwrap();
+        let mut normal: Saved = unsafe { std::mem::zeroed() };
+        begin(&mut normal);
+        finish(&mut normal, false);
+        assert_eq!(normal.invocation.cookie, 0);
+        assert!(frames.healthy() && !FAILED.load(Ordering::Acquire));
+        assert_eq!(frames.drain_status().unwrap().active_frames, 0);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        frames.seal_executions_and_wait(deadline).unwrap();
+        frames.seal_and_wait(deadline).unwrap();
+        assert!(frames.drain_status().unwrap().locally_drained());
+        frames.reopen().unwrap();
+
+        let mut exceptional: Saved = unsafe { std::mem::zeroed() };
+        begin(&mut exceptional);
+        let before = TRACE.0[4].load(Ordering::Acquire);
+        finish(&mut exceptional, true);
+        let status = frames.drain_status().unwrap();
+        assert_eq!(exceptional.invocation.cookie, 0);
+        assert_eq!(status.active_frames, 0, "the unwound ticket must settle");
+        assert!(
+            status.unresolved,
+            "an exceptional return is not a clean drain"
+        );
+        assert!(FAILED.load(Ordering::Acquire));
+        assert_eq!(TRACE.0[6].load(Ordering::Acquire), 1);
+        assert_eq!(TRACE.0[4].load(Ordering::Acquire), before + 1);
+        assert!(!close(Instant::now() + Duration::from_secs(1)));
+        assert!(!reopen());
+    }
     #[test]
     fn retained_hook_ownership_refuses_empty_partial_restored_and_changed_entries() {
         let mut words = [0x1122u64, 0x3344];
