@@ -336,14 +336,13 @@ impl Ledger {
         self.retain_input_transport(lease, transport).map(Some)
     }
     fn has_input_holds(&self, world: WorldReceipt) -> bool {
-        self.input_holds.values().any(|hold| {
-            hold.world == Some(world)
-                || (hold.world.is_none()
-                    && self
-                        .records
-                        .get(&hold.lease.0)
-                        .is_some_and(|record| record.world == Some(world)))
-        })
+        // A poll can own a ticket before any storage/queue entry is visible.
+        // Removing that Session or reusing its native addresses cannot settle
+        // this obligation. Unknown ownership blocks completion until its own
+        // final release; it is never assigned to the World being inspected.
+        self.input_holds
+            .values()
+            .any(|hold| hold.world.is_none() || hold.world == Some(world))
     }
     pub fn bind_bootstrap_world(
         &mut self,

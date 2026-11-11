@@ -66,6 +66,47 @@ fn unbound_old_transport_storage_denies_completion_without_adopting_the_new_worl
     ledger.retire_world(world).unwrap();
 }
 #[test]
+fn unbound_input_from_a_removed_session_remains_a_completion_obligation() {
+    let mut ledger = Ledger::default();
+    let old = unbound(&mut ledger, true);
+    let transport = ledger.publish_transport(old, 900, 90, 100, 110).unwrap();
+    let hold = ledger.retain_input_transport(old, transport).unwrap();
+    ledger.terminal_remove_begin(1, 2, 7, 40).unwrap().unwrap();
+    ledger
+        .transport_join_result(old, transport, 110, 1)
+        .unwrap();
+    ledger.transport_disconnect_end(old).unwrap();
+    ledger.terminal_remove_end(old).unwrap();
+
+    // Exact native addresses may be reused after the original removal. The
+    // surviving input is still owned by the earlier Session/transport.
+    let fresh = unbound(&mut ledger, true);
+    assert_ne!(fresh, old);
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    let current = WorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    assert_eq!(ledger.input_holds[&hold.0].lease, old);
+    assert_eq!(ledger.input_holds[&hold.0].world, None);
+    assert_eq!(ledger.retire_world(current), Err(Error::Busy));
+    assert_eq!(ledger.drained(current), Err(Error::Busy));
+    assert_eq!(ledger.input_holds[&hold.0].world, None);
+    ledger.release_input_transport(hold).unwrap();
+    assert_eq!(ledger.release_input_transport(hold), Err(Error::Unknown));
+    ledger.retire_world(current).unwrap();
+    let next = WorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    ledger.loaded_world(fresh, Some(current), next).unwrap();
+    ledger.publish_transport(fresh, 901, 90, 100, 110).unwrap();
+    let packet = ledger.reserve(fresh).unwrap();
+    assert_eq!(ledger.message_world(packet), Ok(next));
+    ledger.cancel_before_dispatch(packet).unwrap();
+}
+#[test]
 fn repeated_reset_accepts_only_new_unpublished_bindings_and_retains_older_packets() {
     let mut ledger = Ledger::default();
     let lease = unbound(&mut ledger, true);

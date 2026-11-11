@@ -232,6 +232,58 @@ fn pre_world_native_storage_owns_transport_until_last_copy_is_released() {
         .is_err());
 }
 #[test]
+fn pre_storage_poll_hold_blocks_the_real_world_retirement_wrapper() {
+    if !child("pre_storage_poll_hold_blocks_the_real_world_retirement_wrapper") {
+        return;
+    }
+    let mut ledger = state();
+    let old = ledger.birth(1, Some(1), 2, 2).unwrap();
+    ledger.factory(old, 7, 2, 3, 4).unwrap();
+    ledger.published(old, 7).unwrap();
+    let transport = ledger.publish_transport(old, 900, 5, 6, 7).unwrap();
+    drop(ledger);
+    // This is the real poll reservation before the constructor publishes any
+    // input storage. A second copy/queue pending count cannot cover it yet.
+    let ticket = reserve_ticket(old, transport).unwrap();
+    assert!(ticket.message.is_none());
+    assert_eq!(pending(), Ok(0));
+    assert_eq!(super::super::deferred::pending(), Ok(0));
+    let mut ledger = state();
+    ledger.terminal_remove_begin(1, 1, 7, 3).unwrap().unwrap();
+    ledger.transport_join_result(old, transport, 7, 1).unwrap();
+    ledger.transport_disconnect_end(old).unwrap();
+    ledger.terminal_remove_end(old).unwrap();
+    let fresh = ledger.birth(1, Some(1), 2, 2).unwrap();
+    ledger.factory(fresh, 7, 2, 3, 4).unwrap();
+    ledger.published(fresh, 7).unwrap();
+    let current = WorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    ledger.bind_world(fresh, current).unwrap();
+    drop(ledger);
+    assert_eq!(super::super::retire_world(current), Err(Error::Busy));
+    assert_eq!(state().world(old), Err(Error::Unbound));
+    cancel_ticket(ticket);
+    super::super::retire_world(current).unwrap();
+    let next = WorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    let mut ledger = state();
+    ledger.loaded_world(fresh, Some(current), next).unwrap();
+    let new_transport = ledger.publish_transport(fresh, 901, 5, 6, 7).unwrap();
+    drop(ledger);
+    let next_ticket = reserve_ticket(fresh, new_transport).unwrap();
+    assert_eq!(
+        state().message_world(next_ticket.message.unwrap()),
+        Ok(next)
+    );
+    assert_eq!(state().world(old), Err(Error::Unbound));
+    cancel_ticket(next_ticket);
+    super::super::retire_world(next).unwrap();
+}
+#[test]
 fn pending_input_uses_fixed_birth_world_and_unknown_never_mints() {
     if !child("pending_input_uses_fixed_birth_world_and_unknown_never_mints") {
         return;
