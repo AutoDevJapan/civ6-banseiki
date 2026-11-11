@@ -400,7 +400,11 @@ fn actual_seh(name: &str, index: usize, original: usize, displaced: usize) {
         unsafe { outer_unwind_driver(state.as_mut_ptr(), target) },
         1
     );
-    assert_eq!(counts(), [1, 0, 1, 0, 0]);
+    // The ticket settles, but terminal unwind retains the lost observation.
+    assert_eq!(counts(), [1, 0, 1, 0, 1]);
+    assert!(FRAMES.get().unwrap().drain_status().unwrap().unresolved);
+    assert!(!close(Instant::now() + Duration::from_secs(1)));
+    assert!(!reopen());
 }
 #[test]
 fn outer_35800_actual_seh_settles_without_native_return() {

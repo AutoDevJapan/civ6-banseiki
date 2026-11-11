@@ -1775,11 +1775,12 @@ mod tests {
             unsafe { root_unwind_driver(state.as_mut_ptr(), gateway) },
             1
         );
-        assert_eq!(native_frames::counts(), [1, 0, 1, 0, 0]);
-        assert!(native_frames::close(
+        // A terminal unwind settles the frame without certifying a clean drain.
+        assert_eq!(native_frames::counts(), [1, 0, 1, 0, 1]);
+        assert!(!native_frames::close(
             Instant::now() + Duration::from_secs(2)
         ));
-        assert!(native_frames::reopen());
+        assert!(!native_frames::reopen());
     }
     #[test]
     fn runtime_native_six_shim_unwind_restores_complete_original_stack_and_registers() {
