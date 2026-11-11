@@ -4,13 +4,13 @@
 
 再開時の実機1は7/33手順後、ハッシュ指定の大文字と厳密比較の不一致でnative設置前に停止した。同じexe/DLLの実bytesを照合し、小文字の指定へ直した。実機2は再起動時に `Steam - Game Launch Failed` の本文とボタンを取得できず停止した。後日の読取ではその画面は存在しないことを確認したが、同期エラーとは断定しない。Steamの記録には新規プロセスの終了コード83があり、人物の実装やnative設置へ原因を帰属させない。実機3は再起動の開始33ms後、Steamログ初期読取の共有違反32で停止した。3試行ともJoin・正式支払い・配置を実行しておらず、未払い拒否の受入へ数えない。原資料は 非公開の検証記録 へ保全した。
 
-共有違反32・ロック違反33だけをSteamログの一時エラーとして区別する修正を追加した。不在だけが空カーソルになり、その他の読取失敗は元の失敗を維持する。二つのログとSteam sessionを読めてから観測状態を更新し、初期読取だけを50ms間隔・最大2秒・元の期限以内で再確認する。共有枠の期限と中断を毎回確認し、起動URIやゲームの終了操作を再送しない。実Windowsの排他openで失敗を再現し、解放後の元bytes・世代・長さを確認した。関連221件と全対象Clippyが成功し、別モデル144304の指摘は0件。次は同じ受入条件の4回目だけを実施する。
+共有違反32・ロック違反33だけをSteamログの一時エラーとして区別する修正を追加した。不在だけが空カーソルになり、その他の読取失敗は元の失敗を維持する。二つのログとSteam sessionを読めてから観測状態を更新し、初期読取だけを50ms間隔・最大2秒・元の期限以内で再確認する。共有枠の期限と中断を毎回確認し、起動URIやゲームの終了操作を再送しない。実Windowsの排他openで失敗を再現し、解放後の元bytes・世代・長さを確認した。関連221件と全対象Clippyが成功し、独立レビューの指摘は0件。次は同じ受入条件の4回目だけを実施する。
 
-既存の配置観測Aと支払済み資格B1を再利用する。実機144はUIと本体更新の共通入口を確認し、親のSP04は費用2の未払い可否false・全額後trueを確認している。今回の生成器は費用3の山内上杉憲政を元の勢力枠4から加入させ、正式任命だけの既払1、追加称号一回後の既払2、全額の既払3を別々に観測する。人物の費用、支払い操作、正常系のUI処理は変更しない。
+既存の配置観測Aと支払済み資格B1を再利用する。実機144はUIと本体更新の共通入口を確認し、既存のSP04は費用2の未払い可否false・全額後trueを確認している。今回の生成器は費用3の山内上杉憲政を元の勢力枠4から加入させ、正式任命だけの既払1、追加称号一回後の既払2、全額の既払3を別々に観測する。人物の費用、支払い操作、正常系のUI処理は変更しない。
 
 `civ6-persona-events-rs generate-sp-runtime TEMPLATE.json OUTPUT.json 3` で生成する。費用2は末尾引数を省略できる。既存の明示runtime、通常のJoin・Evolve・Assign、実AI手番、保存と再起動後の比較を使う。snapshotは本人の昇進を前から連続した列として読み、本人のGameplay取得記録と確定した支出を照合する。既払1と2の両方で配置可否falseを要求する。許可の読取は、未公開のGameplay記録を待つ前に行い、記録待ちが未払いtrueを隠さないようにする。全額後だけtrueを要求し、過剰支出、別人物の記録、昇進の順序違いを拒否する。二つ目の途中観測が欠ければ、全額の結果から補わず失敗する。
 
-有限差分75138ac9は重点13件と人物イベント123件がLua5.1で成功し、別モデル132341のMust/Suggestion/Nitは0件。保存比較の精度修正は既存の1c9c7046をそのまま取り込む。この記録は新しい実機の成功ではない。明示的な接続を通常の自動起動と呼ばず、UI可否の観測だけで本体の未払いASSIGN要求、AI本人の費用2/3、途中保存と複数端末まで成功とはしない。これらの元の受入条件とPR86未マージを保持する。
+有限差分75138ac9は重点13件と人物イベント123件がLua5.1で成功し、独立レビューのMust/Suggestion/Nitは0件。保存比較の精度修正は既存の1c9c7046をそのまま取り込む。この記録は新しい実機の成功ではない。明示的な接続を通常の自動起動と呼ばず、UI可否の観測だけで本体の未払いASSIGN要求、AI本人の費用2/3、途中保存と複数端末まで成功とはしない。これらの元の受入条件とPR86未マージを保持する。
 
 ## B1と本人読取を同じ試験用leaseへ接続
 
@@ -28,7 +28,7 @@ schemaはGame property `JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA=1`。904000..904255�
 
 ## 配置検証の再開：配置資格の独立受信処理B1
 
-**配置の共通経路は親の実機144で確認済み。今回のB1は独立した支払済み資格の受信処理と合成拒否試験であり、製品の未払い配置拒否B全体は未完成である。** 元の観測Aの差分b848fba5を保持した担当用作業場所を、親のc21b145fと通常資格修正51cb6b42まで早送りした。親・実機担当の作業場所と本体メモリには接続しない。
+**配置の共通経路は実機144で確認済み。今回のB1は独立した支払済み資格の受信処理と合成拒否試験であり、製品の未払い配置拒否B全体は未完成である。** 元の観測Aの差分b848fba5を保持した作業ブランチを、c21b145fと通常資格修正51cb6b42まで早送りした。この検査では実ゲームの本体メモリへ接続していない。
 
 実機144の根拠は本書「実機141〜144」の記録とd49d485e。UI戻り先0xBA3E2が2行、本体更新0x2DD375が1行、owner0・Index4・City ID65536・座標134/29・owner0・原AL1で一致した。これは私的な費用1の配置観測で、費用2/3・AI・支払い本人の全昇進の受入へ拡張しない。
 
@@ -45,19 +45,19 @@ schemaはGame property `JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA=1`。904000..904255�
 1. 現在の本人読取器について、同一実SessionのCore昇進とそのゲームのGameInfo定義を実機で照合する。診断の呼出元が渡したPromotion Indexだけでpaidをtrueにしない。
 2. 同期Gameplayの人物台帳と、実Governor/base/title1/title2/公式Spentの人物別会計からRustでpaidを派生するproducerを接続する。全22人の任命producerを複製せず、範囲の衝突検査・保存schema移行・全owner閉鎖を同じ初期化へ追加する。予約残高とEVOLVING状態だけを支払い証拠にしない。
 3. 完全な人物catalogの初期化前は人物を閉じる共通gateを、CanEver・自然Core getter・4引数CanAssignの三入口として一Job・leaseで設置する。入力が未分類の間にabsenceを通常総督の証拠にしない。第二/第三設置失敗、遅延callback、取り消し、各trace版の終端、三入口の復元を合成試験で確認する。
-4. 同一候補の別モデルレビュー・全件検査・releaseは親が行う。費用2/3の公式APPOINT後の未払いUI/本体ASSIGN拒否、PROMOTEを一個ずつ支払った本人会計、全額後の配置、途中保存/再開、AIの正式支払いと配置、複数端末を親のlive_chainで実証する。B1の合成成功を実機成功へ読み替えない。
+4. 同一候補の独立レビュー・全件検査・releaseが必要である。費用2/3の公式APPOINT後の未払いUI/本体ASSIGN拒否、PROMOTEを一個ずつ支払った本人会計、全額後の配置、途中保存/再開、AIの正式支払いと配置、複数端末を所有するlive_chainで実証する。B1の合成成功を実機成功へ読み替えない。
 
 ### B1の検査結果
 
 最終候補は専用targetで `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets --no-fail-fast` が115実行対象・1,809件成功、失敗・ignored・measured・filtered outが0件だった。Lua5.1を全件実行した。Cargoの各Running区間の最後のsummaryだけを集計し、別Win64子の1件成功・44 filtered outは二重加算しない。最終native45件には受信処理の追加6件と、4引数gatewayの合成拒否・通常総督の昇進配列欠落の直接確認を含む。
 
-native crateは `cargo clippy --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --all-targets --no-deps -- -D warnings` が成功した。初回は既存の本人読取器の末尾byteループでneedless_range_loopを検出したため、同じoffset・一byteずつの読取をiteratorへ変更して修復した。初回45件の検査に出た試験用メモリのunused_assignmentsもvolatile書込みと読取結果の確認へ修復した。さらに通常総督へ人物用昇進配列を要求しないよう判定順を直し、修正前の全件1,809件とは別に最終全件を再実行した。Rust2021の対象整形・差分検査も成功した。依存先まで含むClippy、別モデル、CI、release、製品の配置拒否と追加実機はこの段階では未実行である。
+native crateは `cargo clippy --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --all-targets --no-deps -- -D warnings` が成功した。初回は既存の本人読取器の末尾byteループでneedless_range_loopを検出したため、同じoffset・一byteずつの読取をiteratorへ変更して修復した。初回45件の検査に出た試験用メモリのunused_assignmentsもvolatile書込みと読取結果の確認へ修復した。さらに通常総督へ人物用昇進配列を要求しないよう判定順を直し、修正前の全件1,809件とは別に最終全件を再実行した。Rust2021の対象整形・差分検査も成功した。依存先まで含むClippy、独立レビュー、CI、release、製品の配置拒否と追加実機はこの段階では未実行である。
 
-親へ渡すのは51cb6b42を基準にした6ファイルのcommit差分だけ。lib/windows/assignment/新paid_assignment/本人読取器のloop/本書が対象で、任命producer・既存シナリオ・UI・実機の保存は変更しない。検査ログ、集計、候補指紋は担当用 `.task/assignment1433` へ保全し、commitには含めない。
+51cb6b42を基準にした6ファイルのcommit差分として保存した。lib/windows/assignment/新paid_assignment/本人読取器のloop/本書が対象で、任命producer・既存シナリオ・UI・実機の保存は変更しない。検査ログ、集計、候補指紋は非公開の検証記録へ保全し、commitには含めない。
 
 ## 配置観測Aと未払い拒否Bの接続契約
 
-**今回追加するのは原戻り値を保持する配置観測Aで、費用2・3の未払い配置拒否Bは未実装・未実機である。** 基準a29a8717の専用作業フォルダーでmode ordinal 7 `AssignCalibration`を追加する。通常資格のmode 6は担当1399/1447が修正中であり、この差分に複製しない。mode 5、数値getter、ticket/session、128bit原子更新と既存の終了処理は保持する。mode 7だけでは人物を任命可能にしない。
+**今回追加するのは原戻り値を保持する配置観測Aで、費用2・3の未払い配置拒否Bは未実装・未実機である。** 基準a29a8717の専用作業フォルダーでmode ordinal 7 `AssignCalibration`を追加する。通常資格のmode 6の修正は独立した差分として保持し、この観測差分に複製しない。mode 5、数値getter、ticket/session、128bit原子更新と既存の終了処理は保持する。mode 7だけでは人物を任命可能にしない。
 
 ### Aの実装と測定対象
 
@@ -67,15 +67,15 @@ native crateは `cargo clippy --locked --manifest-path tools/Cargo.toml -p civ6-
 
 専用gatewayは4引数とRAX/R10/R11、XMM0..5を原呼出し前に復元し、原関数を一度だけ呼ぶ。戻ったRAX全体を退避・復元し、ALも改変しない。Win64のshadow space、16 byteの呼出し時stack alignment、SEH unwind情報を持つ。入口5 byteの中継分岐は既存の8 byte原子交換で設置・復元する。先頭命令だけをtrampolineへ移すため、二番目の命令の途中を分岐先にしない。復元後もDLL・trace・中継コードを所有ゲームの終了まで保持し、mode 7の再設置は同一プロセスで拒否する。実行器の事前検証も配置観測を単回に制限し、停止後のrestart_gameだけで使用済み状態を戻す。安定したsnapshotは遅れて中継へ入るthreadの不存在を証明しない。
 
-呼出し中に `this+0x70`、Player+0xD8、Governor+4、および本体検証が使うCity+0xA8/+0xC0/+0xC4/+0xD8のraw値だけをコピーする。読取成功bitを独立して記録し、null・不正アドレス・欠落を許可へ変換しない。R9の先や任意getter、Lua VMは呼ばない。アドレスは数値の観測記録にし、別の呼出しで参照しない。City各fieldの意味は親が同じ場面のLua city ID・座標・ownerと照合するまで実測済みとしない。
+呼出し中に `this+0x70`、Player+0xD8、Governor+4、および本体検証が使うCity+0xA8/+0xC0/+0xC4/+0xD8のraw値だけをコピーする。読取成功bitを独立して記録し、null・不正アドレス・欠落を許可へ変換しない。R9の先や任意getter、Lua VMは呼ばない。アドレスは数値の観測記録にし、別の呼出しで参照しない。City各fieldの意味は同じ場面のLua city ID・座標・ownerと照合するまで実測済みとしない。
 
 traceは独立版1・容量1,024。上限では行を上書きせず欠落を加算し、原戻り値を保持する。controllerは不完全行、欠落、旧版、未復元を成功としない。実行器は終端のquiescence_proven=falseとcounter_scope=snapshot_observation_not_complete_call_historyを必須とし、所有者0・実Index4のUI/本体更新双方の行と、両経路のthis/Governor/City/PlayerおよびCity raw値の一致を要求する。この数値比較も、別呼出し間のポインター寿命の証明ではない。合成Windows検査は途中のpanicでもworkerを全件回収してから入口を復元し、traceを解放する。
 
-### 親が実行する有限シナリオ
+### 有限シナリオによる検証
 
 既存の私的費用1の手動任命シナリオを基に `leader-persona-assign-calibration-15km.json` を追加した。正規Join、本人の偉人、称号全額予約、公式APPOINT一度、Governor/base/Spent+1、通常Finalizeを確認する。mode 5を復元してから、同じ所有ゲームにmode 7を一度設置し、公式UIのCanAssignと通常のJAC_AssignLeaderを一度送る。実Cityへの配置と称号使用数不変を確認し、入口を復元する。観測窓は90秒、配置待ちは30秒。strict Luaと既存のgeneric固定Judgeを使い、新テストMOD・map・rulesetは追加しない。通常の新規開始の試験MOD分離を保持する。
 
-別モデルレビュー後、所有ゲームのない状態で同一候補からDLL・controller・実行器をrelease buildして配置し、次を実行する。この段階では実Civ6・実メモリ・共有ロックへの接続は未実施である。
+独立レビュー後、所有ゲームのない状態で同一候補からDLL・controller・実行器をrelease buildして配置し、次を実行する。この段階では実Civ6・実メモリ・共有ロックへの接続は未実施である。
 
 ```powershell
 D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-assign-calibration-15km.json --stop-on-failure
@@ -83,25 +83,25 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-assign-calibrat
 
 `assign-calibration-cost1.jsonl` と同試行の `ASSIGN1433_UI/REQUEST/AFTER`・steps・Lua.logを照合する。最初のAは費用1だけなので、費用2/3途中の拒否や本体AIの自然な配置試行を合格に数えない。AI用の寿命未証明な `0x30CBE0/0x30C100` は呼ばない。
 
-### Bの具体的な実装契約（A実測と1447確定後）
+### Bの具体的な実装契約（A実測と通常資格契約の確定後）
 
 1. mode 6の `901000+Index` は全額予約中のEVOLVINGにも真となる**任命**資格であり、配置資格へ共用しない。`903000+Index` は任命の閉鎖に使う。配置の候補は対応表 `904000+Index`、本人の支払済みbool `905000+Index`、閉鎖 `906000+Index`、所有者失効 `907000` とする。全runtime定義・保存初期化で既存範囲との衝突を検査し、同じowner・人物Index・Core receiver・session・ticket・typed false ACKで公開する。番号は未実装で、まだ製品へ公開しない。
 2. 同期Gameplayの正本から、同じactor・人物・runtime Index・保存された費用、実Governor、base、必要なTITLE_1/TITLE_2、公式Spentと人物別の全支払の会計一致を確認してpaidを作る。予約残高、UI cache、EVOLVING/GOVERNORという文字列だけを全支払の証明にしない。未払い時は偉人と支払済みの実Governorを保持する。追加称号や完了stateを偽造しない。
-3. producerは任命資格とは独立してpaid falseを最初に公開し、manifest/owner/Index/世代の確定と閉鎖値のCore自然getterによる確認後、全支払の確定点で最後にtrueを公開する。死亡・取消・所有者変更・保存読込・実体欠落・会計不一致では最初に閉じる。1399/1447の初期化/reload、receiver切替、closed ACK、manifest競合の契約へ合流し、全22人のproducerを複製しない。
-4. consumerにはactor×Indexのpaid用128bit cellを追加し、同一Core receiver・session・入口で一度採番したticket・派生paidを一体でCAS更新する。manifest/owner/resetにも同じ世代照合を要求する。UI receiver・不正型・flags・欠損・旧世代・古いtrueの遅延復帰は閉鎖。資格consumerと同じ受信先切替/取消で両cellを閉じ、任命allow trueからpaid trueを導出しない。未確定の1447のatomic形式を別実装で固定しない。
-5. A実測後の共通CanAssign callbackは、その呼出し中にコピーしたowner/Indexで確定manifestを照合し、原関数を一度呼ぶ。人物ならpaidだけで原ALを制限し、偽を真にはしない。通常の非人物総督は原RAXを返す。manifest未初期化時は全人物を識別できるまで人物を閉じる設計を1447のmanifest契約と統合する。無効owner・不正型・旧世代・未払いは閉じ、引数ポインターは保持しない。R9の意味はAで未証明のため書き換えず、記録名はraw_r9とする。
+3. producerは任命資格とは独立してpaid falseを最初に公開し、manifest/owner/Index/世代の確定と閉鎖値のCore自然getterによる確認後、全支払の確定点で最後にtrueを公開する。死亡・取消・所有者変更・保存読込・実体欠落・会計不一致では最初に閉じる。通常資格の初期化/reload、receiver切替、closed ACK、manifest競合の契約へ合流し、全22人のproducerを複製しない。
+4. consumerにはactor×Indexのpaid用128bit cellを追加し、同一Core receiver・session・入口で一度採番したticket・派生paidを一体でCAS更新する。manifest/owner/resetにも同じ世代照合を要求する。UI receiver・不正型・flags・欠損・旧世代・古いtrueの遅延復帰は閉鎖。資格consumerと同じ受信先切替/取消で両cellを閉じ、任命allow trueからpaid trueを導出しない。通常資格のatomic形式を未確定のまま別実装で固定しない。
+5. A実測後の共通CanAssign callbackは、その呼出し中にコピーしたowner/Indexで確定manifestを照合し、原関数を一度呼ぶ。人物ならpaidだけで原ALを制限し、偽を真にはしない。通常の非人物総督は原RAXを返す。manifest未初期化時は全人物を識別できるまで人物を閉じる設計を通常資格のmanifest契約と統合する。無効owner・不正型・旧世代・未払いは閉じ、引数ポインターは保持しない。R9の意味はAで未証明のため書き換えず、記録名はraw_r9とする。
 6. controllerはCanEver/自然getter/CanAssignを同一Job・lease・sessionで管理し、paidを先に閉じて全入口を復元する。第二/第三設置失敗のatomic rollback、遅延callbackと取消の競合、各版のsnapshot読取、所有ゲーム終了を合成で検査する。mode 7は観測専用として維持し、製品のmode 6との接続はレビュー確定後の別deltaにする。
-7. 合成の拒否/許可/元一回/通常総督保持と、親の費用2・3の公式APPOINT→未払いUI/本体ASSIGN拒否→PROMOTE一個ずつ→実Spent/base/title照合→全額後の配置、保存読込・複数端末・AI実手番を必須にする。AIの公式PROMOTE選択・支払い経路は親の別工程で未完了のまま残す。
+7. 合成の拒否/許可/元一回/通常総督保持と、費用2・3の公式APPOINT→未払いUI/本体ASSIGN拒否→PROMOTE一個ずつ→実Spent/base/title照合→全額後の配置、保存読込・複数端末・AI実手番を必須にする。AIの公式PROMOTE選択・支払い経路は別の未完了条件として残す。
 
-Aの観測sourceと合成検査だけを引き渡し、B完成やPR86の製品完成とは報告しない。
+Aの観測sourceと合成検査の結果であり、B完成やPR86の製品完成を示さない。
 
-### 1433の検査結果と引き継ぐ差分
+### 配置観測の検査結果と差分
 
-専用targetで `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets --no-fail-fast` が112実行対象・1,712件成功、失敗・ignored・filtered 0。Lua 5.1の全件を含む。別実行のworkspace文書検査10対象も成功した。新シナリオは実行器の `--check` で30手順VALIDだった。初回の新規開始件数133→134、配布固定一覧への新シナリオ登録漏れ、基準版の手動任命回帰1件の登録漏れを検出して修復した。元の119件と追加5件の人物検査一覧は、親の公開済み `9c34d443` と同一の差分を取り込み、削除・省略しない。
+専用targetで `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets --no-fail-fast` が112実行対象・1,712件成功、失敗・ignored・filtered 0。Lua 5.1の全件を含む。別実行のworkspace文書検査10対象も成功した。新シナリオは実行器の `--check` で30手順VALIDだった。初回の新規開始件数133→134、配布固定一覧への新シナリオ登録漏れ、基準版の手動任命回帰1件の登録漏れを検出して修復した。元の119件と追加5件の人物検査一覧は、公開済み `9c34d443` と同一の差分を取り込み、削除・省略しない。
 
-追加Clippyでは依存先を含む既存のスタイル警告で停止したため、任意の別領域へ機能変更を広げず、Aを載せるnative crateを `--all-targets --no-deps -- -D warnings` で検査した。この範囲のscope初期化3箇所、bool検査、無効ポインターの検査記法を等価に修正し、成功した。依存先を含めた厳格Clippy全体の成功は主張しない。修正後はnative 34件、実行器と関係シナリオ126件、人物一覧2件の計162件を再実行し、すべて成功した。整形と `git diff --check` も成功した。ソースの別モデルレビュー、同一候補release、CIと実機Aは親の担当で、子1433では未実行である。
+追加Clippyでは依存先を含む既存のスタイル警告で停止したため、任意の別領域へ機能変更を広げず、Aを載せるnative crateを `--all-targets --no-deps -- -D warnings` で検査した。この範囲のscope初期化3箇所、bool検査、無効ポインターの検査記法を等価に修正し、成功した。依存先を含めた厳格Clippy全体の成功は主張しない。修正後はnative 34件、実行器と関係シナリオ126件、人物一覧2件の計162件を再実行し、すべて成功した。整形と `git diff --check` も成功した。この時点でソースの独立レビュー、同一候補release、CIと実機Aは未実行である。
 
-対象はnative bridgeのlib/windows/独立assignment module/controller、実行器のnative_bridge/runner/scenario、assignment回帰と配布・MOD分離・人物一覧の検査、30手順シナリオ、本節の13ファイルだけ。親は基準a29a8717からのcommit deltaを3-way統合し、mode 6と新しい親修正を保持する。実機Aの同一call内の数値・原ALを確認し、1447確定後のpaid契約Bへ進む。AIの公式支払い工程は別の未完了条件である。
+対象はnative bridgeのlib/windows/独立assignment module/controller、実行器のnative_bridge/runner/scenario、assignment回帰と配布・MOD分離・人物一覧の検査、30手順シナリオ、本節の13ファイルだけ。基準a29a8717からのcommit deltaを3-way統合する際は、mode 6と既存修正を保持する。実機Aの同一call内の数値・原ALを確認し、資格公開契約の確定後のpaid契約Bへ進む。AIの公式支払い工程は別の未完了条件である。
 
 ## 技術判断
 
@@ -193,7 +193,7 @@ llvm-objdump -d --no-show-raw-insn --start-address=0x1804a80ea --stop-address=0x
 
 公式Luaも両側の境界を分けている。`G/DLC/BlackDeathScenario/Scripts/BlackDeathScenario_StateUtils.lua:63-95` はUIから `EXECUTE_SCRIPT` を送り、GameCore側で `SetProperty` を呼ぶ。`G/DLC/PiratesScenario/Scripts/PiratesScenario_UnitCommands.lua:74-84` は本体Playerへ数値propertyを書き、同シナリオのUI `WorldTracker_PiratesScenario.lua:41` はPlayer propertyを読む。標準の同期Lua経路と画面での読取が実在する根拠になる。ただし、これらのLuaファイルだけで本体関数からUIスレッド上で `Player+0x528` を安全に読むこと、または再読込直後のcache反映時刻は証明できない。
 
-### 親のruntime observerへ渡す検証順
+### runtime observerによる検証順
 
 各組を少数のhardware breakpointで順に測る。命令位置はRVAなので、観測時は対象DLLのSHA-256を照合して実際のロード基底を足す。試験用キー `JAC_ACCESSOR_853_NUMBER=853271` と `JAC_ACCESSOR_853_TEXT="ACCESSOR_853"` を同期Gameplayの `Player:SetProperty` で設定し、公式Lua getterと比較する。人物台帳の `OWNER` / `STATE` / `EVOLVING` を試験用に上書きせず、Governor実体・公式使用済み称号も変更しない。
 
@@ -248,7 +248,7 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-lifecycle-15km.
 
 取込候補単体は103試験群・1501件、統合コミット `f3cd5e4` までは103試験群・1516件、次のレビュー修正後は103試験群・1522件、実機82後のno-breakpoint診断追加時は103試験群・1530件、attach出所と対象終了の区別を加えた段階では103試験群・1531件成功していた。今回の `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets -q` は、このworktree専用の `tools/target-native-integrate` で103試験群・1534件成功、失敗0・省略0だった。Lua 5.1の73人物ケース、SQLの22件gate、Windows専用Rust子プロセスでの実開始位置・停止中RIPの照合、先行アプリ例外のdispatcher注入、重大終了コードと終端版の検査を含む。整形と差分の空白検査、7手順シナリオの`--check`も通った。実機でのproperty ABIとnative adapterは未証明・未接続のままである。
 
-統合前の実機55では、敵AI1の費用1について実Great Personと公式称号1、予約後の本体任命・配置、使用済み称号1、進化完了時の偉人消失まで確認した。実機61では定着、63ではスパイの派遣受理まで進んだ。これは敵側の試験経路の証跡であり、今回の静的閉鎖gateで加入後の資格が開く証明ではない。実機56の後続ロードは保存名の書換えで失敗した。親側の新checkpoint修正と実機確認は今回の観測器修正の合格に含めない。未加入21AIを含む全113ケース、費用2/3の追加昇進、資格の本体adapterと戻り値への接続、propertyの型・寿命・スレッド安全性、配置拒否、保存・読込、複数端末、スパイ中和と回復はMustとして残る。
+統合前の実機55では、敵AI1の費用1について実Great Personと公式称号1、予約後の本体任命・配置、使用済み称号1、進化完了時の偉人消失まで確認した。実機61では定着、63ではスパイの派遣受理まで進んだ。これは敵側の試験経路の証跡であり、今回の静的閉鎖gateで加入後の資格が開く証明ではない。実機56の後続ロードは保存名の書換えで失敗した。後続の新checkpoint修正と実機確認は今回の観測器修正の合格に含めない。未加入21AIを含む全113ケース、費用2/3の追加昇進、資格の本体adapterと戻り値への接続、propertyの型・寿命・スレッド安全性、配置拒否、保存・読込、複数端末、スパイ中和と回復はMustとして残る。
 
 ### 追加した読取コマンド
 
@@ -291,13 +291,13 @@ b025c32の比較は再起動を含む17手順と6種類のログ判定に成功�
 
 #### 実機118のA段階と費用1の私的B接続
 
-ROOT853の実機118は22手順・6ログ検査に成功し、最終の484組もすべて元の本体資格が偽だった。加入した所有者0の蘆名盛舜だけ試験用派生ID `853304` がtrueとなり、ほかはfalseを維持した。`joined-admission-property.jsonl` のCore thread 146072では、本体getterのreceiver `0x152557b98` が前後のCanEver呼出しから得た所有者0の `Player+0x528` と一致した。同じreceiverでboolタグ1・flags0のpayloadが0から1へ移り、UI thread 148772のcache receiver `0x18061fba8` とは別だった。GameCore固定SHA、両入口の復元、欠落0も同試行で確認した。これは別呼出し間のポインタ寿命やロード時の同期を証明しない。
+実機118は22手順・6ログ検査に成功し、最終の484組もすべて元の本体資格が偽だった。加入した所有者0の蘆名盛舜だけ試験用派生ID `853304` がtrueとなり、ほかはfalseを維持した。`joined-admission-property.jsonl` のCore thread 146072では、本体getterのreceiver `0x152557b98` が前後のCanEver呼出しから得た所有者0の `Player+0x528` と一致した。同じreceiverでboolタグ1・flags0のpayloadが0から1へ移り、UI thread 148772のcache receiver `0x18061fba8` とは別だった。GameCore固定SHA、両入口の復元、欠落0も同試行で確認した。これは別呼出し間のポインタ寿命やロード時の同期を証明しない。
 
 この結果を受け、`joined-admission` を私的な費用1専用モードとして追加した。固定GameCoreの数値getter入口とCanEver入口を同じPID・作成FILETIME・共有lease・300秒上限のもとで同時に設置する。CanEverは元関数を一度だけ呼び、`this+0x70` のPlayer IDが0、Indexが実行時検査済みの4である呼出しからCore property receiverを登録する。自然に呼ばれたgetterが同じreceiver・固定キー `853304` の24バイトboolを返した時だけ、receiverと許可bitを一つの原子的な値で更新する。Core以外のUI cache receiver、欠損、不正タグ・flags・payload、所有者違いは許可を作らない。所有者0のIndex 4以外は元のCanEver結果を返す。controllerはtrueを構成から渡さない。終了時は許可を先に閉じてから両入口を復元し、property前置領域と中継コードをゲーム終了まで保持する。
 
 試験用の同期GameplayはGame台帳の正規Join、実Great Person、費用1の全額予約を確認した確定点で派生boolを公開する。完了時は偉人を消す前にfalseへ戻し、本体Governor・基礎昇進・称号使用済み数と偉人消失を確認した後にtrueを再公開する。初期値は全484組falseで、数値IDの衝突は試験開始時に拒否する。この公開処理は試験MODの明示flagで有効になり、通常の人物MODだけでは数値資格を公開しない。
 
-ROOT853が同一releaseビルドを配置・レビューした後に実行するBの有限シナリオは次である。24手順の内容は、未加入484組偽、21AIに公式称号を与えた実ターン後の使用済み0・未任命、正規Join後に所有者0の蘆名盛舜だけ真、ほか483組偽、公式APPOINT一度、実Governor・基礎昇進・Spent+1、通常Finalize後の偉人消失である。証跡は`joined-admission-cost1.jsonl`、同期receipt、`steps.jsonl`と各ログで判断する。
+同一releaseビルドの配置・レビュー後に実行するBの有限シナリオは次である。24手順の内容は、未加入484組偽、21AIに公式称号を与えた実ターン後の使用済み0・未任命、正規Join後に所有者0の蘆名盛舜だけ真、ほか483組偽、公式APPOINT一度、実Governor・基礎昇進・Spent+1、通常Finalize後の偉人消失である。証跡は`joined-admission-cost1.jsonl`、同期receipt、`steps.jsonl`と各ログで判断する。
 
 ```powershell
 D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admission-cost1-15km.json --stop-on-failure
@@ -309,13 +309,13 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admissio
 
 `poc/JAC_Test_PropertyObserver` の試験用同期Gameplayイベントは、22人の実行中Governor Indexから `853300+Index` を作り、Game/Playerでの既存値との衝突を全484組について拒否してから、全員をfalseにする。蘆名盛舜（実行時Index 4、費用1）だけを正規Joinし、実Great Personが1体であることと公式称号1個の全額予約、Game台帳の所有者・EVOLVINGを確認してから、所有者0の派生値だけをtrueにする。Game propertyの加入台帳を正本とし、試験用のPlayer値やreceiptから加入・称号を作らない。別の人物・所有者はfalseのままにする。
 
-ROOT853はAの有限シナリオを実機118で実行した。ROOT側で加入後の484組を追加したため実行版は22手順だった。元の資格判定のfalseと所有者0/1をJoin前後に観測し、その間に派生propertyのfalse→trueをGameplay/UI getterで観測した。共有ロックとゲーム終了はROOT853の`live_chain`が所有した。
+Aの有限シナリオは実機118で実行した。加入後の484組を追加したため実行版は22手順だった。元の資格判定のfalseと所有者0/1をJoin前後に観測し、その間に派生propertyのfalse→trueをGameplay/UI getterで観測した。共有ロックとゲーム終了は同じ実行の`live_chain`が所有した。
 
 ```powershell
 D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admission-calibration-15km.json --stop-on-failure
 ```
 
-証跡は `joined-admission-before.jsonl`、`joined-admission-property.jsonl`、`joined-admission-after.jsonl`、同期Game receiptと`steps.jsonl`で照合する。前後のnative行にIndex 4、所有者0/1、元のAL=0、UI戻り先RVA `0xBA523`、Player候補と`+0x528` receiverの整合が必要である。property行はID `853304`、boolタグ1、payload 0/1、flags 0、Core/UIの別threadを必要とする。property traceのreceiverと各CanEver行のreceiverが一致しても、別呼出し・別threadのポインタ寿命や同時更新の安全性は証明されない。ROOT853はその差と同期Gameplay receiptの順序を実際の証跡で判断する。
+証跡は `joined-admission-before.jsonl`、`joined-admission-property.jsonl`、`joined-admission-after.jsonl`、同期Game receiptと`steps.jsonl`で照合する。前後のnative行にIndex 4、所有者0/1、元のAL=0、UI戻り先RVA `0xBA523`、Player候補と`+0x528` receiverの整合が必要である。property行はID `853304`、boolタグ1、payload 0/1、flags 0、Core/UIの別threadを必要とする。property traceのreceiverと各CanEver行のreceiverが一致しても、別呼出し・別threadのポインタ寿命や同時更新の安全性は証明されない。その差と同期Gameplay receiptの順序を実際の証跡で判断する。
 
 Aの実測に基づく費用1の私的B接続は、CanEver内から新たにC++ getterを呼ばず、同じ所有者のCore receiverに対して本体が自然に呼んだgetterの結果だけを使う。B合格には蘆名盛舜本人だけのnative資格真、他483組偽、公式APPOINT1回による実Governor・基礎昇進・本体Spent+1、Finalize後の実Great Person消失が必要である。費用2/3のPROMOTE、未払い時ASSIGN拒否、保存とスパイ回復はその後のMustであり、Aの成功に含めない。
 
@@ -325,7 +325,7 @@ Aの実測に基づく費用1の私的B接続は、CanEver内から新たにC++ 
 
 成果物は`tools/civ6-autotest/artifacts/leaderperson-100/can-ever-original.jsonl`。DLLのSHA-256は`8a4c0fcfd9052ccb27b159b8101767a0dbb9275f006aa653b68e34a818ed8888`。共有実行器はゲームを閉じ、ゲームとロックの不在を確認した。シナリオの結果は成功だが、実行器は完了表示後にファイル使用中のエラー32を返したため、この終了処理の原因確認は別に残す。正式任命の受理・本体propertyの値形式・AIの費用2/3・中和と回復は未達のまま維持する。
 
-このソースのRust/Lua全件検査は106対象・1,609件が成功し、失敗・ignored・filtered outは0件だった。終了保護の別モデル再レビューはMust 0件、Suggestion 1件だった。Suggestionはlease末尾で起動時間分が不足する点で、実機100は新しいleaseから開始して十分な余裕を確保した。今後の短いlease開始に対する起動時間予算の検査は残る。
+このソースのRust/Lua全件検査は106対象・1,609件が成功し、失敗・ignored・filtered outは0件だった。終了保護の独立再レビューはMust 0件、Suggestion 1件だった。Suggestionはlease末尾で起動時間分が不足する点で、実機100は新しいleaseから開始して十分な余裕を確保した。今後の短いlease開始に対する起動時間予算の検査は残る。
 
 実機94は17手順と6ログ検査に合格したが、機能の成功ではない。正規Join・実Great Person・公式称号1の予約・`AttachModifierByID`の接続後、実ターンを1回進めても資格は偽だった。対象の公式`APPOINT_GOVERNOR`を一度送った後に、本体使用済み称号0・Governor不在・`CanEver=false`を同期GameplayとUIで読んだため、この操作は拒否と分類した。成果物は`leaderperson-94/result.json`と`steps.jsonl`である。`EFFECT_GRANT_TRAIT`候補を製品の22人へ展開しない。効果handlerの登録成否はこの記録だけでは確定せず、別の公式接続の全否定でもない。
 
@@ -361,7 +361,7 @@ d958059では、固定DLLのproperty getter RVA `0x99F5C0`を観測する別モ�
 
 終了時の記録読取も、作成側のCalibrationTraceが版2なのにcontrollerが版1を固定していたため失敗した。DLL SHA-256はE9302C45413B9F4C0DAED1D2E28CF0D6A9489857EE98EB092BA5651B9A7BCEA5で、用意した同一ビルドと一致していた。JSONLはidentity/install/uninstallの3行だけで、calibration/propertyの返値群は保存されていない。元の入口の復元は成功し、controllerの対象終了とlive_chainのゲーム・ロック解放を確認した。
 
-読取側は全3種のtraceで、作成側と同じ型のVERSION定義を使う形へ修正した。現在のCalibrationTraceを自分のプロセスから読み取る回帰検査は修正前に版不一致で失敗し、修正後に成功した。旧版を拒否する検査も保持する。修正後のnative crate全30件と、任命シナリオの形式検査・関連シナリオ検査を行った。実機の再確認は4試行の上限に達したため次の担当へ引き継ぐ。
+読取側は全3種のtraceで、作成側と同じ型のVERSION定義を使う形へ修正した。現在のCalibrationTraceを自分のプロセスから読み取る回帰検査は修正前に版不一致で失敗し、修正後に成功した。旧版を拒否する検査も保持する。修正後のnative crate全30件と、任命シナリオの形式検査・関連シナリオ検査を行った。この有限試行での実機再確認は当時の上限4試行で終了し、製品受入の未達条件は保持した。
 
 今回の作業で実機120（診断成功）、121（地図条件の不一致で建設前停止）、122（正式BUILD・進捗・保存成功）、123（上記の任命前停止）を行った。最終実機用dc6347eの全件検査は109対象・1,700件成功、失敗・ignored・filtered outは0で、Luaを全件実行した。変更58シナリオの--checkも成功した。実機123後の版定義修正と診断表示は、この先行版の全件成功へ混ぜず、統合版の全件・再レビュー・release再ビルドと実機を次の担当が確認する。
 
@@ -394,7 +394,7 @@ AIが費用2・3の支払い用昇進を自発的に選ぶ経路は、引き続�
 
 公開キーは、対応表900000+Index、資格901000+Index、所有者別の失効902000+owner、人物セルの閉鎖903000+Indexである。初回は各公開範囲と所有者別失効キーの衝突を確認する。死亡中も含む既存の主要文明を調べ、復活後に別MODの値を上書きしない。同期Gameのschema値3がこの範囲を所有する。旧保存の値1では新閉鎖範囲、値2では新しい所有者別失効キーを確認してから移す。衝突または既存キーの読取失敗なら、全所有者を失効して公開を中断し、既存値を上書きしない。所有者一覧は0〜63の重複しない整数を持つ連続配列と確認し、穴や不正値があれば全所有者を失効して公開を止める。Luaの揮発性スナップショットは前回公開値の比較だけに使い、権限源にしない。所有者の操作はその所有者を、各PlayerTurnはその所有者を、全体Turnは全員を再計算する。変化のないセルの数値propertyは読み書きしない。加入直後・EVOLVING前後・正式Finalize前後も同じ処理である。
 
-初回・Lua再作成・所有者オブジェクトの変更は、各所有者の失効キーを自然なCore property getterから読む。そのキーに含むownerと今回の受信先をnativeが原子的に結び、同じ入口で旧世代を閉じる。Gameplayに存在するか未実測のCanEverAppointGovernorへ依存しない。全所有者の失効値trueの読取を確認してから公開を開始する。GameInfo対応表が変わった場合と所有者の消滅時も以前の所有者を失効させる。保存されたtrueだけでは再公開しない。native接続がLua初期化より遅かった場合、比較用スナップショットから自動的には再公開しないため、親は接続を先に用意してGameplayを初期化する必要がある。任意の途中接続を製品完成とは扱わない。
+初回・Lua再作成・所有者オブジェクトの変更は、各所有者の失効キーを自然なCore property getterから読む。そのキーに含むownerと今回の受信先をnativeが原子的に結び、同じ入口で旧世代を閉じる。Gameplayに存在するか未実測のCanEverAppointGovernorへ依存しない。全所有者の失効値trueの読取を確認してから公開を開始する。GameInfo対応表が変わった場合と所有者の消滅時も以前の所有者を失効させる。保存されたtrueだけでは再公開しない。native接続がLua初期化より遅かった場合、比較用スナップショットから自動的には再公開しないため、接続を先に用意してGameplayを初期化する必要がある。任意の途中接続を製品完成とは扱わない。
 
 変更されたセルは、閉鎖キーの読取、資格falseの読取確認、対応表trueの読取確認、必要な場合だけ資格trueの読取確認の順で公開する。全変更セルを閉じてから新しい値を公開する。falseまたは対応表の確認に失敗すれば所有者全体を失効し、その自然読取も確認して中断する。失敗したスナップショットは捨てる。失効の読取が不正型でもnative側は入口で失効する。古いtrueがfalseの直後に戻る場合、nativeは新しい閉鎖世代のfalse確認がないため許可しない。
 
@@ -412,18 +412,18 @@ nativeは各owner/Indexに受信先・session・ticketを持つ閉鎖、false確
 
 GOVERNOR段階の本人への支払照合は未解決である。Gameplay HasGovernorは実機54/89で不在、GetGovernorの存在は未確認である。CorePaymentCompleteは両正式bindingと本人の基礎・必要な追加昇進を読める場合だけ許可し、UIの値で代用しない。fixtureで両メソッドがあることは本体の証明ではない。HasGovernor欠損のnegativeを維持する。
 
-親の限定診断は、live_chain所有セッションで費用1の本人が正式APPOINTされた直後とFinalize直後に、Gameplay内の次の関数を1回ずつ呼ぶ。任命・称号・配置・記録の書換えは行わない。
+この限定診断は、live_chain所有セッションで費用1の本人が正式APPOINTされた直後とFinalize直後に、Gameplay内の次の関数を1回ずつ呼ぶ。任命・称号・配置・記録の書換えは行わない。
 
     local r = ExposedMembers.JAC_LeaderPersona.CoreAdmissionCapabilities(0, "LEADER_JAC_ASHINA_MORIKIYO")
     for _,k in ipairs({"context","owner","leader","index","state","ledgerOwner","available","spent","hasGovernorBinding","hasGovernorOK","hasGovernor","getGovernorBinding","getGovernorOK","governorReturned","baseOK","base","paymentOK1","payment1","paymentOK2","payment2"}) do
         print("JAC_CORE_GOV_BINDING " .. k .. "=" .. tostring(r[k]))
     end
 
-診断は自然な正式Lua bindingのHasGovernor/GetGovernorを各1回だけ呼び、取得できた本人の昇進を読む。bindingがない場合もその不在を返し、別のgetter・未確認RVAを呼ばない。両bindingが存在するなら費用2・3の同じ本人について支払昇進を実測する。存在しなければ、親は本体の正式イベントまたは自然なnative queryの本人情報を用いた支払証明へ次段の設計を進める。総使用済み数だけ、UI cache、未確認30CBE0/30C100の呼出しでは紐付けを作らない。
+診断は自然な正式Lua bindingのHasGovernor/GetGovernorを各1回だけ呼び、取得できた本人の昇進を読む。bindingがない場合もその不在を返し、別のgetter・未確認RVAを呼ばない。両bindingが存在するなら費用2・3の同じ本人について支払昇進を実測する。存在しなければ、本体の正式イベントまたは自然なnative queryの本人情報を用いた支払証明へ次段の設計を進める。総使用済み数だけ、UI cache、未確認30CBE0/30C100の呼出しでは紐付けを作らない。
 
-配置担当1433への契約: 901000+Indexは未任命EVOLVINGの全額予約もtrueになり、追加称号の支払済み配置資格ではない。PaidAssignmentは別の派生bool/manifest範囲と閉鎖キーを設け、同じCore actor/Index・session・getter入口ticket・false ACKの原子的な公開契約を使う必要がある。今回その配置範囲を予約・公開しない。配置の4引数ABIへ任命のIndex入口を流用しない。
+配置資格の接続契約: 901000+Indexは未任命EVOLVINGの全額予約もtrueになり、追加称号の支払済み配置資格ではない。PaidAssignmentは別の派生bool/manifest範囲と閉鎖キーを設け、同じCore actor/Index・session・getter入口ticket・false ACKの原子的な公開契約を使う必要がある。今回その配置範囲を予約・公開しない。配置の4引数ABIへ任命のIndex入口を流用しない。
 
-実機の通常22人、AI追加公式PROMOTE、未払いAssign、保存/MP、元113通し、中和・回復、常時の製品接続、別モデルの固定全差分レビューは未完了である。04b単体を統合せず、今回の修正も合成成功だけで製品完了・マージ可とは扱わない。私的manual fixtureの修正と最新spy修正は、3-way統合で保持する。
+実機の通常22人、AI追加公式PROMOTE、未払いAssign、保存/MP、元113通し、中和・回復、常時の製品接続、独立レビューによる固定全差分の確認は未完了である。04b単体を統合せず、今回の修正も合成成功だけで製品完了・マージ可とは扱わない。私的manual fixtureの修正と最新spy修正は、3-way統合で保持する。
 
 単回起動の実行制約に合わせ、形式検査でも同じゲームプロセス内の2回目の昇進観測を拒否する。property観測と私的な加入観測も、同じproperty入口を共有するためまとめて単回とする。観測停止後のrestart_gameだけが再起動を許し、観測中の再起動は拒否する。入口記録の終端ではquiescence_proven=falseと、完全な呼出し履歴ではない範囲の明示も必須にした。
 
@@ -437,7 +437,7 @@ leader-persona-promotion-call-calibration-15km.jsonは、既存の私的な費�
 
 実機のcontrollerはSHA256 34323348C27B6B1E9AA2F3A917BC198494E966413C8F5072871E394E6E68DD8C、DLLは9CDFE71A15E35F7D9C8A2401BAE76F4BCE8497DEA4E365863E551B21038E7124で、配布先と一致した。4回とも共有実行器がゲームを閉じた。この段階の実機試行はここで終了した。
 
-d1a07dfeで固定したRustワークスペース全112実行対象・1,723件は成功し、失敗・ignored・filtered outは0件だった。Luaを全件実行し、変更59シナリオの--checkと整形・差分検査も成功した。別モデルの修正差分レビューは新Mustなし。複数段のCivic前提・共有親を持つfixture拡張と、盤上にいないスパイがUI要求とCore処理の間に現れる競合の確認は、提案・確認項目として残す。通常22人の資格、AIの費用2/3、未払い配置の拒否、途中保存・複数端末、人物化の通し、中和成功と回復の未達は、この成功に含めない。
+d1a07dfeで固定したRustワークスペース全112実行対象・1,723件は成功し、失敗・ignored・filtered outは0件だった。Luaを全件実行し、変更59シナリオの--checkと整形・差分検査も成功した。独立した修正差分レビューは新Mustなし。複数段のCivic前提・共有親を持つfixture拡張と、盤上にいないスパイがUI要求とCore処理の間に現れる競合の確認は、提案・確認項目として残す。通常22人の資格、AIの費用2/3、未払い配置の拒否、途中保存・複数端末、人物化の通し、中和成功と回復の未達は、この成功に含めない。
 
 ## 実機141〜144：開始比較、捕虜API不足、配置の4引数校正
 
@@ -457,7 +457,7 @@ d49d485eの指定Rustワークスペースはトップレベル114対象・1,765
 
 ### 支払い途中の予約額を人物別に計算する
 
-全差分の別モデルレビューで、EVOLVINGの各人物の費用全額を再予約する新しいMustが見つかった。費用3の人物に正式任命と追加昇進1回の計2称号を払い、費用1の別人物も予約した場合、獲得4・使用2の残り2で両者の未払い分を払える。それでも全額4を要求し、後者を任命候補から閉じていた。
+全差分の独立レビューで、EVOLVINGの各人物の費用全額を再予約する新しいMustが見つかった。費用3の人物に正式任命と追加昇進1回の計2称号を払い、費用1の別人物も予約した場合、獲得4・使用2の残り2で両者の未払い分を払える。それでも全額4を要求し、後者を任命候補から閉じていた。
 
 bbaf3494では本人の正式Core総督・基礎昇進・順序どおりの支払い昇進を読める場合、支払い済み分だけ予約から除く。正式な本人支払いの合計が使用済み称号より多い場合、昇進の順序が違う場合、本人の読取結果が矛盾する場合は許可しない。Coreの本人getterがない場合は全額予約を保ち、称号使用総数やUIの値から支払いを推定しない。任命資格と全額支払い後の配置資格は別であり、この変更は未払い配置を許すものではない。
 
@@ -521,7 +521,7 @@ mode7の観測は、ownerとleaderを指定すると、そのゲームのUI定�
 
 ### 本人の昇進を画面の実定義と照合する診断
 
-費用1の診断は、追加スパイ採用の後続結果を統合し、費用1の本体本人昇進を独立した画面読取と照合する診断を追加する。追加スパイの分離は実機138・148・149と別モデルの監査で達成した。正式中和の最新状態は実機160のターン45・失敗・捕虜2であり、その保存と23/45の履歴を保持する。巻戻しや過去の任務の再送はしない。
+費用1の診断は、追加スパイ採用の後続結果を統合し、費用1の本体本人昇進を独立した画面読取と照合する診断を追加する。追加スパイの分離は実機138・148・149と独立の監査で達成した。正式中和の最新状態は実機160のターン45・失敗・捕虜2であり、その保存と23/45の履歴を保持する。巻戻しや過去の任務の再送はしない。
 
 Rustの `civ6-persona-payment-check generate <出力JSON>` は既存の費用1配置シナリオの全手順を保持し、配置観測の直後に独立した読取だけを挿入する。同じゲームの画面側GameInfoから本人のGovernor Index、基礎Promotion Index、昇進表の長さと取得済み一覧を読む。都市は元の配置要求と同じく、自国の都市をID順に並べた先頭を使う。公式称号の使用数と費用1の加入記録も照合する。読取は本体の値や人物台帳を書き換えない。
 
@@ -563,7 +563,7 @@ controllerはrel32の接続先と中継命令を確認する。ロード済みbr
 
 投影全体の例外でも、支払照合と任命資格の両方を閉じ直す。次の通常の調整処理は、保存台帳から再構築を試みる。ここでは加入・任命・昇進・支払い要求を送らず、称号の使用済み数を変更しない。初期閉鎖は失敗した所有者の後も継続し、既存の全所有者に試みる。閉鎖不能な所有者があれば新しい公開は始めない。
 
-旧生成物で、初期閉鎖の例外、死亡した大国の保存キーの読取例外、途中の公開における書込・読戻し例外をRustのLua 5.1検査で再現した。追加3件が失敗し、既存4件は成功した。最初の修正後は全7件が成功した。別モデルの指摘を受け、無効化側で閉鎖失敗を無視する問題と、閉鎖メソッド取得の例外が後続所有者を飛ばす問題も追加2件の失敗で再現した。閉鎖処理は、所有者と二つの名前空間ごとに独立して保護する構成へ統一した。最終の全9件が成功した。
+旧生成物で、初期閉鎖の例外、死亡した大国の保存キーの読取例外、途中の公開における書込・読戻し例外をRustのLua 5.1検査で再現した。追加3件が失敗し、既存4件は成功した。最初の修正後は全7件が成功した。独立の指摘を受け、無効化側で閉鎖失敗を無視する問題と、閉鎖メソッド取得の例外が後続所有者を飛ばす問題も追加2件の失敗で再現した。閉鎖処理は、所有者と二つの名前空間ごとに独立して保護する構成へ統一した。最終の全9件が成功した。
 
 書込・読戻し例外の検査は、例外発生時に閉鎖回数を保存し、その後に全所有者を閉じ直すことを確認する。通常の調整処理による再構築、未加入人物の拒否、使用済み称号の不変も確認する。書込失敗後の閉鎖呼出しだけを取り除く試験では、閉鎖の断言が失敗した。試験後の生成済みソースは元のバイト列へ復元した。
 
@@ -579,9 +579,9 @@ RustのLua 5.1検査では、任命と支払照合の許可を別々の読取側
 
 有限再生モデルの `ai_operation/protocol.rs` はcallback連番だけでは手番を区別できなかった。上杉のTITLE1の結果を確認した後、同じ手番の別callbackがTITLE2を提案できた。複数人物が同じ所有者に属する場合も同様である。再生モデルへ同期Gameplayの手番を別入力として追加し、所有者ごとに提案済みの手番を保持する。支払い結果の確認は同じ手番でも受理するが、本人・別人物を問わず次の提案は手番が進むまで返さない。未確認の要求は手番が進んでも再提案せず、手番の巻戻りを含む不整合ではその再生を閉じる。
 
-再読込時の再生構築は、同じ所有者の保存済み提案手番を明示的に受け取る。旧操作の排出確認と同期した保存からの復元は引き続き親側の前提である。`None`は新規ゲーム用であり、再読込で印を消すために使わない。世代変更だけで同じ手番の提案権を回復させない。
+再読込時の再生構築は、同じ所有者の保存済み提案手番を明示的に受け取る。旧操作の排出確認と同期した保存からの復元は引き続き統合runtime側の前提である。`None`は新規ゲーム用であり、再読込で印を消すために使わない。世代変更だけで同じ手番の提案権を回復させない。
 
-これは送信関数を持たない再生モデルの修正であり、通常AIの操作armや正式支払いを接続したものではない。通常ビルド・DLL設置・本体操作・新しい上位hookは変更しない。親の通常CanPromote制限は次の未払いTITLEに絞る判定で、AIがその昇進を選んだことや正式支出の証拠にはならない。初回AI前の設置、発行停止と同じjob-setの待機、同期callbackと保留要求の退出、paid0の正式任命、本人費用2・3の実支払いは未達として維持する。
+これは送信関数を持たない再生モデルの修正であり、通常AIの操作armや正式支払いを接続したものではない。通常ビルド・DLL設置・本体操作・新しい上位hookは変更しない。通常CanPromote制限は次の未払いTITLEに絞る判定で、AIがその昇進を選んだことや正式支出の証拠にはならない。初回AI前の設置、発行停止と同じjob-setの待機、同期callbackと保留要求の退出、paid0の正式任命、本人費用2・3の実支払いは未達として維持する。
 
 限定検査はai-operation-audit入口20件成功・除外0、同じprotocolを使うai-gateway-observer入口は15件成功・対象外17件、両入口Clippyは警告0で成功した。後者15件は前者と重複し、合算しない。独立した差分レビューはMust0・Suggestion1・Nit0。提案は将来の接続時に、保存からの復元で誤って`None`を渡さない呼び出し側の検査を要求するもので、実行接続の前提として保持する。モデル単体で入力の真正性を保証したとは扱わない。証跡は非公開の検証記録と各検査ログ。
 
@@ -642,12 +642,12 @@ AI chooserは `0x4A7C1F` と `0x4A7D01/0x4A7D98` で評価値を既存の最良�
 共通callerまで追加照合した。`0x4014F0` は登録時と同じ所有者側 `+0x1B8` の集合を取り出し、`0x401513` は `+0x108` の段階値を読む。`0x40152C/30` がbyteと32bit段階値のアドレスをR8/RDXへ渡し、**`0x401534: call [rax+0x10]`（file `0x400934`）→ `0x404170` → `0x4A7AD0`** と進む。元の戻り先は `0x401537` のまま。段階値は `0x401544..0x40155E` で減らしながら反復する。観測候補の開始時もこの元戻り先を必須にした。これにより関数名や近傍文字列だけに頼らず、登録された所有者receiverを使う自然callbackの共通callerを特定できた。ただし、その実thread・同期Gameplay更新順・保存境界の実行時照合は未達である。
 追加レビューのSpent出所指摘を修正した。Spentの入口と原戻り先を同じ観測単位で対にし、生RCX/RDX/R8/R9・原RAX・順番をreceiptへ保存する。前Spentを取得する前のAI checker完了を拒否し、対の欠落・世代違い・thread違いで観測単位を消費して終える。filterのR8は下位byteで照合し、上位bitをABI上の別条件にしない。再生中の新規称号獲得はこの有限校正では対象外として、従来どおり曖昧な結果で閉じる。正規22人の置換と引数キーの個別命令照合も追加した。
 
-今回の検証は、capture追加前のworkspace全対象が139群・1980件成功（独立Win64子2群の各1成功・54内部filteredを加えると141群・1982件）、失敗・ignored0。Lua 5.1全件を含む。captureと費用欠損拒否を含む最終追加binは17件成功、失敗・ignored・filtered0。待機後の最初のコンパイルでは試験連番の型推論が失敗し、u32を明示してから17件を再実行した。対象Rust整形とgit diff --checkは成功。capture再レビューは原Spentの対保存とR8byteの修正後にMust/Suggestion/Nit各0。これらは有限候補の検証であり、ゲームの起動・操作・実受入は0である。親が扱うGameplayの進化完了・追加費用欠落修正には触れていない。
+今回の検証は、capture追加前のworkspace全対象が139群・1980件成功（独立Win64子2群の各1成功・54内部filteredを加えると141群・1982件）、失敗・ignored0。Lua 5.1全件を含む。captureと費用欠損拒否を含む最終追加binは17件成功、失敗・ignored・filtered0。待機後の最初のコンパイルでは試験連番の型推論が失敗し、u32を明示してから17件を再実行した。対象Rust整形とgit diff --checkは成功。capture再レビューは原Spentの対保存とR8byteの修正後にMust/Suggestion/Nit各0。これらは有限候補の検証であり、ゲームの起動・操作・実受入は0である。Gameplayの進化完了・追加費用欠落修正はこの差分に含まない。
 完成版の監査binをインストール済み固定DLLに実行し、全SHA・18個の分岐・9個の引数/共通caller命令を再照合して終了0。出力はexecution_enabled=false、runtime_installed=false、receipt_complete=falseを維持した。実機のreceiptを生成したわけではない。
 
 ## 自然AI callbackの4地点gateway登録候補
 
-`cc7525ae` 基点の独立writerで、`ai_operation/gateway.rs` と検査、任意実行bin `ai-gateway-observer` を追加した。親 `runtime-integration` の `32af6210` および `0051068e` のCallFence・所有者識別・loader helperは読むだけで、既存runtime/composite/bootstrapを変更していない。通常runtime登録・実AI観測は0のまま。
+`cc7525ae` 基点の独立した候補に、`ai_operation/gateway.rs` と検査、任意実行bin `ai-gateway-observer` を追加した。統合対象 `runtime-integration` の `32af6210` および `0051068e` のCallFence・所有者識別・loader helperは読むだけで、既存runtime/composite/bootstrapを変更していない。通常runtime登録・実AI観測は0のまま。
 
 登録候補は、現在のAI owner `+0x1B8` の集合（上限256、要素幅0x40、callableポインタ+0x38）から一意の本人callableを確認する。vtable `base+0x9FB4B8`、receiver+8、元関数slot+0x10=`base+0x4A7AD0`、owner+0x90とreceiver+0x98の同一playerを照合し、slot+0x10の整列64bit CASで観測gatewayへ切り替える。共通caller `0x401534` の原戻り先 `0x401537` とEDX段階2が一致した自然呼出しから、既存 `Capture::begin` へ生値を渡す。
 
@@ -655,18 +655,18 @@ AI chooserは `0x4A7C1F` と `0x4A7D01/0x4A7D98` で評価値を既存の最良�
 
 4つのgatewayは原関数を一度だけ呼ぶ。真callerのRSP+8から0x60byteを `ReadProcessMemory(GetCurrentProcess())` で有限コピーし、observerのshadow領域とは別に保存した後、原call前にhome領域を含めて復元する。読み取れなければ元stackへ戻して原calleeへtail jumpし、観測は採用しない。RCX/RDX/R8/R9/RAX/R10/R11・XMM0..5・RFLAGSを観測前後に保存し、returnの元結果を復元する。gatewayは元calleeから見たreturn addressを自身のreturnラベルへ変えるため、ログでは元callerのreturn addressを別フィールドに保持する。無加工の元return addressをcalleeが読むという保証はしない。
 
-SEHのpdata/xdataを持たせ、巻戻り時の終了handlerでそのthreadの呼出し情報・深さ・Captureを破棄する。親の原例外処理へ検索を続け、例外を成功にしない。再入呼出しは外側の所有者文脈を借りず、観測拒否にする。元targetは登録前に一度だけ確定し、停止後も書き換えない。GameCoreとgateway moduleをpinし、relayもプロセス終了まで保持する。途中失敗は逆順復元を試し、失敗した場合は `CriticalRestore` と静的保持したRegistrationを残す。`recover_failed_registration` で元所有者が再復元できる。
+SEHのpdata/xdataを持たせ、巻戻り時の終了handlerでそのthreadの呼出し情報・深さ・Captureを破棄する。呼出し元の原例外処理へ検索を続け、例外を成功にしない。再入呼出しは外側の所有者文脈を借りず、観測拒否にする。元targetは登録前に一度だけ確定し、停止後も書き換えない。GameCoreとgateway moduleをpinし、relayもプロセス終了まで保持する。途中失敗は逆順復元を試し、失敗した場合は `CriticalRestore` と静的保持したRegistrationを残す。`recover_failed_registration` で元所有者が再復元できる。
 
-`RuntimeLease` は親内部で実lease/ARMとCallFenceへつなぐunsafeなRust契約であり、実装済の許可ではない。開始時のPID/作成時刻/owner/generation/session/ticket/arm tokenと、現在のowner transactionを原呼出し前後に検査する必要がある。今回読んだ親ソースに `PRODARM` という公開型は見つからず、数値propertyや常にtrueを返すアダプターは作っていない。世代変更後に古いcallableを再利用しない。親が安全な現caller registrationと同一leaseを保証するまで、CLIは状態JSONを表示するだけで、登録を実行しない。
+`RuntimeLease` は統合runtime内部で実lease/ARMとCallFenceへつなぐunsafeなRust契約であり、実装済の許可ではない。開始時のPID/作成時刻/owner/generation/session/ticket/arm tokenと、現在のowner transactionを原呼出し前後に検査する必要がある。今回読んだ統合runtimeのソースに `PRODARM` という公開型は見つからず、数値propertyや常にtrueを返すアダプターは作っていない。世代変更後に古いcallableを再利用しない。統合runtimeで安全な現caller registrationと同一leaseを保証するまで、CLIは状態JSONを表示するだけで、登録を実行しない。
 
 この4地点だけではfilterの原AL・実Execute・反映後の原Spentを揃えた完全receiptにはならない。実測できていない点を架空のstatusや機械アドレス0で埋めず、将来の3操作・途中読込1回の校正では前節の追加地点と合わせる。property getter内からOP/VM/Lua getterを呼ばず、Spent・本体昇進flag・追加許可flagを生成しない。
-親ソースの実enumはProductionAdmission=6、PromotionCall=8である。新候補は既存enumへ架空の53や9を足さず、独立binと任意のRust登録関数に留めた。最新SEH試験ではWindows SDK準拠のFFIを試験内だけに宣言し、Rust activationを飛び越さない明示Win64の例外発生元を使う。
+統合runtimeの実enumはProductionAdmission=6、PromotionCall=8である。新候補は既存enumへ架空の53や9を足さず、独立binと任意のRust登録関数に留めた。最新SEH試験ではWindows SDK準拠のFFIを試験内だけに宣言し、Rust activationを飛び越さない明示Win64の例外発生元を使う。
 
 最終source `6f7dba43` の対象bin検査は24件成功、失敗・ignored・上位filtered0、コンパイル警告0。内訳は既存のcapture/protocol/pinned17件＋gateway7件で、gatewayの7件に2つの独立Win64子検査を含む。各子は1件成功・23内部filteredであり、上位24件へ重ねて加算しない。原関数4gateway各1回、homeを含む0x60真caller領域とvolatile GP/XMM/flags、実RtlVirtualUnwindのRIP/RSP、実RtlUnwindExでgatewayを跨いだ深さ・invocation解除、rel32両端、非整列拒否、原子的slot復元、読取不能frame、所有者/世代/session/arm/ticket差を検査した。
 
 初回の実unwind fixtureはアクセス違反で失敗した。診断付きRust発生元では成功したが、その結果を最終成功には使わず、Rust activationを飛び越さない明示Win64発生元へ変更し、診断なしの全24件で成功した。FFIのfeature不足によるコンパイル失敗も記録し、共有Cargo.tomlへ変更を広げず試験内SDK宣言で解消した。最終ログは 非公開の検証記録。再レビューは新Must0・Nit0。unwind fixtureの状態設定を補強するSuggestionに対し、INVOCATIONへ値を設定して解除確認を追加した。CAPTUREは空の解除確認で、非空CaptureのSEH破棄を実証したとは主張しない。最終的な統合範囲のレビューは別途必要である。全workspaceの追加実行はしていない。
 
-実所有leaseを使う通常registration、callable集合の実ゲーム寿命、ゲーム内並行owner/load競合、完全な支払いreceiptは未実測。unsafe RuntimeLeaseの架空true実装はなく、単体のfence値比較を本体authorityの成功とは扱わない。実機起動・Steam操作・共有DLL変更・通常登録・実AI観測はいずれも0。親で既存lease/CallFenceアダプターの実装と所有権確認を終えた後にのみ、前節の有限校正へ進める。
+実所有leaseを使う通常registration、callable集合の実ゲーム寿命、ゲーム内並行owner/load競合、完全な支払いreceiptは未実測。unsafe RuntimeLeaseの架空true実装はなく、単体のfence値比較を本体authorityの成功とは扱わない。実機起動・Steam操作・共有DLL変更・通常登録・実AI観測はいずれも0。既存lease/CallFenceアダプターの実装と所有権確認を終えた後にのみ、前節の有限校正へ進める。
 
 ### 解除の直列化と未完了状態の保持（レビュー対応）
 
@@ -678,12 +678,12 @@ PatchStateは全地点の初期ページ保護を最初の変更前に保存す�
 
 レビュー指摘修正後の対象binは29件成功（失敗・ignored・上位filtered0、警告0）。内訳は前回24件から旧slot単発検査1件を共有状態のRX復旧5件へ置き換え、正常Captureの動的owner/generation子検査1件を追加したもの。独立子は原ABI、非空Captureの実SEH、正常観測、並行解除の4本で、各1成功・28内部filteredを上位29件へ重ねて加算しない。実ロード済gatewayのRET直前の仮想unwindも成功した。ログは 非公開の検証記録。
 
-差分の再レビューはMust0。Suggestionの導入途中flush失敗と公開recover_failed_registration経由の再試行を検査へ追加し、Nitの名称と実処理の差も解消した。この最終差分は復旧5件を再実行して5成功・24filtered・失敗ignored0・警告0（`ai-patchstate-recovery-final.log`）。29+5を別の34ケースとして数えない。全workspaceの追加実行はしていない。親runtimeの実lease adapterは未接続、通常登録・実AI観測・ゲーム起動は0のまま。
+差分の再レビューはMust0。Suggestionの導入途中flush失敗と公開recover_failed_registration経由の再試行を検査へ追加し、Nitの名称と実処理の差も解消した。この最終差分は復旧5件を再実行して5成功・24filtered・失敗ignored0・警告0（`ai-patchstate-recovery-final.log`）。29+5を別の34ケースとして数えない。全workspaceの追加実行はしていない。統合runtimeの実lease adapterは未接続、通常登録・実AI観測・ゲーム起動は0のまま。
 
 レビューでの追加提案のphase不一致検査を確定した。試験用機械語callerをphase引数付きにし、同じowner/thread/ARM/世代のphase2→phase1→phase2を原gateway経由で呼ぶ。phase1は原関数へそのまま届き、原callは1回だけ増え、受理receiptは0、Capture/INVOCATION/DEPTHは解除済み。続くphase2は正常に再受理される。誤owner・再入・別thread・世代変更も含め、子試験の合計を9原call・18行・入口連番1..9で検査した。世代を巻き戻してphase検査を通していない。
 
 変更はgateway_tests.rsと本書のみ。対象子検査を共有cargo_gateと専用targetで再コンパイルし、1成功・28filtered・失敗ignored0・警告0（非公開の検証記録）。直前の対象29成功、復旧API5成功・24filteredと合わせて検証範囲を保持し、重複加算しない。全workspaceの追加実行は0。source上のproduction ABI/RuntimeLease契約に変更はなく、本体の実adapter登録・AI支払い実観測・通常接続成功は依然0である。
-### Root324: 通常Gameplay成功通知を使う有限会計
+### 通常Gameplay成功通知を使う有限会計
 
 基点0051068eの費用2診断は、実機agent-todo-324-a39639587c09-01で39/39手順、6/6判定が成功した。原steps.jsonl、result.jsonとtodo324-events-cost2.jsonlを照合した。所有者0・伊達稙宗Index6ではBASE成功seq1/Spent1、任命成功seq2/Spent1、TITLE_1成功seq3/Spent2となり、保存再読込で取得集合・定義・本人支払数・Spent・確定後Spentが一致した。功績・全通知履歴・保存前の確定列番号の完全比較は未達である。判定対象のRuntime Error等は0件だが、ログには公式Mods検索のcontext作成失敗と翻訳重複がある。再読込後の正式操作再送は0である。この事実は同診断だけの証明で、通常22人の実機受入ではない。
 
@@ -697,17 +697,17 @@ JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1は所有者ごとの人物取得集合と�
 
 通知時のSpentはnil/0もそのまま保存する。予約前の公式Spentを保存し、以後の正規支出連番が要求するSpentへ後のGameplay queryが達したことを確認する。通知数や総Spentから人物の支払数を作らない。各人物の集合から未払予約を計算し、複数の進化を互いに区別する。Spentが不明・遅延中、任命/BASE欠落、TITLEの穴は不明として全額予約を保持する。通常NativeGovernorとCorePaymentReadはこの集合を読み、既存CompleteEvolutionだけが全額証拠後に偉人を消す。Events callbackは取得記録の保存だけを行い、任命許可やpaid flagを作らず、支払い要求・Finalize・偉人除去を呼ばない。
 
-途中保存を新Lua contextへ移した後も同じ集合だけを読む。Appointed前の欠けた通知をUI full-paid、総Spent、後readyから補完しない。receipt導入前のold paid/old partialはunknown closedを維持する。既存Core本人観測を使う正式bootstrapは別Mustであり、本変更でUI受領を転記しない。通常AI自動支払い、default loader、複数端末、Runtime2の実機受入はこの有限実装の達成条件に含めず、未達のまま保持する。workerは実機を予約・起動せず、Rootが後で全件検査・別モデルレビュー・実機受入を行う。
+途中保存を新Lua contextへ移した後も同じ集合だけを読む。Appointed前の欠けた通知をUI full-paid、総Spent、後readyから補完しない。receipt導入前のold paid/old partialはunknown closedを維持する。既存Core本人観測を使う正式bootstrapは別Mustであり、本変更でUI受領を転記しない。通常AI自動支払い、default loader、複数端末、Runtime2の実機受入はこの有限実装の達成条件に含めず、未達のまま保持する。この差分で実機を予約・起動していない。全件検査・独立レビュー・実機受入は別途必要である。
 
 検査は出荷Gameplay全体をmluaのLua5.1で読み込む。全22所有者と22人物の非自己加入462組、疎Index、費用1/2/3、通知前後逆・重複、複数予約、保存途中・再送、callback nil/0とSpent遅延、TITLEprefix穴、schema衝突・閉鎖読取失敗・死亡大国、Index/Hashと証拠束縛の変化、UI全額でも通知不足なら偉人保持を扱う。元callbackを空にするmutationでは成功側が失敗し、通常Finalizeでも偉人が残る。これは合成検査であり新しい実機成功数には加算しない。
 
-取得集合の通常読取は、進化中と進化済みの保存EVOLUTION_SURCHARGEが人物定義の費用-1へ一致することも要求する。欠落・過小・別費用なら未知として偉人を保持する。880担当が変更するCompleteEvolution本体のpredicateは編集せず、会計モジュールの入力束縛だけでこの条件を守る。通常APIで私的Paid/Native/Scope/Startを例外に置換しても費用2が完了する検査を追加し、public modeの独立性を直接確認する。
+取得集合の通常読取は、進化中と進化済みの保存EVOLUTION_SURCHARGEが人物定義の費用-1へ一致することも要求する。欠落・過小・別費用なら未知として偉人を保持する。CompleteEvolution本体のpredicateはこの会計差分に含めず、会計モジュールの入力束縛だけでこの条件を守る。通常APIで私的Paid/Native/Scope/Startを例外に置換しても費用2が完了する検査を追加し、public modeの独立性を直接確認する。
 
-実機01のsnapshot(2)はFinalize前のacquired・definition・paid・spent・afterSpentを比較する範囲である。merit、全receipt履歴、Finalize後の最終sequenceと台帳・UnitNilを含む完全保存比較の証明へ拡大しない。Rootの別担当が成功済み01の物理保存を読取り、新しい現在値baselineを採り別名保存・再読込する有限診断を作る。workerはsrc/scenario.rsとCLI出力を編集しない。通常モジュールの新Lua contextテストでは同期取得store全体を深い比較で照合するが、この合成検査を実機01の不足範囲の証明には使わない。
+実機01のsnapshot(2)はFinalize前のacquired・definition・paid・spent・afterSpentを比較する範囲である。merit、全receipt履歴、Finalize後の最終sequenceと台帳・UnitNilを含む完全保存比較の証明へ拡大しない。成功済み01の物理保存を読取り、新しい現在値baselineを採り別名保存・再読込する有限診断が必要である。この会計差分はsrc/scenario.rsとCLI出力を変更していない。通常モジュールの新Lua contextテストでは同期取得store全体を深い比較で照合するが、この合成検査を実機01の不足範囲の証明には使わない。
 
-最終の対象検査はLua5.1 Gameplay 31件と診断生成2件が成功した。前者には全22人物のSQL定義と費用式を照合した462組、通常APIから私的cost2 APIへ接続しない検査、callback removalで偉人を保持するmutationを含む。専用targetはD:/CC/BuildCache/todo324-normal-events。コマンドはcargo test --locked --manifest-path tools/Cargo.toml -p civ6-persona-events-rs（Gameplay 31件成功）と、手順数の期待値を生成38へ訂正した後の同-p --test scenario（2件成功）である。Rust CLIのembedを再実行して出荷LuaのSHA-256が変わらないことも確認した。Native crate・paid/appointment生成ブロック・UI/shared・CompleteEvolution・src/scenario.rs・src/main.rsは基点から変更していない。全体検査、別モデルレビューと新しい実機受入はRootで行う。
+最終の対象検査はLua5.1 Gameplay 31件と診断生成2件が成功した。前者には全22人物のSQL定義と費用式を照合した462組、通常APIから私的cost2 APIへ接続しない検査、callback removalで偉人を保持するmutationを含む。専用targetと検査ログは非公開の検証記録に保持する。コマンドはcargo test --locked --manifest-path tools/Cargo.toml -p civ6-persona-events-rs（Gameplay 31件成功）と、手順数の期待値を生成38へ訂正した後の同-p --test scenario（2件成功）である。Rust CLIのembedを再実行して出荷LuaのSHA-256が変わらないことも確認した。Native crate・paid/appointment生成ブロック・UI/shared・CompleteEvolution・src/scenario.rs・src/main.rsは基点から変更していない。全体検査、独立レビューと新しい実機受入は別途必要である。
 
-### Root324: 支出の確認基準と購読の連続性
+### 支出の確認基準と購読の連続性
 
 独立レビューの二つのMustを受け、所有者の支出会計を予約前の基準と正規の支出連番へ組み直した。通常のPrepareEvolutionは、残額検査より前にRust生成のBeforeEvolutionを呼ぶ。人物・加入元・費用と保存された状態を照合した上で、その時点のSpent、所有者の期待Spent、支出連番と通知列番号を同期保存する。保存の費用と追加費用は引き続き人物定義との完全一致が必要である。CompleteEvolution本体と本体配置のpredicateは変更しない。
 
@@ -721,23 +721,23 @@ BASEとTITLEの最初の成功通知だけが所有者の期待Spentを1進め�
 
 現在のLua contextで両方のEvents.Addが成功したことをstate/read/admissionの条件にする。復元した台帳で一方でも失敗したら、通常の公開より前に同期保存へcontinuityTaintedと失敗した購読・時点・通知列番号を刻む。次のLua contextで購読が成功してもこの欠測を解除しない。保存に全額支払いの人物がいても、その資格と新しい人物の加入を閉じる。UIの現在値や設定による復旧入口は作らない。通常台帳はversion3/source v3で、支出確定の証拠を持たない旧version1/2はunknown closedのままにし、正式Core bootstrapを別Mustとして保持する。私的な費用2の台帳・フラグ・診断は従来どおりである。
 
-前候補のGameplay Lua5.1の40件は成功したが、Rootのnormal-events-integrated.logでは診断生成2件中1件が失敗した。Finalize後の比較元追加に合わせた39手順へ期待値を修正した。現在の候補はnormal-v3-fixed-tests.logでGameplay44件・診断生成2件・paid glue10件が全て成功し、失敗・ignored・filteredは0だった。過去支出5/新費用2/Spent5遅延から7への確認、複数人物と普通の総督の前後逆・重複、本人通知欠落、購読失敗から別contextへの復旧、全額保存と新人物加入、Aの支出1とB消失、後の不明支出による旧欠測の再利用拒否、支出基準と連番の改変を扱う。支出確認と購読条件をそれぞれ外すmutationでは、正常側の保持・閉鎖の断言が失敗した。全体検査と次の別モデルレビューはRootで行う。この合成結果は、通常22人・AI・MPの実機成功数には加算しない。
+前候補のGameplay Lua5.1の40件は成功したが、normal-events-integrated.logでは診断生成2件中1件が失敗した。Finalize後の比較元追加に合わせた39手順へ期待値を修正した。現在の候補はnormal-v3-fixed-tests.logでGameplay44件・診断生成2件・paid glue10件が全て成功し、失敗・ignored・filteredは0だった。過去支出5/新費用2/Spent5遅延から7への確認、複数人物と普通の総督の前後逆・重複、本人通知欠落、購読失敗から別contextへの復旧、全額保存と新人物加入、Aの支出1とB消失、後の不明支出による旧欠測の再利用拒否、支出基準と連番の改変を扱う。支出確認と購読条件をそれぞれ外すmutationでは、正常側の保持・閉鎖の断言が失敗した。全体検査と次の独立レビューは別途必要である。この合成結果は、通常22人・AI・MPの実機成功数には加算しない。
 
-### Root324: 既払セーブからの通知履歴・功績の追加比較
+### 既払セーブからの通知履歴・功績の追加比較
 
 0051068eの実機agent-todo-324-a39639587c09-04は11/11手順・6/6判定が成功した。元の成功セーブ（SHA-256 71E9A0DB5F54BF33699CA6D57F5DE6FFBA06511F62BF3B9DF99E2D5193C2C925）を読み、全receipt、生引数を含む取得集合、定義、本人paid2、Spent2、afterSpent2、確定sequence3、数値の功績0とその存在・型を比較元として取得した。新しいcheckpointを保存して読み直し、同じ全文を二回取得して完全一致を確認した。Join/Evolve/APPOINT/PROMOTE/Finalizeの送信は0で、元セーブのハッシュも不変だった。判定対象のLuaエラーは0、CHAIN DONE/exit0と所有ゲームの終了を確認した。
 
 これは今回の比較元から新checkpointを経た追加検査の結果であり、元の39手順で採取しなかった項目へ遡って成功を補わない。通常22人、AI、複数端末、常駐runtimeの未払い拒否の証拠にも転用しない。生記録と照合値は非公開の検証記録およびlive-full-save-proof.jsonに保全した。
 
-### Root324: 通常イベントの準備順と既存試験の契約
+### 通常イベントの準備順と既存試験の契約
 
 旧試験の3人・ターン1開始とUI読取による会計は、通常イベント会計の初期化条件を満たさなかった。Rustのpersona_engine試験補助で、全22人、ターン0の初期化、一意な総督・昇進の定義と公式の所属表、加入前の全閉鎖を先に用意する。元の3人のIndex/Hashは保持する。費用3を試す設定は定義を固定する前へ移し、初期化後の定義変更を製品が受理するようにはしない。
 
 試験の正式APPOINT/PROMOTEは既存のエンジン処理で支払いを行い、その実際の成功からGameplay通知を送る。直接生成する既払総督の試験用準備も、対応する支出を伴う。候補オブジェクトだけの生成は別のNATIVE_CANDIDATEを使い、通知と支出がないまま偉人を消さないことを引き続き検査する。UIの総督getterを会計の確認元にしていた試験は、正規に作ったGameplay確認データの欠落・同じデータの復元・他人の予約・追加支払いへ更新する。UI側の種類別getterがない場合の操作送信拒否は保持する。旧関数をskip/ignoreにしたり、失敗した呼出しを成功へ置き換えたりしない。
 
-別モデルが指摘した、通常総督の成功通知の後にSpentの読取が遅れている間の予約過剰は、独立した追加試験で再現した。BeforeEvolutionは現在のSpentが所有者の期待Spentより小さい間、新しい人物の予約を拒否する。Spentが追いついて残高が0ならNO_TITLEとなり、いずれも偉人を保持する。
+独立レビューが指摘した、通常総督の成功通知の後にSpentの読取が遅れている間の予約過剰は、独立した追加試験で再現した。BeforeEvolutionは現在のSpentが所有者の期待Spentより小さい間、新しい人物の予約を拒否する。Spentが追いついて残高が0ならNO_TITLEとなり、いずれも偉人を保持する。
 
-修正版のnormal-engine-migration-03.logは任命10件、境界25件、人物80件、通常任命21件の136件が成功した。normal-v3-related-all-02.logでは関連2パッケージの全対象を実行し、33対象・906件、失敗・ignored・filtered 0、exit0を確認した。Lua 5.1を省略していない。予約過剰の追加試験を含むGameplay45件とscenario2件も同じ検査に含む。これは当候補の関連検査であり、親の固定67fの全2184件へ足したり、当候補の全workspace成功として扱ったりしない。通知に対して実Spentが先行する場合の本体順序保証は、別モデルの実機確認項目として残る。
+修正版のnormal-engine-migration-03.logは任命10件、境界25件、人物80件、通常任命21件の136件が成功した。normal-v3-related-all-02.logでは関連2パッケージの全対象を実行し、33対象・906件、失敗・ignored・filtered 0、exit0を確認した。Lua 5.1を省略していない。予約過剰の追加試験を含むGameplay45件とscenario2件も同じ検査に含む。これは当候補の関連検査であり、固定67fの全2184件へ足したり、当候補の全workspace成功として扱ったりしない。通知に対して実Spentが先行する場合の本体順序保証は、独立の実機確認項目として残る。
 
 再レビューのSuggestionには、昇進定義を残したまま公式所属だけを削除する場合と、所属先を別の実在総督へ変える場合の負例を追加した。どちらも通常の初期化と加入が閉じ、偉人を生成しない。別人のSpentがその通知より先に見える順序も追加し、本人のTITLE通知がない間は完了できず、本人の正式通知と追加支出が揃って初めて完了することを確認した。normal-membership-late-callback.logのGameplay47件は全成功・省略0である。前の全関連906件から製品コードは変わらず、追加はこの2試験だけである。本人の通知が全てある場合に本体がどの順で集計値を公開するかの実機保証は、引き続き未確認として区別する。
 
@@ -761,11 +761,11 @@ T9技能は生成器の `--skill-turn9 元41手順 実保存 出力` で用意�
 
 独立した技能の実機 `todo880-reserved-05-02` は42/42手順・6/6判定、非test_modeで成功した。実ターン9→10→11で功績4→6→8となり、ENVOYS_1を費用8で一回購入して0になった。本人owner0/source1/index6/hash912436062、正式支払い2・使用称号2、都市131073を保持した。重複購入と別系統購入の拒否で全状態が不変だった。Coreの実都市効果も確認し、再起動して実保存を読み直した。
 
-`verify-reserved-skill` は固定された41操作と準備起動の全STARTを照合する。購入後・保存前・再読込後の全166,725バイトが同一で、SHA-256 `6BB37F91139299F9591E9C531301A5162E789164CDBB39BCECB2120FE0C24BCC` も必須にした。実保存 `46037a45ff174987b8a3d9fc46a7ee92-0000000000000001` は1,740,554バイト、SHA-256 `CB6F4004136F0E4B41B9A47D90E8F1472E9C17D8AD5D2F28B413B6CDF06DA33D`。親の6つの受入条件全体や、中和・返還の成功には広げない。
+`verify-reserved-skill` は固定された41操作と準備起動の全STARTを照合する。購入後・保存前・再読込後の全166,725バイトが同一で、SHA-256 `6BB37F91139299F9591E9C531301A5162E789164CDBB39BCECB2120FE0C24BCC` も必須にした。実保存 `46037a45ff174987b8a3d9fc46a7ee92-0000000000000001` は1,740,554バイト、SHA-256 `CB6F4004136F0E4B41B9A47D90E8F1472E9C17D8AD5D2F28B413B6CDF06DA33D`。製品の6つの受入条件全体や、中和・返還の成功には広げない。
 
 次の `read-group-refusal-62` は最新の拒否保存から5手順で読む。保存時の応答と、現在の取引項目・金額・容量を分けて記録する。APIごとの欠測と途中結果を残し、待機中も外交画面を保護する。項目を観測する前のValidate呼出しは行わない。本体のEFFECT_GRANT_SPYを含む容量付与制度の取得済み状態・進行可否・費用を確認する。文明別CitizenNames件数は仮説検証用であり、旧捕虜への名前やIDの割当てには使わない。
 
-関連検査は読み取り55件、技能照合18件が成功し、最終別モデルは全指摘0。原技能rawの独立照合も終了0。新しい読み取りの実機は未実施。原ログ・全実保存・ハッシュ・proofは非公開の検証記録 `20261007-current` に保全した。ゲームと各チェーンを回収し、次の実機は共有枠で調整する。
+関連検査は読み取り55件、技能照合18件が成功し、最終独立レビューは全指摘0。原技能rawの独立照合も終了0。新しい読み取りの実機は未実施。原ログ・全実保存・ハッシュ・proofは非公開の検証記録 `20261007-current` に保全した。ゲームと各チェーンを回収し、次の実機は共有枠で調整する。
 
 ### 通常の市民名候補の不足を修正する
 
@@ -795,7 +795,7 @@ SSOT `03-map-and-scale.md` の独立したアイヌ・琉球の文明、各指�
 
 ### 名前登録後のT62保存の実機読取
 
-親固定5a792461の `todo880-citizen-12-01` は6/6手順・6/6判定で成功し、終了0とゲーム回収を確認した。所有lockと実行中のlive HEADを記録した。最新2E774保存のみを読み、取引・任務・ターン送り・新保存は送信していない。実保存のSHAは読取前後で一致した。
+固定5a792461の `todo880-citizen-12-01` は6/6手順・6/6判定で成功し、終了0とゲーム回収を確認した。所有lockと実行中のlive HEADを記録した。最新2E774保存のみを読み、取引・任務・ターン送り・新保存は送信していない。実保存のSHAは読取前後で一致した。
 
 北条・伊達の市民名候補はUI/Coreとも40件になった。旧3捕虜は空名・NameIndex=-1、取引候補はForType=-1を保持する。UIの保存済みquoteとspyRosterは前のread07と全文一致し、容量3と所持金61.6953125/220.19140625も不変だった。CoreのrosterはAPI欠測のERRORであり、両文脈で捕虜一覧が一致したという主張はしない。
 
@@ -905,7 +905,7 @@ nativeへの設定と観測上限300秒は変更しない。v3の`controller_sec
 
 同じruntime本体に追加した一次照合テストだけを次に実行し、1成功・83 skipped（この1件の内部83 filtered）、失敗・ignored0だった。実際の固定SHAのDLLから両caller・直前引数・callee境界をコピーし、通常installerと同じ`verify`を通した。AI operand/後続命令/R8D命令、公式RCX命令、callee先頭の各改変を拒否した。150件を最新151件の一括実行とは言わず、150件と追加1件を別記録で保持する。GameCoreをロード・実行した検査ではない。最初のABI子は試験用確保位置のoperand整列条件で失敗し、試験の近傍anchorを修正後に該当4子を再確認した。実装のCPU条件は変えていない。変更Rust7本の整形と差分検査も成功し、全workspace実行は0である。
 
-親の独立レビューは固定c360の新Must0だった。未公開relayの保護・cache更新・距離検査の失敗で確保を失うSuggestionは修正した。Slotへ所有権を渡す前のページだけRAIIで解放し、operand変更前にSlotへ渡した後のページはプロセス終了まで保持する。Win子でVirtualQueryを使って未公開ページの解放と移譲後の保持を実測し、既存のABI・逆順復元・並列呼出しを含む8対象が成功した。旧AI actor候補も同じ二つのE8を使用するため、この通常guardへ重ねて設置しない。actorは未接続のままであり、今後の接続は同じ通常所有者へ統合して別の実証を必要とする。
+独立レビューは固定c360の新Must0だった。未公開relayの保護・cache更新・距離検査の失敗で確保を失うSuggestionは修正した。Slotへ所有権を渡す前のページだけRAIIで解放し、operand変更前にSlotへ渡した後のページはプロセス終了まで保持する。Win子でVirtualQueryを使って未公開ページの解放と移譲後の保持を実測し、既存のABI・逆順復元・並列呼出しを含む8対象が成功した。旧AI actor候補も同じ二つのE8を使用するため、この通常guardへ重ねて設置しない。actorは未接続のままであり、今後の接続は同じ通常所有者へ統合して別の実証を必要とする。
 
 ## 2026-10-08：22人ホットシート準備画面の既存診断を統合
 
@@ -949,7 +949,7 @@ main1df7を統合した固定829b9e4bの標準chain実機179は29/31手順を通
 
 最後のnative記録回収は旧CalibrationTrace v4の容量1024に達し、欠落1048・呼出し中0で失敗した。property-logは144795件・欠落0・呼出し中0で、nativeとproperty-logの各2回の原バイト列は一致した。原結果・停止境界・保存2本・原バイナリとSHA一覧は非公開の検証記録と同artifacts・savesへ保全した。StopObservationの成功応答後に保全したbootstrap原2本も一致したが、drainedは未判定、boundary_order_provenとproduct_acceptanceはfalseのままである。所有ゲームとロックは回収済み。実機枠は3/4で残り1回、元製品条件は完全達成0/7。
 
-6回の全484組の読取は、診断だけでも2904件の任命資格の問合せを行う。自然な本体問合せにも余裕を残すため、CalibrationTrace v5では有限容量8192を使う。追加メモリは516096バイト。旧v4は旧1024件の配置のまま読取り、新v5と未知の版を取り違えない。容量の拡張でDropや未完了行を許容せず、欠落・未完了・未公開行・版違いを引き続き拒否する。300秒の観測時間も保持する。大きな記録の初期化と読取は直接ヒープ上で行い、ゲームの1MiBスタック上に一時配列を作らない。診断の残る1回は、変更後の検査・別モデル確認と新DLLのSHA保全が終わってから用途を決める。
+6回の全484組の読取は、診断だけでも2904件の任命資格の問合せを行う。自然な本体問合せにも余裕を残すため、CalibrationTrace v5では有限容量8192を使う。追加メモリは516096バイト。旧v4は旧1024件の配置のまま読取り、新v5と未知の版を取り違えない。容量の拡張でDropや未完了行を許容せず、欠落・未完了・未公開行・版違いを引き続き拒否する。300秒の観測時間も保持する。大きな記録の初期化と読取は直接ヒープ上で行い、ゲームの1MiBスタック上に一時配列を作らない。診断の残る1回は、変更後の検査・独立確認と新DLLのSHA保全が終わってから用途を決める。
 
 固定0345c0e5の実機180では、179の保存2本を読取だけで再開し、21/21手順と6/6判定が成功した。同じPID82132・作成FILETIME134359834396042655で両世界を読込し、各3回、計6回の全484組の状態記録が、179の保存前の全文とも一致した。加入・支払い・新しい保存・ターンの操作は0。保存2本と原Date保存のSHAは不変で、所有ゲームと共有ロックは回収した。
 
@@ -975,7 +975,7 @@ Context構築側の`58FB91`は`7503E0`を呼び、戻り値をRBX+8へ保存す�
 
 修正版v3の単体3件・省略0、Clippy、release、固定primary照合はすべて終了0である。原ログとJSONは非公開の検証記録へ保全した。修正前のレビューとJSONも別名で保持し、受け手の連続性が未確立の箇所を後から証明済みに変更しない。
 
-既存の無効なAI候補について、独立した読取調査は`install_producer`成功後の`guarded_install`失敗とpanicの両経路で、producerが開いたまま残る問題を確認した。同じ調査報告によると、現在の親runtimeにはこのproducerの設置コードがなく、候補を親へ有効化したわけではない。必要な修正は失敗時の共通処理でproducerを閉じ、閉鎖の失敗はCriticalへ上げ、回復ハンドルを保持してRebuildを拒否すること。既存の部分設置テストはproducerを開いていないため、この失敗を検出できない。実際にfixtureでproducerを開く子プロセス回帰が統合前に必要であり、未修正・未検証のままとして保持する。調査結果は非公開の検証記録へ保全した。
+既存の無効なAI候補について、独立した読取調査は`install_producer`成功後の`guarded_install`失敗とpanicの両経路で、producerが開いたまま残る問題を確認した。同じ調査報告によると、当時の統合runtimeにはこのproducerの設置コードがなく、候補を統合runtimeで有効化したわけではない。必要な修正は失敗時の共通処理でproducerを閉じ、閉鎖の失敗はCriticalへ上げ、回復ハンドルを保持してRebuildを拒否すること。既存の部分設置テストはproducerを開いていないため、この失敗を検出できない。実際にfixtureでproducerを開く子プロセス回帰が統合前に必要であり、未修正・未検証のままとして保持する。調査結果は非公開の検証記録へ保全した。
 
 ### 終了処理の待機前区間を連続して照合する監査
 
@@ -989,7 +989,7 @@ v4では、`63E160`入口から`63E1D0`の直接呼出し末尾までの117バ�
 
 ### main統合時のシナリオ検査の固定件数を解消する
 
-再読込修正`1A8FD191`のUbuntu CIは、main `76334D82`との仮想統合`F36F1421`で、隔離検査の実件数150と固定期待値149の不一致により失敗した。mainの追加ファイル`absorption-ai-palace-deal-readonly.json`は先頭が`enable_mods`なので、既存の隔離検査の対象に入る。すべてのシナリオ別の隔離断言を通過し、最後の件数比較だけが失敗した。同じmainを親へ競合なく統合し、PCでも1失敗・66件選択対象外・終了100で再現した。旧`4338630C`の必須CI7件の成功とは区別して保全した。
+再読込修正`1A8FD191`のUbuntu CIは、main `76334D82`との仮想統合`F36F1421`で、隔離検査の実件数150と固定期待値149の不一致により失敗した。mainの追加ファイル`absorption-ai-palace-deal-readonly.json`は先頭が`enable_mods`なので、既存の隔離検査の対象に入る。すべてのシナリオ別の隔離断言を通過し、最後の件数比較だけが失敗した。同じmainを作業ブランチへ競合なく統合し、PCでも1失敗・66件選択対象外・終了100で再現した。旧`4338630C`の必須CI7件の成功とは区別して保全した。
 
 最終修正は件数を150に置き換えるだけでなく、配布ファイル名と開始時の扱いを`tests/fixtures/shipped_scenarios.rs`の同じ一覧へまとめた。構造検査は206本の名前の完全一致と重複拒否を維持する。隔離検査は150本をShared、旧4本をDirectDiagnostic、52本をNoSelectionとして明示した宣言と、実際に検査した名前を比較する。期待側のSharedは現在のJSONの先頭手順から導出しないので、Sharedの先頭が`enable_mods`から変わっても検査対象から静かに消えない。既存の各MODの隔離断言、例外4本、全JSONの形式検査、埋込Luaのコンパイル、成長シナリオの断言も保持した。
 
@@ -1013,11 +1013,11 @@ main統合の関連173件・88件選択対象外と、独立したnative workspa
 
 固定Coreを再照合してLLVMで局所区間を読むと、`4B132`の呼出し結果が`4B13A`でRBXへ入り、`4B16D`から`5E2D0`へ渡る。正常復帰先`4B172`からは要素を4バイト進め、`4B18A`の条件分岐で`4B130`へ戻る。アドレス上で後ろの別区間には、`4B1B2`から`44F00`、`4B1DB`から`5CB00`への呼出しがある。PEの範囲表示ではこれらを含む区間が`4AFC0..4B87B`で、直接分岐候補`63E2E4`から`4AFC0`は既存`task_audit.rs`の`branch`照合でも確認する。すべての間接呼出し元、各区間への全到達、関数の実際の役割をこの表示だけで確定しない。
 
-別の作業フォルダーに保持する未統合のAI候補では、`ai_operation/producer_hook.rs`の`OUTER`が`5E2D0`であり、`producer_observe`が`producer::enter`を呼ぶ。`producer.rs`はsnapshotの世代と受付状態が一致する場合にreaderを取得する。これは親の`task_audit.rs`の読取監査とは別の、未統合候補の実装である。入口内の呼出しが終わってreaderが0になったことは、上記の呼出し元の反復が終わったことを示さない。独立した読取でも、呼出し元が次の入口に入る前に停止した場合、その間のCloseとRebuildをこの計数だけでは拒否しないと確認した。これは未統合候補の契約不足であり、実Civ6でその競合が発生したという記録ではない。古いsnapshotを拒否する検査を、古い呼出し元が再武装後に新snapshotを得ない証拠へ拡張しない。
+別の作業フォルダーに保持する未統合のAI候補では、`ai_operation/producer_hook.rs`の`OUTER`が`5E2D0`であり、`producer_observe`が`producer::enter`を呼ぶ。`producer.rs`はsnapshotの世代と受付状態が一致する場合にreaderを取得する。これは統合runtimeの`task_audit.rs`の読取監査とは別の、未統合候補の実装である。入口内の呼出しが終わってreaderが0になったことは、上記の呼出し元の反復が終わったことを示さない。独立した読取でも、呼出し元が次の入口に入る前に停止した場合、その間のCloseとRebuildをこの計数だけでは拒否しないと確認した。これは未統合候補の契約不足であり、実Civ6でその競合が発生したという記録ではない。古いsnapshotを拒否する検査を、古い呼出し元が再武装後に新snapshotを得ない証拠へ拡張しない。
 
 他スレッドを一時停止してスタックを点検する案は、点検後の再入と保留発行を止めないため、全排出の権限として採用しない。追加フックも実装していない。原180の41行のbootstrap記録には、この外反復の在席・退出を測る地点がなく、同じPIDでの保存読込成功から退出を推定しない。次に必要なのは、既存のnative発行経路の停止と、同じjob-setの保留公開・待機、および同期呼出し元の最後の退出を、保持先Releaseと再武装の間へ接続する根拠である。候補の失敗時OPEN問題は、この調査時点では未修正・未統合として保持する。
 
-一次抜粋は非公開の検証記録、範囲と分岐候補は同`post-v5-outer-caller-xrefs-20261009.txt`、終了処理は同`post-v5-manager-cleanup-byte-20261009.txt`、独立した確認結果は同非公開のレビュー記録に保持する。候補4ファイルの調査時のSHAは同`post-v5-candidate-reviewed-source-20261009.json`、原180の記録範囲は同`post-v5-original180-boundary-coverage-20261009.json`に残した。候補と親の出典を区別した修正後の文書追審は、同非公開のレビュー記録でMust0である。実機4/4・残0、元製品完全0/7は変わらない。
+一次抜粋は非公開の検証記録、範囲と分岐候補は同`post-v5-outer-caller-xrefs-20261009.txt`、終了処理は同`post-v5-manager-cleanup-byte-20261009.txt`、独立した確認結果は同非公開のレビュー記録に保持する。候補4ファイルの調査時のSHAは同`post-v5-candidate-reviewed-source-20261009.json`、原180の記録範囲は同`post-v5-original180-boundary-coverage-20261009.json`に残した。候補と統合runtimeの出典を区別した修正後の文書追審は、同非公開のレビュー記録でMust0である。実機4/4・残0、元製品完全0/7は変わらない。
 
 ### main25cea705の統合と共通一覧の維持
 
@@ -1027,7 +1027,7 @@ PR134/135を含むmain`25cea705`を取り込む際、`judge_parity.rs`の旧目�
 
 ### 状態38A8を読む受け手と、発行・起動の局所接続
 
-最新の共有記録を受領し、v5の公開・追審とf87の必須CI7件成功を繰り返さなかった。AI候補の設置失敗・panic時の共通閉鎖は、別ブランチ`e27339ad`へ検査・追審済みで保存されている。親へ統合せず、既定無効を保持する。
+最新の共有記録を受領し、v5の公開・追審とf87の必須CI7件成功を繰り返さなかった。AI候補の設置失敗・panic時の共通閉鎖は、別ブランチ`e27339ad`へ検査・追審済みで保存されている。統合runtimeへ取り込まず、既定無効を保持する。
 
 既存LLVM表示の明示offset38A8命令15箇所を分け、v6の固定ファイル監査へ追加した。10箇所の比較は直前の直接呼出し、返されたRAX+38A8の2との比較、完全なJNEと行き先を連続で照合する。9箇所は`49C640`を呼び、同関数の21バイトと`951550`の8バイトから、共有ポインター`B8AA68`を読み、その+250を返すことを照合する。残る`561286`は`49C630`を呼び、その8バイトは引数RCX+250を返す。この引数由来の受け手を、共有ポインター由来の受け手と同一とは扱わない。5箇所の書込みは命令そのものを照合する。RCX+38A8への1・3、RSI+38A8への2、RDI+38A8へのR15D、RBX+38A8へのESIを区別し、長い関数を隔てたレジスタ同一性やR15D/ESIの値は確定しない。
 
@@ -1072,7 +1072,7 @@ Windowsの所有子検査は、実際の開始・復帰ハンドラーとReadPro
 
 外側入口がまだ実行されていない発行も、発行時の予約として追跡する。遅れた入口はその予約を消費し、現在の世代値を新しく取得しない。終了から再開まで遅延した発行を、スカラーの一致だけで新世界へ取り込む入口APIは設けない。発行予約をなくした場合も、nativeの取消と扱わず未解決を維持する。
 
-固定候補8463d39aの下位検査2194は、関連207件成功・1件対象外、追加16件の管理部検査成功、全対象Clippy終了0だった。対象外は既存Windows子helperの親入口で、今回新たに実行した証拠には含めない。Closingの外側呼出し計数だけを外した変異は、指定検査で終了100を返し、元bytesの復元後に差分0を確認した。原ログは非公開の検証記録、元ソースは8463d39ad505da5102c9cdd34f5929f008f8aa63で固定する。この結果を後続の修正版へ付け替えない。
+固定候補8463d39aの関連検査は、関連207件成功・1件対象外、追加16件の管理部検査成功、全対象Clippy終了0だった。対象外は既存Windows子helperの親入口で、今回新たに実行した証拠には含めない。Closingの外側呼出し計数だけを外した変異は、指定検査で終了100を返し、元bytesの復元後に差分0を確認した。原ログは非公開の検証記録、元ソースは8463d39ad505da5102c9cdd34f5929f008f8aa63で固定する。この結果を後続の修正版へ付け替えない。
 
 同候補の差分レビューはMust0・Suggestion1・Nit0。期限の確認より先に未処理0を判定すると、待機から戻ってmutexを再取得する間の最後の精算で、期限後にも排出成功を返せる。期限を厳密な上限とし、取得・再取得後の時刻確認とwait_timeoutの期限切れ判定を成功より先に置く。期限後のidle状態と、条件変数がmutexを解放した後の最終精算を有限検査へ追加した。外側計数の変異検査は、期限確認だけで失敗して見逃さないよう、短い将来期限で外側が残ることを検査する。これらの修正版検査はまだ実行待ちである。
 
