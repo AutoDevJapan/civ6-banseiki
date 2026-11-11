@@ -28,11 +28,11 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-lifecycle-15km.
 
 ## 初回実機53の失敗と今回の切り分け
 
-親の`leaderperson-53/eligibility-ui.jsonl`には、ゲームPID `71856`、作成FILETIME `134354995302818060`、GameCoreロードbase `0x1a49b0000`、DLL SHA-256 `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`のidentityと、141 threadのreadyだけがある。`entry`と`return`は0件。2026-10-03 20:14:31.824 JSTのWindows Application Error 1000は、GameCore内RVA `0x2DDDD0`の`0x80000004`（`SINGLE_STEP`）でCiv6が失敗したと報告した。最初のUI Lua判定は接続切断で停止した。後続の`critical_cleanup`はthread `7180`の`SuspendThread`がAccessDeniedを返した記録であり、初発の例外と同じ原因とは扱わない。`stop`行の`detached=true/result=error`は実験成功を示さない。
+実機記録`leaderperson-53/eligibility-ui.jsonl`には、ゲームPID `71856`、作成FILETIME `134354995302818060`、GameCoreロードbase `0x1a49b0000`、DLL SHA-256 `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`のidentityと、141 threadのreadyだけがある。`entry`と`return`は0件。2026-10-03 20:14:31.824 JSTのWindows Application Error 1000は、GameCore内RVA `0x2DDDD0`の`0x80000004`（`SINGLE_STEP`）でCiv6が失敗したと報告した。最初のUI Lua判定は接続切断で停止した。後続の`critical_cleanup`はthread `7180`の`SuspendThread`がAccessDeniedを返した記録であり、初発の例外と同じ原因とは扱わない。`stop`行の`detached=true/result=error`は実験成功を示さない。
 
 旧dispatchはthread contextのDR6 bitとRIPが同時に一致しないと`SINGLE_STEP`を未処理で渡した。一方、実機53ではRIP・DR6・DR7を記録していないため、どちらが一致しなかったかは確定できない。修正では`OwnedProven`・`Unrelated`・`Ambiguous`を分ける。登録済みthreadに自分が設定したDR0〜DR3のアドレス・enable bitがあり、例外アドレスとRIPも同じslotに一致した場合だけ`OwnedProven`とする。DR6 bitだけが0でもこの所有判定は失わない。未所有の`SINGLE_STEP`はRIP・DR6・DR7・例外アドレス・first chanceをJSONLに記録して元の例外handlerへ渡す。
 
-RIP不一致・debug registerの不一致・context取得失敗は両モードとも`Ambiguous`である。ABIを読まず、通常の復元→detach→ゲーム再開には進めない。pendingの例外を保ったまま`critical_cleanup`を親へ通知し、同じゲームの終了要求に成功した旨を親から受け取ってから終了イベントを処理する。終了前にその例外を`DBG_CONTINUE`で処理済みにしない。元のdebug registerは可能なら戻すが、復元成功を曖昧な例外の正常終了と混同しない。実機53の`SuspendThread: Access is denied`を受け、後始末ではdebug registerを書き換えたthreadの保存済みhandleを使う。未登録threadは停止せず、生存中の登録済みthreadすべてで元値への復元を確認する。実機での解消は未確認である。
+RIP不一致・debug registerの不一致・context取得失敗は両モードとも`Ambiguous`である。ABIを読まず、通常の復元→detach→ゲーム再開には進めない。pendingの例外を保ったまま`critical_cleanup`を所有controllerへ通知し、同じゲームの終了要求に成功した旨をcontrollerから受け取ってから終了イベントを処理する。終了前にその例外を`DBG_CONTINUE`で処理済みにしない。元のdebug registerは可能なら戻すが、復元成功を曖昧な例外の正常終了と混同しない。実機53の`SuspendThread: Access is denied`を受け、後始末ではdebug registerを書き換えたthreadの保存済みhandleを使う。未登録threadは停止せず、生存中の登録済みthreadすべてで元値への復元を確認する。実機での解消は未確認である。
 
 ## 固定した対象と境界
 
@@ -48,7 +48,7 @@ RIP不一致・debug registerの不一致・context取得失敗は両モード�
 
 `identity`にゲーム実行ファイル、作成時刻、ロードbase、GameCore SHAを記録する。`ready`の後に`entry`と`return`をIDで対応付け、`stop`にdetach結果を記録する。`entry`にはthread ID、関数RVA、`this`の生ポインタ、32ビットIndex、stack由来の`return_site_rva`と`expected_rsp`を別項目として保存する。直前の5バイトが対象への直接`E8`である場合だけ`caller_rva`を設定する。`0x2DD861`からの末尾分岐は新しいreturn addressを作らない。直前の`CanAppoint`入口が直接呼出しとして確認済みで、戻り先・stack位置・`this`ポインタ・Indexが同じ場合だけ、`CanEver`を親IDに関連付ける。関連付けた2つのIDには同じ`linked_tail_group_id`でALの候補値を記録する。例外後の呼出し枠の再利用や未確認の重複ではALを両IDへ割り当てず、`return_incomplete`へ理由を記録する。各threadのpendingは最大64件、return停止位置は最大2つに制限する。戻り値を観測できない呼出しは`entry`の`return_breakpoint_armed=false`または`return_incomplete`で分かる。ポインタからowner IDを確定しない。
 
-`path_candidate`は既存の逆アセンブルで得た呼出し箇所との照合名であり、AI実手番の文脈を単独で証明しない。主な候補はUI getter `0xBA51E`、公式要求 `0x30DA56`と`0x2DCFFE`、AI解析領域 `0x4A8114`、未分類 `0x21B9E4`。`owner_id_candidate`と`property_interface_candidate`も実機での同一性と寿命を確定した値ではない。親のシナリオがAI実手番・公式要求・UI getterを別の区間で起動し、同じ本体関数の実呼出しと戻り値を突き合わせる。
+`path_candidate`は既存の逆アセンブルで得た呼出し箇所との照合名であり、AI実手番の文脈を単独で証明しない。主な候補はUI getter `0xBA51E`、公式要求 `0x30DA56`と`0x2DCFFE`、AI解析領域 `0x4A8114`、未分類 `0x21B9E4`。`owner_id_candidate`と`property_interface_candidate`も実機での同一性と寿命を確定した値ではない。検証シナリオがAI実手番・公式要求・UI getterを別の区間で起動し、同じ本体関数の実呼出しと戻り値を突き合わせる。
 
 シナリオで `mode=property` を指定すると、runnerは子プロセスへ `--mode property` を渡し、identityにも同じmodeを要求する。4つの固定breakpointをPlayer getter `0x6EDC76`、試験用文字列キー `0x15339`、property getter前後 `0x1535E/0x15361` に割り当てる。このモードは本体資格の戻りALを採らない。Player getterとproperty getterが同じスレッド・同じPlayerのinterfaceで一致した2つの試験用キーだけ、値ポインタの先頭16バイトを記録する。停止後に各キーの読取・更新・削除の欠測があれば失敗する。実機診断と次コマンドは[加入資格の実装記録](pr86-native-admission.md#配置資格の実装候補と実機待ちの境界2026-10-03)にある。
 
@@ -75,7 +75,7 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 
 この節の115試験群・1790件の成功は、修正候補 `5daaef17` の検査である。統合後の `64a84927` の全件検査は別に実行し、以後のレビュー修正を旧候補の合格に含めない。
 
-基準 `750274db` のWindows全件検査は、観測器のテストで復元期限を超えた後、子の応答・終了・観測スレッドの合流を無期限に待っていた。親の16:58開始の検査では8子が残った。同じ検査実行ファイルを専用作業領域へコピーすると、標準の並列数で40秒後も7子が残り、並列数12では42件が18.79秒で完了した。再現用の子はすべて回収した。
+基準 `750274db` のWindows全件検査は、観測器のテストで復元期限を超えた後、子の応答・終了・観測スレッドの合流を無期限に待っていた。16:58開始の検査では8子が残った。同じ検査実行ファイルを専用作業領域へコピーすると、標準の並列数で40秒後も7子が残り、並列数12では42件が18.79秒で完了した。再現用の子はすべて回収した。
 
 復元前の停止処理は、Windows全体のスレッド一覧を取得してから対象を絞り込み、停止済みの集合を確認するため同じ一覧を再度取得していた。Microsoftの[スナップショットの仕様](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot)でも、スレッド一覧にはシステム全体が含まれる。元と同じ並列構成で時間を記録すると、1回の取得・列挙が1.87〜4.86秒、停止処理全体が6.00〜7.61秒だった。OSエラーがなくても6秒の復元期限を使い切り、復元に進む前に重大エラーへ入っていた。回収待ちに期限を付けた再現検査は31.82秒で35件成功・9件失敗となり、無期限停止を有限の失敗として確認できた。
 
@@ -87,7 +87,7 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 
 各実子テストは、専用のWindows Jobに所属する別の検査プロセスで動かす。所属の設定を確認するまで子を作らせない。応答は8秒、観測スレッドの合流は40秒、検査プロセスは50秒、終了要求後の回収は15秒を上限にする。OS呼出しそのものが戻らない場合も、外側が所有する検査プロセスと子だけを終了する。Jobの件数が0でも終了シグナルがまだ立たない事例を実測したため、実行中から各プロセスのハンドルを保持し、件数と終了シグナルを両方確認する。子の標準エラーは検査のファイルへ流し、panic出力で未読のpipeを満たさない。タイムアウト、panic、回収前の残存子を正常な検査へ読み替えない。
 
-無応答の合成子、controller側のpanic、保留中の実ハードウェア例外におけるpanic、続行APIの一時拒否、永続的な復元拒否を検査する。意図的に停止した検査を終了して失敗を保持すること、同時に動く別の合成子を閉じないことも実証する。ゲーム・Civ6・Steamの起動、共有DLLの配置・編集、実ゲームへのattachは行っていない。実ゲームのAI検証と、統合後の別モデルレビューは引き続き確認する。
+無応答の合成子、controller側のpanic、保留中の実ハードウェア例外におけるpanic、続行APIの一時拒否、永続的な復元拒否を検査する。意図的に停止した検査を終了して失敗を保持すること、同時に動く別の合成子を閉じないことも実証する。ゲーム・Civ6・Steamの起動、共有DLLの配置・編集、実ゲームへのattachは行っていない。実ゲームのAI検証と、統合後の独立レビューは引き続き確認する。
 
 修正候補 `5daaef17` は専用targetを使い、Rust製の `cargo_gate.exe` 経由で検査した。Windowsの主ワークスペース全件は115試験群・1790件が成功し、失敗・除外・フィルター適用は0件だった。観測器の51件は全件実行中に7.46秒で完了し、単独実行でも3.15秒で成功した。ワークスペース全体の形式検査も成功した。検査コマンドは `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` と `cargo fmt --manifest-path tools/Cargo.toml --all -- --check` である。全件検査後に所有プロセスの残存がないことを確認した。
 
