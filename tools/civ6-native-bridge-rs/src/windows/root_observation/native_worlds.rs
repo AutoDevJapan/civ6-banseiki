@@ -186,6 +186,7 @@ impl Bindings {
         }
         true
     }
+    #[cfg(test)]
     fn birth_window(&self) -> Option<BirthWindow> {
         if !self.session_births.is_empty() {
             return None;
