@@ -1450,22 +1450,60 @@ mod native_recovery_tests {
     }
 
     #[test]
-    fn real_runner_detects_bound_exit_notice_and_refuses_unowned_close_without_game_access() {
-        let scope = refused_scope();
-        let script = format!("$fixture=[Diagnostics.Process]::GetCurrentProcess(); [Console]::Error.WriteLine(('{NATIVE_RECOVERY_REQUIRED} {{0}} {{1}} {{2}}' -f $env:CIV6_NATIVE_RECOVERY_NONCE, $PID, $fixture.StartTime.ToFileTimeUtc())); [Threading.Thread]::Sleep(1000); exit 9");
-        let mut call = Call::new(crate::args(&[
-            "powershell.exe",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &script,
-        ]))
+    #[ignore = "owned Rust notice fixture, invoked by the RealRunner tests"]
+    fn real_runner_recovery_notice_worker() {
+        let case = std::env::var("CC_REAL_RUNNER_NOTICE_CASE").expect("parent fixture case");
+        let text = if case == "bound" {
+            let pid = std::process::id();
+            let created = native_process_identity(pid)
+                .unwrap()
+                .unwrap()
+                .created_filetime
+                .unwrap();
+            let nonce = std::env::var(crate::recovery_protocol::NONCE_ENV).unwrap();
+            format!("{NATIVE_RECOVERY_REQUIRED} {nonce} {pid} {created}")
+        } else {
+            assert_eq!(case, "unbound");
+            format!("{NATIVE_RECOVERY_REQUIRED} wrong 42 71")
+        };
+        eprintln!("NOTICE_RAW_BEFORE\n{text}\nNOTICE_RAW_AFTER");
+        std::io::stderr().flush().unwrap();
+        if case == "bound" {
+            thread::sleep(Duration::from_secs(1));
+            std::process::exit(9);
+        }
+    }
+
+    fn notice_call(case: &str) -> Call {
+        // These tests cover notice handling, containment and output drain.
+        // The Rust child avoids making that contract depend on a cold .NET
+        // host startup. Keep the complete RealRunner startup budget at 4s.
+        let mut call = Call::new(vec![
+            std::env::current_exe()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            "--ignored".into(),
+            "--exact".into(),
+            "process::native_recovery_tests::real_runner_recovery_notice_worker".into(),
+            "--nocapture".into(),
+        ])
         .merged()
         .managed()
         .timeout(4.0);
+        call.env
+            .insert("CC_REAL_RUNNER_NOTICE_CASE".into(), case.into());
+        call
+    }
+
+    #[test]
+    fn real_runner_detects_bound_exit_notice_and_refuses_unowned_close_without_game_access() {
+        let scope = refused_scope();
+        let mut call = notice_call("bound");
         call.native_recovery = Some(scope.clone());
         let error = RealRunner.run(call).unwrap_err();
         assert!(error.contains(NATIVE_RECOVERY_FAILURE), "{error}");
+        assert!(error.contains("NOTICE_RAW_BEFORE") && error.contains("NOTICE_RAW_AFTER"));
         let outcome = scope.outcome.lock().unwrap().clone().unwrap();
         assert!(outcome.result.is_err());
         assert_eq!(outcome.evidence["native_recovery_close_confirmed"], false);
@@ -1476,21 +1514,22 @@ mod native_recovery_tests {
     fn real_runner_ignores_an_unbound_notice_and_keeps_normal_exit_and_raw_output() {
         let scope = refused_scope();
         let text = format!("{NATIVE_RECOVERY_REQUIRED} wrong 42 71");
-        let script = format!("[Console]::Error.WriteLine('{text}'); exit 0");
-        let mut call = Call::new(crate::args(&[
-            "powershell.exe",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &script,
-        ]))
-        .merged()
-        .managed()
-        .timeout(4.0);
+        let mut call = notice_call("unbound");
         call.native_recovery = Some(scope.clone());
         let output = RealRunner.run(call).unwrap();
         assert_eq!(output.code, 0);
-        assert_eq!(output.stdout, format!("{text}\n"));
+        assert!(output.stdout.contains("1 passed; 0 failed; 0 ignored;"));
+        assert!(
+            output
+                .stdout
+                .contains(&format!("NOTICE_RAW_BEFORE\n{text}\nNOTICE_RAW_AFTER\n")),
+            "raw notice bytes were lost: {}",
+            output.stdout
+        );
+        assert_eq!(
+            output.stdout.lines().filter(|line| *line == text).count(),
+            1
+        );
         assert!(scope.outcome.lock().unwrap().is_none());
         assert_eq!(scope.target().unwrap(), None);
     }
