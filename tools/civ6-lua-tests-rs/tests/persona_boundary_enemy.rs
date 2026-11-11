@@ -1928,7 +1928,7 @@ fn capacity_retry_final_core_read_rejects_stale_receipts_and_changed_native_stat
         ),
         (
             "Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').latest.token=99",
-            "completed native Intelligence Agency",
+            "native capacity building receipt changed",
         ),
         ("makeSpy(0,786441)", "exactly one native map spy"),
         (
@@ -2368,9 +2368,72 @@ if not IS_DISTRICT then
  assert(api.CaptiveCapacityOutcome().stage=='CAPACITY_READY')
  assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==nil)
  assert(SPY_CAPACITY==2 and #CAPTURED[1]==1)
+ local unit=makeSpy(0,16); unit.x=CONTROL.x; unit.y=CONTROL.y
+ local next=api.EnemyRetryDiagnosis()
+ assert(next.mode=='CAPACITY_MAP' and next.currentID==16 and next.outcome=='CAPTURED_WITH_NEW_MAP')
+ local observed=api.CaptiveCapacityOutcome()
+ assert(observed.stage=='CAPACITY_READY' and observed.captured==1 and observed.mapSpies==1)
+ assert(CAPACITY_PROGRESS_CALLS==2 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED)
 end
 "#);
+            if !district {
+                h.0.load(read_repo(VIEW)).exec().unwrap();
+                h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+                h.run("local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); assert(r.mode=='CAPACITY_MAP' and r.spyID==16 and r.archive.spyID==15 and r.archive.eventID==0 and r.binding.source=='BUILDING_GOV_SPIES' and r.binding.spyID==16); assert(CAPACITY_PROGRESS_CALLS==2 and #CAPTURED[1]==1 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED); assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==nil,'archive fabricated a completion record')");
+            }
         }
+    }
+}
+
+#[test]
+fn capacity_map_archive_uses_the_same_attempt_reference_and_rejects_changed_identity() {
+    for fault in [
+        "none",
+        "owner",
+        "cityID",
+        "targetIndex",
+        "eventID",
+        "eventTurn",
+        "token",
+        "turn",
+        "newID",
+    ] {
+        let h = Enemy::new();
+        h.captured_with_capacity_spy();
+        h.0.globals().set("ARCHIVE_FAULT", fault).unwrap();
+        h.run(
+            r#"
+local progress=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')
+local old=progress.latest
+local cfg=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')
+Game:SetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS',{
+ BUILDING_GOV_SPIES={action='PROGRESS_CAPACITY',owner=0,cityID=old.cityID,
+  targetType='BUILDING_GOV_SPIES',targetIndex=old.buildingIndex,token=old.token,
+  turn=old.turn,frame=1,publishEpoch=0,defender=cfg.owner,leader=cfg.leader,
+  eventID=0,eventTurn=23}})
+Game:SetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS',nil)
+local d=ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis()
+assert(d.mode=='CAPACITY_MAP' and d.currentID==786440 and d.binding.token==old.token)
+ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME()
+local request=REQUESTS[#REQUESTS].params
+if ARCHIVE_FAULT=='newID' then request.CurrentID=655368
+elseif ARCHIVE_FAULT~='none' then
+ local attempt=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS').BUILDING_GOV_SPIES
+ attempt[ARCHIVE_FAULT]=9999
+end
+local ok=pcall(ENEMY_CASES.fireCore,'JAC_BoundaryBeginEnemySpyRetry',request)
+if ARCHIVE_FAULT=='none' then
+ assert(ok and Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING'))
+else
+ assert(not ok,'changed attempt or binding entered the native archive')
+ assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil)
+ assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING')==nil)
+end
+assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==nil)
+assert(HISTORY[0][0].CompletionTurn==23 and #CAPTURED[1]==1)
+assert(CAPACITY_PROGRESS_CALLS==0,'read-only archive replayed the capacity mutation')
+"#,
+        );
     }
 }
 

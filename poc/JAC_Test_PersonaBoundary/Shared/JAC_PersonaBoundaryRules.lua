@@ -1,6 +1,61 @@
 -- Test-only read/validation rules. No native or persona state is written here.
 JAC_PersonaBoundaryRules = {};
 local R = JAC_PersonaBoundaryRules;
+-- The UI and synchronized Gameplay use the same immutable reference. A saved
+-- attempt is never a completed building; callers still verify native state.
+function R.CapacityProgressAttempt(key,action,c)
+    local attempts=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS");
+    assert(attempts==nil or type(attempts)=="table",
+        "native capacity progress attempt ledger is invalid");
+    local attempt=attempts and attempts[key];
+    if attempt==nil then return nil; end
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "native capacity original mission missing");
+    assert(type(attempt)=="table" and attempt.action==action and
+        attempt.targetType==key and attempt.owner==c.attacker and
+        attempt.defender==c.owner and attempt.leader==c.leader and
+        attempt.eventID==event.id and attempt.eventTurn==event.turn and
+        type(attempt.cityID)=="number" and type(attempt.targetIndex)=="number" and
+        type(attempt.token)=="number" and attempt.token>0 and
+        type(attempt.turn)=="number" and attempt.turn<=Game.GetCurrentGameTurn(),
+        "native capacity progress attempt identity changed");
+    return attempt;
+end
+
+function R.CapacityBuildingReference(c)
+    local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS");
+    local latest=progress and progress.latest;
+    local step=latest and progress.steps and progress.steps[latest.buildingType];
+    local recovered=false;
+    local candidate;
+    for _,kind in ipairs({"BUILDING_GOV_TALL","BUILDING_GOV_CONQUEST",
+        "BUILDING_GOV_WIDE","BUILDING_GOV_SPIES"}) do
+        local completed=progress and progress.steps and progress.steps[kind];
+        local laterTarget=not latest or (kind=="BUILDING_GOV_SPIES" and
+            latest.buildingType~="BUILDING_GOV_SPIES");
+        local attempt=not completed and laterTarget and
+            R.CapacityProgressAttempt(kind,"PROGRESS_CAPACITY",c);
+        if attempt and not completed and laterTarget then
+            assert(not candidate or (kind=="BUILDING_GOV_SPIES" and
+                candidate.targetType~="BUILDING_GOV_SPIES" and
+                candidate.cityID==attempt.cityID and candidate.turn<=attempt.turn),
+                "multiple uncertain capacity building attempts");
+            candidate=attempt;
+        end
+    end
+    if candidate then
+        latest={buildingType=candidate.targetType,cityID=candidate.cityID,
+            buildingIndex=candidate.targetIndex,token=candidate.token,turn=candidate.turn};
+        step=latest; recovered=true;
+    end
+    assert(latest,"native capacity building progress receipt missing");
+    assert(step,"latest capacity building step missing");
+    assert(step.cityID==latest.cityID and step.buildingIndex==latest.buildingIndex and
+        step.token==latest.token and step.turn==latest.turn,
+        "native capacity building receipt changed");
+    return latest,step,recovered;
+end
+
 include("JAC_PersonaCompletedFailure");
 R.CompletedNativeFailure=function(initial,escape)
     return assert(JAC_PersonaCompletedFailure,"Rust generated native failure policy missing")(initial,escape);

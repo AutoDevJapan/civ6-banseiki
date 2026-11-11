@@ -740,10 +740,7 @@ local function HandleEnemySpyRetry(controller,params,final)
     elseif params.Mode=="CAPACITY_MAP" then
         local building=assert(GameInfo.Buildings["BUILDING_GOV_SPIES"],
             "native Intelligence Agency definition missing");
-        local progress=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS"),
-            "native Intelligence Agency progress receipt missing");
-        local latest=assert(progress.latest,"latest native capacity receipt missing");
-        local step=progress.steps and progress.steps.BUILDING_GOV_SPIES;
+        local latest,step,recovered=R.CapacityBuildingReference(c);
         local city=assert(CityManager.GetCity(controller,params.BindingCityID),
             "native Intelligence Agency production city missing");
         assert(params.Outcome=="CAPTURED_WITH_NEW_MAP" and
@@ -759,6 +756,7 @@ local function HandleEnemySpyRetry(controller,params,final)
             step.cityID==latest.cityID and step.token==latest.token and
             step.turn==latest.turn and step.buildingIndex==latest.buildingIndex and
             latest.turn<=Game.GetCurrentGameTurn() and
+            (not recovered or latest.turn<Game.GetCurrentGameTurn()) and
             city:GetOwner()==controller and
             city:GetBuildings():HasBuilding(building.Index),
             "new spy is not tied to the completed native Intelligence Agency");
