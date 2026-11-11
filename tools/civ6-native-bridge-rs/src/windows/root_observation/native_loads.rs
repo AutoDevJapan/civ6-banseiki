@@ -91,6 +91,60 @@ struct Call {
     joined: bool,
 }
 #[cfg(test)]
+pub(super) fn fixture_capture_snapshot_load(exe: u64, raw: &mut Saved) -> u64 {
+    EXE.store(exe, Ordering::Release);
+    begin(raw);
+    let source = CALLS.with(|calls| calls.borrow().last().unwrap().source.unwrap());
+    assert!(source.wire.is_some() && source.bootstrap.is_some());
+    let descriptor = [0u32, 0, 4, 0, 0, 0, 0];
+    let mut stack = [0u64; 7];
+    stack[5] = 0x2200;
+    let mut request: Saved = unsafe { std::mem::zeroed() };
+    request.invocation.kind = 81;
+    request.invocation.caller_rsp = stack.as_ptr() as u64;
+    request.gpr[1] = 2;
+    request.gpr[2] = descriptor.as_ptr() as u64;
+    begin(&mut request);
+    let id = parent_request().unwrap();
+    let call = CALLS.with(|calls| calls.borrow_mut().pop().unwrap());
+    assert_eq!(call.request, Some(id));
+    assert!(state().sources.get(&id.0).unwrap().wire.is_some());
+    finish(raw, false);
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    id.0
+}
+#[cfg(test)]
+pub(super) fn fixture_finish_captured_snapshot_load(
+    request: u64,
+    world: worlds::WorldLease,
+) -> Option<sessions::SessionError> {
+    let request = Request(request);
+    state().worlds.insert(request.0, world);
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 81;
+    raw.invocation.cookie = COOKIE;
+    raw.invocation.token = 1;
+    raw.gpr[4] = 0x1234_5601;
+    CALLS.with(|calls| {
+        calls.borrow_mut().push(Call {
+            serial: 1,
+            kind: 81,
+            source: None,
+            request: Some(request),
+            invocation: None,
+            pointer: 0,
+            descriptor: 0,
+            engine: 0,
+            allocation: None,
+            joined: false,
+        })
+    });
+    finish(&mut raw, false);
+    assert_eq!(raw.gpr[4], 0x1234_5601);
+    assert!(state().accepted.contains(&request.0));
+    state().binding_rejections.get(&request.0).copied()
+}
+#[cfg(test)]
 pub(super) fn fixture_accept_pre_world_target(
     target: sessions::BootstrapTarget,
     world: worlds::WorldLease,

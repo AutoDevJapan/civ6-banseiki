@@ -95,6 +95,8 @@ static BEFORE_PUBLISH: AtomicBool = AtomicBool::new(false);
 static GROW_MAP: AtomicU64 = AtomicU64::new(0);
 static SNAPSHOT_EXE: AtomicU64 = AtomicU64::new(0);
 static SNAPSHOT_TARGET: Mutex<Option<super::super::BootstrapTarget>> = Mutex::new(None);
+static SNAPSHOT_LOAD: AtomicBool = AtomicBool::new(false);
+static SNAPSHOT_REQUEST: AtomicU64 = AtomicU64::new(0);
 extern "system" fn before_publication(queue: u64) {
     ENQUEUE_COUNT.fetch_add(1, Ordering::AcqRel);
     let address = DESTINATION.load(Ordering::Acquire);
@@ -112,6 +114,19 @@ extern "system" fn admission_body(session: u64, message: u64) {
             SNAPSHOT_EXE.load(Ordering::Acquire),
             message,
             session,
+        );
+    }
+    if SNAPSHOT_LOAD.load(Ordering::Acquire) {
+        wire::fixture_snapshot_load(
+            SNAPSHOT_EXE.load(Ordering::Acquire),
+            message,
+            session,
+            |raw| {
+                SNAPSHOT_REQUEST.store(
+                    loads::fixture_capture_snapshot_load(SNAPSHOT_EXE.load(Ordering::Acquire), raw),
+                    Ordering::Release,
+                );
+            },
         );
     }
     FULL_HOLD.store(
@@ -821,6 +836,9 @@ fn pre_world_queue_snapshot_load(replace: bool) {
     message[11] = 0x100;
     DECODED.store(message.as_ptr() as u64, Ordering::Release);
     SNAPSHOT_EXE.store(fixture.exe as u64, Ordering::Release);
+    unsafe {
+        *((fixture.exe + 0xfd36b0) as *mut u64) = fixture.exe as u64 + 0x273f40;
+    }
     super::super::CALLS.with(|calls| {
         calls.borrow_mut().push(super::super::Call {
             serial: 1,
@@ -863,7 +881,13 @@ fn pre_world_queue_snapshot_load(replace: bool) {
         super::super::fixture_replace_pre_world_transport(lease);
     }
     let world = worlds::fixture_world_birth();
-    let rejection = loads::fixture_accept_pre_world_target(target, world);
+    let rejection = if SNAPSHOT_LOAD.load(Ordering::Acquire) {
+        let request = SNAPSHOT_REQUEST.load(Ordering::Acquire);
+        assert_ne!(request, 0);
+        loads::fixture_finish_captured_snapshot_load(request, world)
+    } else {
+        loads::fixture_accept_pre_world_target(target, world)
+    };
     if replace {
         assert_eq!(rejection, Some(Error::Stale));
         assert_eq!(super::super::fixture_bound_session_world(lease), None);
@@ -890,6 +914,22 @@ fn pre_world_deferred_packet_snapshot_load_refuses_a_replaced_transport() {
     if !child("pre_world_deferred_packet_snapshot_load_refuses_a_replaced_transport") {
         return;
     }
+    pre_world_queue_snapshot_load(true);
+}
+#[test]
+fn pre_world_deferred_snapshot_request_capture_keeps_the_original_transport() {
+    if !child("pre_world_deferred_snapshot_request_capture_keeps_the_original_transport") {
+        return;
+    }
+    SNAPSHOT_LOAD.store(true, Ordering::Release);
+    pre_world_queue_snapshot_load(false);
+}
+#[test]
+fn pre_world_deferred_snapshot_request_capture_rejects_transport_replacement() {
+    if !child("pre_world_deferred_snapshot_request_capture_rejects_transport_replacement") {
+        return;
+    }
+    SNAPSHOT_LOAD.store(true, Ordering::Release);
     pre_world_queue_snapshot_load(true);
 }
 

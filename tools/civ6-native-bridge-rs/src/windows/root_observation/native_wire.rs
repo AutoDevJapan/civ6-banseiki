@@ -88,6 +88,38 @@ pub(super) fn fixture_packet_bootstrap_target(
     assert!(snapshot.packet.is_some());
     snapshot.bootstrap_target(snapshot.owner, session)
 }
+#[cfg(test)]
+pub(super) fn fixture_snapshot_load(
+    exe: u64,
+    message: u64,
+    session: u64,
+    capture_load: impl FnOnce(&mut Saved),
+) {
+    EXE.store(exe, Ordering::Release);
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.gpr[0] = message;
+    raw.gpr[1] = session;
+    raw.invocation.caller_rsp = 0x2000;
+    begin(&mut raw);
+    let snapshot = CALLS.with(|calls| calls.borrow().last().unwrap().snapshot.unwrap());
+    assert!(snapshot.packet.is_some() && snapshot.session.is_none());
+    let mut load: Saved = unsafe { std::mem::zeroed() };
+    load.invocation.kind = 80;
+    load.invocation.caller = exe + 0x80f297;
+    load.gpr = [
+        snapshot.owner,
+        snapshot.payload,
+        snapshot.length as u64,
+        snapshot.metadata as u64,
+        0,
+        0,
+        0,
+        0,
+    ];
+    capture_load(&mut load);
+    finish(&mut raw, false);
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+}
 thread_local! { static CALLS: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) }; }
 #[track_caller]
 fn fault() -> ! {
