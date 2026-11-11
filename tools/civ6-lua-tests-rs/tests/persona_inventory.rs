@@ -233,6 +233,7 @@ fn saved_price_and_join_regressions_are_registered_separately() {
             &[
                 "real_sql_rebuild_preserves_d21_and_price_v1_saves_for_prices_123",
                 "rebuilt_sql_rejects_unknown_cross_person_owner_and_damaged_receipts",
+                "original_cost_one_scenario_guard_conflicts_with_fixed_payment_capacity",
             ][..],
         ),
         (

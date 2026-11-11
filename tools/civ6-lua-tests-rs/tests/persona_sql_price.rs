@@ -65,6 +65,44 @@ fn exec(lua: &Lua, source: &str) {
     lua.load(source).exec().unwrap();
 }
 
+#[test]
+fn original_cost_one_scenario_guard_conflicts_with_fixed_payment_capacity() {
+    let data = database(&read_repo(SQL), None);
+    let rows = data["rows"].as_array().unwrap();
+    let oda = rows
+        .iter()
+        .find(|row| row["LeaderType"] == "LEADER_JAC_ODA_NOBUHIDE")
+        .unwrap();
+    assert_eq!(oda["EvolutionCost"], 1);
+    let lua = world(&data);
+    let globals = lua.globals();
+    globals.set("r", json_to_lua(&lua, oda)).unwrap();
+    let scenario: Json = serde_json::from_str(&read_repo(
+        "tools/civ6-autotest/scenarios/leader-persona-15km.json",
+    ))
+    .unwrap();
+    let start = "if GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_1']";
+    let finish = "then error('cost1 has an extra payment promotion') end";
+    let mut checked = 0;
+    for step in scenario["steps"].as_array().unwrap() {
+        let Some(code) = step["code"].as_str() else {
+            continue;
+        };
+        let Some(at) = code.find(start) else { continue };
+        let end = code[at..].find(finish).unwrap() + at + finish.len();
+        let guard = &code[at..end];
+        let error = lua.load(guard).exec().unwrap_err().to_string();
+        assert!(error.contains("cost1 has an extra payment promotion"));
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 2,
+        "retain both original pre/post-save cost-one guards"
+    );
+    lua.load("assert(GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_1'] and GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_2'])")
+        .exec().unwrap();
+}
+
 fn world(data: &Json) -> Lua {
     let lua = Lua::new();
     for path in [
