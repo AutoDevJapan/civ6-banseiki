@@ -265,6 +265,7 @@ impl Bindings {
     }
     fn owns_birth(&self, lease: WorldLease) -> bool {
         !self.coverage_gap()
+            && lease.observation == self.observation
             && self.contexts.get(&lease.context).is_some_and(|birth| {
                 birth.serial == lease.serial
                     && birth.epoch == lease.epoch
@@ -1000,7 +1001,10 @@ mod tests {
         let gap = b.start_unproven(999, false).unwrap();
         assert!(!b.owns_birth(first));
         assert!(b.finish_unproven(gap, 999, false, false));
-        assert!(b.owns_birth(first), "unrelated unknown lifetime has ended");
+        assert!(
+            !b.owns_birth(first),
+            "a lost interval cannot qualify an old birth for a new Session binding"
+        );
         assert_eq!(b.close(20), Some(first));
         assert!(!b.owns_birth(first));
         assert!(b.closed(20, first.serial));
