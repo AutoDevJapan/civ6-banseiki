@@ -245,6 +245,15 @@ function Q.Drain(a)
                 completedBuckets[e.leader .. '_' .. e.deed .. '_' .. e.turn] = nil
             end
         end
+        -- A conflicting restored identity may still retain the original
+        -- qualified event outside PENDING. Its cap reservation is still live.
+        if type(recovery) == 'table' then
+            for _,e in pairs(recovery) do
+                if type(e) == 'table' and type(e.leader) == 'string' and type(e.deed) == 'string' and integer(e.turn) then
+                    completedBuckets[e.leader .. '_' .. e.deed .. '_' .. e.turn] = nil
+                end
+            end
+        end
         for bucket in pairs(completedBuckets) do buckets[bucket] = nil end
         Game:SetProperty(BUCKETS, next(buckets) and buckets or nil)
         Game:SetProperty(PENDING, next(pending) and pending or nil)

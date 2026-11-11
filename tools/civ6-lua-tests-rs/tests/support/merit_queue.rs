@@ -188,6 +188,31 @@ fn direct_alliance_defer_preserves_a_false_entry_and_unknown_replay() {
 }
 
 #[test]
+fn a_recovery_conflict_keeps_the_original_bucket_until_both_events_settle() {
+    run(r#"
+        settled(); set_merit(0)
+        local first=DATE..'_BUILDING_100_0'
+        local bucket=DATE..'_BUILDING_1'
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        local original=Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')[first]
+        assert(original.amount==3 and original.reservedCount==1)
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',{[first]=false})
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        local buckets=Game:GetProperty('JAC_PERSONA_MERIT_BUCKETS_V2')
+        assert(type(buckets)=='table' and buckets[bucket]==2,'another commit erased a recovery reservation')
+        assert(Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')[first]==original)
+        Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[first]=nil
+        reload()
+        assert(prop('MERIT')==6,'the original proven event was stranded after resolving the conflict')
+        assert(Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')==nil)
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        assert(prop('MERIT')==6)
+    "#);
+}
+
+#[test]
 fn malformed_saved_queue_keeps_building_callbacks_and_saved_values_intact() {
     for value in ["false", "true", "1", "0.5", "'invalid'"] {
         run(&format!(
