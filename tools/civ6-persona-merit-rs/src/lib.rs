@@ -200,13 +200,24 @@ function Q.Drain(a)
     local nextSequence = Q.NextSequence()
     if nextSequence then
         local maximum = nextSequence - 1
-        for key, e in pairs(pending) do
-            if type(e) == 'table' then
-                if integer(e.sequence) then maximum = math.max(maximum, e.sequence) end
-                if e.version == {version} and e.eligible == true and e.eligibilityUnknown == false and
-                   e.sequenceDeferred == true and e.sequence == nil and integer(e.turn) and integer(e.reservedCount) and
-                   integer(e.recoverySequence) and e.recoverySequence > 0 then
-                    deferred[#deferred + 1] = {{key=key, event=e}}
+        -- Inspect the complete saved ordering graph before changing any
+        -- ordinal. A conflicting restored key can leave an earlier copy in
+        -- RECOVERY even after other records moved to PENDING.
+        local deferredCounts = {{}}
+        for _, saved in ipairs({{pending, recovery or false}}) do
+            if type(saved) == 'table' then
+                for key, e in pairs(saved) do
+                    if type(e) == 'table' then
+                        if integer(e.sequence) then maximum = math.max(maximum, e.sequence) end
+                        if e.version == {version} and e.eligible == true and e.eligibilityUnknown == false and
+                           e.sequenceDeferred == true and e.sequence == nil and
+                           integer(e.recoverySequence) and e.recoverySequence > 0 then
+                            deferredCounts[e.recoverySequence] = (deferredCounts[e.recoverySequence] or 0) + 1
+                            if saved == pending and integer(e.turn) and integer(e.reservedCount) then
+                                deferred[#deferred + 1] = {{key=key, event=e}}
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -216,8 +227,8 @@ function Q.Drain(a)
         end)
         -- Never partially number a set when the exact Lua integer space ends.
         local unique = true
-        for i=2,#deferred do
-            if deferred[i-1].event.recoverySequence == deferred[i].event.recoverySequence then unique = false end
+        for _, item in ipairs(deferred) do
+            if deferredCounts[item.event.recoverySequence] ~= 1 then unique = false end
         end
         if unique and maximum <= 9007199254740991 - #deferred then
             for _, item in ipairs(deferred) do

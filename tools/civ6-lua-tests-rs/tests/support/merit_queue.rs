@@ -326,6 +326,32 @@ fn a_recovery_conflict_keeps_the_original_bucket_until_both_events_settle() {
 }
 
 #[test]
+fn deferred_order_is_validated_across_blocked_recovery_before_renumbering() {
+    for duplicate in [false, true] {
+        run(&format!(
+            r#"{FREEZE}
+            local keyA=DATE..'_BUILDING_100_0'; local keyB=DATE..'_BUILDING_100_1'
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            FIRE('BuildingConstructed',0,1,1,100,true)
+            local recovery=Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')
+            if {duplicate} then recovery[keyB].recoverySequence=recovery[keyA].recoverySequence end
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',{{[keyA]=false}})
+            reload()
+            if {duplicate} then
+                assert((prop('MERIT') or 0)==0,'renumbering erased a duplicate in blocked recovery')
+                assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[keyB].sequence==nil)
+                Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[keyB].recoverySequence=2
+            else assert(prop('MERIT')==3,'a unique valid event was discarded by an unrelated identity conflict') end
+            Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[keyA]=nil
+            reload(); assert(prop('MERIT')==6)
+            reload(); assert(prop('MERIT')==6,'recovered order paid twice')
+        "#
+        ));
+    }
+}
+
+#[test]
 fn malformed_saved_queue_keeps_building_callbacks_and_saved_values_intact() {
     for value in ["false", "true", "1", "0.5", "'invalid'"] {
         run(&format!(
