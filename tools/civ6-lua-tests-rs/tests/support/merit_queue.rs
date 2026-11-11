@@ -151,6 +151,9 @@ fn damaged_identity_or_changed_owner_never_adopts_a_recovery_event() {
         Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',{[key]=false})
         FIRE('BuildingConstructed',0,1,0,100,true)
         assert(prop('MERIT')==0 and Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[key]==false)
+        Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[key]=nil
+        reload(); FIRE('BuildingConstructed',0,1,0,100,true)
+        assert(prop('MERIT')==0,'clearing a damaged per-identity value allowed retrospective merit')
         Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
         FIRE('BuildingConstructed',0,1,1,100,true)
         local stored=Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')

@@ -71,7 +71,7 @@ function Q.Unknown(row, deed, identity, a)
     local key = leader .. '_' .. deed .. '_' .. identity
     for _, store in ipairs({{PENDING, RECOVERY}}) do
         local saved = Game:GetProperty(store)
-        if type(saved) == 'table' and saved[key] ~= nil then return end
+        if type(saved) == 'table' and type(saved[key]) == 'table' then return end
     end
     -- This independent identity survives an unusable queue or sequence. It is
     -- not a paid receipt and never becomes eligible after state visibility.
@@ -86,7 +86,7 @@ function Q.Capture(row, deed, identity, city, a)
     local pending = Q.Pending()
     local recovery = Game:GetProperty(RECOVERY)
     if recovery ~= nil and type(recovery) ~= 'table' then Q.Unknown(row, deed, identity, a); return false end
-    if recovery and recovery[key] ~= nil then return false end
+    if recovery and recovery[key] ~= nil then Q.Unknown(row, deed, identity, a); return false end
     local destination = PENDING
     if not pending then
         -- Do not replace damaged saves. Retain a new event's independently
@@ -94,7 +94,8 @@ function Q.Capture(row, deed, identity, city, a)
         pending = recovery or {{}}
         destination = RECOVERY
     end
-    if pending[key] ~= nil or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
+    if pending[key] ~= nil then Q.Unknown(row, deed, identity, a); return false end
+    if a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
     if not city or not a.Player(owner, true) or city:GetOwner() ~= owner then return false end
     local turn = Game.GetCurrentGameTurn()
     local cap = deed == 'GOVERN_TURN' and 1 or a.Parameter(deed .. '_DEEDS_PER_TURN')
