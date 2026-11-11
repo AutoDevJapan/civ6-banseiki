@@ -12,13 +12,23 @@ function Q.Reserve(eligible, count, cap, reward)
     if count < cap then return reward, count + 1 end
     return 0, cap
 end
+function Q.Pending()
+    local pending = Game:GetProperty(PENDING)
+    if pending == nil then return {} end
+    if type(pending) == 'table' then return pending end
+end
+function Q.NextSequence()
+    local sequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')
+    if sequence == nil then sequence = 0 end
+    if not integer(sequence) or sequence >= 9007199254740991 then return nil end
+    return sequence + 1
+end
 function Q.Capture(row, deed, identity, city, a)
     local leader = row.LeaderType
     local owner = a.Get(leader, 'OWNER')
     local key = leader .. '_' .. deed .. '_' .. identity
-    local pending = Game:GetProperty(PENDING)
-    if pending == nil then pending = {} end
-    if type(pending) ~= 'table' then return false end
+    local pending = Q.Pending()
+    if not pending then return false end
     if pending[key] or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
     if not city or not a.Player(owner, true) or city:GetOwner() ~= owner then return false end
     local turn = Game.GetCurrentGameTurn()
@@ -32,10 +42,8 @@ function Q.Capture(row, deed, identity, city, a)
     if count == nil then count = a.Get(leader, deed .. '_COUNT_TURN') == turn and (a.Get(leader, deed .. '_COUNT') or 0) or 0 end
     local amount, reserved = Q.Reserve(true, count, cap, reward)
     if amount == nil then return false end
-    local priorSequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')
-    if priorSequence == nil then priorSequence = 0 end
-    if not integer(priorSequence) or priorSequence >= 9007199254740991 then return false end
-    local sequence = priorSequence + 1
+    local sequence = Q.NextSequence()
+    if not sequence then return false end
     pending[key] = {version=2, leader=leader, owner=owner, deed=deed,
         identity=identity, turn=turn, sequence=sequence, cityID=city:GetID(),
         eligibilityUnknown=false, eligible=true, amount=amount, reservedCount=reserved,
@@ -47,9 +55,8 @@ function Q.Capture(row, deed, identity, city, a)
     return amount > 0
 end
 function Q.Drain(a)
-    local pending = Game:GetProperty(PENDING)
+    local pending = Q.Pending()
     local buckets = Game:GetProperty(BUCKETS)
-    if pending == nil then pending = {} end
     if buckets == nil then buckets = {} end
     if type(pending) ~= 'table' or type(buckets) ~= 'table' then return end
     local changed = false
@@ -2267,10 +2274,12 @@ end
 -- Pending notifications are immutable gameplay identities, not UI-provided eligibility.
 -- Keep them through save/load. A later read cannot establish event-time eligibility.
 local function Defer(row, deed, identity, cityID, x, y)
-    local pending = Game:GetProperty(PENDING) or {};
+    local pending = MeritQueue.Pending();
+    if not pending then return; end
     local key = row.LeaderType .. "_" .. deed .. "_" .. identity;
     if not pending[key] then
-        local sequence = (Game:GetProperty("JAC_PERSONA_PENDING_SEQUENCE") or 0) + 1;
+        local sequence = MeritQueue.NextSequence();
+        if not sequence then return; end
         Game:SetProperty("JAC_PERSONA_PENDING_SEQUENCE", sequence);
         pending[key] = {sequence=sequence, leader=row.LeaderType, owner=Get(row.LeaderType, "OWNER"),
             deed=deed, identity=identity, turn=Game.GetCurrentGameTurn(), cityID=cityID, x=x, y=y,
@@ -2300,7 +2309,8 @@ local function HandleDeed(row, deed, identity, cityID, x, y)
     local owner = Get(leader, "OWNER");
     if Get(leader, "STATE") ~= "GOVERNOR" or not Player(owner, true) then return; end
     if Get(leader, "DEED_" .. deed .. "_" .. identity) ~= nil then return; end
-    local pending = Game:GetProperty(PENDING) or {};
+    local pending = MeritQueue.Pending();
+    if not pending then return; end
     if pending[leader .. "_" .. deed .. "_" .. identity] then return; end
     local city, ready = SettledCity(owner, row);
     if not ready then Defer(row, deed, identity, cityID, x, y); return; end
@@ -2413,11 +2423,11 @@ OnPlayerTurnStarted = function(owner)
     for row in GameInfo.JAC_LeaderPersonas() do
         local leader = row.LeaderType;
         if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then
-            local pending = Game:GetProperty(PENDING) or {};
+            local pending = MeritQueue.Pending();
             local city, ready = SettledCity(owner, row);
             if Get(leader, "GOVERN_LAST_TURN") ~= turn then
                 Set(leader, "GOVERN_LAST_TURN", turn); -- the eligibility decision is final for this turn
-                if not ready or pending[leader .. "_TURN_" .. tostring(turn)] then
+                if not pending or not ready or pending[leader .. "_TURN_" .. tostring(turn)] then
                     Defer(row, "TURN", tostring(turn));
                 elseif city then
                     Award(row, "GOVERN_TURN", tostring(turn), city);

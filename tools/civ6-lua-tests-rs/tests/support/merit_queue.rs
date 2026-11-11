@@ -29,6 +29,97 @@ queue.Drain=function() end
 "#;
 
 #[test]
+fn malformed_saved_queue_keeps_building_callbacks_and_saved_values_intact() {
+    for value in ["false", "true", "1", "0.5", "'invalid'"] {
+        run(&format!(
+            r#"
+            settled(); set_merit(0)
+            local damaged={value}
+            local buckets={{keep='original'}}
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',damaged)
+            Game:SetProperty('JAC_PERSONA_MERIT_BUCKETS_V2',buckets)
+            Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE',17)
+            for reloadIndex=1,2 do
+                local reached=false
+                GameEvents.BuildingConstructed.Add(function() reached=true end)
+                FIRE('BuildingConstructed',0,1,0,100,true)
+                assert(reached, 'later building callback did not run')
+                assert(prop('MERIT')==0 and prop('DEED_BUILDING_100_0')==nil)
+                assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==damaged)
+                assert(Game:GetProperty('JAC_PERSONA_MERIT_BUCKETS_V2')==buckets)
+                assert(Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')==17)
+                reload()
+            end
+        "#
+        ));
+    }
+}
+
+#[test]
+fn malformed_saved_queue_keeps_turn_callbacks_without_late_merit() {
+    for value in ["false", "true", "1", "'invalid'"] {
+        run(&format!(
+            r#"
+            settled(); set_merit(0)
+            local damaged={value}
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',damaged)
+            Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE',17)
+            local reached=false
+            GameEvents.PlayerTurnStarted.Add(function() reached=true end)
+            FIRE('PlayerTurnStarted',0)
+            assert(reached and prop('MERIT')==0 and prop('GOVERN_LAST_TURN')==1)
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==damaged)
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')==17)
+            reload()
+            FIRE('PlayerTurnStarted',0)
+            assert(prop('MERIT')==0 and Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==damaged)
+            -- Model a separately repaired save only inside this Lua fixture.
+            -- The production callback must not replay the missed turn.
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil)
+            FIRE('PlayerTurnStarted',0)
+            assert(prop('MERIT')==0)
+            TURN=2; FIRE('PlayerTurnStarted',0)
+            assert(prop('MERIT')==2 and prop('GOVERN_LAST_TURN')==2)
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(prop('MERIT')==5)
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(prop('MERIT')==5)
+        "#
+        ));
+    }
+}
+
+#[test]
+fn deferred_deeds_preserve_invalid_saved_sequence_without_throwing() {
+    for value in [
+        "false",
+        "-1",
+        "0.5",
+        "'invalid'",
+        "9007199254740991",
+        "math.huge",
+    ] {
+        run(&format!(
+            r#"
+            settled(); set_merit(0)
+            CITIES[0][1].GetProperty=nil
+            local damaged={value}
+            local pending={{}}
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',pending)
+            Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE',damaged)
+            local reached=false
+            GameEvents.BuildingConstructed.Add(function() reached=true end)
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(reached and prop('MERIT')==0 and next(pending)==nil)
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==pending)
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')==damaged)
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY')==nil)
+        "#
+        ));
+    }
+}
+
+#[test]
 fn qualified_buildings_reserve_in_order_and_settle_once_on_context_restore() {
     run(&format!(
         r#"{FREEZE}

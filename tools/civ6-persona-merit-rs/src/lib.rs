@@ -51,13 +51,23 @@ function Q.Reserve(eligible, count, cap, reward)
     if count < cap then return reward, count + 1 end
     return 0, cap
 end
+function Q.Pending()
+    local pending = Game:GetProperty(PENDING)
+    if pending == nil then return {{}} end
+    if type(pending) == 'table' then return pending end
+end
+function Q.NextSequence()
+    local sequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')
+    if sequence == nil then sequence = 0 end
+    if not integer(sequence) or sequence >= 9007199254740991 then return nil end
+    return sequence + 1
+end
 function Q.Capture(row, deed, identity, city, a)
     local leader = row.LeaderType
     local owner = a.Get(leader, 'OWNER')
     local key = leader .. '_' .. deed .. '_' .. identity
-    local pending = Game:GetProperty(PENDING)
-    if pending == nil then pending = {{}} end
-    if type(pending) ~= 'table' then return false end
+    local pending = Q.Pending()
+    if not pending then return false end
     if pending[key] or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
     if not city or not a.Player(owner, true) or city:GetOwner() ~= owner then return false end
     local turn = Game.GetCurrentGameTurn()
@@ -71,10 +81,8 @@ function Q.Capture(row, deed, identity, city, a)
     if count == nil then count = a.Get(leader, deed .. '_COUNT_TURN') == turn and (a.Get(leader, deed .. '_COUNT') or 0) or 0 end
     local amount, reserved = Q.Reserve(true, count, cap, reward)
     if amount == nil then return false end
-    local priorSequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')
-    if priorSequence == nil then priorSequence = 0 end
-    if not integer(priorSequence) or priorSequence >= 9007199254740991 then return false end
-    local sequence = priorSequence + 1
+    local sequence = Q.NextSequence()
+    if not sequence then return false end
     pending[key] = {{version={version}, leader=leader, owner=owner, deed=deed,
         identity=identity, turn=turn, sequence=sequence, cityID=city:GetID(),
         eligibilityUnknown=false, eligible=true, amount=amount, reservedCount=reserved,
@@ -86,9 +94,8 @@ function Q.Capture(row, deed, identity, city, a)
     return amount > 0
 end
 function Q.Drain(a)
-    local pending = Game:GetProperty(PENDING)
+    local pending = Q.Pending()
     local buckets = Game:GetProperty(BUCKETS)
-    if pending == nil then pending = {{}} end
     if buckets == nil then buckets = {{}} end
     if type(pending) ~= 'table' or type(buckets) ~= 'table' then return end
     local changed = false
