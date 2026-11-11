@@ -289,7 +289,7 @@ mod tests {
                 ..Paths::default()
             };
             fs::create_dir_all(&p.here).unwrap();
-            let run = Run::new(&root.join("run"));
+            let mut run = Run::new(&root.join("run"));
             fs::create_dir_all(&run.artifacts).unwrap();
             fs::create_dir_all(log_path(&p).parent().unwrap()).unwrap();
             fs::write(
@@ -297,6 +297,10 @@ mod tests {
                 b"Renderer::CreateD3DDevice()\r\n\xff\0CPU\r\n",
             )
             .unwrap();
+            // This fixture models a log from this run. Anchor its start to
+            // the actual filesystem timestamp, rather than assuming the OS
+            // wall clock and file timestamp advance on the same tick.
+            run.started = fs::metadata(log_path(&p)).unwrap().modified().unwrap();
             let owner = json!({"chain_pid": 42, "pid_created_filetime": 7});
             Self {
                 root,
@@ -414,10 +418,29 @@ mod tests {
         f.run
             .capture(&mut r, &f.p, &f.owner, "chain-before-close")
             .unwrap();
+        let evidence = f.evidence("chain-before-close");
         assert_eq!(
-            f.evidence("chain-before-close")["attribution_status"],
-            "matched_receipt_generation"
+            evidence["attribution_status"], "matched_receipt_generation",
+            "{evidence}"
         );
+    }
+
+    #[test]
+    fn log_one_filetime_tick_before_run_is_not_attributed() {
+        let mut f = Fixture::new();
+        let mut r = model();
+        f.receipt(11, r.created.unwrap());
+        let modified = fs::metadata(log_path(&f.p)).unwrap().modified().unwrap();
+        f.run.started = modified + std::time::Duration::from_nanos(100);
+        f.run.capture(&mut r, &f.p, &f.owner, "old-tick").unwrap();
+        let evidence = f.evidence("old-tick");
+        assert_eq!(evidence["attribution_status"], "unknown");
+        assert!(evidence["attribution_error"]
+            .as_str()
+            .unwrap()
+            .contains("timestamp is outside"));
+        assert_eq!(evidence["capture_status"], "saved");
+        assert_eq!(evidence["renderer_selection_verified"], false);
     }
 
     #[test]
