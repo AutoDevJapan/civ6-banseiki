@@ -136,6 +136,23 @@ extern "system" fn submission_observed_cleanup() {
     submission_observed::fixture_parent_end();
 }
 global_asm!(
+    // Macro definitions must be in the same assembly unit as their uses;
+    // separate global_asm! blocks may be assigned to different codegen units.
+    ".macro submission_probe_inputs",
+    "mov [rcx],rax","mov [rcx+8],rdx","mov [rcx+16],r8","mov [rcx+24],r9",
+    "mov [rcx+32],r10","mov [rcx+40],r11","mov [rcx+48],rcx",
+    "pushfq","pop qword ptr [rcx+56]",
+    "movdqu [rcx+0x100],xmm0","movdqu [rcx+0x110],xmm1","movdqu [rcx+0x120],xmm2",
+    "movdqu [rcx+0x130],xmm3","movdqu [rcx+0x140],xmm4","movdqu [rcx+0x150],xmm5",
+    ".endm",
+    ".macro submission_probe_outputs",
+    "mov rbx,rcx","call {get_error}","mov [rbx+0x90],rax",
+    "inc qword ptr [rbx+0x80]","mov ecx,0x880","call {set_error}",
+    "xor eax,eax","mov rax,0x1122","mov rdx,0x2233","mov r8,0x3344","mov r9,0x4455",
+    "mov r10,0x5566","mov r11,0x6677","mov rcx,0x7788",
+    "pcmpeqb xmm0,xmm0","pxor xmm1,xmm1","pcmpeqb xmm2,xmm2",
+    "pxor xmm3,xmm3","pcmpeqb xmm4,xmm4","pxor xmm5,xmm5",
+    "stc","pushfq","pop qword ptr [rbx+0x88]",".endm",
     ".globl submission_observed_probe_driver",".seh_proc submission_observed_probe_driver",
     "submission_observed_probe_driver:","push rbx",".seh_pushreg rbx",
     "sub rsp,0x40",".seh_stackalloc 0x40",".seh_endprologue",
@@ -158,25 +175,26 @@ global_asm!(
     // before its later stack allocation, not from the recorder's Saved copy.
     ".globl submission_observed_probe_producer",".seh_proc submission_observed_probe_producer",
     "submission_observed_probe_producer:","mov [rsp+0x18],rsi",".seh_savereg rsi,0x18",
-    "root_probe_inputs","push rbx",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",
-    ".seh_endprologue","root_probe_outputs","mov rbx,[rsp+0x20]","mov rsi,[rsp+0x40]",
+    "submission_probe_inputs","push rbx",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",
+    ".seh_endprologue","submission_probe_outputs","mov rbx,[rsp+0x20]","mov rsi,[rsp+0x40]",
     "lea rsp,[rsp+0x28]","ret",".seh_endproc",
     ".globl submission_observed_probe_host",".seh_proc submission_observed_probe_host",
     "submission_observed_probe_host:",".byte 0x40,0x53",".seh_pushreg rbx",
     "sub rsp,0x20",".seh_stackalloc 0x20",".seh_endprologue",
-    "root_probe_inputs","root_probe_outputs","mov rbx,[rsp+0x20]",
+    "submission_probe_inputs","submission_probe_outputs","mov rbx,[rsp+0x20]",
     "lea rsp,[rsp+0x28]","ret",".seh_endproc",
     ".globl submission_observed_probe_core",".seh_proc submission_observed_probe_core",
     "submission_observed_probe_core:",".byte 0x40,0x57",".seh_pushreg rdi",
     "sub rsp,0x20",".seh_stackalloc 0x20","mov [rsp+0x10],rbx",".seh_savereg rbx,0x10",
-    ".seh_endprologue","root_probe_inputs","root_probe_outputs",
+    ".seh_endprologue","submission_probe_inputs","submission_probe_outputs",
     "mov rbx,[rsp+0x10]","mov rdi,[rsp+0x20]","lea rsp,[rsp+0x28]","ret",".seh_endproc",
     ".globl submission_observed_probe_push_host",".seh_proc submission_observed_probe_push_host",
     "submission_observed_probe_push_host:","sub rsp,0x38",".seh_stackalloc 0x38",
     "movups xmm0,[r9]","mov [rsp+0x30],rbx",".seh_savereg rbx,0x30",
-    ".seh_endprologue","root_probe_inputs","root_probe_outputs",
+    ".seh_endprologue","submission_probe_inputs","submission_probe_outputs",
     "mov rbx,[rsp+0x30]","lea rsp,[rsp+0x38]","ret",".seh_endproc",
     prepare=sym submission_observed_prepare,cleanup=sym submission_observed_cleanup,
+    set_error=sym SetLastError,get_error=sym GetLastError,
 );
 unsafe extern "system" {
     fn submission_observed_probe_driver(data: *mut u8, target: usize, kind: u64);
