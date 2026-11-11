@@ -421,6 +421,13 @@ fn actual_growth_relocates_map_without_changing_reserved_slot_receipt() {
     let grow: unsafe extern "system" fn(u64, u64) = unsafe { std::mem::transmute(gateways()[6]) };
     unsafe { grow(f.session.as_ptr() as u64 + 0xd8, 1) };
     assert_eq!(pending(), Ok(1));
+    assert_eq!(
+        state().retire_world(WorldReceipt {
+            binding_id: 8,
+            epoch: 1
+        }),
+        Err(Error::Busy)
+    );
     assert_eq!(f.pump(), 0x8811);
     assert_eq!(
         *ADMISSION_WORLD.lock().unwrap(),
@@ -798,12 +805,25 @@ fn unknown_packet_identity_survives_native_serialization_free_and_delayed_dispat
     });
     f.session[31] = 1;
     assert_eq!(pending(), Ok(1));
+    assert_eq!(
+        state().retire_world(WorldReceipt {
+            binding_id: 8,
+            epoch: 1
+        }),
+        Err(Error::Busy)
+    );
     assert_eq!(f.pump(), 0x8811);
     assert_eq!(*ADMISSION_WORLD.lock().unwrap(), None);
     assert_eq!(*ADMISSION_PACKET.lock().unwrap(), Some(packet));
     assert!(FULL_HOLD.load(Ordering::Acquire));
     assert_eq!(FREE_COUNT.load(Ordering::Acquire), 1);
     assert_eq!(pending(), Ok(0));
+    state()
+        .retire_world(WorldReceipt {
+            binding_id: 8,
+            epoch: 1,
+        })
+        .unwrap();
     assert!(!super::super::unproven_input_active());
 }
 fn pre_world_queue_snapshot_load(replace: bool) {

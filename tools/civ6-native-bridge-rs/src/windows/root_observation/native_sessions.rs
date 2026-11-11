@@ -386,6 +386,21 @@ pub(super) fn fixture_pre_world_packet(lease: SessionLease) -> PacketReceipt {
     }
 }
 #[cfg(test)]
+pub(super) struct FixtureInputHold(ledger::InputHold);
+#[cfg(test)]
+pub(super) fn fixture_retain_packet_input(packet: PacketReceipt) -> FixtureInputHold {
+    FixtureInputHold(
+        state()
+            .retain_packet_transport(packet.lease, packet.transport)
+            .unwrap()
+            .unwrap(),
+    )
+}
+#[cfg(test)]
+pub(super) fn fixture_release_packet_input(hold: FixtureInputHold) {
+    state().release_input_transport(hold.0).unwrap();
+}
+#[cfg(test)]
 pub(super) fn fixture_replace_pre_world_transport(lease: SessionLease) {
     let mut state = state();
     let old = state.transport(lease).unwrap();
@@ -431,6 +446,9 @@ pub(super) fn bind_bootstrap_world(
         census::SemanticEvent::BindRejected
     });
     result
+}
+pub(super) fn seal_world(world: SessionWorldReceipt) -> Result<(), SessionError> {
+    state().seal_world(world)
 }
 pub(super) fn retire_world(world: SessionWorldReceipt) -> Result<(), SessionError> {
     if deferred::pending().map_err(|_| Error::Unresolved)? != 0
@@ -506,12 +524,6 @@ pub(super) fn terminal_remove_end(lease: SessionLease) -> Result<(), SessionErro
 }
 pub(super) fn terminal_registry_end(registry: u64, lifetime: u64) -> Result<(), SessionError> {
     state().terminal_registry_end(registry, lifetime)
-}
-pub(super) fn reserve_input(
-    lease: SessionLease,
-    transport: SessionTransport,
-) -> Result<Option<SessionMessage>, SessionError> {
-    state().reserve_input(lease, transport)
 }
 pub(super) fn fork_input(message: SessionMessage) -> Result<SessionMessage, SessionError> {
     state().fork_input(message)

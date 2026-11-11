@@ -67,9 +67,16 @@ pub(super) fn observed_shutdown_complete() -> bool {
         && WAITED.load(Ordering::Acquire)
         && SHUTDOWN_RETURNED.load(Ordering::Acquire)
         && CLOSURE_COMPLETE.load(Ordering::Acquire)
-        && WORLD_BIRTH
-            .lock()
-            .is_ok_and(|birth| birth.is_some_and(worlds::completed))
+        && WORLD_BIRTH.lock().is_ok_and(|birth| {
+            birth.is_some_and(|birth| {
+                worlds::completed(birth)
+                    && sessions::retire_world(sessions::SessionWorldReceipt {
+                        binding_id: birth.serial,
+                        epoch: birth.epoch,
+                    })
+                    .is_ok()
+            })
+        })
 }
 fn native_coverage_complete() -> bool {
     // Explicitly absent producer/receive/window proofs, rather than mistaking
@@ -142,6 +149,11 @@ extern "system" fn begin(raw: *mut Saved) {
                         fault();
                     }
                     *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = Some(birth);
+                    sessions::seal_world(sessions::SessionWorldReceipt {
+                        binding_id: birth.serial,
+                        epoch: birth.epoch,
+                    })
+                    .unwrap_or_else(|_| fault());
                 }
                 if raw.gpr[0] == 0 {
                     fault();
@@ -277,11 +289,19 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 .unwrap_or_else(|v| scheduler::closure::fault(v));
             CLOSURE_COMPLETE.store(receipt.complete(), Ordering::Release);
             if let Some(birth) = worlds::birth(raw.invocation.world) {
-                sessions::retire_world(sessions::SessionWorldReceipt {
+                match sessions::retire_world(sessions::SessionWorldReceipt {
                     binding_id: birth.serial,
                     epoch: birth.epoch,
-                })
-                .unwrap_or_else(|_| fault());
+                }) {
+                    Ok(()) => {}
+                    Err(sessions::SessionError::Busy | sessions::SessionError::Unresolved) => {
+                        // Native storage cleanup can finish after this body's
+                        // return. Keep product grants closed and recheck at the
+                        // complete World boundary; do not abort ordinary cleanup.
+                        diagnostic(2102);
+                    }
+                    Err(_) => fault(),
+                }
             }
             SHUTDOWN_RETURNED.store(true, Ordering::Release);
         }
@@ -1407,6 +1427,33 @@ mod tests {
         assert_eq!(WORLD.load(Ordering::Acquire), 0);
     }
 
+    #[test]
+    fn complete_world_observation_waits_for_pre_world_input_storage_without_abort() {
+        if !child("complete_world_observation_waits_for_pre_world_input_storage_without_abort") {
+            return;
+        }
+        let world = worlds::fixture_world_birth();
+        let lease = sessions::fixture_bootstrap_session(10, 20);
+        let packet = sessions::fixture_pre_world_packet(lease);
+        let hold = sessions::fixture_retain_packet_input(packet);
+        let target = sessions::bootstrap_load_target(10, 20, Some(packet)).unwrap();
+        sessions::bind_bootstrap_world(target, world).unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        WORLD.store(world.world, Ordering::Release);
+        *WORLD_BIRTH.lock().unwrap() = Some(world);
+        for flag in [&CLOSING, &WAITED, &SHUTDOWN_RETURNED, &CLOSURE_COMPLETE] {
+            flag.store(true, Ordering::Release);
+        }
+        worlds::fixture_world_close(world);
+        assert!(!observed_shutdown_complete());
+        assert!(!FAILED.load(Ordering::Acquire));
+        sessions::fixture_release_packet_input(hold);
+        assert!(observed_shutdown_complete());
+        assert!(
+            !native_coverage_complete(),
+            "storage drain is not full coverage"
+        );
+    }
     #[test]
     fn observation_resume_requires_the_exact_closed_world_and_settled_uses_without_product_grants()
     {

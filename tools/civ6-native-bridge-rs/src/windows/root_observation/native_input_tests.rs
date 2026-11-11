@@ -184,7 +184,52 @@ fn fixture_ticket() -> Ticket {
         message: Some(message),
         lease,
         transport: t,
+        transport_hold: None,
     }
+}
+#[test]
+fn pre_world_native_storage_owns_transport_until_last_copy_is_released() {
+    if !child("pre_world_native_storage_owns_transport_until_last_copy_is_released") {
+        return;
+    }
+    let mut ledger = state();
+    let lease = ledger.birth(1, Some(1), 2, 2).unwrap();
+    ledger.factory(lease, 7, 2, 3, 4).unwrap();
+    ledger.published(lease, 7).unwrap();
+    let transport = ledger.publish_transport(lease, 900, 5, 6, 7).unwrap();
+    drop(ledger);
+    let ticket = reserve_ticket(lease, transport).unwrap();
+    assert!(ticket.message.is_none());
+    let input = records()
+        .issued(
+            Receipt {
+                message: ticket,
+                transport: transport.incarnation,
+            },
+            100,
+        )
+        .unwrap();
+    records().bind(input, 200).unwrap();
+    let world = WorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    state().bind_world(lease, world).unwrap();
+    assert_eq!(state().retire_world(world), Err(Error::Busy));
+    let first = retire(100).unwrap();
+    release(vec![first]);
+    assert_eq!(
+        state().retire_world(world),
+        Err(Error::Busy),
+        "remaining native copy lost its ownership"
+    );
+    let last = retire(200).unwrap();
+    release(vec![last]);
+    assert_eq!(pending(), Ok(0));
+    state().retire_world(world).unwrap();
+    assert!(state()
+        .release_input_transport(ticket.transport_hold.unwrap())
+        .is_err());
 }
 #[test]
 fn pending_input_uses_fixed_birth_world_and_unknown_never_mints() {
@@ -337,6 +382,7 @@ fn typed_callback_enters_shared_incoming_with_saved_input() {
         message: Some(m),
         lease: l,
         transport: t,
+        transport_hold: None,
     };
     BOUND.set((l, t)).unwrap();
     record[0] = (7u64 << 32) | 4;
@@ -444,7 +490,9 @@ fn pending_packet_and_poll_after_rebind_never_use_new_session_world() {
     assert_eq!(s.reserve_input(unknown, ut), Ok(None));
     drop(s);
     let before = census::event_count(census::SemanticEvent::RetiredInput);
-    assert_eq!(reserve(l, t), Ok(None));
+    let retired = reserve_ticket(l, t).unwrap();
+    assert!(retired.message.is_none());
+    cancel_ticket(retired);
     assert_eq!(
         census::event_count(census::SemanticEvent::RetiredInput),
         before + 1

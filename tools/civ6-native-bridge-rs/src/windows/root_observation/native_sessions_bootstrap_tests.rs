@@ -10,6 +10,62 @@ fn unbound(s: &mut Ledger, record_window: bool) -> Lease {
     lease
 }
 #[test]
+fn pre_world_input_transport_stays_owned_until_its_actual_storage_is_released() {
+    let mut ledger = Ledger::default();
+    let lease = unbound(&mut ledger, true);
+    let transport = ledger.publish_transport(lease, 900, 90, 100, 110).unwrap();
+    assert_eq!(ledger.reserve_input(lease, transport), Ok(None));
+    let hold = ledger.retain_input_transport(lease, transport).unwrap();
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    let bound = WorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    assert_eq!(ledger.retire_world(bound), Err(Error::Busy));
+    assert_eq!(ledger.drained(bound), Err(Error::Busy));
+    assert_eq!(ledger.reserve(lease), Err(Error::Closed));
+    ledger.release_input_transport(hold).unwrap();
+    assert_eq!(ledger.release_input_transport(hold), Err(Error::Unknown));
+    ledger.retire_world(bound).unwrap();
+    assert_eq!(ledger.reserve_input(lease, transport), Ok(None));
+    let new = WorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    ledger.loaded_world(lease, Some(bound), new).unwrap();
+    let later = ledger.retain_input_transport(lease, transport).unwrap();
+    assert!(ledger.has_input_holds(bound));
+    assert!(
+        !ledger.has_input_holds(new),
+        "old transport lifetime moved into the latest World"
+    );
+    ledger.release_input_transport(later).unwrap();
+}
+#[test]
+fn unbound_old_transport_storage_denies_completion_without_adopting_the_new_world() {
+    let mut ledger = Ledger::default();
+    let lease = unbound(&mut ledger, true);
+    let old = ledger.publish_transport(lease, 900, 90, 100, 110).unwrap();
+    let hold = ledger.retain_input_transport(lease, old).unwrap();
+    ledger.transport_disconnect_begin(lease).unwrap();
+    ledger
+        .transport_join_result(lease, old, old.thread, 1)
+        .unwrap();
+    ledger.transport_disconnect_end(lease).unwrap();
+    ledger.publish_transport(lease, 901, 90, 100, 110).unwrap();
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    assert_eq!(ledger.input_holds.get(&hold.0).unwrap().world, None);
+    let world = WorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    assert_eq!(ledger.retire_world(world), Err(Error::Busy));
+    ledger.release_input_transport(hold).unwrap();
+    ledger.retire_world(world).unwrap();
+}
+#[test]
 fn repeated_reset_accepts_only_new_unpublished_bindings_and_retains_older_packets() {
     let mut ledger = Ledger::default();
     let lease = unbound(&mut ledger, true);

@@ -23,6 +23,7 @@ struct Ticket {
     message: Option<Message>,
     lease: Lease,
     transport: Transport,
+    transport_hold: Option<ledger::InputHold>,
 }
 #[derive(Clone, Copy)]
 struct Pending {
@@ -107,17 +108,6 @@ fn network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
     }
     transports::from_network(p)
 }
-fn reserve(lease: Lease, t: Transport) -> Result<Option<Message>, Error> {
-    match super::reserve_input(lease, t) {
-        // A normal same-transport reload can retire its issuing World. Keep
-        // native polling transparent; Closed grants no replacement receipt.
-        Err(Error::Closed) => {
-            census::event(census::SemanticEvent::RetiredInput);
-            Ok(None)
-        }
-        result => result,
-    }
-}
 fn fork(message: Option<Message>) -> Result<Option<Message>, Error> {
     message.map(super::fork_input).transpose()
 }
@@ -128,10 +118,35 @@ fn cancel(message: Option<Message>) {
             .unwrap_or_else(|_| fault());
     }
 }
+fn cancel_ticket(ticket: Ticket) {
+    cancel(ticket.message);
+    if let Some(hold) = ticket.transport_hold {
+        state()
+            .release_input_transport(hold)
+            .unwrap_or_else(|_| fault());
+    }
+}
+fn reserve_ticket(lease: Lease, transport: Transport) -> Result<Ticket, Error> {
+    let mut ledger = state();
+    let message = match ledger.reserve_input(lease, transport) {
+        Err(Error::Closed) => {
+            census::event(census::SemanticEvent::RetiredInput);
+            None
+        }
+        result => result?,
+    };
+    let transport_hold = ledger.retain_input_transport(lease, transport)?;
+    Ok(Ticket {
+        message,
+        lease,
+        transport,
+        transport_hold: Some(transport_hold),
+    })
+}
 fn collect(input: Input) {
     let receipt = records().collected(input).unwrap_or_else(|_| fault());
     if let Some(r) = receipt {
-        cancel(r.message.message);
+        cancel_ticket(r.message);
     }
 }
 fn release(ids: Vec<Input>) {
@@ -251,7 +266,7 @@ pub(super) fn receiver_returned(network: u64, invocation: u64, exceptional: bool
         if exceptional {
             poison();
         } else {
-            cancel(p.ticket.message);
+            cancel_ticket(p.ticket);
         }
     }
 }
@@ -282,12 +297,7 @@ extern "system" fn begin(raw: *mut Saved) {
                         fault();
                     }
                     if let Some((lease, t)) = network(net).unwrap_or_else(|_| fault()) {
-                        let message = reserve(lease, t).unwrap_or_else(|_| fault());
-                        c.ticket = Some(Ticket {
-                            message,
-                            lease,
-                            transport: t,
-                        });
+                        c.ticket = Some(reserve_ticket(lease, t).unwrap_or_else(|_| fault()));
                     }
                 }
             }
@@ -477,7 +487,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                         fault();
                     }
                 } else {
-                    cancel(ticket.message);
+                    cancel_ticket(ticket);
                 }
             }
         }

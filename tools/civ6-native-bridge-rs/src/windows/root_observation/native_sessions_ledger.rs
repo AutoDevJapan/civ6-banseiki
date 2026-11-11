@@ -7,6 +7,8 @@ pub struct Lease(pub(super) u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Message(pub(super) u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct InputHold(u64);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldReceipt {
     pub binding_id: u64,
     pub epoch: u64,
@@ -78,6 +80,11 @@ struct Packet {
     world: WorldReceipt,
     active: bool,
 }
+struct InputOwnership {
+    lease: Lease,
+    transport: Transport,
+    world: Option<WorldReceipt>,
+}
 #[derive(Default)]
 pub(super) struct Ledger {
     next: u64,
@@ -86,7 +93,10 @@ pub(super) struct Ledger {
     callbacks: HashMap<u64, Lease>,
     keys: HashMap<(u64, u32), Lease>,
     packets: HashMap<u64, Packet>,
+    input_holds: HashMap<u64, InputOwnership>,
+    input_owners: HashMap<u64, Option<WorldReceipt>>,
     retired_worlds: HashSet<(u64, u64)>,
+    retiring_worlds: HashSet<(u64, u64)>,
     transport_ids: HashSet<u64>,
     input_worlds: HashMap<u64, Option<WorldReceipt>>,
     unresolved: bool,
@@ -225,6 +235,16 @@ impl Ledger {
         }
         r.world = Some(world);
         r.birth_window = None;
+        if let Some(transport) = r.transport {
+            if self.input_owners.get(&transport.incarnation) == Some(&None) {
+                self.input_owners.insert(transport.incarnation, Some(world));
+                for hold in self.input_holds.values_mut().filter(|hold| {
+                    hold.lease == lease && hold.transport == transport && hold.world.is_none()
+                }) {
+                    hold.world = Some(world);
+                }
+            }
+        }
         Ok(())
     }
     pub fn record_birth_window(&mut self, lease: Lease, window: BirthWindow) {
@@ -257,6 +277,72 @@ impl Ledger {
                 && record
                     .transport
                     .is_some_and(|transport| transport.incarnation == incarnation)
+        })
+    }
+    /// Lifetime only, including before any World exists. It never creates a
+    /// Message or dispatch authority from an unqualified input.
+    pub fn retain_input_transport(
+        &mut self,
+        lease: Lease,
+        transport: Transport,
+    ) -> Result<InputHold, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let record = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if record.phase != Phase::Open
+            || record.transport != Some(transport)
+            || record.transport_closed
+            || record.transport_closing
+        {
+            return Err(Error::Stale);
+        }
+        let id = self.id()?;
+        let world = self
+            .input_owners
+            .get(&transport.incarnation)
+            .copied()
+            .ok_or(Error::Unbound)?;
+        self.input_holds.insert(
+            id,
+            InputOwnership {
+                lease,
+                transport,
+                world,
+            },
+        );
+        Ok(InputHold(id))
+    }
+    pub fn release_input_transport(&mut self, hold: InputHold) -> Result<(), Error> {
+        self.input_holds
+            .remove(&hold.0)
+            .map(|_| ())
+            .ok_or(Error::Unknown)
+    }
+    pub fn retain_packet_transport(
+        &mut self,
+        lease: Lease,
+        incarnation: u64,
+    ) -> Result<Option<InputHold>, Error> {
+        if !self.bootstrap_packet_matches(lease, incarnation) {
+            return Ok(None);
+        }
+        let transport = self
+            .records
+            .get(&lease.0)
+            .ok_or(Error::Unknown)?
+            .transport
+            .ok_or(Error::Unbound)?;
+        self.retain_input_transport(lease, transport).map(Some)
+    }
+    fn has_input_holds(&self, world: WorldReceipt) -> bool {
+        self.input_holds.values().any(|hold| {
+            hold.world == Some(world)
+                || (hold.world.is_none()
+                    && self
+                        .records
+                        .get(&hold.lease.0)
+                        .is_some_and(|record| record.world == Some(world)))
         })
     }
     pub fn bind_bootstrap_world(
@@ -528,6 +614,7 @@ impl Ledger {
         };
         self.transport_ids.insert(incarnation);
         self.input_worlds.insert(incarnation, r.world);
+        self.input_owners.insert(incarnation, r.world);
         let r = self.records.get_mut(&lease.0).unwrap();
         r.transport = Some(transport);
         r.unproven_transport = None;
@@ -655,6 +742,9 @@ impl Ledger {
         if self
             .retired_worlds
             .contains(&(world.binding_id, world.epoch))
+            || self
+                .retiring_worlds
+                .contains(&(world.binding_id, world.epoch))
         {
             return Err(Error::Closed);
         }
@@ -857,7 +947,9 @@ impl Ledger {
         if world.binding_id == 0 || world.epoch == 0 {
             return Err(Error::Unbound);
         }
-        if self.packets.values().any(|p| p.world == world)
+        self.seal_world(world)?;
+        if self.has_input_holds(world)
+            || self.packets.values().any(|p| p.world == world)
             || self
                 .records
                 .values()
@@ -866,6 +958,15 @@ impl Ledger {
             return Err(Error::Busy);
         }
         self.retired_worlds.insert((world.binding_id, world.epoch));
+        self.retiring_worlds
+            .remove(&(world.binding_id, world.epoch));
+        Ok(())
+    }
+    pub fn seal_world(&mut self, world: WorldReceipt) -> Result<(), Error> {
+        if world.binding_id == 0 || world.epoch == 0 {
+            return Err(Error::Unbound);
+        }
+        self.retiring_worlds.insert((world.binding_id, world.epoch));
         Ok(())
     }
     pub fn born(&self, registry: u64, lifetime: u64, id: u32) -> Option<Lease> {
@@ -934,6 +1035,10 @@ impl Ledger {
             network,
             thread,
         };
+        self.input_owners.insert(
+            transport.incarnation,
+            self.records.get(&lease.0).unwrap().world,
+        );
         self.records.get_mut(&lease.0).unwrap().transport = Some(transport);
         self.records.get_mut(&lease.0).unwrap().transport_closed = false;
         Ok(transport)
@@ -957,6 +1062,9 @@ impl Ledger {
         if self
             .retired_worlds
             .contains(&(world.binding_id, world.epoch))
+            || self
+                .retiring_worlds
+                .contains(&(world.binding_id, world.epoch))
         {
             return Err(Error::Closed);
         }
@@ -1171,6 +1279,9 @@ impl Ledger {
                 .contains(&(world.binding_id, world.epoch))
         {
             return Err(Error::Unresolved);
+        }
+        if self.has_input_holds(world) {
+            return Err(Error::Busy);
         }
         let mut found = false;
         for r in self.records.values().filter(|r| r.world == Some(world)) {

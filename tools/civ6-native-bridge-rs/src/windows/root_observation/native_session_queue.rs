@@ -45,6 +45,7 @@ thread_local! {static QUEUE_CALLS:RefCell<Vec<QueueCall>>=const {RefCell::new(Ve
 struct Receipt {
     message: Option<Message>,
     packet: Option<PacketReceipt>,
+    transport_hold: Option<ledger::InputHold>,
 }
 enum Hold {
     Bound(u64),
@@ -128,6 +129,7 @@ fn admitted_receipt(queue: u64) -> Option<Receipt> {
             .map(|c| Receipt {
                 message: c.message,
                 packet: c.packet,
+                transport_hold: None,
             })
     })?;
     let session = if let Some(message) = receipt.message {
@@ -236,12 +238,21 @@ extern "system" fn begin(raw: *mut Saved) {
                     let message = parent
                         .message
                         .map(|message| state().fork_message(message).unwrap_or_else(|_| fault()));
+                    let transport_hold = parent
+                        .packet
+                        .map(|packet| {
+                            state().retain_packet_transport(packet.lease, packet.transport)
+                        })
+                        .transpose()
+                        .unwrap_or_else(|_| fault())
+                        .flatten();
                     c.id = slots()
                         .reserve(
                             c.queue,
                             Receipt {
                                 message,
                                 packet: parent.packet,
+                                transport_hold,
                             },
                         )
                         .unwrap_or_else(|_| fault());
@@ -451,6 +462,11 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 if let Some(message) = message.message {
                     state().dispatched(message).unwrap_or_else(|_| fault());
                 }
+                if let Some(hold) = message.transport_hold {
+                    state()
+                        .release_input_transport(hold)
+                        .unwrap_or_else(|_| fault());
+                }
                 leave(f.hold, false);
             }
         }
@@ -481,6 +497,11 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 if let Some(message) = message.message {
                     state()
                         .cancel_before_dispatch(message)
+                        .unwrap_or_else(|_| fault());
+                }
+                if let Some(hold) = message.transport_hold {
+                    state()
+                        .release_input_transport(hold)
                         .unwrap_or_else(|_| fault());
                 }
             }
