@@ -988,6 +988,14 @@ fn receive_exception_settles_its_observation_but_never_certifies_completion() {
         }),
         Err(Error::Unresolved)
     );
+    // An unowned receive's exception is missing close proof, not evidence that
+    // a later unrelated native Session is corrupt. Keep its normal path live.
+    assert!(!FAILED.load(Ordering::Acquire));
+    let mut sessions = super::super::state();
+    let next = sessions.birth(1, Some(2), 30, 2).unwrap();
+    sessions.factory(next, 7, 30, 40, 50).unwrap();
+    sessions.published(next, 7).unwrap();
+    assert_eq!(sessions.snapshot(next), Ok((40, 7, 50)));
 }
 extern "system" fn unpublished_close_original(session: u64) -> u64 {
     assert_eq!(unsafe { GetLastError() }, 0x87654321);

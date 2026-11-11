@@ -168,8 +168,10 @@ fn leave_receive(
     if exceptional {
         if let Some(birth) = birth {
             transports.unresolved(Some(birth));
+            sessions.unresolved(None);
+        } else {
+            sessions.unobserved_receive_unwind();
         }
-        sessions.unresolved(None);
     } else if let Some(birth) = birth {
         transports.leave(birth)?;
     }
@@ -366,7 +368,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         super::input::receiver_returned(c.pointer, c.serial, exceptional);
         leave_receive(c.receive.unwrap_or_else(|| fault()), c.birth, exceptional)
             .unwrap_or_else(|_| fault());
-        if exceptional {
+        if exceptional && c.birth.is_some() {
             super::unresolved(None);
         }
         return;

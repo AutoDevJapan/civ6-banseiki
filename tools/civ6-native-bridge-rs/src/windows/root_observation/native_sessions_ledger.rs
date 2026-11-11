@@ -97,6 +97,7 @@ pub(super) struct Ledger {
     packets: HashMap<u64, Packet>,
     input_holds: HashMap<u64, InputOwnership>,
     receive_holds: HashMap<u64, Option<(Lease, Transport)>>,
+    receive_uncertain: bool,
     input_owners: HashMap<u64, Option<WorldReceipt>>,
     retired_worlds: HashSet<(u64, u64)>,
     retiring_worlds: HashSet<(u64, u64)>,
@@ -343,6 +344,11 @@ impl Ledger {
         }
         self.receive_holds.remove(&hold.0);
         Ok(())
+    }
+    pub fn unobserved_receive_unwind(&mut self) {
+        // Missing receive closure is not corruption of a subsequent unrelated
+        // Session. Retain the missing proof without aborting its normal birth.
+        self.receive_uncertain = true;
     }
     pub fn retain_packet_transport(
         &mut self,
@@ -967,7 +973,7 @@ impl Ledger {
     /// Logical fence after the verified old World's native cleanup. It
     /// accounts for tracked packets only and is not a transport/OS queue seal.
     pub fn retire_world(&mut self, world: WorldReceipt) -> Result<(), Error> {
-        if self.unresolved {
+        if self.unresolved || self.receive_uncertain {
             return Err(Error::Unresolved);
         }
         if world.binding_id == 0 || world.epoch == 0 {
@@ -1300,6 +1306,7 @@ impl Ledger {
     }
     pub fn drained(&self, world: WorldReceipt) -> Result<(), Error> {
         if self.unresolved
+            || self.receive_uncertain
             || self
                 .transport_proof_gaps
                 .contains(&(world.binding_id, world.epoch))
