@@ -229,7 +229,7 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
     for person in rows(&people) {
         let governor = person[0].as_str().unwrap();
         let base = person[1].as_str().unwrap();
-        let capacity = 3;
+        let capacity = person[2].as_i64().unwrap();
         let expected = std::iter::once(json!([base]))
             .chain((1..capacity).map(|step| json!([format!("{base}_TITLE_{step}")])))
             .collect::<Vec<_>>();
@@ -262,10 +262,16 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
             assert_eq!(query(&db, "SELECT PrereqGovernorPromotion FROM GovernorPromotionPrereqs WHERE GovernorPromotionType=?", params![payment]), json!([[prerequisite]]), "{payment}");
             assert_eq!(query(&db, "SELECT ModifierId FROM GovernorPromotionModifiers WHERE GovernorPromotionType=?", params![payment]), json!([]), "{payment}");
         }
+        for step in capacity..=2 {
+            assert_eq!(query(&db, "SELECT GovernorPromotionType FROM GovernorPromotions WHERE GovernorPromotionType=?", params![format!("{base}_TITLE_{step}")]), json!([]));
+        }
     }
     assert_eq!(
         count(&db, "SELECT COUNT(*) FROM JAC_PersonaTitlePayments"),
-        2 * rows(&people).len() as i64
+        rows(&people)
+            .iter()
+            .map(|person| person[2].as_i64().unwrap() - 1)
+            .sum::<i64>()
     );
     let leaders = q(
         &db,
@@ -381,24 +387,13 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
 }
 
 #[test]
-fn repricing_personas_keeps_the_original_official_payment_definitions() {
-    let legacy = open_snapshot(&fixture().before);
-    legacy
-        .execute_batch(include_str!(
-            "../../civ6-lua-tests-rs/fixtures/persona/persona-d21.sql"
-        ))
-        .unwrap();
-    let original = q(&legacy, "SELECT p.rowid-1,t.Hash,p.GovernorPromotionType,p.BaseAbility,p.Level FROM GovernorPromotions p JOIN Types t ON t.Type=p.GovernorPromotionType ORDER BY p.rowid");
-    let mut expected = None;
-    for new_price in 1..=3 {
+fn repricing_personas_registers_only_current_price_payment_definitions() {
+    for price in 1..=3 {
         let db = open_snapshot(&fixture().before);
         let sql = Repository::checked_in()
             .read(format!("{MOD}/Data/JAC_LeaderPersona.sql"))
             .unwrap()
-            .replace(
-                "('BASE_TITLES', 1)",
-                &format!("('BASE_TITLES', {new_price})"),
-            )
+            .replace("('BASE_TITLES', 1)", &format!("('BASE_TITLES', {price})"))
             .replace("('FAME_TITLE_WEIGHT', 1)", "('FAME_TITLE_WEIGHT', 0)")
             .replace(
                 "('YOUTH_TITLE_SURCHARGE', 1)",
@@ -411,43 +406,49 @@ fn repricing_personas_keeps_the_original_official_payment_definitions() {
         db.execute_batch(&sql).unwrap();
         assert_eq!(
             q(&db, "SELECT DISTINCT EvolutionCost FROM JAC_LeaderPersonas"),
-            json!([[new_price]])
+            json!([[price]])
         );
-        let definitions=q(&db,"SELECT p.rowid-1,t.Hash,p.GovernorPromotionType,p.BaseAbility,p.Level FROM GovernorPromotions p JOIN Types t ON t.Type=p.GovernorPromotionType ORDER BY p.rowid");
-        for definition in rows(&original) {
-            assert!(
-                rows(&definitions).contains(definition),
-                "d21 promotion Index/Hash changed: {definition}"
-            );
-        }
-        if let Some(prior) = &expected {
+        assert_eq!(
+            count(&db, "SELECT COUNT(*) FROM JAC_PersonaTitlePayments"),
+            22 * (price - 1)
+        );
+        for person in rows(&q(
+            &db,
+            "SELECT GovernorType,BasePromotionType FROM JAC_LeaderPersonas",
+        )) {
+            let governor = person[0].as_str().unwrap();
+            let base = person[1].as_str().unwrap();
+            let expected = std::iter::once(json!([base]))
+                .chain((1..price).map(|step| json!([format!("{base}_TITLE_{step}")])))
+                .collect::<Vec<_>>();
             assert_eq!(
-                prior, &definitions,
-                "prices must not change payment definitions"
+                query(
+                    &db,
+                    "SELECT GovernorPromotion FROM GovernorPromotionSets WHERE GovernorType=?",
+                    params![governor]
+                ),
+                json!(expected)
             );
-        } else {
-            expected = Some(definitions);
-        }
-        let people = q(&db, "SELECT BasePromotionType,3 FROM JAC_LeaderPersonas");
-        for person in rows(&people) {
-            let base = person[0].as_str().unwrap();
-            let original = person[1].as_i64().unwrap();
-            for step in 1..original {
-                let payment = format!("{base}_TITLE_{step}");
+            for step in 1..=2 {
+                let promotion = format!("{base}_TITLE_{step}");
+                let expected = if step < price {
+                    json!([[0]])
+                } else {
+                    json!([])
+                };
                 assert_eq!(
                     query(
                         &db,
                         "SELECT BaseAbility FROM GovernorPromotions WHERE GovernorPromotionType=?",
-                        params![payment]
+                        params![promotion]
                     ),
-                    json!([[0]])
+                    expected
                 );
-                assert_eq!(query(&db,"SELECT ModifierId FROM GovernorPromotionModifiers WHERE GovernorPromotionType=?",params![payment]),json!([]));
+                assert_eq!(query(&db, "SELECT ModifierId FROM GovernorPromotionModifiers WHERE GovernorPromotionType=?", params![promotion]), json!([]));
             }
         }
     }
 }
-
 #[test]
 fn test_all_persons_have_reusable_chains_choices_and_one_unique_signature() {
     let db = persona_db();

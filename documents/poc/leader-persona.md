@@ -173,7 +173,7 @@ CLIは3つの生ログを既存の実行器と同じ判定で再検査し、最�
 
 使える称号は公式画面のGetGovernorPoints()−GetGovernorPointsSpent()（G/DLC/Expansion2/UI/Additions/GovernorPanel.lua:54-61）。進化前に全額を確認する。APPOINT_GOVERNORが1個を消費し、追加分は人物総督の効果なしの昇進をPROMOTE_GOVERNORで1個ずつ取得して消費する（同:547-577）。公式の使用済み数が費用分だけ増え、獲得数は変えない。独自ツリーの技能は昇進操作を使わず、功績だけを減らす。
 
-正数の付与例はG/Debug/Player.ltp:289-295、獲得数・使用済み数は同:654,676。実機ではChangeGovernorPoints(-1)が称号2/0を変えず、進化がTITLE_PAYMENT_FAILEDで止まった。負数のMODIFIER_PLAYER_ADJUST_GOVERNOR_POINTSも公式データに使用例がなく、動的付与の再送・返金をエンジン状態から確定しにくいため採用しない。公式GovernorPromotionSets・GovernorPromotionPrereqsの形（G/DLC/Expansion1/Data/Expansion1_Governors.xml:77-229）に従い、全員に効果なしの支払用昇進2段階を固定して登録し、人物の加入時価格に必要な先頭の段階だけを使う。価格式を調整しても、d21の定義・番号・所属を元の登録順で保持する。未払いの称号数を本物の任命状態とHasPromotionから算出し、部分的に支払った状態で止まっても再読込後に残りだけを要求する。実機シナリオは費用1・2・3の使用済み数、昇進の取得、功績による技能購入で称号が変わらないこと、保存後の残高を断言する。新しい公式昇進の実機成功は未確認である。
+正数の付与例はG/Debug/Player.ltp:289-295、獲得数・使用済み数は同:654,676。実機ではChangeGovernorPoints(-1)が称号2/0を変えず、進化がTITLE_PAYMENT_FAILEDで止まった。負数のMODIFIER_PLAYER_ADJUST_GOVERNOR_POINTSも公式データに使用例がなく、動的付与の再送・返金をエンジン状態から確定しにくいため採用しない。公式GovernorPromotionSets・GovernorPromotionPrereqsの形（G/DLC/Expansion1/Data/Expansion1_Governors.xml:77-229）に従い、現在の人物別費用に必要な効果なしの支払用昇進だけを登録し、加入時価格に従って使う。費用1は追加定義なし、費用2は1段階、費用3は2段階とする。公開前の旧版の定義・番号・所属を保つために余分な段階は追加しない。未払いの称号数を本物の任命状態とHasPromotionから算出し、部分的に支払った状態で止まっても再読込後に残りだけを要求する。実機シナリオは費用1・2・3の使用済み数、昇進の取得、功績による技能購入で称号が変わらないこと、保存後の残高を断言する。新しい公式昇進の実機成功は未確認である。
 
 ## 戦国社会制度からの進化用称号
 

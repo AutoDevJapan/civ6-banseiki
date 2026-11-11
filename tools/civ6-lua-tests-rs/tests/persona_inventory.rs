@@ -192,9 +192,8 @@ fn persona_inventory_preserves_all_119_original_methods() {
         if file == "tools/civ6-data-rs/tests/persona.rs" {
             // Register the price-update regression separately. The original
             // 119-method correspondence and digest remain exact and unchanged.
-            assert!(
-                actual.remove("repricing_personas_keeps_the_original_official_payment_definitions")
-            );
+            assert!(actual
+                .remove("repricing_personas_registers_only_current_price_payment_definitions"));
         }
         let expected: BTreeSet<String> = expected.into_iter().map(str::to_owned).collect();
         assert_eq!(actual, expected, "{}", source.display());
@@ -231,9 +230,9 @@ fn saved_price_and_join_regressions_are_registered_separately() {
         (
             "persona_sql_price",
             &[
-                "real_sql_rebuild_preserves_d21_and_price_v1_saves_for_prices_123",
+                "current_sql_preserves_partial_payment_saves_within_each_current_ruleset",
                 "rebuilt_sql_rejects_unknown_cross_person_owner_and_damaged_receipts",
-                "original_cost_one_scenario_guard_conflicts_with_fixed_payment_capacity",
+                "original_cost_one_scenario_guards_match_current_payment_definitions",
             ][..],
         ),
         (

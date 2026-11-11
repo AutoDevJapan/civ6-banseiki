@@ -1,4 +1,4 @@
-//! Rebuild separate databases from real old/new SQL and price parameters.
+//! Build current rulesets from real SQL and exercise partial-payment save/load.
 //! Saved engine flags and Game properties are restored without replaying a debit.
 use civ6_lua_tests_rs::strict::{ChunkExt, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{json_to_lua, official, query_json, read_repo};
@@ -9,10 +9,9 @@ use std::sync::LazyLock;
 const SQL: &str = "poc/JAC_PoC_LeaderPersona/Data/JAC_LeaderPersona.sql";
 const GP: &str = "poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua";
 const UI: &str = "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua";
-const OLD_SQL: &str = include_str!("../fixtures/persona/persona-d21.sql");
 static CATALOGS: LazyLock<Vec<Json>> = LazyLock::new(|| {
     let latest = read_repo(SQL);
-    std::iter::once(database(OLD_SQL, None))
+    std::iter::once(database(&latest, None))
         .chain((1..=3).map(|price| database(&latest, Some(price))))
         .collect()
 });
@@ -66,7 +65,7 @@ fn exec(lua: &Lua, source: &str) {
 }
 
 #[test]
-fn original_cost_one_scenario_guard_conflicts_with_fixed_payment_capacity() {
+fn original_cost_one_scenario_guards_match_current_payment_definitions() {
     let data = database(&read_repo(SQL), None);
     let rows = data["rows"].as_array().unwrap();
     let oda = rows
@@ -91,15 +90,14 @@ fn original_cost_one_scenario_guard_conflicts_with_fixed_payment_capacity() {
         let Some(at) = code.find(start) else { continue };
         let end = code[at..].find(finish).unwrap() + at + finish.len();
         let guard = &code[at..end];
-        let error = lua.load(guard).exec().unwrap_err().to_string();
-        assert!(error.contains("cost1 has an extra payment promotion"));
+        lua.load(guard).exec().unwrap();
         checked += 1;
     }
     assert_eq!(
         checked, 2,
         "retain both original pre/post-save cost-one guards"
     );
-    lua.load("assert(GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_1'] and GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_2'])")
+    lua.load("assert(GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_1']==nil and GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_2']==nil)")
         .exec().unwrap();
 }
 
@@ -212,7 +210,7 @@ Players[0].spent=PAID
 if PAID>0 then
  local gov=NATIVE_CANDIDATE(0,LEADER,false)
  for step=1,PAID-1 do
-  local p=assert(GameInfo.GovernorPromotions[ROW.BasePromotionType..'_TITLE_'..step],'old payment disappeared from rebuilt SQL')
+  local p=assert(GameInfo.GovernorPromotions[ROW.BasePromotionType..'_TITLE_'..step],'current payment definition is absent')
   gov.promotions[p.Hash]=true
  end
 end
@@ -227,72 +225,62 @@ end
 }
 
 #[test]
-fn real_sql_rebuild_preserves_d21_and_price_v1_saves_for_prices_123() {
-    let old_default = &CATALOGS[0];
-    let rebuilt = &CATALOGS[1..];
-    for version in 0..3 {
-        for old in 1..=3 {
-            let before = if version < 2 {
-                old_default
-            } else {
-                &rebuilt[usize::from(old - 1)]
-            };
-            for new in (1..=3).filter(|n| *n != old) {
-                for paid in 0..=old {
-                    let a = world(before);
-                    boot(&a);
-                    a.globals().set("OLD", old).unwrap();
-                    exec(
-                        &a,
-                        r#"
-SOURCE=sourceFor(OLD); LEADER=PlayerConfigurations[SOURCE]:GetLeaderTypeName()
+fn current_sql_preserves_partial_payment_saves_within_each_current_ruleset() {
+    for data in CATALOGS.iter() {
+        let rows = data["rows"].as_array().unwrap();
+        let costs: std::collections::BTreeSet<_> = rows
+            .iter()
+            .map(|row| row["EvolutionCost"].as_u64().unwrap() as u8)
+            .collect();
+        for cost in costs {
+            for paid in 0..=cost {
+                let a = world(data);
+                boot(&a);
+                a.globals().set("COST", cost).unwrap();
+                exec(
+                    &a,
+                    r#"
+SOURCE=sourceFor(COST); LEADER=PlayerConfigurations[SOURCE]:GetLeaderTypeName()
 ROW=GameInfo.JAC_LeaderPersonas[LEADER]; KEY='JAC_PERSONA_'..LEADER..'_'
 assert(ExposedMembers.JAC_LeaderPersona.Join(0,SOURCE)=='JOINED')
 assert(ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,LEADER)=='EVOLVING')
 "#,
-                    );
-                    for _ in 0..paid {
-                        exec(&a, "assert(JAC_AppointLeader(LEADER)); deliver()");
-                    }
-                    exec(&a,"ExposedMembers.JAC_LeaderPersona.Reconcile(); Game:SetProperty(KEY..'MERIT',37); Game:SetProperty(KEY..'NODE_PRESERVED',1)");
-                    if version == 0 {
-                        exec(&a,"local s=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'); s.prices=nil; s.priceVersion=nil; Game:SetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1',s)");
-                    }
-                    let b = restore(&a, &rebuilt[usize::from(new - 1)], paid);
-                    b.globals().set("OLD", old).unwrap();
-                    b.globals().set("NEW", new).unwrap();
-                    exec(
-                        &b,
-                        r#"
+                );
+                for _ in 0..paid {
+                    exec(&a, "assert(JAC_AppointLeader(LEADER)); deliver()");
+                }
+                exec(&a, "ExposedMembers.JAC_LeaderPersona.Reconcile(); Game:SetProperty(KEY..'MERIT',37); Game:SetProperty(KEY..'NODE_PRESERVED',1)");
+                let b = restore(&a, data, paid);
+                b.globals().set("COST", cost).unwrap();
+                exec(
+                    &b,
+                    r#"
 local api=ExposedMembers.JAC_LeaderPersona
-assert(api.EventsGameplayStatus(0,LEADER).active,'rebuilt SQL closed the saved catalog')
-assert(api.EvolutionCost(LEADER)==OLD and ROW.EvolutionCost==NEW,'SQL repricing changed the joining price')
-assert(api.EventsGameplayStatus(0,LEADER).reserved==OLD-PAID)
+assert(api.EventsGameplayStatus(0,LEADER).active,'same-ruleset load closed normal receipts')
+assert(api.EvolutionCost(LEADER)==COST and ROW.EvolutionCost==COST)
+assert(api.EventsGameplayStatus(0,LEADER).reserved==COST-PAID)
 local def=GameInfo.Governors[ROW.GovernorType]
-api.Reconcile(); assert(Players[0]:GetProperty(901000+def.Index)==true,'appointment qualification lost')
+api.Reconcile(); assert(Players[0]:GetProperty(901000+def.Index)==true)
 assert(Players[1]:GetProperty(905000+def.Index)==false,'other owner inherited payment')
-if PAID<OLD then
+if PAID<COST then
  assert(Game:GetProperty(KEY..'STATE')=='EVOLVING' and DESTROYS==0)
  assert(not Players[0]:GetProperty(905000+def.Index),'partial payment counted as complete')
- for step=PAID,OLD-1 do assert(JAC_AppointLeader(LEADER)); deliver() end
+ for step=PAID,COST-1 do assert(JAC_AppointLeader(LEADER)); deliver() end
  assert(JAC_AppointLeader(LEADER)); deliver()
 end
-assert(Game:GetProperty(KEY..'STATE')=='GOVERNOR' and Players[0].spent==OLD)
-assert(Players[0]:GetProperty(905000+def.Index)==true,'placement qualification lost')
+assert(Game:GetProperty(KEY..'STATE')=='GOVERNOR' and Players[0].spent==COST)
+assert(Players[0]:GetProperty(905000+def.Index)==true)
 assert(Game:GetProperty(KEY..'MERIT')==37 and Game:GetProperty(KEY..'NODE_PRESERVED')==1)
-api.Reconcile(); assert(#REQUESTS==0 and Players[0].spent==OLD,'old operation was replayed')
--- New joins use the new SQL formula, while the old contract remains fixed.
-local source=sourceFor(NEW,LEADER); local fresh=PlayerConfigurations[source]:GetLeaderTypeName()
-assert(api.Join(0,source)=='JOINED' and api.EvolutionCost(fresh)==NEW)
-assert(api.EvolutionCost(LEADER)==OLD)
+api.Reconcile(); assert(#REQUESTS==0 and Players[0].spent==COST,'paid operation was replayed')
+local source=sourceFor(COST,LEADER); local fresh=PlayerConfigurations[source]:GetLeaderTypeName()
+assert(api.Join(0,source)=='JOINED' and api.EvolutionCost(fresh)==COST)
+assert(api.EvolutionCost(LEADER)==COST)
 "#,
-                    );
-                }
+                );
             }
         }
     }
 }
-
 #[test]
 fn rebuilt_sql_rejects_unknown_cross_person_owner_and_damaged_receipts() {
     let a = world(&CATALOGS[0]);
@@ -314,7 +302,7 @@ assert(JAC_AppointLeader(LEADER)); deliver(); ExposedMembers.JAC_LeaderPersona.R
         "local s=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'); s.prices[LEADER].cost=1; Game:SetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1',s)",
         "local s=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'); s.people[LEADER].acquired[1].raw[3].value=4095; Game:SetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1',s)",
     ] {
-        let b=restore(&a,&CATALOGS[1],1); exec(&b,fault);
+        let b=restore(&a,&CATALOGS[0],1); exec(&b,fault);
         exec(&b,r#"
 ExposedMembers.JAC_LeaderPersona.Reconcile()
 ExposedMembers.JAC_LeaderPersona.CompleteEvolution(0,LEADER)
@@ -322,7 +310,7 @@ assert(Game:GetProperty(KEY..'STATE')=='EVOLVING' and Players[0].spent==1 and DE
 assert(not Players[0]:GetProperty(905000+GameInfo.Governors[ROW.GovernorType].Index))
 "#);
     }
-    let b = restore(&a, &CATALOGS[1], 1);
+    let b = restore(&a, &CATALOGS[0], 1);
     exec(
         &b,
         r#"
