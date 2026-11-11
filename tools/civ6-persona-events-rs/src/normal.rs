@@ -660,9 +660,10 @@ end
 function E.UIReservations(owner,leader)
     if E.Enabled() then return nil end
     local s,c=state(); local d=c and c.leaders[leader]
-    if not s or not d or not s.accounts[owner] or not Player(owner,true) or
-       Get(leader,'OWNER')~=owner or Get(leader,'STATE')~='EVOLVING' then return math.huge,0 end
+    if not s or not s.accounts[owner] or not Player(owner,true) then return math.huge,0 end
+    if leader~=nil and (not d or Get(leader,'OWNER')~=owner or Get(leader,'STATE')~='EVOLVING') then return math.huge,0 end
     local total,uncertain,own=E.Reserved(owner,nil,leader)
+    if leader==nil then own=0 end
     if not integer(total) or not integer(own) or own>total then return math.huge,0 end
     return total,own
 end

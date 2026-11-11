@@ -17,12 +17,26 @@ function CASES.test_two_partial_people_with_stock_spending_keep_only_unpaid_rese
  end
  api.Reconcile(); eq(3,Players[0].spent)
  eq(1,api.EventsGameplayStatus(0,DATE).paid); eq(1,api.EventsGameplayStatus(0,HOJO).paid)
+ local third=ROWS[4].LeaderType
+ eq('JOINED',api.Join(0,3))
+ local function thirdDisabled(expected)
+  JAC_RefreshPersonas()
+  local target
+  for _,view in ipairs(VIEWS) do if view.name==Game:GetProperty('JAC_PERSONA_'..third..'_NAME') then target=view end end
+  yes(target~=nil); eq(expected,target.disabled)
+ end
+ Players[0].points=7; thirdDisabled(false)
+ local aggregateBefore=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1')
+ local total,none=api.ReservedEvolutionTitles(0)
+ eq(3,total); eq(0,none); eq(aggregateBefore,Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'))
+ Players[0].points=6; thirdDisabled(true)
  local store='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'; local saved=Game:GetProperty(store)
  local base=saved.people[HOJO].acquired[1]
  local broken=Game:GetProperty(store); broken.people[HOJO].acquired[1]=nil
  Game:SetProperty(store,broken); Players[0].points=5
  no(appoint(DATE)); eq(0,#REQUESTS); eq(3,Players[0].spent)
- Game:SetProperty(store,nil); no(appoint(DATE)); eq(0,#REQUESTS)
+ thirdDisabled(true)
+ Game:SetProperty(store,nil); no(appoint(DATE)); eq(0,#REQUESTS); thirdDisabled(true)
  saved.people[HOJO].acquired[1]=base; Game:SetProperty(store,saved); api.Reconcile()
  local snapshot=Game:GetProperty(store)
  local reservations,own=api.ReservedEvolutionTitles(0,DATE)

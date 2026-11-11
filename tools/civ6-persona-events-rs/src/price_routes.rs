@@ -154,7 +154,7 @@ pub fn shared(source: &str) -> Result<String, String> {
 
 const SHARED_RESERVATIONS: &str = r#"function Rules.ReservedAppointments(owner, leader)
     local api = ExposedMembers and ExposedMembers.JAC_LeaderPersona;
-    if leader and api and type(api.ReservedEvolutionTitles) == "function" then
+    if api and type(api.ReservedEvolutionTitles) == "function" then
         local total, own = api.ReservedEvolutionTitles(owner, leader);
         if total == math.huge and own == 0 then return total, true, own; end
         if type(total) == "number" and total >= 0 and total < 9007199254740991 and total % 1 == 0 and
