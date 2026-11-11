@@ -156,6 +156,25 @@ fn enter_receive(network: u64) -> Result<(Option<Birth>, ReceiveScope), SessionE
     let hold = sessions.retain_receive(source)?;
     Ok((birth, ReceiveScope { hold, source }))
 }
+fn leave_receive(
+    receive: ReceiveScope,
+    birth: Option<Birth>,
+    exceptional: bool,
+) -> Result<(), SessionError> {
+    // Keep the obligation visible through the transport's own return update.
+    // Entry, return and retirement all serialize on the Session ledger first.
+    let mut sessions = super::state();
+    let mut transports = state();
+    if exceptional {
+        if let Some(birth) = birth {
+            transports.unresolved(Some(birth));
+        }
+        sessions.unresolved(None);
+    } else if let Some(birth) = birth {
+        transports.leave(birth)?;
+    }
+    sessions.release_receive(receive.hold, receive.source)
+}
 /// A captured native incarnation; no World or packet is issued by this lookup.
 pub(in super::super) fn from_network(
     network: u64,
@@ -345,15 +364,12 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     }
     if c.kind == 108 {
         super::input::receiver_returned(c.pointer, c.serial, exceptional);
-    }
-    if let Some(receive) = c.receive {
-        let mut ledger = super::state();
-        let result = ledger.release_receive(receive.hold, receive.source);
+        leave_receive(c.receive.unwrap_or_else(|| fault()), c.birth, exceptional)
+            .unwrap_or_else(|_| fault());
         if exceptional {
-            ledger.unresolved(None);
+            super::unresolved(None);
         }
-        drop(ledger);
-        result.unwrap_or_else(|_| fault());
+        return;
     }
     if c.kind == 103 && !exceptional {
         if let Some(old) = c.reset {
@@ -437,7 +453,6 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             };
             Ok(())
         }
-        108 => state().leave(id),
         103 => Ok(()),
         _ => Err(Error::Stale),
     };
