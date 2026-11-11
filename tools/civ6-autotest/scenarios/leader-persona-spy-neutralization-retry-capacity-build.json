@@ -8,9 +8,9 @@
     {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); assert((p.stage=='BUILD_TIER1' or p.stage=='BUILD_SPIES') and p.capacity==1 and p.occupied==1,'official building prerequisites not ready: '..p.stage); b.Queue('BUILD_CAPACITY'); return p.buildingType"},
     {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BUILD_CAPACITY' or a=='REJECTED_BUILD_CAPACITY' then error(a) end; return a=='READY_BUILD_CAPACITY'"}},
     {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; assert(b.CaptiveCapacityPlan().stage=='BUILD_QUEUED','native building queue not observed'); b.Queue('PROGRESS_CAPACITY'); return 'one official city progress request queued'"},
-    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_PROGRESS_CAPACITY' or a=='UNKNOWN_PROGRESS_CAPACITY' or a=='REJECTED_PROGRESS_CAPACITY' then error(a) end; return a=='ACCEPTED_PROGRESS_CAPACITY'"}},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local a=b.lastAction; if a=='ERROR_PROGRESS_CAPACITY' or a=='UNKNOWN_PROGRESS_CAPACITY' or a=='REJECTED_PROGRESS_CAPACITY' then local ok,known=pcall(b.CapacityProgressCheckpoint,false); if ok and known then return true end; error(a) end; return a=='ACCEPTED_PROGRESS_CAPACITY'"}},
     {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
-    {"action":"ui_lua","state_name":"InGame","code":"local p=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')); return 'native progress recorded; building and capacity require a real turn'"},
+    {"action":"ui_lua","state_name":"InGame","code":"assert(ExposedMembers.JAC_PersonaBoundary.CapacityProgressCheckpoint(false)); return 'progress or uncertain attempt checkpointed; building and capacity require a real turn'"},
     {"action":"exit_to_menu"}
   ]
 }

@@ -3,7 +3,7 @@
 use civ6_data_rs::{cascade, Repository};
 use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
-use mlua::Lua;
+use mlua::{Lua, Value as LuaValue};
 use rusqlite::Connection;
 use serde_json::Value;
 
@@ -492,6 +492,20 @@ fn scene_lua(scene: &Value, index: usize) -> &str {
         .as_str()
         .or_else(|| scene["steps"][index]["condition"]["code"].as_str())
         .unwrap()
+}
+
+fn capacity_tick_outcome_index(scene: &Value) -> usize {
+    scene["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rposition(|step| {
+            step["action"] == "ui_lua"
+                && step["code"]
+                    .as_str()
+                    .is_some_and(|code| code.contains("o.targetBuilt"))
+        })
+        .expect("final native capacity outcome assertion")
 }
 
 fn scene_phase_index(scene: &Value, action: &str, marker: &str) -> usize {
@@ -2314,7 +2328,10 @@ fn unknown_capacity_progress_converges_from_later_native_observation_without_rep
                 "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-tick.json"
             })).unwrap();
             h.0.globals()
-                .set("OUTCOME_ASSERT", scene_lua(&scenario, 5))
+                .set(
+                    "OUTCOME_ASSERT",
+                    scene_lua(&scenario, capacity_tick_outcome_index(&scenario)),
+                )
                 .unwrap();
             h.run(r#"
 local save=Game.SetProperty
@@ -2504,6 +2521,219 @@ assert(before.BUILDING_GOV_TALL==original,'publication mutated the old attempt i
 assert(#CAPTURED[1]==1 and SPY_CAPACITY==1 and not GOV_SPIES_BUILT)
 "#,
     );
+}
+
+#[test]
+fn capacity_scenarios_checkpoint_uncertain_progress_before_read_only_recovery() {
+    for district in [false, true] {
+        for completion_failure in ["throw", "false"] {
+            let h = Enemy::new();
+            h.queue_capacity_progress(district);
+            h.0.globals().set("IS_DISTRICT", district).unwrap();
+            h.0.globals()
+                .set("COMPLETION_FAILURE", completion_failure)
+                .unwrap();
+            let name = if district {
+                "leader-persona-spy-neutralization-retry-capacity-district.json"
+            } else {
+                "leader-persona-spy-neutralization-retry-capacity-build.json"
+            };
+            let scene: Value =
+                serde_json::from_str(&read_repo(format!("tools/civ6-autotest/scenarios/{name}")))
+                    .unwrap();
+            h.run(r#"
+local save=Game.SetProperty
+local key=IS_DISTRICT and 'JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS' or 'JAC_BOUNDARY_CAPACITY_PROGRESS'
+Game.SetProperty=function(self,name,value)
+ if name==key then
+  if COMPLETION_FAILURE=='false' then return false end
+  error('completion write failed after effect')
+ end
+ return save(self,name,value)
+end
+local returned=pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST)
+assert(returned==(COMPLETION_FAILURE=='false'))
+Game.SetProperty=save
+assert(CAPACITY_PROGRESS_CALLS==1)
+FRAME()
+local barrier=REQUESTS[#REQUESTS]
+assert(barrier.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier')
+ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',barrier.params)
+fire(Events.GameCoreEventPublishComplete); FRAME()
+assert(ExposedMembers.JAC_PersonaBoundary.lastAction==
+ (IS_DISTRICT and 'REJECTED_PROGRESS_CAPACITY_DISTRICT' or 'REJECTED_PROGRESS_CAPACITY'))
+"#);
+            let wait = scene["steps"][5]["condition"]["code"].as_str().unwrap();
+            assert!(
+                h.0.load(wait).eval::<bool>().unwrap(),
+                "scenario cannot reach its attempt checkpoint"
+            );
+            h.run(
+                r#"
+local key=IS_DISTRICT and 'DISTRICT_GOVERNMENT' or PROGRESS_REQUEST.BuildingType
+local attempts=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS')
+local attempt=attempts[key]; local original=attempt.token
+attempt.token=original+1
+assert(not pcall(ExposedMembers.JAC_PersonaBoundary.CapacityProgressCheckpoint,IS_DISTRICT),
+ 'another saved request was used as this checkpoint')
+attempt.token=original
+local saved=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS')
+Game:SetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS',nil)
+assert(not pcall(ExposedMembers.JAC_PersonaBoundary.CapacityProgressCheckpoint,IS_DISTRICT),
+ 'missing proof was checkpointed')
+Game:SetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS',saved)
+assert(CAPACITY_PROGRESS_CALLS==1)
+"#,
+            );
+            h.run("SAVED_VALUES={}; for _,name in ipairs(WRITES) do SAVED_VALUES[name]=Game:GetProperty(name) end");
+            fn copy_value(lua: &Lua, value: LuaValue) -> LuaValue {
+                match value {
+                    LuaValue::Table(table) => {
+                        let copy = lua.create_table().unwrap();
+                        for pair in table.pairs::<LuaValue, LuaValue>() {
+                            let (key, value) = pair.unwrap();
+                            copy.set(copy_value(lua, key), copy_value(lua, value))
+                                .unwrap();
+                        }
+                        LuaValue::Table(copy)
+                    }
+                    LuaValue::String(value) => {
+                        LuaValue::String(lua.create_string(value.as_bytes()).unwrap())
+                    }
+                    value => value,
+                }
+            }
+            let restored = Enemy::new();
+            restored.failed();
+            restored.0.globals().set("IS_DISTRICT", district).unwrap();
+            let values: LuaValue = h.0.globals().get("SAVED_VALUES").unwrap();
+            restored
+                .0
+                .globals()
+                .set("RESTORED_VALUES", copy_value(&restored.0, values))
+                .unwrap();
+            restored.run(
+                r#"
+for name,value in pairs(RESTORED_VALUES) do Game:SetProperty(name,value) end
+UNITS[0]={}
+CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}
+OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}
+GOV_CIVIC_COMPLETED=true
+if IS_DISTRICT then
+ GOV_DISTRICT_PLACED=true; BUILD_HEAD={DistrictType=70}
+else
+ GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; BUILD_HEAD={BuildingType=76}
+end
+-- Engine save/load restored this already-applied native queue progress; no
+-- callback is replayed to construct it in the restored Lua environment.
+CAPACITY_PROGRESS_CALLS=1
+"#,
+            );
+            let tick: Value=serde_json::from_str(&read_repo(if district {
+            "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-district-tick.json"
+        } else {
+            "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-tick.json"
+        })).unwrap();
+            restored.run(scene_lua(&tick, 2));
+            restored.run("ADVANCE_TURN(); BEFORE_RESTORE_REQUESTS=#REQUESTS");
+            restored.run(scene_lua(&tick, capacity_tick_outcome_index(&tick)));
+            restored.run("assert(CAPACITY_PROGRESS_CALLS==1 and #REQUESTS==BEFORE_RESTORE_REQUESTS and #CAPTURED[1]==1 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED)");
+            if !district {
+                restored.run(
+                    "ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY'); FRAME(); FRAME()",
+                );
+                restored.sync("PROGRESS_CAPACITY", "JAC_BoundaryProgressCapacityBuilding");
+                restored.run("ADVANCE_TURN(); local spy=makeSpy(0,16); spy.x=CONTROL.x; spy.y=CONTROL.y; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='CAPACITY_MAP')");
+                restored.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+                restored.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.spyID==16 and r.archive.spyID==15 and CAPACITY_PROGRESS_CALLS==2 and #CAPTURED[1]==1)");
+            }
+        }
+    }
+}
+
+#[test]
+fn capacity_checkpoint_preserves_same_turn_early_spy_without_claiming_recovery() {
+    let h = Enemy::new();
+    h.queue_capacity_progress(false);
+    h.0.globals().set("VIEW_SOURCE", read_repo(VIEW)).unwrap();
+    h.run(
+        r#"
+ENEMY_CASES.fireCore(PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST)
+ADVANCE_TURN(); assert(loadstring(VIEW_SOURCE))()
+local api=ExposedMembers.JAC_PersonaBoundary
+api.Queue('BUILD_CAPACITY'); FRAME(); FRAME()
+api.Queue('PROGRESS_CAPACITY'); FRAME()
+local request=REQUESTS[#REQUESTS].params
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+local oldProgress=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')
+local oldSnapshot=JAC_PersonaBoundaryRules.Serialize(oldProgress)
+queue.AddProgress=function(self,amount)
+ add(self,amount); GOV_SPIES_BUILT=true; SPY_CAPACITY=2
+ local spy=makeSpy(0,16); spy.x=CONTROL.x; spy.y=CONTROL.y
+ BUILD_HEAD=nil
+end
+local save=Game.SetProperty
+Game.SetProperty=function(self,key,value)
+ if key=='JAC_BOUNDARY_CAPACITY_PROGRESS' then return false end
+ return save(self,key,value)
+end
+ENEMY_CASES.fireCore(request.OnStart,request)
+Game.SetProperty=save; queue.AddProgress=add
+assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==oldProgress)
+assert(JAC_PersonaBoundaryRules.Serialize(oldProgress)==oldSnapshot,
+ 'refused completion publication changed an existing saved table')
+assert(api.CapacityProgressCheckpoint(false),'early native result was not checkpointable')
+assert(not pcall(api.EnemyRetryDiagnosis),'same-turn attempt became an accepted retry')
+assert(CAPACITY_PROGRESS_CALLS==2 and #CAPTURED[1]==1)
+ADVANCE_TURN(); assert(api.EnemyRetryDiagnosis().mode=='CAPACITY_MAP')
+assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').latest.buildingType=='BUILDING_GOV_TALL')
+"#,
+    );
+}
+
+#[test]
+fn pending_capacity_tick_checkpoints_a_later_turn_without_calling_progress() {
+    for district in [false, true] {
+        let h = Enemy::new();
+        h.queue_capacity_progress(district);
+        h.0.globals().set("IS_DISTRICT", district).unwrap();
+        h.run(
+            r#"
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+queue.AddProgress=function() error('native effect did not occur') end
+assert(not pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST))
+queue.AddProgress=add
+assert(CAPACITY_PROGRESS_CALLS==0)
+CAPACITY_COMPLETES=false; ADVANCE_TURN()
+"#,
+        );
+        let scene:Value=serde_json::from_str(&read_repo(if district {
+            "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-district-tick.json"
+        } else {
+            "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-tick.json"
+        })).unwrap();
+        assert!(h
+            .0
+            .load(scene["steps"][4]["condition"]["code"].as_str().unwrap())
+            .eval::<bool>()
+            .unwrap());
+        assert_eq!(scene["steps"][5]["action"], "save");
+        assert!(scene["steps"][5]["checkpoint"].as_bool().unwrap());
+        h.run(
+            r#"
+local api=ExposedMembers.JAC_PersonaBoundary
+local o=IS_DISTRICT and api.CaptiveCapacityDistrictOutcome() or api.CaptiveCapacityOutcome()
+assert(o.stage=='PROGRESS_PENDING' and not o.targetBuilt and o.turn>o.progressTurn)
+assert(CAPACITY_PROGRESS_CALLS==0 and #CAPTURED[1]==1)
+-- Ordinary engine production may subsequently complete; this observation
+-- does not reissue the uncertain AddProgress request.
+TURN=TURN+1
+if IS_DISTRICT then GOV_DISTRICT_BUILT=true else GOV_TIER1_BUILT=true end
+"#,
+        );
+        h.run(scene_lua(&scene, capacity_tick_outcome_index(&scene)));
+        h.run("assert(CAPACITY_PROGRESS_CALLS==0 and #CAPTURED[1]==1)");
+    }
 }
 
 #[test]

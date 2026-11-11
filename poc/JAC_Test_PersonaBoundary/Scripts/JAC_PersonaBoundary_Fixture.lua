@@ -1880,7 +1880,19 @@ GameEvents.JAC_BoundaryProgressCapacityBuilding.Add(function(controller,params)
     local city=assert(CityManager.GetCity(controller,params.CityID),
         "owned capacity production city missing");
     assert(city:GetOwner()==controller,"capacity production city owner changed");
-    local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS") or {steps={}};
+    local previous=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS");
+    assert(previous==nil or (type(previous)=="table" and type(previous.steps)=="table"),
+        "native capacity progress ledger is invalid");
+    local progress={steps={}};
+    for key,value in pairs(previous and previous.steps or {}) do
+        assert(type(value)=="table","native capacity progress step is invalid");
+        local entry={}; for name,scalar in pairs(value) do entry[name]=scalar; end
+        progress.steps[key]=entry;
+    end
+    if previous and previous.latest then
+        local latest={}; for name,scalar in pairs(previous.latest) do latest[name]=scalar; end
+        progress.latest=latest;
+    end
     assert(not progress.steps[row.BuildingType],
         "capacity building progress was already added once");
     local read=assert(ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead,

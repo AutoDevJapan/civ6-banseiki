@@ -2,6 +2,7 @@
 include("JAC_PersonaBoundaryRules");
 local R = JAC_PersonaBoundaryRules;
 local B = {};
+local capacityProgressRequest;
 ExposedMembers.JAC_PersonaBoundary = B;
 local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
 local RETRY_PENDING = "JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING";
@@ -502,7 +503,7 @@ InTargetCity=function(x,y,owner,id)
     return city and city:GetOwner()==owner and city:GetID()==id or false;
 end
 
-function B.EnemyRetryDiagnosis()
+local function FailedEnemyForRetry()
     local c=EnemyConfig();
     assert(not Game:GetProperty(RETRY),"finite enemy retry already archived");
     local s=B.ReadEnemy();
@@ -523,6 +524,11 @@ function B.EnemyRetryDiagnosis()
         not s.neutralizationMission and s.native.neutralized==0,
         "retry requires the actual failed mission with no native neutralization");
     R.Check(s,"SETTLED");
+    return c,s,event,reference,travel,mission;
+end
+
+function B.EnemyRetryDiagnosis()
+    local c,s,event,reference,travel,mission=FailedEnemyForRetry();
     local roster=assert(s.spyRoster,"native spy roster missing");
     local occupied=roster.physicalCount;
     local capacity=Players[c.attacker]:GetDiplomacy():GetSpyCapacity();
@@ -1512,6 +1518,56 @@ end
 -- still present, before a scenario publishes its checkpoint.
 function B.CaptiveCapacityBuildingReference()
     return R.CapacityBuildingReference(EnemyConfig());
+end
+-- Only evidence that an uncertain mutation is durably identified. Callers may
+-- checkpoint it, but it is never an operation success or a completed building.
+function B.CapacityProgressCheckpoint(district)
+    local c=EnemyConfig();
+    local request=assert(capacityProgressRequest,"capacity checkpoint request missing");
+    local action=district and "PROGRESS_CAPACITY_DISTRICT" or "PROGRESS_CAPACITY";
+    assert(request.Action==action and request.Attacker==c.attacker,
+        "capacity checkpoint request identity changed");
+    if district then
+        local receipt=B.CaptiveCapacityDistrictReference();
+        local outcome=B.CaptiveCapacityDistrictOutcome();
+        assert(receipt.owner==c.attacker and outcome.captured==1 and
+            outcome.occupied==1 and receipt.cityID==request.CityID and
+            receipt.districtIndex==request.DistrictIndex and
+            receipt.districtID==request.DistrictID and
+            receipt.plot==request.PlotIndex and receipt.memberKey==request.MemberKey and
+            receipt.acceptedNonce==request.AcceptedNonce and
+            receipt.token==request.Token and receipt.turn==request.Turn,
+            "capacity district checkpoint identity changed");
+    else
+        local latest=B.CaptiveCapacityBuildingReference();
+        assert(latest.buildingType==request.BuildingType and
+            latest.buildingIndex==request.BuildingIndex and
+            latest.cityID==request.CityID and latest.token==request.Token and
+            latest.turn==request.Turn,"capacity checkpoint request identity changed");
+        local city=assert(CityManager.GetCity(c.attacker,latest.cityID),
+            "native capacity checkpoint city missing");
+        assert(city:GetOwner()==c.attacker,"capacity checkpoint city owner changed");
+        local _,s,_,reference,travel=FailedEnemyForRetry();
+        local roster=assert(s.spyRoster,"capacity checkpoint roster missing");
+        local captive=roster.captured[1];
+        local defaultName=GameInfo.Units["UNIT_SPY"].Name;
+        assert(#roster.captured==1 and not s.spy.present and
+            #roster.map<=1 and #roster.activeOffMap==0 and
+            #roster.offMap==1 and roster.capturedPlaceholder and
+            roster.physicalCount==1+#roster.map and
+            captive.level==travel.level and
+            (captive.name==R.StoredText(travel,"name") or
+             (captive.name=="" and captive.nameIndex==-1 and
+              R.StoredText(travel,"name")==defaultName)),
+            "capacity checkpoint captive changed");
+        if #roster.map==1 then
+            local unit=roster.map[1];
+            assert(unit.id~=reference.id and unit.owner==c.attacker and
+                unit.unitType==GameInfo.Units["UNIT_SPY"].Index and
+                R.FindSpy(c.attacker,unit.id),"capacity checkpoint map spy changed");
+        end
+    end
+    return true;
 end
 function B.CaptiveCapacityOutcome()
     local c=EnemyConfig();
@@ -2763,6 +2819,10 @@ local function EnemySyncRequest(action,observed)
         PROGRESS_CAPACITY="JAC_BoundaryProgressCapacityBuilding",
         THIRD_SPY_CIVIC_INTENT="JAC_BoundaryThirdSpyCivicIntent"};
     payload.OnStart=assert(onStart[action],"unknown enemy fixture operation");
+    if action=="PROGRESS_CAPACITY" or action=="PROGRESS_CAPACITY_DISTRICT" then
+        capacityProgressRequest={};
+        for name,value in pairs(payload) do capacityProgressRequest[name]=value; end
+    end
     if capacity and capacity.resume then payload.Phase="RESUME_READ"; end
     UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,payload);
     Log("ENEMY_SYNC_REQUEST",{action=action,token=payload.Token,

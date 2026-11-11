@@ -574,7 +574,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             "{name}"
         );
     }
-    assert_eq!(saves, 18);
+    assert_eq!(saves, 20);
     let production =
         scenario("leader-persona-spy-neutralization-retry-capacity-tier1-production-diagnose.json");
     let production_steps = steps(&production);
@@ -879,7 +879,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             && built
                 < district_tick_steps
                     .iter()
-                    .position(|step| action(step, "save"))
+                    .rposition(|step| action(step, "save"))
                     .unwrap()
     );
     let capacity_plan = scenario("leader-persona-spy-neutralization-retry-capacity-plan.json");
@@ -933,9 +933,14 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         .unwrap();
     let save = tick_steps
         .iter()
-        .position(|step| action(step, "save"))
+        .rposition(|step| action(step, "save"))
         .unwrap();
     assert!(turn < confirmed && confirmed < save);
+    let pending_checkpoint = tick_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(turn < pending_checkpoint && pending_checkpoint < confirmed);
     assert!(tick_steps[turn + 1..confirmed].iter().any(|step| {
         action(step, "wait_for")
             && step["timeout"]
