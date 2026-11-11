@@ -1510,8 +1510,8 @@ mod native_recovery_tests {
                 .unwrap(),
         );
         let mut command = Command::new("powershell.exe");
-        command.args(["-NoProfile", "-NonInteractive", "-Command", &format!("[Console]::Error.WriteLine('{NATIVE_RECOVERY_REQUIRED} abc-123 42 71'); [Console]::ReadLine() | Out-Null; exit 9")])
-            .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped());
+        command.args(["-NoProfile", "-NonInteractive", "-Command", &format!("Start-Sleep -Milliseconds 2500; [Console]::WriteLine('RECOVERY_DRIVER_READY'); [Console]::Out.Flush(); [Console]::ReadLine() | Out-Null; [Console]::Error.WriteLine('{NATIVE_RECOVERY_REQUIRED} abc-123 42 71'); [Console]::Error.Flush(); [Console]::ReadLine() | Out-Null; exit 9")])
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let (mut child, mut tree) =
             crate::process_tree::Tree::spawn(&mut command, CREATE_NO_WINDOW, true).unwrap();
         let mut input = child.stdin.take().unwrap();
@@ -1520,6 +1520,53 @@ mod native_recovery_tests {
         let reader_notice = Arc::clone(&notice);
         let reader =
             thread::spawn(move || read_driver_output(error, Some((&reader_notice, "abc-123"))));
+        let output = child.stdout.take().unwrap();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let readiness = thread::spawn(move || {
+            use std::io::BufRead;
+            let mut line = String::new();
+            let result = std::io::BufReader::new(output)
+                .read_line(&mut line)
+                .map(|_| line);
+            let _ = ready_tx.send(result);
+        });
+        let ready = ready_rx.recv_timeout(Duration::from_secs(15));
+        if !matches!(&ready,Ok(Ok(line)) if line.trim()=="RECOVERY_DRIVER_READY") {
+            tree.stop(&mut child).unwrap();
+            let _ = child.wait();
+            readiness.join().unwrap();
+            let bytes = reader.join().unwrap().unwrap();
+            panic!(
+                "owned recovery fixture failed readiness: {ready:?}; {}",
+                decode(&bytes)
+            );
+        }
+        readiness.join().unwrap();
+        assert!(
+            notice.lock().unwrap().is_none(),
+            "no recovery before the parent's release"
+        );
+        input.write_all(b"publish recovery\n").unwrap();
+        let notice_deadline = Instant::now() + Duration::from_secs(5);
+        while notice.lock().unwrap().is_none() && Instant::now() < notice_deadline {
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        if notice.lock().unwrap().is_none() {
+            tree.stop(&mut child).unwrap();
+            let _ = child.wait();
+            let bytes = reader.join().unwrap().unwrap();
+            panic!(
+                "owned fixture did not publish its notice after release: {}",
+                decode(&bytes)
+            );
+        }
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "driver must await cleanup acknowledgement"
+        );
         let started = RealRunner.monotonic();
         let mut calls = 0;
         let result = wait_with_recovery(
