@@ -18,6 +18,7 @@ pub(super) struct WorldLease {
     pub context: u64,
     pub game: u64,
     pub world: u64,
+    pub observation: u64,
 }
 /// Captured at native Session birth, while no World is live. It describes
 /// the next unpublished World, not a lookup of a later current World.
@@ -27,10 +28,12 @@ pub(super) struct BirthWindow {
     context: u64,
     game: u64,
     epoch: u64,
+    observation: u64,
 }
 impl BirthWindow {
     pub(super) fn matches(self, world: WorldLease) -> bool {
         world.serial == self.serial
+            && world.observation == self.observation
             && world.epoch != 0
             && world.context != 0
             && world.game != 0
@@ -161,6 +164,7 @@ impl Bindings {
                 context: 0,
                 game: 0,
                 epoch: 0,
+                observation: self.observation,
             });
         }
         if let [(context, b)] = live.as_slice() {
@@ -170,6 +174,7 @@ impl Bindings {
                     context: **context,
                     game: b.game,
                     epoch: b.epoch,
+                    observation: self.observation,
                 });
             }
         }
@@ -225,6 +230,7 @@ impl Bindings {
             context: *context,
             game,
             world,
+            observation: self.observation,
         };
         b.world = Some(lease);
         Ok(lease)
@@ -257,6 +263,29 @@ impl Bindings {
             .filter(|b| b.closing && !b.closed)
             .find_map(|b| b.world.filter(|w| w.world == world))
     }
+    fn owns_birth(&self, lease: WorldLease) -> bool {
+        !self.coverage_gap()
+            && self.contexts.get(&lease.context).is_some_and(|birth| {
+                birth.serial == lease.serial
+                    && birth.epoch == lease.epoch
+                    && birth.game == lease.game
+                    && birth.world == Some(lease)
+                    && !birth.uncertain
+                    && !birth.closing
+                    && !birth.closed
+            })
+    }
+}
+/// Read the actual constructor owner's record, never adopt the supplied tuple
+/// or the current World. This proves one observed birth, not a complete window.
+pub(super) fn with_observed_birth<R>(lease: WorldLease, bind: impl FnOnce() -> R) -> Option<R> {
+    let bindings = BINDINGS.lock().ok()?;
+    if !bindings.owns_birth(lease) {
+        return None;
+    }
+    // Keep the exact birth open until the binding consumer finishes. A close
+    // cannot invalidate the check between this read and the consumer's write.
+    Some(bind())
 }
 pub(super) fn closing(world: u64) -> Option<WorldLease> {
     BINDINGS.lock().ok()?.closing(world)
@@ -343,6 +372,18 @@ pub(super) fn fixture_cold_observer(core: u64) {
 #[cfg(test)]
 pub(super) fn fixture_world_birth() -> WorldLease {
     let mut bindings = BINDINGS.lock().unwrap();
+    bindings.context(10, 20, 1).unwrap();
+    bindings.world(20, 30, 1).unwrap()
+}
+#[cfg(test)]
+pub(super) fn fixture_world_birth_after(retired: u64) -> WorldLease {
+    let mut bindings = BINDINGS.lock().unwrap();
+    for _ in 0..retired {
+        bindings.context(10, 20, 1).unwrap();
+        let lease = bindings.world(20, 30, 1).unwrap();
+        assert_eq!(bindings.close(20), Some(lease));
+        assert!(bindings.closed(20, lease.serial));
+    }
     bindings.context(10, 20, 1).unwrap();
     bindings.world(20, 30, 1).unwrap()
 }
@@ -502,6 +543,7 @@ fn finish(raw: &mut Saved, exceptional: bool) {
         }
         return;
     }
+    let mut created = None;
     if !exceptional {
         let core = CORE.load(Ordering::Acquire);
         let mut b = BINDINGS.lock().unwrap_or_else(|_| fault());
@@ -535,8 +577,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             // The native load carrier, if present, was retained before the
             // asynchronous command selected this view. Current globals alone
             // never create a Session/World relation.
-            loads::world_created(lease);
+            created = Some(lease);
         }
+    }
+    // The binding consumer rechecks this owner. Release the owner mutex before
+    // calling it, while retaining the original native frame until it returns.
+    if let Some(lease) = created {
+        loads::world_created(lease);
     }
     FRAMES
         .get()
@@ -931,6 +978,79 @@ mod tests {
         let second = b.world(20, 30, 2).unwrap();
         assert!(next.matches(second));
         assert!(!initial.matches(second) && !pending.matches(second));
+    }
+    #[test]
+    fn binding_observation_requires_the_exact_live_constructor_record() {
+        let mut b = Bindings::default();
+        b.context(10, 20, 1).unwrap();
+        let first = b.world(20, 30, 1).unwrap();
+        assert!(b.owns_birth(first));
+        for changed in [
+            WorldLease {
+                context: 11,
+                ..first
+            },
+            WorldLease { game: 21, ..first },
+            WorldLease { world: 31, ..first },
+            WorldLease { epoch: 2, ..first },
+            WorldLease { serial: 2, ..first },
+        ] {
+            assert!(!b.owns_birth(changed));
+        }
+        let gap = b.start_unproven(999, false).unwrap();
+        assert!(!b.owns_birth(first));
+        assert!(b.finish_unproven(gap, 999, false, false));
+        assert!(b.owns_birth(first), "unrelated unknown lifetime has ended");
+        assert_eq!(b.close(20), Some(first));
+        assert!(!b.owns_birth(first));
+        assert!(b.closed(20, first.serial));
+        b.context(10, 20, 2).unwrap();
+        let next = b.world(20, 30, 2).unwrap();
+        assert!(!b.owns_birth(first));
+        assert!(b.owns_birth(next));
+    }
+    #[test]
+    fn captured_context_window_cannot_survive_an_unobserved_birth_interval() {
+        let mut b = Bindings::default();
+        b.context(10, 20, 1).unwrap();
+        let old = b.birth_window().unwrap();
+        let gap = b.start_unproven(999, false).unwrap();
+        assert!(b.birth_window().is_none());
+        assert!(b.finish_unproven(gap, 999, false, false));
+        let fresh = b.birth_window().unwrap();
+        let actual = b.world(20, 30, 1).unwrap();
+        assert!(
+            !old.matches(actual),
+            "saved context window lost an observation interval"
+        );
+        assert!(
+            fresh.matches(actual),
+            "fresh observed interval remains usable"
+        );
+        assert!(b.owns_birth(actual));
+    }
+    #[test]
+    fn observed_birth_stays_locked_through_the_session_binding_consumer() {
+        if !child("observed_birth_stays_locked_through_the_session_binding_consumer") {
+            return;
+        }
+        let birth = fixture_world_birth();
+        assert_eq!(
+            with_observed_birth(birth, || {
+                assert!(
+                    BINDINGS.try_lock().is_err(),
+                    "close could enter before binding finished"
+                );
+                7
+            }),
+            Some(7)
+        );
+        assert!(BINDINGS.try_lock().is_ok());
+        fixture_world_close(birth);
+        assert_eq!(
+            with_observed_birth(birth, || panic!("closed birth reached the consumer")),
+            None::<()>
+        );
     }
     #[test]
     fn unproven_interval_invalidates_old_window_and_allows_a_fresh_observed_lifetime() {

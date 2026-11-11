@@ -109,6 +109,7 @@ fn world(serial: u64, epoch: u64) -> WorldLease {
         context: 60,
         game: 70,
         world: 80,
+        observation: 0,
     }
 }
 #[test]

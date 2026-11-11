@@ -15,6 +15,73 @@ use std::sync::atomic::AtomicUsize;
 use windows_sys::Win32::System::Diagnostics::Debug::{
     RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
+
+#[test]
+fn bootstrap_binding_requires_the_matching_observed_world_birth() {
+    if !child("bootstrap_binding_requires_the_matching_observed_world_birth") {
+        return;
+    }
+    let lease = fixture_bootstrap_session(10, 20);
+    let target = state().bootstrap_target(10, 20).unwrap();
+    let proposed = worlds::WorldLease {
+        serial: 1,
+        epoch: 1,
+        context: 10,
+        game: 20,
+        world: 30,
+        observation: 0,
+    };
+    assert_eq!(
+        bind_bootstrap_world(target, proposed),
+        Err(Error::Unresolved),
+        "an otherwise matching saved window cannot invent an unobserved World birth"
+    );
+    assert_eq!(state().world(lease), Err(Error::Unbound));
+    let observed = worlds::fixture_world_birth();
+    assert_eq!(observed, proposed);
+    for changed in [
+        worlds::WorldLease {
+            context: 11,
+            ..observed
+        },
+        worlds::WorldLease {
+            game: 21,
+            ..observed
+        },
+        worlds::WorldLease {
+            world: 31,
+            ..observed
+        },
+        worlds::WorldLease {
+            epoch: 2,
+            ..observed
+        },
+        worlds::WorldLease {
+            serial: 2,
+            ..observed
+        },
+    ] {
+        assert_eq!(
+            bind_bootstrap_world(target, changed),
+            Err(Error::Unresolved)
+        );
+        assert_eq!(state().world(lease), Err(Error::Unbound));
+    }
+    assert_eq!(bind_bootstrap_world(target, observed), Ok(()));
+    assert_eq!(
+        state().world(lease),
+        Ok(WorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        })
+    );
+    worlds::fixture_world_close(observed);
+    assert_eq!(
+        worlds::with_observed_birth(observed, || panic!("closed World granted a binding")),
+        None::<()>
+    );
+}
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn SetErrorMode(mode: u32) -> u32;

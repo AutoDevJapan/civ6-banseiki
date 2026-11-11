@@ -67,7 +67,7 @@ extern "system" fn flow_worker_body() {
     assert_eq!(state().ledger.request(invocation).unwrap().0, 1);
     FRAMES.get_or_init(NativeFrames::new);
     jobs::fixture_activate_core(0x180000000);
-    world_created(worlds::WorldLease {
+    let world = worlds::WorldLease {
         epoch: 1,
         serial: if FLOW_BOOTSTRAP.load(Ordering::Acquire)
             && !FLOW_BOOTSTRAP_STALE.load(Ordering::Acquire)
@@ -79,7 +79,12 @@ extern "system" fn flow_worker_body() {
         context: 10,
         game: 20,
         world: 30,
-    });
+        observation: 0,
+    };
+    if FLOW_BOOTSTRAP.load(Ordering::Acquire) {
+        assert_eq!(worlds::fixture_world_birth_after(world.serial - 1), world);
+    }
+    world_created(world);
     if FLOW_PATH.load(Ordering::Acquire) {
         // The pinned 85857 caller enters the shared input reader with both
         // arguments zero. For pathname loads its global input is a native file,
@@ -260,6 +265,7 @@ fn accepted_request_with_world_order(unproven: bool, world_first: bool) {
         context: 80,
         game: 90,
         world: 100,
+        observation: 0,
     };
     let frames = FRAMES.get_or_init(NativeFrames::new);
     for _ in 1..world.epoch {

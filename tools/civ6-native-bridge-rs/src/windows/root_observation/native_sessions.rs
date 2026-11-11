@@ -399,7 +399,8 @@ pub(super) fn bind_bootstrap_world(
     target: BootstrapTarget,
     world: worlds::WorldLease,
 ) -> Result<(), SessionError> {
-    let result = state().bind_bootstrap_world(target, world);
+    let result = worlds::with_observed_birth(world, || state().bind_bootstrap_world(target, world))
+        .unwrap_or(Err(Error::Unresolved));
     census::event(if result.is_ok() {
         census::SemanticEvent::BindWorld
     } else {
