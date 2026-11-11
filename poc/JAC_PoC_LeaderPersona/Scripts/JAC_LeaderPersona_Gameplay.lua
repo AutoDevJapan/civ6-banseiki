@@ -25,7 +25,7 @@ function Q.NextSequence()
     if not integer(sequence) or sequence >= 9007199254740991 then return nil end
     return sequence + 1
 end
-local function qualified(e, leader, owner, deed, identity)
+local function qualified(e, leader, owner, deed, identity, buckets)
     local known = deed == 'GOVERN_TURN' or deed == 'BUILDING' or deed == 'VICTORY' or deed == 'ALLIANCE'
     return known and type(identity) == 'string' and integer(owner) and
         type(e) == 'table' and e.version == 2 and e.leader == leader and e.owner == owner and
@@ -35,16 +35,46 @@ local function qualified(e, leader, owner, deed, identity)
         integer(e.reservedCount) and e.reservedCount > 0 and e.reservedCount <= e.cap and
         integer(e.amount) and (e.amount == e.reward or (e.amount == 0 and e.reservedCount == e.cap)) and
         ((integer(e.sequence) and e.sequence > 0) or
-         (e.sequence == nil and e.sequenceDeferred == true and integer(e.recoverySequence) and e.recoverySequence > 0))
+         (e.sequence == nil and e.sequenceDeferred == true and integer(e.recoverySequence) and e.recoverySequence > 0)) and
+        type(buckets) == 'table' and integer(buckets[leader .. '_' .. deed .. '_' .. e.turn]) and
+        buckets[leader .. '_' .. deed .. '_' .. e.turn] >= e.reservedCount and
+        buckets[leader .. '_' .. deed .. '_' .. e.turn] <= e.cap
+end
+local function uniqueOrder(e, pending, recovery)
+    local deferred = e.sequence == nil and e.sequenceDeferred == true
+    local number = deferred and e.recoverySequence or e.sequence
+    if not integer(number) or number <= 0 then return false end
+    local count = 0
+    for _, saved in ipairs({pending or false, recovery or false}) do
+        if type(saved) == 'table' then
+            for _, other in pairs(saved) do
+                if type(other) == 'table' and other.version == 2 and other.eligible == true and other.eligibilityUnknown == false then
+                    local same = deferred and other.sequence == nil and other.sequenceDeferred == true and other.recoverySequence == number or
+                        not deferred and other.sequence == number
+                    if same then count = count + 1 end
+                end
+            end
+        end
+    end
+    return count == 1
 end
 function Q.Unknown(row, deed, identity, a)
     local leader = row.LeaderType
     local seen = 'DEED_UNKNOWN_' .. deed .. '_' .. identity
     if a.Get(leader, seen) ~= nil or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return end
     local key = leader .. '_' .. deed .. '_' .. identity
-    for _, store in ipairs({PENDING, RECOVERY}) do
-        local saved = Game:GetProperty(store)
-        if type(saved) == 'table' and qualified(saved[key], leader, a.Get(leader, 'OWNER'), deed, identity) then return end
+    local pending, recovery = Game:GetProperty(PENDING), Game:GetProperty(RECOVERY)
+    for _, saved in ipairs({pending or false, recovery or false}) do
+        if type(saved) == 'table' and qualified(saved[key], leader, a.Get(leader, 'OWNER'), deed, identity, Game:GetProperty(BUCKETS)) and
+           uniqueOrder(saved[key], pending, recovery) then
+            -- Qualification and notification identity are separate. Even if
+            -- this saved queue entry is later lost, never capture its replay
+            -- with a new placement, amount, turn or ordering decision.
+            if a.Get(leader, 'DEED_CAPTURED_' .. deed .. '_' .. identity) == nil then
+                a.Set(leader, 'DEED_CAPTURED_' .. deed .. '_' .. identity, {owner=saved[key].owner, turn=saved[key].turn})
+            end
+            return
+        end
     end
     -- This independent identity survives an unusable queue or sequence. It is
     -- not a paid receipt and never becomes eligible after state visibility.
@@ -56,6 +86,7 @@ function Q.Capture(row, deed, identity, city, a)
     local owner = a.Get(leader, 'OWNER')
     local key = leader .. '_' .. deed .. '_' .. identity
     if a.Get(leader, 'DEED_UNKNOWN_' .. deed .. '_' .. identity) ~= nil then return false end
+    if a.Get(leader, 'DEED_CAPTURED_' .. deed .. '_' .. identity) ~= nil then return false end
     local pending = Q.Pending()
     local recovery = Game:GetProperty(RECOVERY)
     if recovery ~= nil and type(recovery) ~= 'table' then Q.Unknown(row, deed, identity, a); return false end
@@ -104,6 +135,7 @@ function Q.Capture(row, deed, identity, city, a)
     if sequence then Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE', sequence) end
     if recoverySequence then Game:SetProperty(RECOVERY_SEQUENCE, recoverySequence) end
     Game:SetProperty(destination, pending)
+    a.Set(leader, 'DEED_CAPTURED_' .. deed .. '_' .. identity, {owner=owner, turn=turn})
     return amount > 0
 end
 function Q.Drain(a)
@@ -179,8 +211,9 @@ function Q.Drain(a)
     for _, item in ipairs(ordered) do
         local e, key = item.event, item.key
         local row = type(e.leader) == 'string' and GameInfo.JAC_LeaderPersonas[e.leader]
-        if row and qualified(e, e.leader, a.Get(e.leader, 'OWNER'), e.deed, e.identity) and
-           sequenceSeen[e.sequence] == 1 and key == e.leader .. '_' .. e.deed .. '_' .. e.identity and a.Player(e.owner, true) then
+        if row and qualified(e, e.leader, a.Get(e.leader, 'OWNER'), e.deed, e.identity, buckets) and
+           uniqueOrder(e, pending, recovery) and sequenceSeen[e.sequence] == 1 and
+           key == e.leader .. '_' .. e.deed .. '_' .. e.identity and a.Player(e.owner, true) then
             -- These are event-time rule values. A later balance update must
             -- neither strand a proven event nor change its committed amount.
             local cap, reward = e.cap, e.reward

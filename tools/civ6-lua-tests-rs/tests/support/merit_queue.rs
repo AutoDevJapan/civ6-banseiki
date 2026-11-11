@@ -217,6 +217,67 @@ fn complete_pending_and_recovery_proofs_are_not_downgraded_by_replayed_unknown_n
 }
 
 #[test]
+fn captured_identity_survives_loss_of_the_ordered_entry_without_new_event_time_authority() {
+    run(&format!(
+        r#"{FREEZE}
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        local observed=prop('DEED_CAPTURED_BUILDING_100_0')
+        assert(observed.owner==0 and observed.turn==1)
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil)
+        TURN=2; reload()
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        assert((prop('MERIT') or 0)==0,'a lost ordered record was requalified from a new turn')
+        assert(prop('DEED_CAPTURED_BUILDING_100_0')==observed)
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        assert(prop('MERIT')==3,'a different new identity was blocked')
+    "#
+    ));
+}
+
+#[test]
+fn event_proof_and_original_bucket_are_one_contract_for_replayed_notifications() {
+    for alteration in [
+        "Game:SetProperty('JAC_PERSONA_MERIT_BUCKETS_V2',nil)",
+        "Game:SetProperty('JAC_PERSONA_MERIT_BUCKETS_V2',false)",
+        "buckets[bucket]=nil",
+        "buckets[bucket]=false",
+        "buckets[bucket]=0",
+        "buckets[bucket]=3",
+        "buckets[bucket]=nil; buckets[DATE..'_VICTORY_1']=1",
+        "event.owner=1",
+        "event.identity='other'",
+        "event.turn=2",
+        "event.amount=false",
+        "event.cityID=nil",
+        "event.cap=nil",
+        "event.sequence=nil",
+        "local other={}; for k,v in pairs(event) do other[k]=v end; other.identity='100_9'; pending[DATE..'_BUILDING_100_9']=other",
+    ] {
+        run(&format!(r#"{FREEZE}
+            local key=DATE..'_BUILDING_100_0'
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            -- Model an old saved entry predating the independent identity journal.
+            Game:SetProperty('JAC_PERSONA_'..DATE..'_DEED_CAPTURED_BUILDING_100_0',nil)
+            local pending=Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')
+            local event=pending[key]
+            local buckets=Game:GetProperty('JAC_PERSONA_MERIT_BUCKETS_V2'); local bucket=DATE..'_BUILDING_1'
+            {alteration}
+            local get=CITIES[0][1].GetProperty; CITIES[0][1].GetProperty=nil
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(pending[key]==event,'damaged saved entry was overwritten')
+            local unknown=prop('DEED_UNKNOWN_BUILDING_100_0')
+            assert(type(unknown)=='table' and unknown.owner==0 and unknown.turn==1,'incomplete event/bucket binding was accepted')
+            pending[key]=nil; Game:SetProperty('JAC_PERSONA_MERIT_BUCKETS_V2',nil)
+            CITIES[0][1].GetProperty=get; TURN=2; reload()
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert((prop('MERIT') or 0)==0,'damaged proof was requalified after repair')
+            FIRE('BuildingConstructed',0,1,1,100,true)
+            assert(prop('MERIT')==3,'a distinct normal event was lost')
+        "#));
+    }
+}
+
+#[test]
 fn direct_alliance_defer_preserves_a_false_entry_and_unknown_replay() {
     for formation in [false, true] {
         run(&format!(
