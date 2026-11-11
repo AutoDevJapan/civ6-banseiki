@@ -323,6 +323,43 @@ impl Ledger {
             .map(|_| ())
             .ok_or(Error::Unknown)
     }
+    /// A copied old input may outlive a reset, but never its exact Session
+    /// callback or original storage obligation. This supplies no new World.
+    pub fn reset_input_callback(
+        &self,
+        hold: InputHold,
+        lease: Lease,
+        transport: Transport,
+        callback: u64,
+    ) -> Result<bool, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        let input = self.input_holds.get(&hold.0).ok_or(Error::Unknown)?;
+        if input.lease != lease || input.transport != transport {
+            return Err(Error::Stale);
+        }
+        if !self
+            .reset_inputs
+            .contains(&(lease.0, transport.incarnation))
+        {
+            return Ok(false);
+        }
+        let record = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if record.phase != Phase::Open
+            || record.registry_lifetime.is_none()
+            || record.callback != callback
+            || self.callbacks.get(&callback) != Some(&lease)
+            || self.sessions.get(&record.session) != Some(&lease)
+            || input.world.is_some_and(|world| {
+                self.retired_worlds
+                    .contains(&(world.binding_id, world.epoch))
+            })
+        {
+            return Err(Error::Stale);
+        }
+        Ok(true)
+    }
     /// Only an already executing receiver of this exact reset source can
     /// retain its old input lifetime after lookup. This issues no Message.
     pub fn retain_reset_receive_input(

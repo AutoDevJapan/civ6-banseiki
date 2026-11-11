@@ -1042,9 +1042,21 @@ fn an_unknown_receiver_cannot_adopt_a_later_publication_at_the_same_network_addr
 }
 #[test]
 fn concurrent_reset_after_actual_poll_lookup_preserves_unqualified_original_progress() {
+    concurrent_reset_poll_case(false);
+}
+#[test]
+fn concurrent_reset_eventful_poll_reaches_old_callback_without_new_authority() {
+    concurrent_reset_poll_case(true);
+}
+fn concurrent_reset_poll_case(eventful: bool) {
     const NAME: &str =
         "concurrent_reset_after_actual_poll_lookup_preserves_unqualified_original_progress";
-    if !child(NAME) {
+    let name = if eventful {
+        "concurrent_reset_eventful_poll_reaches_old_callback_without_new_authority"
+    } else {
+        NAME
+    };
+    if !child(name) {
         return;
     }
     unsafe { windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode(3) };
@@ -1062,7 +1074,18 @@ fn concurrent_reset_after_actual_poll_lookup_preserves_unqualified_original_prog
     begin(&mut receiver);
     super::super::input::fixture_after_poll_lookup(reset_between_poll_lookup_and_reservation);
     unsafe { SetLastError(0x7931) };
-    let result = super::super::input::fixture_poll_with_authority(old.network);
+    let result = if eventful {
+        assert_eq!(
+            super::super::input::fixture_eventful_reset_poll(
+                old.network,
+                EXE.load(Ordering::Acquire)
+            ),
+            0x8899
+        );
+        Ok((Some((lease, old)), false))
+    } else {
+        super::super::input::fixture_poll_with_authority(old.network)
+    };
     let poll_error = unsafe { GetLastError() };
     eprintln!("CONCURRENT_RESET_POLL_RETURNED {result:?}");
     assert_eq!(

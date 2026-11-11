@@ -154,6 +154,109 @@ pub(super) fn fixture_poll_with_authority(
     unsafe { SetLastError(returned_error) };
     Ok((source, authority))
 }
+#[cfg(test)]
+pub(super) fn fixture_eventful_reset_poll(network: u64, base: u64) -> u64 {
+    INPUT_EXE.store(base, Ordering::Release);
+    let mut bytes = [0u8; 8];
+    let payload = bytes.as_mut_ptr() as u64;
+    let mut peer = [0u32; 8];
+    peer[3] = 7;
+    let mut packet = [0u64; 6];
+    packet[2] = payload;
+    packet[3] = 8;
+    let mut event = [0u64; 8];
+    event[0] = 4;
+    event[1] = peer.as_mut_ptr() as u64;
+    event[3] = packet.as_mut_ptr() as u64;
+    let mut poll: Saved = unsafe { std::mem::zeroed() };
+    poll.invocation.kind = 110;
+    poll.invocation.caller = exe(0x8615a0);
+    poll.gpr[0] = value(network + 0xd0);
+    poll.gpr[1] = event.as_mut_ptr() as u64;
+    begin(&mut poll);
+    let ticket = INPUT_CALLS.with(|calls| calls.borrow().last().unwrap().ticket.unwrap());
+    assert!(ticket.message.is_none());
+    poll.gpr[4] = 1; // Successful original poll returned one modeled event.
+    end(&mut poll);
+
+    let mut record = [0u64; 8];
+    let pointer = record.as_mut_ptr() as u64;
+    let mut home = [0u64; 8];
+    home[5] = 8;
+    let mut ctor: Saved = unsafe { std::mem::zeroed() };
+    ctor.invocation.kind = 111;
+    ctor.invocation.caller = exe(0x8615e9);
+    ctor.invocation.caller_rsp = home.as_mut_ptr() as u64;
+    ctor.gpr[0] = pointer;
+    ctor.gpr[1] = 4;
+    ctor.gpr[2] = 7;
+    ctor.gpr[3] = payload;
+    begin(&mut ctor);
+    record[0] = (7u64 << 32) | 4;
+    record[1] = payload;
+    record[2] = payload + 8;
+    ctor.gpr[4] = pointer;
+    end(&mut ctor);
+    assert!(POLLED.with(|polled| polled.borrow().is_none()));
+    assert_eq!(pending(), Ok(1));
+
+    let mut copied = [0u64; 8];
+    let destination = copied.as_mut_ptr() as u64;
+    let mut copy: Saved = unsafe { std::mem::zeroed() };
+    copy.invocation.kind = 112;
+    copy.invocation.caller = exe(0x8574ab);
+    copy.gpr[0] = destination + 8;
+    copy.gpr[1] = pointer + 8;
+    begin(&mut copy);
+    copied.copy_from_slice(&record);
+    end(&mut copy);
+    let original = retire(pointer).unwrap();
+    release(vec![original]);
+    assert_eq!(pending(), Ok(1));
+
+    let callback = value(ticket.transport.pointer + 8);
+    let mut callback_table = [0u64; 8];
+    callback_table[5] = exe(0x860000);
+    unsafe {
+        *(callback as *mut u64) = callback_table.as_mut_ptr() as u64;
+        *((value(ticket.transport.pointer) + 0x68) as *mut u64) = exe(0x84e9e0);
+    }
+    let mut dispatch: Saved = unsafe { std::mem::zeroed() };
+    dispatch.invocation.kind = 120;
+    dispatch.invocation.caller = exe(0x84ee79);
+    dispatch.invocation.caller_rsp = home.as_mut_ptr() as u64;
+    unsafe { ptr::write_volatile(home.as_mut_ptr().add(5), 0) };
+    dispatch.gpr[0] = ticket.transport.pointer;
+    dispatch.gpr[1] = 7;
+    dispatch.gpr[2] = payload;
+    dispatch.gpr[3] = 8;
+    dispatch.gpr[7] = destination;
+    println!("EVENTFUL_POLL_CTOR_COPY_REACHED_RESET_CALLBACK");
+    unsafe { SetLastError(0x7931) };
+    begin(&mut dispatch);
+    fn original_callback(callback: u64, incarnation: u64, calls: &mut u64) -> u64 {
+        *calls += 1;
+        let mut incoming_call: Saved = unsafe { std::mem::zeroed() };
+        incoming_call.gpr[0] = callback;
+        assert_eq!(incoming(&incoming_call), Some(None));
+        assert_eq!(current_packet().unwrap().transport, incarnation);
+        assert_eq!(current_packet().unwrap().world, None);
+        0x8899 // Owned Rust seam, not the original native callback body.
+    }
+    let mut callback_calls = 0;
+    dispatch.gpr[4] =
+        original_callback(callback, ticket.transport.incarnation, &mut callback_calls);
+    end(&mut dispatch);
+    let error = unsafe { GetLastError() };
+    assert_eq!(dispatch.gpr[4], 0x8899);
+    assert_eq!(callback_calls, 1);
+    assert_eq!(error, 0x7931);
+    let last = retire(destination).unwrap();
+    release(vec![last]);
+    assert_eq!(pending(), Ok(0));
+    unsafe { *(callback as *mut u64) = 0 };
+    0x8899
+}
 fn poll_network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
     #[cfg(test)]
     if tests::FLOW.load(Ordering::Acquire) {
@@ -499,7 +602,19 @@ extern "system" fn begin(raw: *mut Saved) {
                     if network(ticket.transport.network).unwrap_or_else(|_| fault())
                         != Some((ticket.lease, ticket.transport))
                     {
-                        fault();
+                        let reset = ticket.transport_hold.is_some_and(|hold| {
+                            state()
+                                .reset_input_callback(
+                                    hold,
+                                    ticket.lease,
+                                    ticket.transport,
+                                    value(ticket.transport.pointer + 8),
+                                )
+                                .unwrap_or_else(|_| fault())
+                        });
+                        if !reset {
+                            fault();
+                        }
                     }
                     if raw.gpr[1] as u32 != read32(record + 4).unwrap_or_else(|_| fault())
                         || raw.gpr[2] != value(record + 8)

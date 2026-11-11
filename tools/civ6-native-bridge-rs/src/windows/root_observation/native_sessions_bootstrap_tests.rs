@@ -209,6 +209,64 @@ fn reset_input_retention_requires_the_live_exact_receiver_and_original_reset() {
         .unwrap();
 }
 #[test]
+fn reset_callback_requires_its_saved_input_owner_and_live_session() {
+    let mut ledger = Ledger::default();
+    let lease = unbound(&mut ledger, true);
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    let transport = ledger.publish_transport(lease, 900, 90, 100, 110).unwrap();
+    let receive = ledger.retain_receive(Some((lease, transport))).unwrap();
+    let normal = ledger.retain_input_transport(lease, transport).unwrap();
+    assert_eq!(
+        ledger.reset_input_callback(normal, lease, transport, 50),
+        Ok(false)
+    );
+    ledger.native_reset_begin(lease, transport).unwrap();
+    let held = ledger
+        .retain_reset_receive_input(receive, lease, transport)
+        .unwrap();
+    assert_eq!(
+        ledger.reset_input_callback(held, lease, transport, 50),
+        Ok(true)
+    );
+    assert_eq!(
+        ledger.reset_input_callback(held, lease, transport, 51),
+        Err(Error::Stale)
+    );
+    for changed in [
+        Transport {
+            incarnation: 901,
+            ..transport
+        },
+        Transport {
+            network: 101,
+            ..transport
+        },
+    ] {
+        assert_eq!(
+            ledger.reset_input_callback(held, lease, changed, 50),
+            Err(Error::Stale)
+        );
+    }
+    ledger.release_input_transport(held).unwrap();
+    assert_eq!(
+        ledger.reset_input_callback(held, lease, transport, 50),
+        Err(Error::Unknown)
+    );
+    ledger.release_input_transport(normal).unwrap();
+    ledger
+        .release_receive(receive, Some((lease, transport)))
+        .unwrap();
+    ledger.native_reset_returned(lease, transport).unwrap();
+    let replacement = ledger.publish_transport(lease, 901, 90, 100, 110).unwrap();
+    let fresh = ledger.retain_input_transport(lease, replacement).unwrap();
+    assert_eq!(
+        ledger.reset_input_callback(fresh, lease, replacement, 50),
+        Ok(false)
+    );
+    ledger.release_input_transport(fresh).unwrap();
+}
+#[test]
 fn repeated_reset_accepts_only_new_unpublished_bindings_and_retains_older_packets() {
     let mut ledger = Ledger::default();
     let lease = unbound(&mut ledger, true);
