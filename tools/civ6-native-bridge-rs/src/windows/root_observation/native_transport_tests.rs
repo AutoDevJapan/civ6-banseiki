@@ -970,6 +970,53 @@ fn unknown_receive_frames_retain_observation_without_issuing_authority() {
     super::super::retire_world(world).unwrap();
 }
 #[test]
+fn an_unknown_receiver_cannot_adopt_a_later_publication_at_the_same_network_address() {
+    const NAME: &str =
+        "an_unknown_receiver_cannot_adopt_a_later_publication_at_the_same_network_address";
+    if !child(NAME) {
+        return;
+    }
+    let (session, lease, _, owned) = setup();
+    let network = NETWORK.load(Ordering::Acquire);
+    // A receiver arrived before a known transport/network was constructed.
+    let mut old: Saved = unsafe { std::mem::zeroed() };
+    old.invocation.kind = 108;
+    old.gpr[0] = network;
+    begin(&mut old);
+    assert!(CALLS.with(|calls| calls
+        .borrow()
+        .last()
+        .unwrap()
+        .receive
+        .as_ref()
+        .unwrap()
+        .source
+        .is_none()));
+    assert_eq!(super::super::input::fixture_poll_network(network), Ok(None));
+    // The owned normal creation path now publishes this physical address.
+    // That event must not change the earlier receiver's saved source.
+    unsafe { transport_fixture_driver(session) };
+    let current = super::super::state().transport(lease).unwrap();
+    assert_eq!(from_network(network), Ok(Some((lease, current))));
+    assert_eq!(current_receiver(), Some((network, old.invocation.token)));
+    assert_eq!(super::super::input::fixture_poll_network(network), Ok(None));
+    finish(&mut old, false);
+    // A newly observed receiver of the actual publication remains usable.
+    let mut fresh: Saved = unsafe { std::mem::zeroed() };
+    fresh.invocation.kind = 108;
+    fresh.gpr[0] = network;
+    begin(&mut fresh);
+    assert_eq!(
+        super::super::input::fixture_poll_network(network),
+        Ok(Some((lease, current)))
+    );
+    finish(&mut fresh, false);
+    unsafe { restore().unwrap() };
+    for pointer in owned {
+        assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
+    }
+}
+#[test]
 fn receive_exception_settles_its_observation_but_never_certifies_completion() {
     if !child("receive_exception_settles_its_observation_but_never_certifies_completion") {
         return;

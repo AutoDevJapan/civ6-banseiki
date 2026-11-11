@@ -125,6 +125,27 @@ pub(in super::super) fn current_receiver() -> Option<(u64, u64)> {
             .map(|c| (c.pointer, c.serial))
     })
 }
+/// Polling consumes the whole receiver's original source, never a fresh
+/// transport relationship found later at the same physical network address.
+pub(in super::super) fn from_receiver(
+    network: u64,
+) -> Result<Option<(SessionLease, SessionTransport)>, SessionError> {
+    let source = CALLS.with(|calls| {
+        let calls = calls.borrow();
+        let call = calls.iter().rev().find(|call| call.kind == 108)?;
+        if call.pointer != network {
+            return None;
+        }
+        call.receive.as_ref()?.source
+    });
+    let Some(source) = source else {
+        return Ok(None);
+    };
+    if state().published_network(network)? != Some(source) {
+        return Ok(None);
+    }
+    from_network(network).map(|current| current.filter(|current| *current == source))
+}
 fn check_published(id: Birth) -> Result<(SessionLease, SessionTransport), SessionError> {
     let (lease, session, callback, t) = state().snapshot(id)?;
     if read64(session + 0x28)? != t.pointer

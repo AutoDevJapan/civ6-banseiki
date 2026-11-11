@@ -108,6 +108,34 @@ fn network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
     }
     transports::from_network(p)
 }
+#[cfg(test)]
+pub(super) fn fixture_poll_network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    let mut event = [0u64; 8];
+    raw.invocation.kind = 110;
+    raw.invocation.caller = exe(0x8615a0);
+    raw.gpr[0] = value(p + 0xd0);
+    raw.gpr[1] = event.as_mut_ptr() as u64;
+    begin(&mut raw);
+    let source = INPUT_CALLS.with(|calls| {
+        calls
+            .borrow()
+            .last()
+            .unwrap()
+            .ticket
+            .map(|ticket| (ticket.lease, ticket.transport))
+    });
+    raw.gpr[4] = 0; // Original poll found no event; release its exact ticket.
+    finish(&mut raw, false);
+    Ok(source)
+}
+fn poll_network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
+    #[cfg(test)]
+    if tests::FLOW.load(Ordering::Acquire) {
+        return network(p);
+    }
+    transports::from_receiver(p)
+}
 fn fork(message: Option<Message>) -> Result<Option<Message>, Error> {
     message.map(super::fork_input).transpose()
 }
@@ -296,7 +324,7 @@ extern "system" fn begin(raw: *mut Saved) {
                     if raw.gpr[0] != value(net + 0xd0) {
                         fault();
                     }
-                    if let Some((lease, t)) = network(net).unwrap_or_else(|_| fault()) {
+                    if let Some((lease, t)) = poll_network(net).unwrap_or_else(|_| fault()) {
                         c.ticket = Some(reserve_ticket(lease, t).unwrap_or_else(|_| fault()));
                     }
                 }
