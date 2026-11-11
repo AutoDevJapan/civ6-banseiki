@@ -342,18 +342,18 @@ MOD の内容：
 `tools/civ6-assets-rs/src/build_art.rs` は PR #20 で `main` に追加済みで、このリポジトリから実行できる。GrowthUI の MOD フォルダが存在すると手帳 DDS も生成し、フォルダが無い場合はその工程をスキップして CustomCivs のアート生成を続ける。
 
 ```powershell
-$env:JAC_ART_LOCAL = 'C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local'
+$env:JAC_ART_LOCAL = (Join-Path (Split-Path (Get-Location) -Parent) 'civ6-art-local')
 $env:JAC_GROWTH_MOD = (Join-Path (Get-Location) 'poc\JAC_PoC_GrowthUI')
 cargo run --locked --manifest-path tools/Cargo.toml --bin jac-build-art --
 ```
 
 Rust の実行器は両 PoC のアートを生成する。画像の原本と Civ6 SDK Asset Cooker が必要。`JAC_GROWTH_MOD` は GrowthUI の別配置先を使う場合に設定する。
 
-手帳アイコンの入力はローカルアートストアの `JAC_PoC_GrowthUI/Originals/notebooks_generated.png`（この PC では `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\JAC_PoC_GrowthUI\Originals\notebooks_generated.png`）、出力は `poc/JAC_PoC_GrowthUI/UI/Textures/JAC_Notebooks_Hook.dds`。原本はローカルアートストアで管理し、リポジトリに追加しない。生成 DDS も既存の `.gitignore` による除外方針を維持する。生成画像の来歴と利用条件は後段の CustomCivs 節「画像」に記録する。
+手帳アイコンの入力は `JAC_ART_LOCAL` が指定するアートストアの `JAC_PoC_GrowthUI/Originals/notebooks_generated.png`、出力は `poc/JAC_PoC_GrowthUI/UI/Textures/JAC_Notebooks_Hook.dds`。原本はローカルアートストアで管理し、リポジトリに追加しない。生成 DDS も既存の `.gitignore` による除外方針を維持する。生成画像の来歴と利用条件は後段の CustomCivs 節「画像」に記録する。
 
 2026-09-29 の位置修正：従来は 54px 以内の本を 64×64 DDS の中央に配置していたため、26×26 の `Image` では左上だけが切り出され、本が右下へずれて見えた。原本の透過範囲を 24×24 以内に縮小し、26×26 の透明キャンバス中央へ配置する方式に変更した。再生成後の DDS は 26×26、アルファ範囲は `(1,1)-(24,25)`、四隅は完全透明。`Mods/JAC_PoC_GrowthUI` のジャンクションをこの `notebooks-icon` worktree に向け、`JAC_GROWTH_MOD` を指定して `jac-build-art` を実行した。Civ6 の再起動後に Gathering Storm の新規ゲームで確認した（再起動前は旧 DDS が表示キャッシュに残った）。
 
-実機では公式アイコンと手帳の `Image` がすべて 26×26、縦の画面内オフセットが 39 で一致し、手帳は Era と Reports の間に表示された。`civ6-autotest` の開始シナリオ 4/4 手順と JAC エラー判定 2/2 件が成功。FireTuner から手帳ボタンの `DoLeftClick()` を2回呼び、手帳の開閉も確認した。右上バーを切り出して4倍に拡大した証跡は `C:\Users\makhmeto\Desktop\dev\ADJ\civ6-art-local\final-01\ingame-v3\notebooks-normal-closeup-x4.png`、`notebooks-hover-offset40-closeup-x4.png`、`notebooks-pressed-offset80-closeup-x4.png`。後二者は入力ドライバのマウス移動が Civ6 のホバー判定に届かなかったため、ゲーム内の手帳 `Button` に背景テクスチャの縦オフセット 40px／80px を一時指定して撮影し、最後に 0px へ戻した。通常・ホバー・押下の背景表示で本の図柄は同じ中央位置を保った。実際のポインター入力によるホバー遷移はこの検証では確認できていない。
+実機では公式アイコンと手帳の `Image` がすべて 26×26、縦の画面内オフセットが 39 で一致し、手帳は Era と Reports の間に表示された。`civ6-autotest` の開始シナリオ 4/4 手順と JAC エラー判定 2/2 件が成功。FireTuner から手帳ボタンの `DoLeftClick()` を2回呼び、手帳の開閉も確認した。右上バーを切り出して4倍に拡大した証跡 `notebooks-normal-closeup-x4.png`、`notebooks-hover-offset40-closeup-x4.png`、`notebooks-pressed-offset80-closeup-x4.png` は非公開の検証記録に保持する。後二者は入力ドライバのマウス移動が Civ6 のホバー判定に届かなかったため、ゲーム内の手帳 `Button` に背景テクスチャの縦オフセット 40px／80px を一時指定して撮影し、最後に 0px へ戻した。通常・ホバー・押下の背景表示で本の図柄は同じ中央位置を保った。実際のポインター入力によるホバー遷移はこの検証では確認できていない。
 
 2026-09-30 の大きさ調整：オーナーから「手帳のアイコンが両隣より大きすぎる」との指摘を受け、図柄の最大辺を 24px から 16px に縮めた（`jac-build-art` の `NOTEBOOKS_GLYPH`）。公式の図柄は BLP 内にあり取り出せないため、上記の実機画像 `04-normal-full.png`（等倍）で、26×26 枠内の金色の画素を数えて測った。World Rankings は幅23×高さ18・223px、Era は20×22・175px、Reports は14×17・181px。旧手帳は23×24・約470px で、面積が両隣の2倍を超えていた。本は塗りつぶしの形で線画より重く見えるため、外形でなく面積を両隣の平均（約190px）に合わせ、15×16・約205px とした。`tools/jac_art/tests` の `test_notebooks_glyph_matches_official_neighbours` が、DDS の図柄の幅・高さが公式3種の範囲（±1px）に入り、面積が平均の±15%に収まり、中心が枠の中央から1px以内であることを検査する。比較画像は Git 除外の `tools/jac_art/build/previews/notebooks-button-vs-neighbours.png`（同じ実機画像の手帳ボタンの図柄を消し、新しい DDS を重ねたもの。背景の消し跡は合成による）。実機での見え方は `leader-portraits.json` シナリオの `notebooks-hook-bar-closeup.png` で確認する（未実施）。
 
@@ -513,7 +513,7 @@ MOD の内容：
 
 #### 新しい画像の実機表示
 
-2026-09-29、Steam 版 1.0.12.68・Gathering Storm・英語 UI で確認。初回に織田を人間／武田を AI とするゲームと、武田を人間／織田を AI とするゲームを起動した。修正後はゲームを再起動し、武田を人間／織田と公式クレオパトラを AI とするゲーム、および織田を人間／武田を AI とするゲームで再確認した。修正後の保存画像は 1456×939。画像の保存先は `C:/Users/makhmeto/Desktop/dev/ADJ/civ6-art-local/final-01/`（Git 管理外）。表中の `ingame/`・`ingame-v2/` から始まるパスはそこを基準とする。
+2026-09-29、Steam 版 1.0.12.68・Gathering Storm・英語 UI で確認。初回に織田を人間／武田を AI とするゲームと、武田を人間／織田を AI とするゲームを起動した。修正後はゲームを再起動し、武田を人間／織田と公式クレオパトラを AI とするゲーム、および織田を人間／武田を AI とするゲームで再確認した。修正後の保存画像は 1456×939。画像の原本は Git 管理外の検証記録に保存している。表中の `ingame/`・`ingame-v2/` は、それぞれ修正前・修正後の画像群を示す。
 
 | 確認 | 実際の結果 |
 |---|---|
@@ -527,12 +527,12 @@ MOD の内容：
 | 文明・指導者能力 | 両家の能力名・説明は設定画面に、武田の能力名・説明は百科事典にも表示された。標準 UI は能力欄で文明／指導者アイコンを再利用するため、能力専用4絵柄の画面表示は対象外。PoC の成功条件である4点の登録と参照は検証済みで、ゲーム内 `IconManager:FindIconAtlas` は4定義とも `JAC_Abilities50.dds` のオフセット 0・50・100・150 を返した。製品版で専用絵柄を画面に表示するには能力用のカスタム UI が必要。`ingame/02-setup-oda-details.png`、`ingame/14-setup-takeda.png`、`ingame/17-civilopedia-takeda.png`、`ingame/18-civilopedia-takeda-leader.png` |
 | 実行ログ | 初回の `Lua.log`・`Database.log`・`Modding.log` に CustomCivs／GrowthUI 由来のテクスチャ・ArtDef エラーは見当たらない。修正後の `Lua.log` に `JAC_LeaderScene.lua`／`LeaderScene` の実行エラー、`Failed to load background image texture`、`We are lacking a texture` は無い。修正後のログは `ingame-v2/logs/` に保存した。初回の `Database.log` の `LocalizedText` 重複は `CurrentClickouts/…/ClickoutText_en_US.xml`、`Modding.log` の XML 警告は本体 DLC のファイルに対応する。 |
 
-`C:/Users/makhmeto/AppData/Local/Firaxis Games/Sid Meier's Civilization VI/Logs/ArtDef.log` のパッケージ解決記録（2026-09-29 02:53:59）は次のとおり。同ログには `Unable to resolve Package` と CustomCivs の BLP を含む行は無い。
+`ArtDef.log` のパッケージ解決記録（2026-09-29 02:53:59）は次のとおり。利用者固有の配置先を除き、Mod 内のパッケージ相対パスを示す。同ログには `Unable to resolve Package` と CustomCivs の BLP を含む行は無い。
 
 ```text
-[2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Fallback.blp
-[2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Icons.blp
-[2026-09-29 02:53:59]	Loading Package: C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Mods/JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp
+[2026-09-29 02:53:59]	Loading Package: JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Fallback.blp
+[2026-09-29 02:53:59]	Loading Package: JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Icons.blp
+[2026-09-29 02:53:59]	Loading Package: JAC_PoC_CustomCivs/Platforms/Windows/BLPs/JAC_CustomCivs_Leaders.blp
 ```
 
 `ingame/` は背景・肖像修正前、`ingame-v2/` は修正後にゲームを再起動して撮影した結果。再起動前のセッションでは新しい `ReplaceUIScript` が未適用で黒帯が残ったため、修正後の判定には使っていない。
@@ -545,13 +545,13 @@ Rust の画像処理で単色背景から人物・手帳を透過処理し、指
 
 今回の「?」の調査では、2026-09-29 14:31 の `ArtDef.log` に `JAC_CustomCivs_Icons.blp`・`JAC_CustomCivs_Leaders.blp`・`JAC_CustomCivs_Fallback.blp` の `Unable to resolve Package` が記録され、実機側の CustomCivs MOD フォルダに BLP がなかった。`FrontEndActions` の `UpdateIcons` と `UpdateArt` は適用されているため、画像名の登録だけでは画素を読み込めない。公式の Portugal DLC と同じく、設定画面には `UpdateArt` と `UpdateIcons` を用い、BLP に収録した UI テクスチャを `.dep` の `UITexture` ライブラリで参照する。UI 用スクリプトの `ImportFiles` はこの画像のロード経路ではない。今回の作業ツリーでは BLP 3個を再生成し、GrowthUI があるため43点のコンタクトシートと手帳 DDS も作った。これらは Git 除外で作業ツリー内にあり、実機の MOD フォルダには配置していない。実機の再表示確認は未実施。
 
-選定した指導者肖像は `civ6-art-local/trial-02/gen_gemini.py`、人物切り抜き用画像・背景・家紋・手帳は `civ6-art-local/generate_final.py` で生成した。両方ともローカル OpenCodex の `http://127.0.0.1:10100/v1/responses` に `google-antigravity/gemini-3.1-flash-image` を指定し、Antigravity の OAuth サブスクリプション枠を使った（API キーや従量課金 API は不使用）。これは生成経路の事実を記録したもので、規約上この経路が許可されるという判断ではない。生成元画像と Cooker の画像出力はローカルの `civ6-art-local/` にのみ保存し、Git には含めていない。プロンプト・生成時刻・出力ファイルは `civ6-art-local/generation-log.jsonl` に保存する（先行して作った肖像2点の時刻は元ファイルの更新時刻から補記）。既存の PD 写真4点は削除せず、`Originals/_old_pd/` に保管した。
+選定した指導者肖像、人物切り抜き用画像・背景・家紋・手帳は、Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）で生成した。当時は第三者クライアント経由で Antigravity の OAuth サブスクリプション枠を使った（API キーや従量課金 API は不使用）。これは生成経路の事実を記録したもので、規約上この経路が許可されるという判断ではない。元の生成スクリプト、接続設定、プロンプト・生成時刻・出力ファイルと画像原本は非公開の検証記録へ保持し、Git には含めていない。先行して作った肖像2点の時刻は元ファイルの更新時刻から補記した。既存の PD 写真4点も削除せず保管している。
 
 生成画像の来歴と利用条件（規約確認日：2026-09-29。下表の現行画像すべてに共通）：
 
 | 対象 | 生成器・経路 | 生成日 | 参照素材 | 規約・再配布 |
 |---|---|---|---|---|
-| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠をローカル OpenCodex 経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。生成物の再配布・公開の可否は未確定。この画像を含む PoC の公開・再配布は、[質問 D11](../questions.md) のオーナー判断が完了するまで保留する |
+| 下表の指導者アイコン、立ち姿、背景、家紋、能力アイコン、手帳ボタン | Gemini 3.1 Flash Image（`google-antigravity/gemini-3.1-flash-image`）。Google Antigravity のサブスクリプション枠を第三者クライアント経由で使用。API キー・従量課金 API は不使用 | 2026-09-29（日本時間） | 公式 Civ6 の指導者画は画風参照のみ。公式画像の人物・画素を生成物に複製せず、リポジトリや MOD に同梱・配布しない | [Google 利用規約](https://policies.google.com/terms)、[生成 AI の禁止用途ポリシー](https://policies.google.com/terms/generative-ai/use-policy)、[Antigravity 追加利用規約](https://antigravity.google/terms)。生成物の再配布・公開の可否は未確定。この画像を含む PoC の公開・再配布は、[質問 D11](../questions.md) のオーナー判断が完了するまで保留する |
 
 Antigravity 追加利用規約の第6項は第三者ソフトウェア経由のアクセスを禁止している。OpenAI 利用規約も自動・プログラムによるデータまたは出力の抽出を禁止しているため、ChatGPT Web UI で出力取得をブラウザーエージェントに自動化する案にも規約上の懸念がある（[OpenAI 利用規約](https://openai.com/policies/row-terms-of-use/)）。今後の生成経路は、ChatGPT のサブスクリプション枠で公式の Codex CLI の画像生成を使うことに決まった（SSOT 15.2.1）。この PoC 画像の公開・再配布と作り直しは [質問 D11](../questions.md) に残す。規約へのリンクは生成画像に再配布許諾があることを示すものではない。
 
