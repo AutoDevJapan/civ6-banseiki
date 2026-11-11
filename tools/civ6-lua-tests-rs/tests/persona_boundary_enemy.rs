@@ -1,7 +1,7 @@
 //! Lua 5.1 checks for the test-only cross-player neutralization fixture.
 //! Engine doubles validate guards and observations, not a live Civ6 outcome.
 use civ6_data_rs::{cascade, Repository};
-use civ6_lua_tests_rs::strict::ChunkExt;
+use civ6_lua_tests_rs::strict::{ChunkExt, TableExt};
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
 use mlua::{Lua, Value as LuaValue};
 use rusqlite::Connection;
@@ -10,6 +10,22 @@ use serde_json::Value;
 const VIEW: &str = "poc/JAC_Test_PersonaBoundary/UI/JAC_PersonaBoundary_View.lua";
 
 struct Enemy(Lua);
+
+fn copy_saved_value(lua: &Lua, value: LuaValue) -> LuaValue {
+    match value {
+        LuaValue::Table(table) => {
+            let copy = lua.create_table().unwrap();
+            for pair in table.pairs::<mlua::Value, mlua::Value>() {
+                let (key, value) = pair.unwrap();
+                copy.set(copy_saved_value(lua, key), copy_saved_value(lua, value))
+                    .unwrap();
+            }
+            LuaValue::Table(copy)
+        }
+        LuaValue::String(value) => LuaValue::String(lua.create_string(value.as_bytes()).unwrap()),
+        value => value,
+    }
+}
 
 impl Enemy {
     fn new() -> Self {
@@ -2586,23 +2602,6 @@ assert(CAPACITY_PROGRESS_CALLS==1)
 "#,
             );
             h.run("SAVED_VALUES={}; for _,name in ipairs(WRITES) do SAVED_VALUES[name]=Game:GetProperty(name) end");
-            fn copy_value(lua: &Lua, value: LuaValue) -> LuaValue {
-                match value {
-                    LuaValue::Table(table) => {
-                        let copy = lua.create_table().unwrap();
-                        for pair in table.pairs::<LuaValue, LuaValue>() {
-                            let (key, value) = pair.unwrap();
-                            copy.set(copy_value(lua, key), copy_value(lua, value))
-                                .unwrap();
-                        }
-                        LuaValue::Table(copy)
-                    }
-                    LuaValue::String(value) => {
-                        LuaValue::String(lua.create_string(value.as_bytes()).unwrap())
-                    }
-                    value => value,
-                }
-            }
             let restored = Enemy::new();
             restored.failed();
             restored.0.globals().set("IS_DISTRICT", district).unwrap();
@@ -2610,7 +2609,7 @@ assert(CAPACITY_PROGRESS_CALLS==1)
             restored
                 .0
                 .globals()
-                .set("RESTORED_VALUES", copy_value(&restored.0, values))
+                .set("RESTORED_VALUES", copy_saved_value(&restored.0, values))
                 .unwrap();
             restored.run(
                 r#"
@@ -2685,10 +2684,50 @@ assert(JAC_PersonaBoundaryRules.Serialize(oldProgress)==oldSnapshot,
 assert(api.CapacityProgressCheckpoint(false),'early native result was not checkpointable')
 assert(not pcall(api.EnemyRetryDiagnosis),'same-turn attempt became an accepted retry')
 assert(CAPACITY_PROGRESS_CALLS==2 and #CAPTURED[1]==1)
-ADVANCE_TURN(); assert(api.EnemyRetryDiagnosis().mode=='CAPACITY_MAP')
-assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').latest.buildingType=='BUILDING_GOV_TALL')
 "#,
     );
+    let tick: Value = serde_json::from_str(&read_repo(
+        "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-tick.json",
+    ))
+    .unwrap();
+    h.run(scene_lua(&tick, 2));
+    h.run("SAVED_VALUES={}; for _,name in ipairs(WRITES) do SAVED_VALUES[name]=Game:GetProperty(name) end; SAVED_TURN=TURN");
+    let restored = Enemy::new();
+    restored.failed();
+    let values: LuaValue = h.0.globals().get("SAVED_VALUES").unwrap();
+    let turn: i64 = h.0.globals().strict_get("SAVED_TURN").unwrap();
+    restored
+        .0
+        .globals()
+        .set("RESTORED_VALUES", copy_saved_value(&restored.0, values))
+        .unwrap();
+    restored.0.globals().set("SAVED_TURN", turn).unwrap();
+    restored.run(r#"
+for name,value in pairs(RESTORED_VALUES) do Game:SetProperty(name,value) end
+TURN=SAVED_TURN; UNITS[0]={}
+CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}
+OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}
+GOV_CIVIC_COMPLETED=true; GOV_DISTRICT_PLACED=true; GOV_DISTRICT_BUILT=true
+GOV_TIER1_BUILT=true; GOV_SPIES_BUILT=true; SPY_CAPACITY=2; BUILD_HEAD=nil
+CAPACITY_PROGRESS_CALLS=2
+local spy=makeSpy(0,16); spy.x=CONTROL.x; spy.y=CONTROL.y
+local api=ExposedMembers.JAC_PersonaBoundary
+local before=#REQUESTS
+api.Queue('BEGIN_SPY_RETRY')
+assert(not pcall(FRAME),'restored same-turn pending granted a retry')
+assert(#REQUESTS==before)
+local attempt=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS').BUILDING_GOV_SPIES
+local owner=attempt.owner; attempt.owner=1
+assert(not pcall(api.CaptiveCapacityOutcome),'foreign saved attempt was observed as current')
+attempt.owner=owner
+local event=Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'); local id=event.id
+event.id=99; assert(not pcall(api.CaptiveCapacityOutcome),'changed original mission was observed as current'); event.id=id
+"#);
+    restored.run(scene_lua(&tick, 2));
+    restored.run("ADVANCE_TURN(); assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='CAPACITY_MAP')");
+    restored.run(scene_lua(&tick, capacity_tick_outcome_index(&tick)));
+    restored.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+    restored.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.spyID==16 and r.archive.spyID==15 and r.archive.eventID==0 and CAPACITY_PROGRESS_CALLS==2 and #CAPTURED[1]==1); assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').latest.buildingType=='BUILDING_GOV_TALL')");
 }
 
 #[test]

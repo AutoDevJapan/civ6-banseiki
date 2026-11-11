@@ -527,7 +527,7 @@ local function FailedEnemyForRetry()
     return c,s,event,reference,travel,mission;
 end
 
-function B.EnemyRetryDiagnosis()
+function B.EnemyRetryDiagnosis(observePendingCapacity)
     local c,s,event,reference,travel,mission=FailedEnemyForRetry();
     local roster=assert(s.spyRoster,"native spy roster missing");
     local occupied=roster.physicalCount;
@@ -584,7 +584,8 @@ function B.EnemyRetryDiagnosis()
                 latest.buildingIndex==building.Index and
                 step.cityID==latest.cityID and step.buildingIndex==latest.buildingIndex and
                 step.token==latest.token and step.turn==latest.turn and
-                latest.turn<=s.turn and (not recovered or latest.turn<s.turn) and
+                latest.turn<=s.turn and
+                (not recovered or latest.turn<s.turn or observePendingCapacity==true) and
                 city:GetOwner()==c.attacker and
                 city:GetBuildings():HasBuilding(building.Index),
                 "second native spy lacks distinct ID, captive placeholder or completed production");
@@ -592,6 +593,9 @@ function B.EnemyRetryDiagnosis()
             result.currentID=unit.id;
             result.binding={source=building.BuildingType,cityID=city:GetID(),
                 buildingIndex=building.Index,token=latest.token,turn=latest.turn};
+            if recovered and latest.turn==s.turn then
+                result.mode="CAPACITY_PENDING_OBSERVATION";
+            end
         else
             assert(occupied==1,"retry requires an unambiguous original operative roster");
             if occupied>=capacity then
@@ -1579,7 +1583,7 @@ function B.CaptiveCapacityOutcome()
     local city=assert(CityManager.GetCity(c.attacker,latest.cityID),
         "native capacity production city missing");
     assert(city:GetOwner()==c.attacker,"native capacity production city owner changed");
-    local d=B.EnemyRetryDiagnosis();
+    local d=B.EnemyRetryDiagnosis(true);
     assert((d.outcome=="CAPTURED" or d.outcome=="CAPTURED_WITH_NEW_MAP") and
         #d.roster.captured==1 and d.occupied==1+#d.roster.map,
         "original native captive changed during capacity construction");
