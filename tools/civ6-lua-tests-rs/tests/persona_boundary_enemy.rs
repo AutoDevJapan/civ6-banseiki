@@ -43,6 +43,25 @@ impl Enemy {
         self.0.load(code).exec().unwrap();
     }
 
+    fn queue_capacity_progress(&self, district: bool) {
+        self.failed();
+        self.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; GOV_CIVIC_COMPLETED=true");
+        if !district {
+            self.run("GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true");
+        }
+        let build = if district {
+            "BUILD_CAPACITY_DISTRICT"
+        } else {
+            "BUILD_CAPACITY"
+        };
+        let progress = if district {
+            "PROGRESS_CAPACITY_DISTRICT"
+        } else {
+            "PROGRESS_CAPACITY"
+        };
+        self.run(&format!("ExposedMembers.JAC_PersonaBoundary.Queue('{build}'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_{build}'); ExposedMembers.JAC_PersonaBoundary.Queue('{progress}'); FRAME(); PROGRESS_REQUEST=REQUESTS[#REQUESTS].params"));
+    }
+
     fn coerce_text_at_engine_boundaries(&self) {
         self.run("UI.RequestPlayerOperation=function(owner,op,params) local wire={}; for k,v in pairs(params) do if type(v)=='string' and (v=='' or tonumber(v)) then wire[k]=tonumber(v) or 0 else wire[k]=v end end; REQUESTS[#REQUESTS+1]={owner=owner,op=op,params=wire} end; local save=Game.SetProperty; local function published(v) if type(v)=='string' and v=='' then return nil end; if type(v)=='string' and tonumber(v) then return tonumber(v) end; if type(v)~='table' then return v end; local out={}; for k,x in pairs(v) do out[k]=published(x) end; return out end; Game.SetProperty=function(self,key,value) return save(self,key,published(value)) end");
     }
@@ -2109,6 +2128,318 @@ fn capacity_civic_old_saved_barrier_cannot_acknowledge_a_missing_core_callback()
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC')",
         "do not replay the setter",
+    );
+}
+
+#[test]
+fn capacity_building_progress_cannot_repeat_after_an_unknown_mutation_result() {
+    for failure in ["completion_write", "mutator_return"] {
+        let h = Enemy::new();
+        h.failed();
+        h.0.globals().set("PROGRESS_FAILURE", failure).unwrap();
+        h.run(
+            r#"
+UNITS[0]={}
+CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}
+OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}
+GOV_CIVIC_COMPLETED=true; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true
+local api=ExposedMembers.JAC_PersonaBoundary
+api.Queue('BUILD_CAPACITY'); FRAME(); FRAME()
+assert(api.lastAction=='READY_BUILD_CAPACITY')
+api.Queue('PROGRESS_CAPACITY'); FRAME()
+local request=REQUESTS[#REQUESTS].params
+assert(request.OnStart=='JAC_BoundaryProgressCapacityBuilding')
+local save=Game.SetProperty
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+if PROGRESS_FAILURE=='completion_write' then
+ Game.SetProperty=function(self,key,value)
+  if key=='JAC_BOUNDARY_CAPACITY_PROGRESS' then error('completion write rejected') end
+  return save(self,key,value)
+ end
+else
+ queue.AddProgress=function(self,amount) add(self,amount); error('unknown native return') end
+end
+assert(not pcall(ENEMY_CASES.fireCore,'JAC_BoundaryProgressCapacityBuilding',request))
+assert(CAPACITY_PROGRESS_CALLS==1 and #CAPTURED[1]==1)
+Game.SetProperty=save; queue.AddProgress=add
+pcall(ENEMY_CASES.fireCore,'JAC_BoundaryProgressCapacityBuilding',request)
+assert(CAPACITY_PROGRESS_CALLS==1,'building progress repeated after an unknown mutation')
+local later={}; for k,v in pairs(request) do later[k]=v end; later.Token=request.Token+1
+pcall(ENEMY_CASES.fireCore,'JAC_BoundaryProgressCapacityBuilding',later)
+assert(CAPACITY_PROGRESS_CALLS==1,'a new token replayed an uncertain building mutation')
+assert(not GOV_TIER1_BUILT and SPY_CAPACITY==1 and #CAPTURED[1]==1)
+"#,
+        );
+    }
+}
+
+#[test]
+fn capacity_district_progress_cannot_repeat_after_an_unknown_mutation_result() {
+    for failure in ["completion_write", "mutator_return"] {
+        let h = Enemy::new();
+        h.failed();
+        h.0.globals().set("PROGRESS_FAILURE", failure).unwrap();
+        h.run(
+            r#"
+UNITS[0]={}
+CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}
+OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}
+GOV_CIVIC_COMPLETED=true
+local api=ExposedMembers.JAC_PersonaBoundary
+api.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); FRAME()
+assert(api.lastAction=='READY_BUILD_CAPACITY_DISTRICT')
+api.Queue('PROGRESS_CAPACITY_DISTRICT'); FRAME()
+local request=REQUESTS[#REQUESTS].params
+assert(request.OnStart=='JAC_BoundaryProgressCapacityDistrict')
+local save=Game.SetProperty
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+if PROGRESS_FAILURE=='completion_write' then
+ Game.SetProperty=function(self,key,value)
+  if key=='JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS' then error('completion write rejected') end
+  return save(self,key,value)
+ end
+else
+ queue.AddProgress=function(self,amount) add(self,amount); error('unknown native return') end
+end
+assert(not pcall(ENEMY_CASES.fireCore,'JAC_BoundaryProgressCapacityDistrict',request))
+assert(CAPACITY_PROGRESS_CALLS==1 and #CAPTURED[1]==1)
+Game.SetProperty=save; queue.AddProgress=add
+pcall(ENEMY_CASES.fireCore,'JAC_BoundaryProgressCapacityDistrict',request)
+assert(CAPACITY_PROGRESS_CALLS==1,'district progress repeated after an unknown mutation')
+local later={}; for k,v in pairs(request) do later[k]=v end; later.Token=request.Token+1
+pcall(ENEMY_CASES.fireCore,'JAC_BoundaryProgressCapacityDistrict',later)
+assert(CAPACITY_PROGRESS_CALLS==1,'a new token replayed an uncertain district mutation')
+assert(not GOV_DISTRICT_BUILT and SPY_CAPACITY==1 and #CAPTURED[1]==1)
+"#,
+        );
+    }
+}
+
+#[test]
+fn capacity_progress_requires_a_persisted_exact_attempt_before_any_effect() {
+    for district in [false, true] {
+        for fault in ["throw", "false", "drop", "identity", "malformed"] {
+            let h = Enemy::new();
+            h.queue_capacity_progress(district);
+            h.0.globals().set("ATTEMPT_FAULT", fault).unwrap();
+            h.run(
+                r#"
+local save=Game.SetProperty
+if ATTEMPT_FAULT=='malformed' then
+ save(Game,'JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS',false)
+else
+ Game.SetProperty=function(self,key,value)
+  if key=='JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS' then
+   if ATTEMPT_FAULT=='throw' then error('attempt write failed') end
+   if ATTEMPT_FAULT=='false' then return false end
+   if ATTEMPT_FAULT=='drop' then return end
+   local changed={}
+   for name,entry in pairs(value) do
+    local copy={}; for k,v in pairs(entry) do copy[k]=v end
+    copy.owner=1; changed[name]=copy
+   end
+   return save(self,key,changed)
+  end
+  return save(self,key,value)
+ end
+end
+local beforeTotal=Players[0]:GetGovernors():GetGovernorPoints()
+local beforeSpent=Players[0]:GetGovernors():GetGovernorPointsSpent()
+assert(not pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST))
+assert(CAPACITY_PROGRESS_CALLS==0,'unconfirmed attempt reached native progress')
+assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==nil)
+assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS')==nil)
+assert(#CAPTURED[1]==1 and SPY_CAPACITY==1)
+assert(Players[0]:GetGovernors():GetGovernorPoints()==beforeTotal)
+assert(Players[0]:GetGovernors():GetGovernorPointsSpent()==beforeSpent)
+Game.SetProperty=save
+if ATTEMPT_FAULT=='throw' or ATTEMPT_FAULT=='false' or ATTEMPT_FAULT=='drop' then
+ ENEMY_CASES.fireCore(PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST)
+ assert(CAPACITY_PROGRESS_CALLS==1,'a confirmed attempt could not make normal progress')
+else
+ assert(not pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST))
+ assert(CAPACITY_PROGRESS_CALLS==0,'corrupt saved attempt was overwritten')
+end
+"#,
+            );
+        }
+    }
+}
+
+#[test]
+fn capacity_progress_attempt_is_not_completion_and_survives_callback_reentry() {
+    for district in [false, true] {
+        let h = Enemy::new();
+        h.queue_capacity_progress(district);
+        h.run(r#"
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+queue.AddProgress=function(self,amount)
+ local before=CAPACITY_PROGRESS_CALLS
+ local ok=pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST)
+ assert(not ok and CAPACITY_PROGRESS_CALLS==before,'reentrant progress passed its saved attempt')
+ add(self,amount)
+end
+ENEMY_CASES.fireCore(PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST)
+queue.AddProgress=add
+assert(CAPACITY_PROGRESS_CALLS==1 and #CAPTURED[1]==1 and SPY_CAPACITY==1)
+local attempts=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS'))
+local key=PROGRESS_REQUEST.Action=='PROGRESS_CAPACITY' and PROGRESS_REQUEST.BuildingType or 'DISTRICT_GOVERNMENT'
+local attempt=assert(attempts[key])
+assert(attempt.owner==0 and attempt.cityID==10 and attempt.token==PROGRESS_REQUEST.Token)
+assert(attempt.action==PROGRESS_REQUEST.Action and attempt.frame==PROGRESS_REQUEST.Frame)
+assert(attempt.turn==TURN and attempt.publishEpoch==PROGRESS_REQUEST.PublishEpoch)
+if PROGRESS_REQUEST.Action=='PROGRESS_CAPACITY' then
+ assert(not GOV_TIER1_BUILT)
+ assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS').steps[key])
+else
+ assert(not GOV_DISTRICT_BUILT)
+ assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS'))
+end
+"#);
+    }
+}
+
+#[test]
+fn unknown_capacity_progress_converges_from_later_native_observation_without_replay() {
+    for district in [false, true] {
+        for failure in ["completion_write", "mutator_return"] {
+            let h = Enemy::new();
+            h.queue_capacity_progress(district);
+            h.0.globals().set("IS_DISTRICT", district).unwrap();
+            h.0.globals().set("PROGRESS_FAILURE", failure).unwrap();
+            h.0.globals().set("VIEW_SOURCE", read_repo(VIEW)).unwrap();
+            let scenario: Value = serde_json::from_str(&read_repo(if district {
+                "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-district-tick.json"
+            } else {
+                "tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-tick.json"
+            })).unwrap();
+            h.0.globals()
+                .set("OUTCOME_ASSERT", scene_lua(&scenario, 5))
+                .unwrap();
+            h.run(r#"
+local save=Game.SetProperty
+local completionKey=IS_DISTRICT and 'JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS' or 'JAC_BOUNDARY_CAPACITY_PROGRESS'
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+if PROGRESS_FAILURE=='completion_write' then
+ Game.SetProperty=function(self,key,value)
+  if key==completionKey then error('completion write rejected') end
+  return save(self,key,value)
+ end
+else
+ queue.AddProgress=function(self,amount) add(self,amount); error('unknown native return') end
+end
+assert(not pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST))
+Game.SetProperty=save; queue.AddProgress=add
+assert(CAPACITY_PROGRESS_CALLS==1 and Game:GetProperty(completionKey)==nil)
+local function outcome()
+ local api=ExposedMembers.JAC_PersonaBoundary
+ return IS_DISTRICT and api.CaptiveCapacityDistrictOutcome() or api.CaptiveCapacityOutcome()
+end
+assert(outcome().stage=='PROGRESS_PENDING' and outcome().recoveredFromAttempt)
+CAPACITY_COMPLETES=false; ADVANCE_TURN()
+assert(outcome().stage=='PROGRESS_PENDING')
+CAPACITY_COMPLETES=true; ADVANCE_TURN()
+-- The saved attempt survives view reload; observation never rewrites it or
+-- sends another synchronized mutation to reconstruct a missing completion.
+assert(loadstring(VIEW_SOURCE))()
+local requests=#REQUESTS
+Game.SetProperty=function() error('read-only recovery wrote Game state') end
+local o=outcome()
+assert(loadstring(OUTCOME_ASSERT))()
+Game.SetProperty=save
+assert(o.stage==(IS_DISTRICT and 'DISTRICT_BUILT' or 'TIER1_BUILT'))
+assert(o.targetBuilt and o.recoveredFromAttempt and o.turn>o.progressTurn)
+assert(CAPACITY_PROGRESS_CALLS==1 and #REQUESTS==requests)
+assert(#CAPTURED[1]==1 and SPY_CAPACITY==1 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED)
+assert(Game:GetProperty(completionKey)==nil,'observation fabricated a completion receipt')
+if not IS_DISTRICT then
+ local api=ExposedMembers.JAC_PersonaBoundary
+ assert(api.CaptiveCapacityPlan().stage=='BUILD_SPIES')
+ -- A different legitimate building remains usable after recovery, even if
+ -- its UI token restarted on reload and is smaller than the earlier token.
+ api.Queue('BUILD_CAPACITY'); FRAME(); FRAME()
+ api.Queue('PROGRESS_CAPACITY'); FRAME()
+ local next=REQUESTS[#REQUESTS].params
+ queue.AddProgress=function(self,amount) add(self,amount); error('second building unknown return') end
+ assert(not pcall(ENEMY_CASES.fireCore,next.OnStart,next))
+ queue.AddProgress=add
+ assert(CAPACITY_PROGRESS_CALLS==2)
+ ADVANCE_TURN()
+ assert(api.CaptiveCapacityOutcome().stage=='CAPACITY_READY')
+ assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS')==nil)
+ assert(SPY_CAPACITY==2 and #CAPTURED[1]==1)
+end
+"#);
+        }
+    }
+}
+
+#[test]
+fn capacity_progress_recovery_rejects_changed_original_identity() {
+    for district in [false, true] {
+        for field in [
+            "owner",
+            "defender",
+            "leader",
+            "cityID",
+            "targetIndex",
+            "eventID",
+            "eventTurn",
+        ] {
+            let h = Enemy::new();
+            h.queue_capacity_progress(district);
+            h.0.globals().set("IS_DISTRICT", district).unwrap();
+            h.0.globals().set("CORRUPT_FIELD", field).unwrap();
+            h.run(
+                r#"
+local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress
+queue.AddProgress=function(self,amount) add(self,amount); error('unknown native return') end
+assert(not pcall(ENEMY_CASES.fireCore,PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST))
+queue.AddProgress=add; ADVANCE_TURN()
+local attempts=Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS')
+local key=IS_DISTRICT and 'DISTRICT_GOVERNMENT' or PROGRESS_REQUEST.BuildingType
+local attempt=assert(attempts[key])
+local old=attempt[CORRUPT_FIELD]
+attempt[CORRUPT_FIELD]=type(old)=='string' and 'FOREIGN' or 9999
+local api=ExposedMembers.JAC_PersonaBoundary
+local read=IS_DISTRICT and api.CaptiveCapacityDistrictOutcome or api.CaptiveCapacityOutcome
+assert(not pcall(read),'changed original capacity identity was accepted')
+assert(CAPACITY_PROGRESS_CALLS==1 and #CAPTURED[1]==1)
+"#,
+            );
+        }
+    }
+}
+
+#[test]
+fn capacity_progress_next_target_cannot_discard_an_existing_attempt() {
+    let h = Enemy::new();
+    h.queue_capacity_progress(false);
+    h.0.globals().set("VIEW_SOURCE", read_repo(VIEW)).unwrap();
+    h.run(
+        r#"
+ENEMY_CASES.fireCore(PROGRESS_REQUEST.OnStart,PROGRESS_REQUEST)
+ADVANCE_TURN()
+assert(loadstring(VIEW_SOURCE))()
+local api=ExposedMembers.JAC_PersonaBoundary
+api.Queue('BUILD_CAPACITY'); FRAME(); FRAME()
+api.Queue('PROGRESS_CAPACITY'); FRAME()
+local request=REQUESTS[#REQUESTS].params
+assert(request.BuildingType=='BUILDING_GOV_SPIES')
+local before=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS'))
+local original=before.BUILDING_GOV_TALL
+local save=Game.SetProperty
+Game.SetProperty=function(self,key,value)
+ if key=='JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS' then
+  value.BUILDING_GOV_TALL=nil
+ end
+ return save(self,key,value)
+end
+assert(not pcall(ENEMY_CASES.fireCore,request.OnStart,request))
+assert(CAPACITY_PROGRESS_CALLS==1,'new effect ignored loss of an earlier attempt')
+assert(before.BUILDING_GOV_TALL==original,'publication mutated the old attempt in place')
+assert(#CAPTURED[1]==1 and SPY_CAPACITY==1 and not GOV_SPIES_BUILT)
+"#,
     );
 }
 

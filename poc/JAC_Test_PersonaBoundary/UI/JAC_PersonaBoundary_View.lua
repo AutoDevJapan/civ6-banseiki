@@ -1512,13 +1512,55 @@ end
 -- A progress receipt is not a completed building. Read the exact latest
 -- target building and the native capacity after a real turn, with the captive
 -- still present, before a scenario publishes its checkpoint.
+local function CapacityProgressAttempt(key,action)
+    local attempts=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS");
+    assert(attempts==nil or type(attempts)=="table",
+        "native capacity progress attempt ledger is invalid");
+    local attempt=attempts and attempts[key];
+    if attempt==nil then return nil; end
+    local c=EnemyConfig();
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "native capacity original mission missing");
+    assert(type(attempt)=="table" and attempt.action==action and
+        attempt.targetType==key and attempt.owner==c.attacker and
+        attempt.defender==c.owner and attempt.leader==c.leader and
+        attempt.eventID==event.id and attempt.eventTurn==event.turn and
+        type(attempt.cityID)=="number" and type(attempt.targetIndex)=="number" and
+        type(attempt.token)=="number" and attempt.token>0 and
+        type(attempt.turn)=="number" and attempt.turn<=Game.GetCurrentGameTurn(),
+        "native capacity progress attempt identity changed");
+    return attempt;
+end
+
 function B.CaptiveCapacityOutcome()
     local c=EnemyConfig();
-    local progress=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS"),
-        "native capacity building progress receipt missing");
-    local latest=assert(progress.latest,"latest capacity building receipt missing");
-    local step=assert(progress.steps and progress.steps[latest.buildingType],
-        "latest capacity building step missing");
+    local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS");
+    local latest=progress and progress.latest;
+    local step=latest and progress.steps and progress.steps[latest.buildingType];
+    local recovered=false;
+    local candidate;
+    for _,kind in ipairs({"BUILDING_GOV_TALL","BUILDING_GOV_CONQUEST",
+        "BUILDING_GOV_WIDE","BUILDING_GOV_SPIES"}) do
+        local completed=progress and progress.steps and progress.steps[kind];
+        local laterTarget=not latest or (kind=="BUILDING_GOV_SPIES" and
+            latest.buildingType~="BUILDING_GOV_SPIES");
+        local attempt=not completed and laterTarget and
+            CapacityProgressAttempt(kind,"PROGRESS_CAPACITY");
+        if attempt and not completed and laterTarget then
+            assert(not candidate or (kind=="BUILDING_GOV_SPIES" and
+                candidate.targetType~="BUILDING_GOV_SPIES" and
+                candidate.cityID==attempt.cityID and candidate.turn<=attempt.turn),
+                "multiple uncertain capacity building attempts");
+            candidate=attempt;
+        end
+    end
+    if candidate then
+        latest={buildingType=candidate.targetType,cityID=candidate.cityID,
+            buildingIndex=candidate.targetIndex,token=candidate.token,turn=candidate.turn};
+        step=latest; recovered=true;
+    end
+    assert(latest,"native capacity building progress receipt missing");
+    assert(step,"latest capacity building step missing");
     assert(step.cityID==latest.cityID and step.buildingIndex==latest.buildingIndex and
         step.token==latest.token and step.turn==latest.turn,
         "native capacity building receipt changed");
@@ -1533,7 +1575,8 @@ function B.CaptiveCapacityOutcome()
     assert((d.outcome=="CAPTURED" or d.outcome=="CAPTURED_WITH_NEW_MAP") and
         #d.roster.captured==1 and d.occupied==1+#d.roster.map,
         "original native captive changed during capacity construction");
-    local built=city:GetBuildings():HasBuilding(row.Index);
+    local observed=city:GetBuildings():HasBuilding(row.Index);
+    local built=observed and (not recovered or Game.GetCurrentGameTurn()>latest.turn);
     local stage="PROGRESS_PENDING";
     if row.BuildingType=="BUILDING_GOV_SPIES" then
         if built then stage=d.capacity==2 and "CAPACITY_READY" or "EFFECT_PENDING"; end
@@ -1547,7 +1590,8 @@ function B.CaptiveCapacityOutcome()
     local result={stage=stage,buildingType=row.BuildingType,cityID=city:GetID(),
         buildingIndex=row.Index,targetBuilt=built,capacity=d.capacity,
         occupied=d.occupied,captured=#d.roster.captured,mapSpies=#d.roster.map,
-        turn=Game.GetCurrentGameTurn(),progressTurn=latest.turn};
+        turn=Game.GetCurrentGameTurn(),progressTurn=latest.turn,
+        recoveredFromAttempt=recovered};
     Log("ENEMY_CAPTIVE_CAPACITY_OUTCOME",{result=result,roster=d.roster});
     return result;
 end
@@ -1595,10 +1639,25 @@ local function SameCapacityDistrict(actual,expected)
         actual.districtType==expected.districtType;
 end
 
+function B.CaptiveCapacityDistrictReference()
+    local receipt=Game:GetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS");
+    local recovered=false;
+    if receipt==nil then
+        local attempt=CapacityProgressAttempt("DISTRICT_GOVERNMENT",
+            "PROGRESS_CAPACITY_DISTRICT");
+        assert(attempt,"native Government Plaza progress receipt missing");
+        receipt={owner=attempt.owner,cityOwner=attempt.owner,cityID=attempt.cityID,
+            districtIndex=attempt.targetIndex,districtID=attempt.districtID,
+            memberKey=attempt.memberKey,acceptedNonce=attempt.acceptedNonce,
+            plot=attempt.plot,x=attempt.x,y=attempt.y,token=attempt.token,turn=attempt.turn};
+        recovered=true;
+    end
+    return receipt,recovered;
+end
+
 function B.CaptiveCapacityDistrictOutcome()
     local c=EnemyConfig();
-    local receipt=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS"),
-        "native Government Plaza progress receipt missing");
+    local receipt,recovered=B.CaptiveCapacityDistrictReference();
     assert(receipt.owner==c.attacker and type(receipt.memberKey)=="number" and
         type(receipt.districtID)=="number" and receipt.districtID>=0 and
         type(receipt.acceptedNonce)=="number" and receipt.acceptedNonce>0 and
@@ -1623,14 +1682,16 @@ function B.CaptiveCapacityDistrictOutcome()
         plot=receipt.plot,x=receipt.x,y=receipt.y,
         districtType="DISTRICT_GOVERNMENT"}),
         "native Government Plaza district identity changed after progress");
-    local built=city:GetDistricts():HasDistrict(receipt.districtIndex,true);
+    local built=city:GetDistricts():HasDistrict(receipt.districtIndex,true) and
+        (not recovered or Game.GetCurrentGameTurn()>receipt.turn);
     local stage=built and "DISTRICT_BUILT" or "PROGRESS_PENDING";
     local result={stage=stage,cityID=city:GetID(),plot=receipt.plot,
         x=receipt.x,y=receipt.y,targetBuilt=built,
         owner=placed.owner,cityOwner=placed.cityOwner,districtID=placed.districtID,
         memberKey=placed.memberKey,acceptedNonce=receipt.acceptedNonce,
         capacity=d.capacity,occupied=d.occupied,captured=#d.roster.captured,
-        turn=Game.GetCurrentGameTurn(),progressTurn=receipt.turn};
+        turn=Game.GetCurrentGameTurn(),progressTurn=receipt.turn,
+        recoveredFromAttempt=recovered};
     Log("ENEMY_CAPTIVE_DISTRICT_OUTCOME",{result=result,roster=d.roster});
     return result;
 end
@@ -2583,6 +2644,10 @@ function B.Queue(action, params)
                 capacityBuildReady.buildingType==plan.buildingType and
                 capacityBuildReady.turn==Game.GetCurrentGameTurn(),
                 "native capacity BUILD acceptance is missing in this UI turn");
+            local attempts=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS");
+            assert(attempts==nil or (type(attempts)=="table" and
+                attempts[plan.buildingType]==nil),
+                "native capacity progress already attempted; do not replay");
         end
         local key=action.."/"..plan.buildingType;
         assert(not capacityQueued[key],"native capacity building request cannot be replayed");
@@ -2591,6 +2656,10 @@ function B.Queue(action, params)
     if action=="BUILD_CAPACITY_DISTRICT" or action=="PROGRESS_CAPACITY_DISTRICT" then
         local plan=B.CaptiveCapacityPlan();
         if action=="PROGRESS_CAPACITY_DISTRICT" then
+            local attempts=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS");
+            assert(attempts==nil or (type(attempts)=="table" and
+                attempts.DISTRICT_GOVERNMENT==nil),
+                "native capacity progress already attempted; do not replay");
             assert(plan.stage=="DISTRICT_QUEUED" and capacityDistrictReady and
                 capacityDistrictReady.cityID==plan.cityID and
                 capacityDistrictReady.turn==Game.GetCurrentGameTurn(),

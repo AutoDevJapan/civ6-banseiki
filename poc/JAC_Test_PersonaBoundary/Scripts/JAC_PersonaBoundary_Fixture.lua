@@ -28,6 +28,7 @@ local CAPACITY_GOVERNMENT_READ = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_READ";
 local CAPACITY_GOVERNMENT_API_PROBE = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_API_PROBE";
 local GOV_CLASSIFY_INTENT = "JAC_BOUNDARY_GOV_CLASSIFY_INTENT";
 local GOV_CLASSIFY_READ = "JAC_BOUNDARY_GOV_CLASSIFY_READ";
+local CAPACITY_PROGRESS_ATTEMPTS = "JAC_BOUNDARY_CAPACITY_PROGRESS_ATTEMPTS";
 
 -- This callback lives in AddGameplayScripts. A FireTuner GameCore state has a
 -- different lifetime and can expose methods unavailable to the gameplay VM.
@@ -1741,6 +1742,59 @@ GameEvents.JAC_BoundaryCapacityGovernmentRead.Add(function(controller,params)
     print("JAC_BOUNDARY CORE_CAPACITY_GOVERNMENT_READ_RESULT "..R.Serialize(read));
 end);
 
+-- A mutation may finish before its completion record can be written. Persist
+-- the exact attempt first; an uncertain result never permits another credit.
+-- Completion and the later native building observation remain separate.
+local function RecordCapacityProgressAttempt(key,identity)
+    local c=EnemyConfig(identity.owner);
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "native capacity original mission missing");
+    identity.defender=c.owner; identity.leader=c.leader;
+    identity.eventID=event.id; identity.eventTurn=event.turn;
+    local previous=Game:GetProperty(CAPACITY_PROGRESS_ATTEMPTS);
+    assert(previous==nil or type(previous)=="table",
+        "native capacity progress attempt ledger is invalid");
+    assert(previous==nil or previous[key]==nil,
+        "native capacity progress already attempted; do not replay");
+    local attempts={};
+    for name,value in pairs(previous or {}) do
+        assert(type(name)=="string" and type(value)=="table",
+            "native capacity progress attempt ledger is invalid");
+        local entry={};
+        for field,scalar in pairs(value) do
+            assert(type(field)=="string" and
+                (type(scalar)=="string" or type(scalar)=="number"),
+                "native capacity progress attempt ledger is invalid");
+            entry[field]=scalar;
+        end
+        attempts[name]=entry;
+    end
+    attempts[key]=identity;
+    local publication={};
+    for name,value in pairs(attempts) do
+        local entry={};
+        for field,scalar in pairs(value) do entry[field]=scalar; end
+        publication[name]=entry;
+    end
+    local acknowledged=Game:SetProperty(CAPACITY_PROGRESS_ATTEMPTS,publication);
+    assert(acknowledged~=false,"native capacity progress attempt was refused");
+    local stored=Game:GetProperty(CAPACITY_PROGRESS_ATTEMPTS);
+    assert(type(stored)=="table","native capacity progress attempt did not persist");
+    for name,value in pairs(attempts) do
+        local saved=stored[name];
+        assert(type(saved)=="table","native capacity progress attempt did not persist");
+        for field,scalar in pairs(value) do
+            assert(saved[field]==scalar,"native capacity progress attempt identity changed");
+        end
+        for field,scalar in pairs(saved) do
+            assert(value[field]==scalar,"native capacity progress attempt identity changed");
+        end
+    end
+    for name in pairs(stored) do
+        assert(attempts[name]~=nil,"native capacity progress attempt identity changed");
+    end
+end
+
 GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
     EnemyReceipt(controller,params,"PROGRESS_CAPACITY_DISTRICT");
     local c=EnemyConfig(controller);
@@ -1786,6 +1840,14 @@ GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
         "native Government Plaza queue changed before progress");
     local queue=city:GetBuildQueue();
     assert(type(queue.AddProgress)=="function","native district progress API unavailable");
+    RecordCapacityProgressAttempt("DISTRICT_GOVERNMENT",{
+        action="PROGRESS_CAPACITY_DISTRICT",owner=controller,cityID=params.CityID,
+        targetType=district.DistrictType,targetIndex=district.Index,
+        districtID=current.districtID,plot=params.PlotIndex,
+        x=params.X,y=params.Y,
+        memberKey=params.MemberKey,acceptedNonce=params.AcceptedNonce,
+        token=params.Token,turn=params.Turn,frame=params.Frame,
+        publishEpoch=params.PublishEpoch});
     queue:AddProgress(500);
     Game:SetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS",{
         owner=controller,cityOwner=current.districtCityOwner,
@@ -1835,6 +1897,10 @@ GameEvents.JAC_BoundaryProgressCapacityBuilding.Add(function(controller,params)
         "native capacity building queue changed before progress");
     local queue=city:GetBuildQueue();
     assert(type(queue.AddProgress)=="function","native city progress API missing");
+    RecordCapacityProgressAttempt(row.BuildingType,{
+        action="PROGRESS_CAPACITY",owner=controller,cityID=params.CityID,
+        targetType=row.BuildingType,targetIndex=row.Index,token=params.Token,
+        turn=params.Turn,frame=params.Frame,publishEpoch=params.PublishEpoch});
     queue:AddProgress(500);
     progress.steps[row.BuildingType]={token=params.Token,cityID=params.CityID,
         buildingIndex=row.Index,turn=Game.GetCurrentGameTurn()};
