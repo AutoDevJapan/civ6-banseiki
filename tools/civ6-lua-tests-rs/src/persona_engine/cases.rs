@@ -2,6 +2,46 @@
 //! read. All new evidence here comes from the ordinary engine/event fixture.
 pub const SOURCE: &str = r#"
 if CASES then
+function CASES.test_native_receipt_ahead_of_official_spent_keeps_full_reservation()
+ local api=ExposedMembers.JAC_LeaderPersona
+ local appoint=JAC_AppointLeader; JAC_AppointLeader=function() return false end
+ join(); Players[0].points=3
+ eq('EVOLVING',api.PrepareEvolution(0,DATE))
+ eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+ NEWGOV(0,DATE,false)
+ eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+ Players[0].spent=1
+ -- A UI read cannot turn the newly visible pool balance into a receipt.
+ eq(2,JAC_PersonaTreeRules.ReservedAppointments(0)); eq(0,DESTROYS)
+ api.Reconcile()
+ eq(1,JAC_PersonaTreeRules.ReservedAppointments(0)); eq(1,Players[0].spent)
+ eq('EVOLVING',prop('STATE')); eq(0,DESTROYS); eq(0,#REQUESTS)
+ yes(appoint(DATE)); yes(STEP()); api.Reconcile()
+ eq('GOVERNOR',prop('STATE')); eq(2,Players[0].spent); eq(1,DESTROYS)
+ eq(0,JAC_PersonaTreeRules.ReservedAppointments(0)); eq(0,#REQUESTS)
+ JAC_AppointLeader=appoint
+end
+function CASES.test_prior_persona_payment_cannot_mask_unpaid_current_evolution()
+ local api=ExposedMembers.JAC_LeaderPersona
+ local appoint=JAC_AppointLeader; JAC_AppointLeader=function() return false end
+ join(); Players[0].points=4
+ eq('EVOLVING',api.PrepareEvolution(0,DATE))
+ NEWGOV(0,DATE); eq(2,Players[0].spent)
+ eq('EVOLVED',api.CompleteEvolution(0,DATE))
+ eq('JOINED',api.Join(0,2)); eq('EVOLVING',api.PrepareEvolution(0,HOJO))
+ eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+ NEWGOV(0,HOJO,false)
+ eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+ Players[0].spent=3
+ eq(2,JAC_PersonaTreeRules.ReservedAppointments(0)); eq(1,DESTROYS)
+ api.Reconcile()
+ eq(1,JAC_PersonaTreeRules.ReservedAppointments(0)); eq(3,Players[0].spent)
+ eq('EVOLVING',prop('STATE',HOJO)); eq(1,DESTROYS); eq(0,#REQUESTS)
+ yes(appoint(HOJO)); yes(STEP()); api.Reconcile()
+ eq('GOVERNOR',prop('STATE',HOJO)); eq(4,Players[0].spent); eq(2,DESTROYS)
+ eq(0,JAC_PersonaTreeRules.ReservedAppointments(0)); eq(0,#REQUESTS)
+ JAC_AppointLeader=appoint
+end
 function CASES.test_two_partial_people_with_stock_spending_keep_only_unpaid_reservations()
  local api=ExposedMembers.JAC_LeaderPersona
  Players[0].points=6
