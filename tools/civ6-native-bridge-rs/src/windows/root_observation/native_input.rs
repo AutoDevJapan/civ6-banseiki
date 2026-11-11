@@ -10,6 +10,14 @@ use records::{Input, Receipt};
 static INPUT_EXE: AtomicU64 = AtomicU64::new(0);
 static INPUT_NEXT: AtomicU64 = AtomicU64::new(0);
 static INPUT_HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+#[cfg(test)]
+type PollLookupHook = fn(Lease, Transport);
+#[cfg(test)]
+static POLL_LOOKUP_HOOK: Mutex<Option<PollLookupHook>> = Mutex::new(None);
+#[cfg(test)]
+pub(super) fn fixture_after_poll_lookup(hook: fn(Lease, Transport)) {
+    *POLL_LOOKUP_HOOK.lock().unwrap() = Some(hook);
+}
 pub(super) fn hook_entries_owned() -> bool {
     owns_hook_entries(&INPUT_HOOKS, SITES.len())
 }
@@ -110,24 +118,41 @@ fn network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
 }
 #[cfg(test)]
 pub(super) fn fixture_poll_network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
+    fixture_poll_with_authority(p).map(|(source, _)| source)
+}
+#[cfg(test)]
+pub(super) fn fixture_poll_with_authority(
+    p: u64,
+) -> Result<(Option<(Lease, Transport)>, bool), Error> {
+    let error = unsafe { GetLastError() };
     let mut raw: Saved = unsafe { std::mem::zeroed() };
     let mut event = [0u64; 8];
     raw.invocation.kind = 110;
     raw.invocation.caller = exe(0x8615a0);
     raw.gpr[0] = value(p + 0xd0);
     raw.gpr[1] = event.as_mut_ptr() as u64;
+    unsafe { SetLastError(error) };
     begin(&mut raw);
-    let source = INPUT_CALLS.with(|calls| {
+    let (source, authority) = INPUT_CALLS.with(|calls| {
         calls
             .borrow()
             .last()
             .unwrap()
             .ticket
-            .map(|ticket| (ticket.lease, ticket.transport))
+            .map(|ticket| {
+                (
+                    Some((ticket.lease, ticket.transport)),
+                    ticket.message.is_some(),
+                )
+            })
+            .unwrap_or((None, false))
     });
     raw.gpr[4] = 0; // Original poll found no event; release its exact ticket.
-    finish(&mut raw, false);
-    Ok(source)
+    end(&mut raw);
+    let returned_error = unsafe { GetLastError() };
+    assert_eq!(raw.gpr[4], 0);
+    unsafe { SetLastError(returned_error) };
+    Ok((source, authority))
 }
 fn poll_network(p: u64) -> Result<Option<(Lease, Transport)>, Error> {
     #[cfg(test)]
@@ -154,12 +179,30 @@ fn cancel_ticket(ticket: Ticket) {
             .unwrap_or_else(|_| fault());
     }
 }
+#[cfg(test)]
 fn reserve_ticket(lease: Lease, transport: Transport) -> Result<Ticket, Error> {
+    reserve_receiver_ticket(lease, transport, None)
+}
+fn reserve_receiver_ticket(
+    lease: Lease,
+    transport: Transport,
+    receive: Option<ledger::ReceiveHold>,
+) -> Result<Ticket, Error> {
     let mut ledger = state();
     let message = match ledger.reserve_input(lease, transport) {
         Err(Error::Closed) => {
             census::event(census::SemanticEvent::RetiredInput);
             None
+        }
+        Err(Error::Stale) if receive.is_some() => {
+            let transport_hold =
+                ledger.retain_reset_receive_input(receive.unwrap(), lease, transport)?;
+            return Ok(Ticket {
+                message: None,
+                lease,
+                transport,
+                transport_hold: Some(transport_hold),
+            });
         }
         result => result?,
     };
@@ -325,7 +368,18 @@ extern "system" fn begin(raw: *mut Saved) {
                         fault();
                     }
                     if let Some((lease, t)) = poll_network(net).unwrap_or_else(|_| fault()) {
-                        c.ticket = Some(reserve_ticket(lease, t).unwrap_or_else(|_| fault()));
+                        #[cfg(test)]
+                        if let Some(hook) = POLL_LOOKUP_HOOK.lock().unwrap().take() {
+                            hook(lease, t);
+                        }
+                        c.ticket = Some(
+                            reserve_receiver_ticket(
+                                lease,
+                                t,
+                                transports::current_receive_hold(lease, t),
+                            )
+                            .unwrap_or_else(|_| fault()),
+                        );
                     }
                 }
             }

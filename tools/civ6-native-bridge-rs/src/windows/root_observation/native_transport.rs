@@ -146,6 +146,18 @@ pub(in super::super) fn from_receiver(
     }
     from_network(network).map(|current| current.filter(|current| *current == source))
 }
+pub(super) fn current_receive_hold(
+    lease: SessionLease,
+    transport: SessionTransport,
+) -> Option<super::ledger::ReceiveHold> {
+    CALLS.with(|calls| {
+        let calls = calls.borrow();
+        let call = calls.iter().rev().find(|call| call.kind == 108)?;
+        let receive = call.receive.as_ref()?;
+        (call.pointer == transport.network && receive.source == Some((lease, transport)))
+            .then_some(receive.hold)
+    })
+}
 fn check_published(id: Birth) -> Result<(SessionLease, SessionTransport), SessionError> {
     let (lease, session, callback, t) = state().snapshot(id)?;
     if read64(session + 0x28)? != t.pointer

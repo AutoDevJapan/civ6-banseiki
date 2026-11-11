@@ -323,6 +323,43 @@ impl Ledger {
             .map(|_| ())
             .ok_or(Error::Unknown)
     }
+    /// Only an already executing receiver of this exact reset source can
+    /// retain its old input lifetime after lookup. This issues no Message.
+    pub fn retain_reset_receive_input(
+        &mut self,
+        receive: ReceiveHold,
+        lease: Lease,
+        transport: Transport,
+    ) -> Result<InputHold, Error> {
+        if self.unresolved {
+            return Err(Error::Unresolved);
+        }
+        if self.receive_holds.get(&receive.0) != Some(&Some((lease, transport))) {
+            return Err(Error::Stale);
+        }
+        let record = self.records.get(&lease.0).ok_or(Error::Unknown)?;
+        if record.phase != Phase::Open
+            || record.transport.is_some()
+            || !matches!(record.native_reset, Some(NativeReset::Closing(old) | NativeReset::Returned(old)) if old == transport)
+        {
+            return Err(Error::Stale);
+        }
+        let world = self
+            .input_owners
+            .get(&transport.incarnation)
+            .copied()
+            .ok_or(Error::Unbound)?;
+        let id = self.id()?;
+        self.input_holds.insert(
+            id,
+            InputOwnership {
+                lease,
+                transport,
+                world,
+            },
+        );
+        Ok(InputHold(id))
+    }
     /// A whole observed receive frame, including before transport publication
     /// or the first poll. This is lifetime accounting, never World authority.
     pub fn retain_receive(

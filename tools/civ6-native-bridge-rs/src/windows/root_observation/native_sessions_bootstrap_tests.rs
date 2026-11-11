@@ -137,6 +137,78 @@ fn receive_obligations_keep_exact_sources_and_require_every_return() {
     assert!(ledger.receive_holds.is_empty());
 }
 #[test]
+fn reset_input_retention_requires_the_live_exact_receiver_and_original_reset() {
+    let mut ledger = Ledger::default();
+    let lease = unbound(&mut ledger, true);
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    let transport = ledger.publish_transport(lease, 900, 90, 100, 110).unwrap();
+    let receive = ledger.retain_receive(Some((lease, transport))).unwrap();
+    assert_eq!(
+        ledger.retain_reset_receive_input(receive, lease, transport),
+        Err(Error::Stale)
+    );
+    ledger.native_reset_begin(lease, transport).unwrap();
+    assert_eq!(ledger.reserve_input(lease, transport), Err(Error::Stale));
+    for altered in [
+        Transport {
+            incarnation: 901,
+            ..transport
+        },
+        Transport {
+            network: 101,
+            ..transport
+        },
+        Transport {
+            thread: 111,
+            ..transport
+        },
+    ] {
+        assert_eq!(
+            ledger.retain_reset_receive_input(receive, lease, altered),
+            Err(Error::Stale)
+        );
+    }
+    let unknown = ledger.retain_receive(None).unwrap();
+    assert_eq!(
+        ledger.retain_reset_receive_input(unknown, lease, transport),
+        Err(Error::Stale)
+    );
+    ledger.release_receive(unknown, None).unwrap();
+    let hold = ledger
+        .retain_reset_receive_input(receive, lease, transport)
+        .unwrap();
+    assert_eq!(
+        ledger.input_holds[&hold.0].world,
+        Some(WorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        })
+    );
+    assert_eq!(ledger.input_holds[&hold.0].lease, lease);
+    ledger
+        .release_receive(receive, Some((lease, transport)))
+        .unwrap();
+    assert_eq!(
+        ledger.retain_reset_receive_input(receive, lease, transport),
+        Err(Error::Stale)
+    );
+    assert_eq!(
+        ledger.retire_world(WorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        }),
+        Err(Error::Busy)
+    );
+    ledger.release_input_transport(hold).unwrap();
+    ledger
+        .retire_world(WorldReceipt {
+            binding_id: 1,
+            epoch: 1,
+        })
+        .unwrap();
+}
+#[test]
 fn repeated_reset_accepts_only_new_unpublished_bindings_and_retains_older_packets() {
     let mut ledger = Ledger::default();
     let lease = unbound(&mut ledger, true);

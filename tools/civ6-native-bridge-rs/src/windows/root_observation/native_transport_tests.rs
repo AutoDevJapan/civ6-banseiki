@@ -41,6 +41,30 @@ static EXTRA: AtomicU64 = AtomicU64::new(99);
 static UNQUALIFIED_RECEIVE: AtomicBool = AtomicBool::new(false);
 static CHECK_RECEIVE_RETIREMENT: AtomicBool = AtomicBool::new(false);
 static RECEIVE_RETIREMENT_OBSERVED: AtomicU64 = AtomicU64::new(0);
+type PendingReset = (std::sync::mpsc::Sender<()>, std::thread::JoinHandle<()>);
+static CONCURRENT_RESET: Mutex<Option<PendingReset>> = Mutex::new(None);
+fn reset_between_poll_lookup_and_reservation(_: SessionLease, transport: SessionTransport) {
+    let (ready, started) = std::sync::mpsc::channel();
+    let (release, wait) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.invocation.kind = 103;
+        raw.gpr[0] = transport.pointer;
+        begin(&mut raw); // Actual reset observer revokes the Session source.
+        ready.send(()).unwrap();
+        wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        // The original reset's join would permit this destruction only after
+        // the active receiver returned. This fixture never stops a real thread.
+        unsafe {
+            *((transport.pointer + 0x10) as *mut u64) = 0;
+            *((transport.network + 0xc0) as *mut u64) = 0;
+        };
+        finish(&mut raw, false);
+    });
+    started.recv_timeout(Duration::from_secs(5)).unwrap();
+    *CONCURRENT_RESET.lock().unwrap() = Some((release, worker));
+    println!("RESET_BETWEEN_ACTUAL_POLL_LOOKUP_AND_RESERVATION");
+}
 pub(super) fn caller_override(rva: u64) -> Option<u64> {
     if !FIXTURE.load(Ordering::Acquire) {
         return None;
@@ -1011,6 +1035,87 @@ fn an_unknown_receiver_cannot_adopt_a_later_publication_at_the_same_network_addr
         Ok(Some((lease, current)))
     );
     finish(&mut fresh, false);
+    unsafe { restore().unwrap() };
+    for pointer in owned {
+        assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
+    }
+}
+#[test]
+fn concurrent_reset_after_actual_poll_lookup_preserves_unqualified_original_progress() {
+    const NAME: &str =
+        "concurrent_reset_after_actual_poll_lookup_preserves_unqualified_original_progress";
+    if !child(NAME) {
+        return;
+    }
+    unsafe { windows_sys::Win32::System::Diagnostics::Debug::SetErrorMode(3) };
+    let (session, lease, _, owned) = setup();
+    unsafe { transport_fixture_driver(session) };
+    let old = super::super::state().transport(lease).unwrap();
+    let world = SessionWorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    super::super::state().bind_world(lease, world).unwrap();
+    let mut receiver: Saved = unsafe { std::mem::zeroed() };
+    receiver.invocation.kind = 108;
+    receiver.gpr[0] = old.network;
+    begin(&mut receiver);
+    super::super::input::fixture_after_poll_lookup(reset_between_poll_lookup_and_reservation);
+    unsafe { SetLastError(0x7931) };
+    let result = super::super::input::fixture_poll_with_authority(old.network);
+    let poll_error = unsafe { GetLastError() };
+    eprintln!("CONCURRENT_RESET_POLL_RETURNED {result:?}");
+    assert_eq!(
+        result,
+        Ok((Some((lease, old)), false)),
+        "reset input retains its exact old source lifetime"
+    );
+    assert!(!FAILED.load(Ordering::Acquire));
+    assert_eq!(poll_error, 0x7931);
+    assert_eq!(super::super::retire_world(world), Err(Error::Busy));
+    assert_eq!(super::super::input::pending(), Ok(0));
+    finish(&mut receiver, false);
+    eprintln!("CONCURRENT_RESET_RECEIVER_RETURNED");
+    let (release, worker) = CONCURRENT_RESET.lock().unwrap().take().unwrap();
+    release.send(()).unwrap();
+    worker.join().unwrap();
+    eprintln!("CONCURRENT_RESET_WORKER_RETURNED");
+    let local: unsafe extern "system" fn(u64, u64) -> u64 =
+        unsafe { std::mem::transmute(transport_fixture_local as *const ()) };
+    assert_eq!(unsafe { local(POINTER.load(Ordering::Acquire), 0x1234) }, 1);
+    eprintln!("CONCURRENT_RESET_NEW_PUBLICATION_RETURNED");
+    let new = super::super::state().transport(lease).unwrap();
+    assert_ne!(new.incarnation, old.incarnation);
+    let mut next: Saved = unsafe { std::mem::zeroed() };
+    next.invocation.kind = 108;
+    next.gpr[0] = new.network;
+    begin(&mut next);
+    assert_eq!(
+        super::super::input::fixture_poll_network(new.network),
+        Ok(Some((lease, new)))
+    );
+    finish(&mut next, false);
+    super::super::retire_world(world).unwrap();
+    assert_eq!(
+        super::super::NativeSessionApi::drained(world),
+        Err(Error::Unresolved)
+    );
+    let fresh_world = SessionWorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    let mut sessions = super::super::state();
+    let fresh_session = sessions.birth(1, Some(2), 130, 2).unwrap();
+    sessions.factory(fresh_session, 8, 130, 140, 150).unwrap();
+    sessions.published(fresh_session, 8).unwrap();
+    sessions.bind_world(fresh_session, fresh_world).unwrap();
+    sessions
+        .publish_transport(fresh_session, 1000, 160, 170, 180)
+        .unwrap();
+    let packet = sessions.reserve(fresh_session).unwrap();
+    assert_eq!(sessions.message_world(packet), Ok(fresh_world));
+    sessions.cancel_before_dispatch(packet).unwrap();
+    drop(sessions);
     unsafe { restore().unwrap() };
     for pointer in owned {
         assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
