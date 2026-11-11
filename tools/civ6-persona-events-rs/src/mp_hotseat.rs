@@ -107,8 +107,13 @@ local function person(owner, gate)
 end
 local function ledger()
  -- Do not query native eligibility without explicitly installed runtime.
+ local merit={}
+ for _,key in ipairs({'JAC_PERSONA_PENDING_DEEDS','JAC_PERSONA_MERIT_BUCKETS_V2','JAC_PERSONA_PENDING_SEQUENCE',
+  'JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1','JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1','JAC_PERSONA_PENDING_NATIVE_HISTORY'}) do
+  local value=Game:GetProperty(key); merit[key]={kind=type(value),value=value}
+ end
  return {active=Game.GetLocalPlayer(),turn=Game.GetCurrentGameTurn(),people={assert(person(0,false)),assert(person(1,false))},
-  store=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1')}
+  store=Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'),merit=merit}
 end
 "#;
 

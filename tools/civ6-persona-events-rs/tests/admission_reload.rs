@@ -149,6 +149,30 @@ fn payment_receipts_and_private_publishers_cannot_replace_normal_evidence() {
         "saved fractional merit must not be rounded away"
     );
 }
+
+#[test]
+fn merit_queue_snapshot_detects_recovery_loss_in_both_saved_worlds() {
+    for paid in [false, true] {
+        let original = run(paid, "").unwrap();
+        let mut omitted = Vec::new();
+        for (key, value) in [
+            (
+                "JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1",
+                "{entry={owner=0,turn=1,amount=3,recoverySequence=9}}",
+            ),
+            ("JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1", "9"),
+        ] {
+            let changed = run(paid, &format!("local get=Game.GetProperty; Game.GetProperty=function(self,key) if key=='{key}' then return {value} end; return get(self,key) end")).unwrap();
+            if original == changed {
+                omitted.push(key);
+            }
+        }
+        assert!(
+            omitted.is_empty(),
+            "saved world paid={paid} ignored merit state {omitted:?}"
+        );
+    }
+}
 #[test]
 fn wrong_world_or_source_setup_is_rejected() {
     let mut input = template();

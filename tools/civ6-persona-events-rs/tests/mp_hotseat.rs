@@ -209,6 +209,41 @@ fn mid_round_save_read_preserves_full0_unpaid1_without_runtime_queries() {
     lua.load("records[1].paid=1").exec().unwrap();
     assert!(check(&lua, "assert(serial(ledger())==saved)").is_err());
 }
+
+#[test]
+fn merit_queue_snapshot_detects_shared_state_loss_without_operations() {
+    let mut omitted = Vec::new();
+    for (key, value) in [
+        (
+            "JAC_PERSONA_PENDING_DEEDS",
+            "{entry={owner=0,turn=1,amount=3,sequence=9}}",
+        ),
+        ("JAC_PERSONA_MERIT_BUCKETS_V2", "{LEADER_TEST_BUILDING_1=1}"),
+        ("JAC_PERSONA_PENDING_SEQUENCE", "9"),
+        (
+            "JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1",
+            "{entry={owner=0,turn=1,amount=3,recoverySequence=9}}",
+        ),
+        ("JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1", "9"),
+        ("JAC_PERSONA_PENDING_NATIVE_HISTORY", "1"),
+    ] {
+        let lua = world();
+        lua.globals().set("MERIT_KEY", key).unwrap();
+        lua.load(format!("props[MERIT_KEY]={value}"))
+            .exec()
+            .unwrap();
+        check(&lua, "saved=serial(ledger()); assert(calls==0)").unwrap();
+        check(&lua, "assert(serial(ledger())==saved and calls==0)").unwrap();
+        lua.load("props[MERIT_KEY]=nil").exec().unwrap();
+        if check(&lua, "assert(serial(ledger())==saved and calls==0)").is_ok() {
+            omitted.push(key);
+        }
+    }
+    assert!(
+        omitted.is_empty(),
+        "saved shared merit state was ignored: {omitted:?}"
+    );
+}
 #[test]
 fn other_human_payment_does_not_change_first_humans_personal_receipts() {
     let lua = world();

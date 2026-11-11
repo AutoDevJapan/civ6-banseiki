@@ -69,7 +69,10 @@ local function snapshot()
   established=g:IsEstablished(),onSite=g:GetTurnsOnSite(),neutralized=g:GetNeutralizedTurns(),
   points=gs:GetGovernorPoints(),merit=merit,deeds=deeds,
   pending=boxed(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')),buckets=boxed(Game:GetProperty('JAC_PERSONA_MERIT_BUCKETS_V2')),
-  pendingSequence=boxed(Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE'))}
+  pendingSequence=boxed(Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')),
+  recovery=boxed(Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')),
+  recoverySequence=boxed(Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1')),
+  nativeHistory=boxed(Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY'))}
 end
 local function destination(current)
  local ids={}; for _,city in Players[0]:GetCities():Members() do

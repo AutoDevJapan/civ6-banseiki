@@ -289,3 +289,49 @@ fn save_comparison_includes_actual_city_merit_and_typed_nil_state() {
         );
     }
 }
+
+#[test]
+fn save_comparison_detects_recovery_merit_and_ordinal_loss() {
+    let mut omitted = Vec::new();
+    for (key, value) in [
+        (
+            "JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1",
+            "{entry={owner=0,turn=3,amount=3,recoverySequence=9}}",
+        ),
+        ("JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1", "9"),
+        ("JAC_PERSONA_PENDING_NATIVE_HISTORY", "1"),
+    ] {
+        let lua = world();
+        lua.globals().set("RECOVERY_KEY", key).unwrap();
+        lua.load(format!("props[RECOVERY_KEY]={value}"))
+            .exec()
+            .unwrap();
+        lua.load(format!(
+            "{SERIAL}\n{}\nsaved=serial(snapshot())",
+            side::READER
+        ))
+        .exec()
+        .unwrap();
+        lua.load(format!(
+            "{SERIAL}\n{}\nassert(serial(snapshot())==saved)",
+            side::READER
+        ))
+        .exec()
+        .unwrap();
+        lua.load("props[RECOVERY_KEY]=nil").exec().unwrap();
+        if lua
+            .load(format!(
+                "{SERIAL}\n{}\nassert(serial(snapshot())==saved)",
+                side::READER
+            ))
+            .exec()
+            .is_ok()
+        {
+            omitted.push(key);
+        }
+    }
+    assert!(
+        omitted.is_empty(),
+        "save comparison ignored loss of {omitted:?}"
+    );
+}
