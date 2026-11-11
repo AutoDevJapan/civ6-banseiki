@@ -165,6 +165,29 @@ fn damaged_identity_or_changed_owner_never_adopts_a_recovery_event() {
 }
 
 #[test]
+fn direct_alliance_defer_preserves_a_false_entry_and_unknown_replay() {
+    for formation in [false, true] {
+        run(&format!(
+            r#"
+            settled(); set_merit(0)
+            local key=DATE..'_ALLIANCE_1'
+            local saved={{[key]=false}}
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',saved)
+            Game:SetProperty('JAC_PERSONA_'..DATE..'_ALLIANCES_BASELINED',1)
+            CITIES[0][1].GetProperty=nil
+            Players[0].allies[1]=true
+            if {formation} then FIREUI('DiplomacyRelationshipChanged',0,1)
+            else FIRE('PlayerTurnStarted',0) end
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==saved and saved[key]==false,'direct Defer replaced an existing false identity')
+            assert(prop('MERIT')==0 and prop('ALLY_SEEN_1')==1)
+            reload(); FIREUI('DiplomacyRelationshipChanged',0,1)
+            assert(saved[key]==false and prop('MERIT')==0)
+        "#
+        ));
+    }
+}
+
+#[test]
 fn malformed_saved_queue_keeps_building_callbacks_and_saved_values_intact() {
     for value in ["false", "true", "1", "0.5", "'invalid'"] {
         run(&format!(

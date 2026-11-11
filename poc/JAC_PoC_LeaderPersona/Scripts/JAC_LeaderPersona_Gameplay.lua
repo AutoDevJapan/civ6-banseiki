@@ -2377,7 +2377,7 @@ local function Defer(row, deed, identity, cityID, x, y)
     local pending = MeritQueue.Pending();
     if not pending then return; end
     local key = row.LeaderType .. "_" .. deed .. "_" .. identity;
-    if not pending[key] then
+    if pending[key] == nil then
         local sequence = MeritQueue.NextSequence();
         if not sequence then return; end
         Game:SetProperty("JAC_PERSONA_PENDING_SEQUENCE", sequence);
