@@ -39,6 +39,8 @@ static OBSERVED: AtomicU64 = AtomicU64::new(0);
 static HIT: AtomicU64 = AtomicU64::new(0);
 static EXTRA: AtomicU64 = AtomicU64::new(99);
 static UNQUALIFIED_RECEIVE: AtomicBool = AtomicBool::new(false);
+static CHECK_RECEIVE_RETIREMENT: AtomicBool = AtomicBool::new(false);
+static RECEIVE_RETIREMENT_OBSERVED: AtomicU64 = AtomicU64::new(0);
 pub(super) fn caller_override(rva: u64) -> Option<u64> {
     if !FIXTURE.load(Ordering::Acquire) {
         return None;
@@ -129,6 +131,21 @@ extern "system" fn before_start(functor: u64, thread: u64, extra: u64) -> u64 {
     thread
 }
 extern "system" fn receive_body(network: u64) -> u64 {
+    if CHECK_RECEIVE_RETIREMENT.load(Ordering::Acquire) {
+        let no_storage =
+            super::super::input::pending() == Ok(0) && super::super::deferred::pending() == Ok(0);
+        let refused = super::super::retire_world(SessionWorldReceipt {
+            binding_id: 1,
+            epoch: 1,
+        }) == Err(Error::Busy);
+        RECEIVE_RETIREMENT_OBSERVED.store(
+            u64::from(no_storage) | (u64::from(refused) << 1),
+            Ordering::Release,
+        );
+        HIT.fetch_add(1, Ordering::AcqRel);
+        unsafe { SetLastError(0x1234) };
+        return 0x8899;
+    }
     if UNQUALIFIED_RECEIVE.load(Ordering::Acquire) {
         let birth = CALLS.with(|calls| calls.borrow().last().and_then(|call| call.birth));
         OBSERVED.store(u64::from(birth.is_none()), Ordering::Release);
@@ -801,6 +818,175 @@ fn reset_retirement_waits_for_old_executions_and_never_joins_the_old_binding() {
     assert_eq!(
         ledger.published_network(5),
         Ok(Some((SessionLease(1), new)))
+    );
+}
+fn receive_before_poll_case(published: bool) {
+    let mut network = [0u64; 32];
+    network[0] = exe(0x1049808);
+    let network_address = network.as_mut_ptr() as u64;
+    let world = SessionWorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    let lease = {
+        let mut ledger = super::super::state();
+        let lease = ledger.birth(1, Some(2), 30, 2).unwrap();
+        ledger.factory(lease, 7, 30, 40, 50).unwrap();
+        ledger.published(lease, 7).unwrap();
+        ledger.bind_world(lease, world).unwrap();
+        lease
+    };
+    let mut transport_ledger = state();
+    let birth = transport_ledger.factory(lease, 40, 50).unwrap();
+    transport_ledger.transport(birth, 90, 50).unwrap();
+    transport_ledger.network(birth, network_address).unwrap();
+    transport_ledger.thread(birth, 110).unwrap();
+    if published {
+        let transport = transport_ledger.publish(birth, 110).unwrap();
+        drop(transport_ledger);
+        super::super::publish_transport(lease, transport.incarnation, 90, network_address, 110)
+            .unwrap();
+    } else {
+        drop(transport_ledger);
+    }
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 108;
+    raw.gpr[0] = network_address;
+    begin(&mut raw);
+    assert_ne!(
+        raw.invocation.cookie, 0,
+        "the actual receive observer must start"
+    );
+    assert_eq!(
+        current_receiver(),
+        Some((network_address, raw.invocation.token))
+    );
+    assert_eq!(super::super::input::pending(), Ok(0));
+    assert_eq!(super::super::deferred::pending(), Ok(0));
+    // The complete original receive body is live, before any poll creates an
+    // input ticket. Neither a storage counter nor a thread handle substitutes
+    // for this frame returning.
+    assert_eq!(super::super::retire_world(world), Err(Error::Busy));
+    finish(&mut raw, false);
+    assert_eq!(current_receiver(), None);
+    super::super::retire_world(world).unwrap();
+    let next = SessionWorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    super::super::state()
+        .loaded_world(lease, Some(world), next)
+        .unwrap();
+    assert_eq!(super::super::state().world(lease), Ok(next));
+}
+#[test]
+fn world_retirement_waits_for_the_published_receive_frame_before_poll() {
+    if child("world_retirement_waits_for_the_published_receive_frame_before_poll") {
+        receive_before_poll_case(true);
+    }
+}
+#[test]
+fn world_retirement_waits_for_the_receive_frame_before_transport_publication() {
+    if child("world_retirement_waits_for_the_receive_frame_before_transport_publication") {
+        receive_before_poll_case(false);
+    }
+}
+#[test]
+fn receive_gateway_keeps_original_return_and_blocks_retirement_until_it_returns() {
+    if !child("receive_gateway_keeps_original_return_and_blocks_retirement_until_it_returns") {
+        return;
+    }
+    let (session, lease, _, owned) = setup();
+    let world = SessionWorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    super::super::state().bind_world(lease, world).unwrap();
+    CHECK_RECEIVE_RETIREMENT.store(true, Ordering::Release);
+    // Original start invokes the hooked receiver before publication.
+    unsafe { SetLastError(0x1234) };
+    assert_eq!(unsafe { transport_fixture_driver(session) }, 1);
+    assert_eq!(unsafe { GetLastError() }, 0x1234);
+    assert_eq!(RECEIVE_RETIREMENT_OBSERVED.load(Ordering::Acquire), 3);
+    assert_eq!(HIT.load(Ordering::Acquire), 1);
+    RECEIVE_RETIREMENT_OBSERVED.store(0, Ordering::Release);
+    // The same real gateway after publication must retain exactly the same
+    // original return semantics, without borrowing current-World authority.
+    assert_eq!(
+        unsafe { transport_fixture_receive(NETWORK.load(Ordering::Acquire)) },
+        0x8899
+    );
+    assert_eq!(unsafe { GetLastError() }, 0x1234);
+    assert_eq!(RECEIVE_RETIREMENT_OBSERVED.load(Ordering::Acquire), 3);
+    assert_eq!(HIT.load(Ordering::Acquire), 2);
+    assert_eq!(current_receiver(), None);
+    super::super::retire_world(world).unwrap();
+    let next = SessionWorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    super::super::state()
+        .loaded_world(lease, Some(world), next)
+        .unwrap();
+    assert_eq!(super::super::state().world(lease), Ok(next));
+    unsafe { restore().unwrap() };
+    for pointer in owned {
+        assert_ne!(unsafe { VirtualFree(pointer.cast(), 0, MEM_RELEASE) }, 0);
+    }
+}
+#[test]
+fn unknown_receive_frames_retain_observation_without_issuing_authority() {
+    if !child("unknown_receive_frames_retain_observation_without_issuing_authority") {
+        return;
+    }
+    let world = SessionWorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    let mut foreign = [0u64; 32];
+    foreign[0] = exe(0x1049808) + 8;
+    let mut first: Saved = unsafe { std::mem::zeroed() };
+    first.invocation.kind = 108;
+    first.gpr[0] = foreign.as_mut_ptr() as u64;
+    begin(&mut first);
+    let mut second: Saved = unsafe { std::mem::zeroed() };
+    second.invocation.kind = 108;
+    second.gpr[0] = 1; // Unreadable vtable, not a reason to stop native cleanup.
+    begin(&mut second);
+    CALLS.with(|calls| {
+        let calls = calls.borrow();
+        assert_eq!(calls.len(), 2);
+        assert!(calls.iter().all(|call| call.birth.is_none()));
+        assert!(calls
+            .iter()
+            .all(|call| call.receive.as_ref().unwrap().source.is_none()));
+    });
+    assert!(super::super::NativeSessionApi::current_world().is_none());
+    assert_eq!(super::super::retire_world(world), Err(Error::Busy));
+    finish(&mut second, false);
+    assert_eq!(super::super::retire_world(world), Err(Error::Busy));
+    finish(&mut first, false);
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    super::super::retire_world(world).unwrap();
+}
+#[test]
+fn receive_exception_settles_its_observation_but_never_certifies_completion() {
+    if !child("receive_exception_settles_its_observation_but_never_certifies_completion") {
+        return;
+    }
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 108;
+    raw.gpr[0] = 1;
+    begin(&mut raw);
+    finish(&mut raw, true);
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    assert_eq!(current_receiver(), None);
+    assert_eq!(
+        super::super::retire_world(SessionWorldReceipt {
+            binding_id: 1,
+            epoch: 1
+        }),
+        Err(Error::Unresolved)
     );
 }
 extern "system" fn unpublished_close_original(session: u64) -> u64 {

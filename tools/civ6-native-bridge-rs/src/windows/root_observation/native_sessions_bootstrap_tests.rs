@@ -107,6 +107,36 @@ fn unbound_input_from_a_removed_session_remains_a_completion_obligation() {
     ledger.cancel_before_dispatch(packet).unwrap();
 }
 #[test]
+fn receive_obligations_keep_exact_sources_and_require_every_return() {
+    let mut ledger = Ledger::default();
+    let lease = unbound(&mut ledger, true);
+    let transport = ledger.publish_transport(lease, 900, 90, 100, 110).unwrap();
+    let source = Some((lease, transport));
+    let first = ledger.retain_receive(source).unwrap();
+    let second = ledger.retain_receive(None).unwrap();
+    let target = ledger.bootstrap_target(30, 40).unwrap();
+    ledger.bind_bootstrap_world(target, world(1, 1)).unwrap();
+    let bound = WorldReceipt {
+        binding_id: 1,
+        epoch: 1,
+    };
+    assert_eq!(ledger.retire_world(bound), Err(Error::Busy));
+    assert_eq!(ledger.release_receive(first, None), Err(Error::Stale));
+    assert_eq!(ledger.receive_holds[&first.0], source);
+    ledger.release_receive(first, source).unwrap();
+    assert_eq!(ledger.release_receive(first, source), Err(Error::Unknown));
+    assert_eq!(ledger.retire_world(bound), Err(Error::Busy));
+    ledger.release_receive(second, None).unwrap();
+    ledger.retire_world(bound).unwrap();
+    let next = WorldReceipt {
+        binding_id: 2,
+        epoch: 2,
+    };
+    ledger.loaded_world(lease, Some(bound), next).unwrap();
+    assert_eq!(ledger.world(lease), Ok(next));
+    assert!(ledger.receive_holds.is_empty());
+}
+#[test]
 fn repeated_reset_accepts_only_new_unpublished_bindings_and_retains_older_packets() {
     let mut ledger = Ledger::default();
     let lease = unbound(&mut ledger, true);

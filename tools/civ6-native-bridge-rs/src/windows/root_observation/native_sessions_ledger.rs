@@ -9,6 +9,8 @@ pub struct Message(pub(super) u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct InputHold(u64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ReceiveHold(u64);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorldReceipt {
     pub binding_id: u64,
     pub epoch: u64,
@@ -94,6 +96,7 @@ pub(super) struct Ledger {
     keys: HashMap<(u64, u32), Lease>,
     packets: HashMap<u64, Packet>,
     input_holds: HashMap<u64, InputOwnership>,
+    receive_holds: HashMap<u64, Option<(Lease, Transport)>>,
     input_owners: HashMap<u64, Option<WorldReceipt>>,
     retired_worlds: HashSet<(u64, u64)>,
     retiring_worlds: HashSet<(u64, u64)>,
@@ -319,6 +322,28 @@ impl Ledger {
             .map(|_| ())
             .ok_or(Error::Unknown)
     }
+    /// A whole observed receive frame, including before transport publication
+    /// or the first poll. This is lifetime accounting, never World authority.
+    pub fn retain_receive(
+        &mut self,
+        source: Option<(Lease, Transport)>,
+    ) -> Result<ReceiveHold, Error> {
+        let id = self.id()?;
+        self.receive_holds.insert(id, source);
+        Ok(ReceiveHold(id))
+    }
+    pub fn release_receive(
+        &mut self,
+        hold: ReceiveHold,
+        source: Option<(Lease, Transport)>,
+    ) -> Result<(), Error> {
+        let saved = self.receive_holds.get(&hold.0).ok_or(Error::Unknown)?;
+        if *saved != source {
+            return Err(Error::Stale);
+        }
+        self.receive_holds.remove(&hold.0);
+        Ok(())
+    }
     pub fn retain_packet_transport(
         &mut self,
         lease: Lease,
@@ -340,9 +365,11 @@ impl Ledger {
         // Removing that Session or reusing its native addresses cannot settle
         // this obligation. Unknown ownership blocks completion until its own
         // final release; it is never assigned to the World being inspected.
-        self.input_holds
-            .values()
-            .any(|hold| hold.world.is_none() || hold.world == Some(world))
+        !self.receive_holds.is_empty()
+            || self
+                .input_holds
+                .values()
+                .any(|hold| hold.world.is_none() || hold.world == Some(world))
     }
     pub fn bind_bootstrap_world(
         &mut self,

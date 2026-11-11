@@ -37,6 +37,11 @@ struct Call {
     reset: Option<Birth>,
     pointer: u64,
     callback: u64,
+    receive: Option<ReceiveScope>,
+}
+struct ReceiveScope {
+    hold: super::ledger::ReceiveHold,
+    source: Option<(SessionLease, SessionTransport)>,
 }
 thread_local! {static CALLS:RefCell<Vec<Call>>=const {RefCell::new(Vec::new())};}
 fn state() -> std::sync::MutexGuard<'static, Ledger> {
@@ -131,6 +136,26 @@ fn check_published(id: Birth) -> Result<(SessionLease, SessionTransport), Sessio
     }
     Ok((lease, t))
 }
+fn enter_receive(network: u64) -> Result<(Option<Birth>, ReceiveScope), SessionError> {
+    // Session retirement takes this same lock. Retain the observation before
+    // allowing its completion check to pass, including the lookup interval.
+    let mut sessions = super::state();
+    let mut transports = state();
+    let birth = if copy_current::<8>(network).map(u64::from_le_bytes) == Some(exe(0x1049808)) {
+        transports.enter(network)?
+    } else {
+        None
+    };
+    let source = birth
+        .map(|birth| {
+            transports
+                .snapshot(birth)
+                .map(|(lease, _, _, transport)| (lease, transport))
+        })
+        .transpose()?;
+    let hold = sessions.retain_receive(source)?;
+    Ok((birth, ReceiveScope { hold, source }))
+}
 /// A captured native incarnation; no World or packet is issued by this lookup.
 pub(in super::super) fn from_network(
     network: u64,
@@ -176,6 +201,7 @@ extern "system" fn begin(raw: *mut Saved) {
             reset: None,
             pointer: raw.gpr[0],
             callback: 0,
+            receive: None,
         };
         match c.kind {
             100..=102
@@ -282,9 +308,9 @@ extern "system" fn begin(raw: *mut Saved) {
                 c.birth = parent(106);
             }
             108 => {
-                if value(c.pointer) == exe(0x1049808) {
-                    c.birth = state().enter(c.pointer).unwrap_or_else(|_| fault());
-                }
+                let (birth, receive) = enter_receive(c.pointer).unwrap_or_else(|_| fault());
+                c.birth = birth;
+                c.receive = Some(receive);
             }
             100..=102 | 104..=107 => {}
             _ => fault(),
@@ -319,6 +345,15 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     }
     if c.kind == 108 {
         super::input::receiver_returned(c.pointer, c.serial, exceptional);
+    }
+    if let Some(receive) = c.receive {
+        let mut ledger = super::state();
+        let result = ledger.release_receive(receive.hold, receive.source);
+        if exceptional {
+            ledger.unresolved(None);
+        }
+        drop(ledger);
+        result.unwrap_or_else(|_| fault());
     }
     if c.kind == 103 && !exceptional {
         if let Some(old) = c.reset {
