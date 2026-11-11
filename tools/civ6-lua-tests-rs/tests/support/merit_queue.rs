@@ -168,6 +168,55 @@ fn damaged_identity_or_changed_owner_never_adopts_a_recovery_event() {
 }
 
 #[test]
+fn incomplete_saved_tables_cannot_be_removed_to_requalify_old_notifications() {
+    for entry in [
+        "{}",
+        "{eligibilityUnknown=false}",
+        "{eligible=true,version=2}",
+    ] {
+        run(&format!(
+            r#"
+            settled(); set_merit(0)
+            local key=DATE..'_BUILDING_100_0'
+            local broken={entry}; local saved={{[key]=broken}}
+            Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',saved)
+            local get=CITIES[0][1].GetProperty
+            CITIES[0][1].GetProperty=nil
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(saved[key]==broken and prop('MERIT')==0)
+            saved[key]=nil; reload()
+            CITIES[0][1].GetProperty=get
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(prop('MERIT')==0,'an incomplete table was treated as qualified history')
+        "#
+        ));
+    }
+}
+
+#[test]
+fn complete_pending_and_recovery_proofs_are_not_downgraded_by_replayed_unknown_notifications() {
+    for recovery in [false, true] {
+        run(&format!(
+            r#"{FREEZE}
+            local key=DATE..'_BUILDING_100_0'
+            if {recovery} then Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false) end
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            local store={recovery} and 'JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1' or 'JAC_PERSONA_PENDING_DEEDS'
+            local original=Game:GetProperty(store)[key]
+            assert(original.eligible and original.eligibilityUnknown==false)
+            CITIES[0][1].GetProperty=nil
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(Game:GetProperty(store)[key]==original and prop('DEED_UNKNOWN_BUILDING_100_0')==nil)
+            if {recovery} then Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil) end
+            reload()
+            assert(prop('MERIT')==3 and prop('DEED_BUILDING_100_0')==1)
+            reload(); assert(prop('MERIT')==3)
+        "#
+        ));
+    }
+}
+
+#[test]
 fn direct_alliance_defer_preserves_a_false_entry_and_unknown_replay() {
     for formation in [false, true] {
         run(&format!(

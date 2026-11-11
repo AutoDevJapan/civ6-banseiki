@@ -25,6 +25,18 @@ function Q.NextSequence()
     if not integer(sequence) or sequence >= 9007199254740991 then return nil end
     return sequence + 1
 end
+local function qualified(e, leader, owner, deed, identity)
+    local known = deed == 'GOVERN_TURN' or deed == 'BUILDING' or deed == 'VICTORY' or deed == 'ALLIANCE'
+    return known and type(identity) == 'string' and integer(owner) and
+        type(e) == 'table' and e.version == 2 and e.leader == leader and e.owner == owner and
+        e.deed == deed and e.identity == identity and integer(e.turn) and e.turn <= Game.GetCurrentGameTurn() and
+        integer(e.cityID) and e.eligible == true and e.eligibilityUnknown == false and
+        integer(e.cap) and e.cap > 0 and integer(e.reward) and e.reward > 0 and
+        integer(e.reservedCount) and e.reservedCount > 0 and e.reservedCount <= e.cap and
+        integer(e.amount) and (e.amount == e.reward or (e.amount == 0 and e.reservedCount == e.cap)) and
+        ((integer(e.sequence) and e.sequence > 0) or
+         (e.sequence == nil and e.sequenceDeferred == true and integer(e.recoverySequence) and e.recoverySequence > 0))
+end
 function Q.Unknown(row, deed, identity, a)
     local leader = row.LeaderType
     local seen = 'DEED_UNKNOWN_' .. deed .. '_' .. identity
@@ -32,7 +44,7 @@ function Q.Unknown(row, deed, identity, a)
     local key = leader .. '_' .. deed .. '_' .. identity
     for _, store in ipairs({PENDING, RECOVERY}) do
         local saved = Game:GetProperty(store)
-        if type(saved) == 'table' and type(saved[key]) == 'table' then return end
+        if type(saved) == 'table' and qualified(saved[key], leader, a.Get(leader, 'OWNER'), deed, identity) then return end
     end
     -- This independent identity survives an unusable queue or sequence. It is
     -- not a paid receipt and never becomes eligible after state visibility.
@@ -167,19 +179,14 @@ function Q.Drain(a)
     for _, item in ipairs(ordered) do
         local e, key = item.event, item.key
         local row = type(e.leader) == 'string' and GameInfo.JAC_LeaderPersonas[e.leader]
-        local known = e.deed == 'GOVERN_TURN' or e.deed == 'BUILDING' or e.deed == 'VICTORY' or e.deed == 'ALLIANCE'
-        if row and known and type(e.identity) == 'string' and integer(e.owner) and integer(e.turn) and
-           integer(e.cityID) and integer(e.amount) and integer(e.reservedCount) and sequenceSeen[e.sequence] == 1 and
-           key == e.leader .. '_' .. e.deed .. '_' .. e.identity and e.turn <= Game.GetCurrentGameTurn() and
-           a.Get(e.leader, 'OWNER') == e.owner and a.Player(e.owner, true) then
+        if row and qualified(e, e.leader, a.Get(e.leader, 'OWNER'), e.deed, e.identity) and
+           sequenceSeen[e.sequence] == 1 and key == e.leader .. '_' .. e.deed .. '_' .. e.identity and a.Player(e.owner, true) then
             -- These are event-time rule values. A later balance update must
             -- neither strand a proven event nor change its committed amount.
             local cap, reward = e.cap, e.reward
             local bucket = e.leader .. '_' .. e.deed .. '_' .. e.turn
             local reserved = buckets[bucket]
-            if integer(cap) and cap > 0 and integer(reward) and reward > 0 and
-               e.reservedCount > 0 and e.reservedCount <= cap and integer(reserved) and reserved >= e.reservedCount and reserved <= cap and
-               (e.amount == reward or (e.amount == 0 and e.reservedCount == cap)) then
+            if integer(reserved) and reserved >= e.reservedCount and reserved <= cap then
                 local seen = 'DEED_' .. e.deed .. '_' .. e.identity
                 if a.Get(e.leader, seen) == nil and a.Get(e.leader, 'DEED_UNKNOWN_' .. e.deed .. '_' .. e.identity) == nil then
                     -- No save or other callback can run inside this synchronous
