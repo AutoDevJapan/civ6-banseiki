@@ -96,8 +96,8 @@ function JAC_AppointLeader(leader)
     -- Other evolving people retain their unpaid reservations. A missing title
     -- delays this step without recording payment or destroying the Great Person.
     local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
-    local reserved, full = JAC_PersonaTreeRules.ReservedAppointments(owner);
-    local ownReserved = full and (surcharge + 1) or remaining;
+    local reserved, full, own = JAC_PersonaTreeRules.ReservedAppointments(owner, leader);
+    local ownReserved = own or (full and (surcharge + 1) or remaining);
     if available - (reserved - ownReserved) < 1 then return false; end
     if native.appointed then
         if not native.canPromote or native.surchargePaid >= surcharge then return false; end

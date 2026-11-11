@@ -11,6 +11,10 @@ use std::sync::LazyLock;
 const MOD: &str = "poc/JAC_PoC_LeaderPersona";
 #[path = "support/merit_queue.rs"]
 mod merit_queue_regressions;
+#[test]
+fn two_partial_people_with_stock_spending_keep_only_unpaid_reservations() {
+    run_case("test_two_partial_people_with_stock_spending_keep_only_unpaid_reservations");
+}
 const SOURCES: [&str; 4] = [
     "Shared/JAC_PersonaTreeRules.lua",
     "Scripts/JAC_LeaderPersona_Gameplay.lua",

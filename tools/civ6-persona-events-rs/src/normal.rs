@@ -639,9 +639,9 @@ function E.NormalNative(owner,row)
     if paid==nil then return nil end
     return {appointed=paid>0,base=paid>0,surchargePaid=math.max(0,paid-1),source=SOURCE}
 end
-function E.Reserved(owner,fallback)
+function E.Reserved(owner,fallback,target)
     if E.Enabled() then return (fallback or Rules.ReservedAppointments)(owner) end
-    local s,c=state(); local total,uncertain=0,not s
+    local s,c=state(); local total,uncertain,own=0,not s,nil
     for row in GameInfo.JAC_LeaderPersonas() do
         if Get(row.LeaderType,'OWNER')==owner and Get(row.LeaderType,'STATE')=='EVOLVING' then
             local cost=E.Cost(row)
@@ -649,9 +649,22 @@ function E.Reserved(owner,fallback)
             local paid=E.NormalPaid(owner,row,cost)
             if paid==nil then uncertain=true; paid=0 end
             total=total+cost-paid
+            if row.LeaderType==target then own=cost-paid end
         end
     end
-    return total,uncertain
+    return total,uncertain,own
+end
+-- Read-only amounts from the same per-person receipts used by Gameplay.
+-- Unknown payment retains that person's full price; aggregate Spent never
+-- turns another person's debit into a smaller reservation.
+function E.UIReservations(owner,leader)
+    if E.Enabled() then return nil end
+    local s,c=state(); local d=c and c.leaders[leader]
+    if not s or not d or not s.accounts[owner] or not Player(owner,true) or
+       Get(leader,'OWNER')~=owner or Get(leader,'STATE')~='EVOLVING' then return math.huge,0 end
+    local total,uncertain,own=E.Reserved(owner,nil,leader)
+    if not integer(total) or not integer(own) or own>total then return math.huge,0 end
+    return total,own
 end
 local function debit(s,c,owner,governor,promotion,sequence)
     local a=s.accounts[owner]; local g=GameInfo.Governors[governor]; local p=c.allPromotions[promotion]

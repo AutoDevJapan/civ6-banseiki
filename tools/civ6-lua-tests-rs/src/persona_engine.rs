@@ -37,14 +37,16 @@ end
 -- use their own disjoint range rather than colliding with that real subject.
 for i=4,#GOVDEFS do GOVDEFS[i].Hash=10000+i end
 if NORMAL_PERSONA_TEST_CASE=='test_rejected_second_native_payment_waits_and_resumes_without_double_charge' or
-   NORMAL_PERSONA_TEST_CASE=='test_upper_cost_consumes_two_extra_titles_and_one_native_once' then
+   NORMAL_PERSONA_TEST_CASE=='test_upper_cost_consumes_two_extra_titles_and_one_native_once' or
+   NORMAL_PERSONA_TEST_CASE=='test_two_partial_people_with_stock_spending_keep_only_unpaid_reservations' then
  ROWS[2].EvolutionCost=3
 end
 if NORMAL_PERSONA_TEST_CASE=='cost_three_needs_two_ordered_official_promotions' or
    NORMAL_PERSONA_TEST_CASE=='partial_native_payment_reserves_only_each_persons_unpaid_titles' then
  ROWS[1].EvolutionCost=3
 end
-if NORMAL_PERSONA_TEST_CASE=='test_pending_surcharge_survives_reload_and_spending_without_double_charge' then
+if NORMAL_PERSONA_TEST_CASE=='test_pending_surcharge_survives_reload_and_spending_without_double_charge' or
+   NORMAL_PERSONA_TEST_CASE=='test_two_partial_people_with_stock_spending_keep_only_unpaid_reservations' then
  GOVDEFS[#GOVDEFS+1]={GovernorType='GOVERNOR_STOCK',Index=240,Hash=12400,Name='Stock'}
  PROMOS[#PROMOS+1]={GovernorPromotionType='STOCK_BASE',Index=4000,Hash=24000,BaseAbility=1}
 end
@@ -61,7 +63,8 @@ for _,row in ipairs(ROWS) do
   end
  end
 end
-if GameInfo and NORMAL_PERSONA_TEST_CASE=='test_pending_surcharge_survives_reload_and_spending_without_double_charge' then
+if GameInfo and (NORMAL_PERSONA_TEST_CASE=='test_pending_surcharge_survives_reload_and_spending_without_double_charge' or
+   NORMAL_PERSONA_TEST_CASE=='test_two_partial_people_with_stock_spending_keep_only_unpaid_reservations') then
  sets[#sets+1]={GovernorType='GOVERNOR_STOCK',GovernorPromotion='STOCK_BASE'}
 end
 GameInfo.JAC_LeaderPersonas=collection(ROWS,'LeaderType')

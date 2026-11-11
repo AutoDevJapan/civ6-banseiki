@@ -90,6 +90,7 @@ macro_rules! persona_tests {
             "lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn"
                 .to_string(),
             "private_manual_admission_keeps_the_fixture_in_control_of_native_requests".to_string(),
+            "two_partial_people_with_stock_spending_keep_only_unpaid_reservations".to_string(),
         ])
     );
     tests

@@ -138,7 +138,7 @@ Win64の呼出し規約と命令から、**このビルドの観測可能な入�
 
 以下はnativebridge向けの設計条件であり、実装済みの関数名や現存するLua APIではない。
 
-1. **状態の所有者**: 同期Gameplayの `Game:SetProperty` 台帳を唯一の正本にする。現行の加入は `poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua:55-104` で実Great Personの生成後に `OWNER`、`EVOLUTION_COST`、`STATE=GREAT_PERSON` を保存する。費用予約は同 `:117-141` が称号獲得数−使用済み数と他人物の未払い予約を検査し、`STATE=EVOLVING` に遷移する。UIのLua値、非同期ログ、別スレッドから同じLua VMを呼ぶ方式を資格の入力にしない。
+1. **状態の所有者**: 同期Gameplayの `Game:SetProperty` 台帳を唯一の正本にする。現行の加入は `poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua` の `Join` とそのRust生成元 `tools/civ6-persona-events-rs/src/join_transaction.rs` で実Great Personの生成後に `OWNER`、`EVOLUTION_COST`、`STATE=GREAT_PERSON` を保存する。費用予約は同Gameplayの `PrepareEvolution` が称号獲得数−使用済み数と他人物の未払い予約を検査し、`STATE=EVOLVING` に遷移する。UIのLua値、非同期ログ、別スレッドから同じLua VMを呼ぶ方式を資格の入力にしない。
 2. **論理述語 `CanEver(playerID, govIndex)`**: 22人物のGovernor Indexだけに限定して、総督Indexから世界共通の人物IDを引く。加入前と他の所有者は偽。加入後も `GREAT_PERSON` の段階では偽とし、当該所有者の実Great Personが存在し、費用全額を公式残高から予約済みの `EVOLVING` 段階で真にする。任命済みの `GOVERNOR` は同じ所有者の実Governorを確認して真を維持する。その他の公式Governorは元の判定に渡す。静的gateだけを維持しても加入後を開けないため、22人物に限り本体の特性判定結果をこの同期資格で置き換える構成を調べる。
 3. **予約と正式会計**: Join直後に開くとAIが費用2/3の人物を1称号だけで先取りし得る。`EVOLVING` は費用全額の予約が成立した後に限る。変更前の `PrepareEvolution` は人物別 `native.canAppoint` を遷移前に確認していたため、資格を `EVOLVING` で開く案と循環していた。この配置資格候補ではGameplay内で実人物・所有者・公式残高・予約を先に検査して遷移する順序へ直した。人間のUIだけでなく、AI所有者も同期Gameplayで人物ID順に同じ予約を確定する必要がある。その処理が本体AIの総督分析より先に走るかは未測定であり、遅ければ本体の同期操作入口に移す。APPOINTを1回、費用2/3では効果なしの公式PROMOTEを1/2回だけ実行し、公式 `GetGovernorPointsSpent` と実Promotionから未払いを復元する。Gameplayの功績購入、5ターン定着、忠誠8、活動不能と回復の判定をUIの擬似総督へ移さない。
 4. **本体との同期接続**: `CanEver` が参照する所有者Playerから本体Player propertyへ到達できることが静的に分かった（下記）。費用1の最初の橋は、同期Gameplayで確定したPlayer側の入場許可を同じ所有者の本体propertyから読む候補を優先して測る。Game property台帳の `OWNER` や `STATE` をPlayer側へ複製して二重正本にしない。許可を派生値として持つなら、加入・予約・取消し・実Great Person死亡・完了・読込の各確定点で台帳から更新し、再構築前は閉じる。既存のGame propertyを本体から直接読む案も残すが、UIスレッドの読取とGameplay更新の競合は未測定である。両案とも実在のC++アクセサの完全ABI・値寿命・同期を証明する前にRustから呼ばない。
@@ -1131,3 +1131,5 @@ localの開始処理RVA `0x84e4e0` は、先にvtableの `+0x58` を呼ぶ。固
 これらは所有fixtureのテストと一次命令列の照合による結果である。旧bindingのjoinedは未証明のまま保持し、影響したWorldの観測不足を消さない。全native経路の完全性、ロード前の閉鎖順序、実保存読込、通常22人・両AI・支払い・MP・正式中和と回復の製品受入は未達である。
 
 World出生がロード要求の正常なAL1復帰より先に観測された場合も、AL1が先の場合と同じ既知Sessionの結合結果を扱う。観測不足による`Unresolved`は拒否理由として保存し、新しいWorld権限を発行せず、元のロード成功をabortへ変えない。異なる所有・世代、不正な状態、旧Worldの未退役による拒否は保持する。純粋なobserver・台帳状態を使うテストで、両順序の観測不足拒否、正常な結合、元の戻り値、frame精算を確認する。このテストはnative入口の設置・命令実行、自然な実Game到達、全native排出や製品受入の証明ではない。
+
+UIが人物の追加支払いを送る際の予約額は、Gameplayの人物別確定支払いと同じ読取から総額と本人分を得る。別の正式な称号消費があることだけを理由に、支払済みの人物まで費用満額へ戻さない。未知の人物の支払いは満額を留保し、台帳や所有者が不明なら要求しない。この読取は保存値・支払い・資格を変更せず、実際の処理は従来の公式APPOINT/PROMOTEと本体の可否判定に従う。所有Lua fixtureで、費用3と2の二人、別の正式支出、途中読込、他人の予約不足・欠損記録を構成し、必要な残額だけで二人が完了し、余分な昇進と予約の流用を拒否することを確認する。通常mapの採用構成で別の正式支出が同じ順序へ到達するかは未実証である。

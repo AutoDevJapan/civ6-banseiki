@@ -429,8 +429,12 @@ pub fn embed(source: &str) -> Result<String, String> {
         "    EventsGameplayStatus = PersonaEvents.NormalStatus,\n",
         "",
     );
+    let source = source.replace(
+        "    ReservedEvolutionTitles = PersonaEvents.UIReservations,\n",
+        "",
+    );
     price_routes::gameplay(&source.replace("    EventsProbeStatus = PersonaEvents.Status,",
-        "    EventsProbeStatus = PersonaEvents.Status,\n    EventsGameplayStatus = PersonaEvents.NormalStatus,"))
+        "    EventsProbeStatus = PersonaEvents.Status,\n    EventsGameplayStatus = PersonaEvents.NormalStatus,\n    ReservedEvolutionTitles = PersonaEvents.UIReservations,"))
 }
 
 fn route(source: &str, start: &str, next: &str, generated: &str) -> Result<String, String> {

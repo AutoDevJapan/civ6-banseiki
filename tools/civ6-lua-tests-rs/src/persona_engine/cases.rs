@@ -2,6 +2,49 @@
 //! read. All new evidence here comes from the ordinary engine/event fixture.
 pub const SOURCE: &str = r#"
 if CASES then
+function CASES.test_two_partial_people_with_stock_spending_keep_only_unpaid_reservations()
+ local api=ExposedMembers.JAC_LeaderPersona
+ Players[0].points=6
+ eq('JOINED',api.Join(0,1)); eq('JOINED',api.Join(0,2))
+ eq(3,api.EvolutionCost(DATE)); eq(2,api.EvolutionCost(HOJO))
+ eq('EVOLVING',api.PrepareEvolution(0,DATE)); eq('EVOLVING',api.PrepareEvolution(0,HOJO))
+ -- Serialize this fixture's calls without changing the production function.
+ local appoint=JAC_AppointLeader; JAC_AppointLeader=function() return false end
+ ENGINE_STOCK_SPEND(0)
+ for _,leader in ipairs({DATE,HOJO}) do
+  local governor=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[leader].GovernorType]
+  UI.RequestPlayerOperation(0,PlayerOperations.APPOINT_GOVERNOR,{governor=governor.Index}); yes(STEP())
+ end
+ api.Reconcile(); eq(3,Players[0].spent)
+ eq(1,api.EventsGameplayStatus(0,DATE).paid); eq(1,api.EventsGameplayStatus(0,HOJO).paid)
+ local store='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'; local saved=Game:GetProperty(store)
+ local base=saved.people[HOJO].acquired[1]
+ local broken=Game:GetProperty(store); broken.people[HOJO].acquired[1]=nil
+ Game:SetProperty(store,broken); Players[0].points=5
+ no(appoint(DATE)); eq(0,#REQUESTS); eq(3,Players[0].spent)
+ Game:SetProperty(store,nil); no(appoint(DATE)); eq(0,#REQUESTS)
+ saved.people[HOJO].acquired[1]=base; Game:SetProperty(store,saved); api.Reconcile()
+ local snapshot=Game:GetProperty(store)
+ local reservations,own=api.ReservedEvolutionTitles(0,DATE)
+ eq(3,reservations); eq(2,own); eq(snapshot,Game:GetProperty(store))
+ local foreign,foreignOwn=api.ReservedEvolutionTitles(1,DATE)
+ eq(math.huge,foreign); eq(0,foreignOwn)
+ -- One available title belongs to the other pending person; do not take it.
+ Players[0].points=4; no(appoint(DATE)); eq(0,#REQUESTS); eq(3,Players[0].spent)
+ Players[0].points=6
+ yes(appoint(DATE)); yes(STEP()); api.Reconcile(); eq(4,Players[0].spent)
+ reload(); api=ExposedMembers.JAC_LeaderPersona
+ appoint=JAC_AppointLeader; JAC_AppointLeader=function() return false end
+ eq(2,api.EventsGameplayStatus(0,DATE).paid); eq(1,api.EventsGameplayStatus(0,HOJO).paid)
+ -- There are two unpaid titles and exactly two left, despite stock Spent.
+ yes(appoint(DATE)); yes(STEP()); api.Reconcile(); eq(5,Players[0].spent)
+ eq('GOVERNOR',prop('STATE'))
+ yes(appoint(HOJO)); yes(STEP()); api.Reconcile(); eq(6,Players[0].spent)
+ eq('GOVERNOR',prop('STATE',HOJO))
+ no(appoint(DATE)); no(appoint(HOJO)); eq(0,#REQUESTS)
+ eq(6,Players[0].spent); eq(2,DESTROYS); eq({},GRANTS[0])
+ JAC_AppointLeader=appoint
+end
 function CASES.test_missing_native_reader_never_creates_or_removes_a_person()
  local api=ExposedMembers.JAC_LeaderPersona; local key='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'
  local before=Game:GetProperty(key); Game:SetProperty(key,nil)

@@ -16,7 +16,16 @@ function Rules.EvolutionCost(leader)
     if Rules.Get(leader, "OWNER") == nil and type(cost) == "number" and cost % 1 == 0 and cost >= 1 and cost <= 3 then return cost; end
 end
 -- END RUST PERSONA PRICE READER
-function Rules.ReservedAppointments(owner)
+function Rules.ReservedAppointments(owner, leader)
+    local api = ExposedMembers and ExposedMembers.JAC_LeaderPersona;
+    if leader and api and type(api.ReservedEvolutionTitles) == "function" then
+        local total, own = api.ReservedEvolutionTitles(owner, leader);
+        if total == math.huge and own == 0 then return total, true, own; end
+        if type(total) == "number" and total >= 0 and total < 9007199254740991 and total % 1 == 0 and
+           type(own) == "number" and own >= 0 and own <= total and own % 1 == 0 then
+            return total, false, own;
+        end
+    end
     local reserved, fullCost, observedPaid, completedPaid = 0, 0, 0, 0;
     for person in GameInfo.JAC_LeaderPersonas() do
         if Rules.Get(person.LeaderType, "OWNER") == owner then
@@ -47,6 +56,7 @@ function Rules.ReservedAppointments(owner)
     if type(spent) ~= "number" or spent ~= completedPaid + observedPaid then return fullCost, true; end
     return reserved, false;
 end
+
 function Rules.Owned(node) return Rules.Get(node.LeaderType, "NODE_" .. node.NodeType) == 1; end
 function Rules.Nodes(leader, category)
     local nodes = {};
