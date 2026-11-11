@@ -68,8 +68,40 @@ fn completed_building_before_turn_is_accepted_without_weakening_final_confirmati
     let produced = json!({"buildingType":"BUILDING_GOV_SPIES","stage":"CAPACITY_READY",
         "capacity":2,"targetBuilt":true,"occupied":2,"captured":1,"mapSpies":1,
         "turn":26,"progressTurn":25});
-    assert!(!accepts(before, produced.clone()));
-    assert!(accepts(after, produced));
+    assert!(accepts(before, produced.clone()));
+    assert!(accepts(after, produced.clone()));
+    let early_pending = json!({"buildingType":"BUILDING_GOV_SPIES","stage":"PROGRESS_PENDING",
+        "capacity":2,"targetBuilt":false,"occupied":2,"captured":1,"mapSpies":1,
+        "turn":25,"progressTurn":25});
+    assert!(accepts(before, early_pending.clone()));
+    assert!(!accepts(after, early_pending.clone()));
+    let mut later_pending = early_pending.clone();
+    later_pending["turn"] = json!(26);
+    assert!(!accepts(after, later_pending));
+    let mut same_turn_completed = produced.clone();
+    same_turn_completed["turn"] = json!(25);
+    assert!(!accepts(after, same_turn_completed));
+    for (key, invalid) in [
+        ("occupied", json!(1)),
+        ("occupied", json!(3)),
+        ("mapSpies", json!(0)),
+        ("mapSpies", json!(2)),
+        ("captured", json!(0)),
+        ("captured", json!(2)),
+    ] {
+        let mut damaged = early_pending.clone();
+        damaged[key] = invalid.clone();
+        assert!(!accepts(before, damaged));
+        let mut damaged = produced.clone();
+        damaged[key] = invalid;
+        assert!(!accepts(after, damaged));
+    }
+    for (key, invalid) in [("capacity", json!(3)), ("targetBuilt", json!(false))] {
+        let mut damaged = produced.clone();
+        damaged[key] = invalid;
+        assert!(!accepts(before, damaged.clone()));
+        assert!(!accepts(after, damaged));
+    }
     let turn = actions.iter().find(|s| action(s, "end_turn")).unwrap();
     assert_eq!(turn["turns"], 1);
 }
