@@ -29,6 +29,142 @@ queue.Drain=function() end
 "#;
 
 #[test]
+fn repaired_malformed_queue_never_requalifies_the_same_building_notification() {
+    run(r#"
+        settled(); set_merit(0)
+        local get=CITIES[0][1].GetProperty; CITIES[0][1].GetProperty=nil
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
+        local reached=false
+        GameEvents.BuildingConstructed.Add(function() reached=true end)
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        assert(reached and prop('MERIT')==0)
+        assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==false)
+        reload()
+        CITIES[0][1].GetProperty=get
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil)
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        assert(prop('MERIT')==0,'repaired queue requalified an old unknown notification')
+        TURN=2; reload(); FIRE('BuildingConstructed',0,1,0,100,true)
+        assert(prop('MERIT')==0,'reload or a later turn erased the old identity')
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        assert(prop('MERIT')==3,'a new eligible identity was discarded')
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        assert(prop('MERIT')==3,'the new eligible identity paid twice')
+    "#);
+}
+
+#[test]
+fn malformed_queue_preserves_proven_event_amount_cap_and_order_until_recovery() {
+    run(r#"
+        settled(); set_merit(0)
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        FIRE('BuildingConstructed',0,1,2,100,true)
+        assert(prop('MERIT')==0 and Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==false)
+        local saved=Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')
+        assert(count(saved)==3 and saved[DATE..'_BUILDING_100_0'].amount==3)
+        for building=0,2 do assert(saved[DATE..'_BUILDING_100_'..building].recoverySequence==building+1) end
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        assert(count(saved)==3)
+        local profile=GameInfo.JAC_PersonaTreePeople[DATE].MeritProfile
+        local rule=GameInfo.JAC_PersonaMeritRules[profile]; local amount=rule.BUILDING
+        rule.BUILDING=30
+        NATIVE_GOVS[0][GameInfo.Governors[GameInfo.JAC_LeaderPersonas[DATE].GovernorType].Hash].neutralized=5
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil)
+        reload()
+        assert(prop('MERIT')==6 and prop('BUILDING_COUNT')==2 and prop('BUILDING_COUNT_TURN')==1)
+        assert(Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')==nil)
+        for building=0,2 do FIRE('BuildingConstructed',0,1,building,100,true) end
+        assert(prop('MERIT')==6,'recovery reinterpreted eligibility or repaid an identity')
+        rule.BUILDING=amount
+        NATIVE_GOVS[0][GameInfo.Governors[GameInfo.JAC_LeaderPersonas[DATE].GovernorType].Hash].neutralized=0
+        TURN=2; FIRE('BuildingConstructed',0,1,3,100,true)
+        assert(prop('MERIT')==9,'a later normal event did not receive its own reward')
+    "#);
+}
+
+#[test]
+fn recovered_events_keep_original_owner_city_and_cross_deed_notification_order() {
+    run(r#"
+        settled(); set_merit(0)
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
+        FIRE('BuildingConstructed',1,1,0,100,true)
+        FIRE('BuildingConstructed',0,2,0,101,true)
+        assert(Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')==nil)
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        local queue=ExposedMembers.JAC_LeaderPersona.MeritQueue
+        local rules=JAC_PersonaTreeRules
+        local a={Get=function(l,f) return Game:GetProperty('JAC_PERSONA_'..l..'_'..f) end,
+            Set=function(l,f,v) Game:SetProperty('JAC_PERSONA_'..l..'_'..f,v) end,
+            Player=function(owner) return Players[owner] end,
+            Parameter=function(name) return GameInfo.JAC_PersonaTreeParameters[name].Value end,
+            Merit=function(l) return rules.Merit(l) end}
+        queue.Capture(GameInfo.JAC_LeaderPersonas[DATE],'VICTORY','later',CITIES[0][1],a)
+        local events=Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')
+        assert(events[DATE..'_BUILDING_100_0'].recoverySequence==1)
+        assert(events[DATE..'_VICTORY_later'].recoverySequence==2)
+        local commits={}; local set=Game.SetProperty
+        Game.SetProperty=function(self,key,value)
+            if key=='JAC_PERSONA_'..DATE..'_DEED_BUILDING_100_0' or key=='JAC_PERSONA_'..DATE..'_DEED_VICTORY_later' then commits[#commits+1]=key end
+            return set(self,key,value)
+        end
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil)
+        queue.Drain(a)
+        assert(commits[1]=='JAC_PERSONA_'..DATE..'_DEED_BUILDING_100_0' and commits[2]=='JAC_PERSONA_'..DATE..'_DEED_VICTORY_later')
+        local merit=prop('MERIT'); assert(merit>3)
+        queue.Drain(a); assert(prop('MERIT')==merit and #commits==2)
+    "#);
+}
+
+#[test]
+fn repaired_sequence_keeps_unknown_eligibility_but_preserves_known_event_rewards() {
+    for ready in [false, true] {
+        run(&format!(
+            r#"
+            settled(); set_merit(0)
+            local get=CITIES[0][1].GetProperty
+            if {ready}==false then CITIES[0][1].GetProperty=nil end
+            Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE',false)
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(prop('MERIT')==0 and Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')==false)
+            CITIES[0][1].GetProperty=get
+            Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE',nil)
+            reload(); FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(prop('MERIT')==({ready} and 3 or 0),'event-time eligibility was lost or reinterpreted')
+            FIRE('BuildingConstructed',0,1,0,100,true)
+            assert(prop('MERIT')==({ready} and 3 or 0),'replayed building paid twice')
+            TURN=2; FIRE('BuildingConstructed',0,1,1,100,true)
+            assert(prop('MERIT')==({ready} and 6 or 3),'new eligible event failed')
+            FIRE('BuildingConstructed',0,1,1,100,true)
+            assert(prop('MERIT')==({ready} and 6 or 3))
+        "#
+        ));
+    }
+}
+
+#[test]
+fn damaged_identity_or_changed_owner_never_adopts_a_recovery_event() {
+    run(r#"
+        settled(); set_merit(0)
+        local key=DATE..'_BUILDING_100_0'
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',{[key]=false})
+        FIRE('BuildingConstructed',0,1,0,100,true)
+        assert(prop('MERIT')==0 and Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')[key]==false)
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',false)
+        FIRE('BuildingConstructed',0,1,1,100,true)
+        local stored=Game:GetProperty('JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1')
+        assert(stored[DATE..'_BUILDING_100_1'].owner==0)
+        Game:SetProperty('JAC_PERSONA_'..DATE..'_OWNER',1)
+        Game:SetProperty('JAC_PERSONA_PENDING_DEEDS',nil)
+        reload()
+        assert(prop('MERIT')==0,'a later owner inherited an older event')
+        local pending=Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')
+        assert(pending[DATE..'_BUILDING_100_1'].owner==0,'recovery rewrote original ownership')
+    "#);
+}
+
+#[test]
 fn malformed_saved_queue_keeps_building_callbacks_and_saved_values_intact() {
     for value in ["false", "true", "1", "0.5", "'invalid'"] {
         run(&format!(
@@ -113,7 +249,9 @@ fn deferred_deeds_preserve_invalid_saved_sequence_without_throwing() {
             assert(reached and prop('MERIT')==0 and next(pending)==nil)
             assert(Game:GetProperty('JAC_PERSONA_PENDING_DEEDS')==pending)
             assert(Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')==damaged)
-            assert(Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY')==nil)
+            assert(Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY')==1)
+            local unknown=prop('DEED_UNKNOWN_BUILDING_100_0')
+            assert(type(unknown)=='table' and unknown.owner==0 and unknown.turn==1 and unknown.eligibilityUnknown==true)
         "#
         ));
     }

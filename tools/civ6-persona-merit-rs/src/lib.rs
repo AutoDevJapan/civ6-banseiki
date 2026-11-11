@@ -43,6 +43,8 @@ JAC_PersonaMeritQueue = {{}}
 local Q = JAC_PersonaMeritQueue
 local PENDING = 'JAC_PERSONA_PENDING_DEEDS'
 local BUCKETS = 'JAC_PERSONA_MERIT_BUCKETS_V2'
+local RECOVERY = 'JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1'
+local RECOVERY_SEQUENCE = 'JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1'
 local function integer(value)
     return type(value) == 'number' and value >= 0 and value < 9007199254740992 and value % 1 == 0
 end
@@ -62,35 +64,72 @@ function Q.NextSequence()
     if not integer(sequence) or sequence >= 9007199254740991 then return nil end
     return sequence + 1
 end
+function Q.Unknown(row, deed, identity, a)
+    local leader = row.LeaderType
+    local seen = 'DEED_UNKNOWN_' .. deed .. '_' .. identity
+    if a.Get(leader, seen) ~= nil or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return end
+    local key = leader .. '_' .. deed .. '_' .. identity
+    for _, store in ipairs({{PENDING, RECOVERY}}) do
+        local saved = Game:GetProperty(store)
+        if type(saved) == 'table' and saved[key] ~= nil then return end
+    end
+    -- This independent identity survives an unusable queue or sequence. It is
+    -- not a paid receipt and never becomes eligible after state visibility.
+    a.Set(leader, seen, {{owner=a.Get(leader, 'OWNER'), turn=Game.GetCurrentGameTurn(), eligibilityUnknown=true}})
+    Game:SetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY', 1)
+end
 function Q.Capture(row, deed, identity, city, a)
     local leader = row.LeaderType
     local owner = a.Get(leader, 'OWNER')
     local key = leader .. '_' .. deed .. '_' .. identity
+    if a.Get(leader, 'DEED_UNKNOWN_' .. deed .. '_' .. identity) ~= nil then return false end
     local pending = Q.Pending()
-    if not pending then return false end
-    if pending[key] or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
+    local recovery = Game:GetProperty(RECOVERY)
+    if recovery ~= nil and type(recovery) ~= 'table' then Q.Unknown(row, deed, identity, a); return false end
+    if recovery and recovery[key] ~= nil then return false end
+    local destination = PENDING
+    if not pending then
+        -- Do not replace damaged saves. Retain a new event's independently
+        -- known eligibility and reserved cap in a separate synchronized store.
+        pending = recovery or {{}}
+        destination = RECOVERY
+    end
+    if pending[key] ~= nil or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
     if not city or not a.Player(owner, true) or city:GetOwner() ~= owner then return false end
     local turn = Game.GetCurrentGameTurn()
     local cap = deed == 'GOVERN_TURN' and 1 or a.Parameter(deed .. '_DEEDS_PER_TURN')
     local reward = GameInfo.JAC_PersonaMeritRules[GameInfo.JAC_PersonaTreePeople[leader].MeritProfile][deed]
     local buckets = Game:GetProperty(BUCKETS)
     if buckets == nil then buckets = {{}} end
-    if type(buckets) ~= 'table' then return false end
+    if type(buckets) ~= 'table' then Q.Unknown(row, deed, identity, a); return false end
     local bucket = leader .. '_' .. deed .. '_' .. turn
     local count = buckets[bucket]
     if count == nil then count = a.Get(leader, deed .. '_COUNT_TURN') == turn and (a.Get(leader, deed .. '_COUNT') or 0) or 0 end
     local amount, reserved = Q.Reserve(true, count, cap, reward)
-    if amount == nil then return false end
-    local sequence = Q.NextSequence()
-    if not sequence then return false end
+    if amount == nil then Q.Unknown(row, deed, identity, a); return false end
+    local sequence = destination == PENDING and Q.NextSequence() or nil
+    local recoverySequence
+    if not sequence then
+        recoverySequence = Game:GetProperty(RECOVERY_SEQUENCE)
+        if recoverySequence == nil then recoverySequence = 0 end
+        if not integer(recoverySequence) or recoverySequence >= 9007199254740991 then
+            Q.Unknown(row, deed, identity, a); return false
+        end
+        recoverySequence = recoverySequence + 1
+    end
+    -- Eligibility, amount and original-turn cap are already known. Keep them
+    -- even while the unrelated ordering counter cannot accept another value.
     pending[key] = {{version={version}, leader=leader, owner=owner, deed=deed,
         identity=identity, turn=turn, sequence=sequence, cityID=city:GetID(),
+        sequenceDeferred=not sequence or nil,
+        recoverySequence=recoverySequence,
         eligibilityUnknown=false, eligible=true, amount=amount, reservedCount=reserved,
         cap=cap, reward=reward}}
     buckets[bucket] = reserved
     Game:SetProperty(BUCKETS, buckets)
-    Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE', sequence)
-    Game:SetProperty(PENDING, pending)
+    if sequence then Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE', sequence) end
+    if recoverySequence then Game:SetProperty(RECOVERY_SEQUENCE, recoverySequence) end
+    Game:SetProperty(destination, pending)
     return amount > 0
 end
 function Q.Drain(a)
@@ -98,7 +137,53 @@ function Q.Drain(a)
     local buckets = Game:GetProperty(BUCKETS)
     if buckets == nil then buckets = {{}} end
     if type(pending) ~= 'table' or type(buckets) ~= 'table' then return end
+    local recovery = Game:GetProperty(RECOVERY)
+    if type(recovery) == 'table' then
+        local moved = false
+        for key, e in pairs(recovery) do
+            -- A restored older entry with the same identity is ambiguous.
+            -- Keep both original records rather than choosing a newer state.
+            if pending[key] == nil then pending[key] = e; recovery[key] = nil; moved = true end
+        end
+        if moved then
+            Game:SetProperty(PENDING, pending)
+            Game:SetProperty(RECOVERY, next(recovery) and recovery or nil)
+        end
+    end
     local changed = false
+    local deferred = {{}}
+    local nextSequence = Q.NextSequence()
+    if nextSequence then
+        local maximum = nextSequence - 1
+        for key, e in pairs(pending) do
+            if type(e) == 'table' then
+                if integer(e.sequence) then maximum = math.max(maximum, e.sequence) end
+                if e.version == {version} and e.eligible == true and e.eligibilityUnknown == false and
+                   e.sequenceDeferred == true and e.sequence == nil and integer(e.turn) and integer(e.reservedCount) and
+                   integer(e.recoverySequence) and e.recoverySequence > 0 then
+                    deferred[#deferred + 1] = {{key=key, event=e}}
+                end
+            end
+        end
+        table.sort(deferred, function(x,y)
+            if x.event.recoverySequence ~= y.event.recoverySequence then return x.event.recoverySequence < y.event.recoverySequence end
+            return tostring(x.key) < tostring(y.key)
+        end)
+        -- Never partially number a set when the exact Lua integer space ends.
+        local unique = true
+        for i=2,#deferred do
+            if deferred[i-1].event.recoverySequence == deferred[i].event.recoverySequence then unique = false end
+        end
+        if unique and maximum <= 9007199254740991 - #deferred then
+            for _, item in ipairs(deferred) do
+                maximum = maximum + 1
+                item.event.sequence = maximum
+                item.event.sequenceDeferred = nil
+                changed = true
+            end
+            if #deferred > 0 then Game:SetProperty('JAC_PERSONA_PENDING_SEQUENCE', maximum) end
+        end
+    end
     local completedBuckets = {{}}
     local ordered = {{}}
     for key, event in pairs(pending) do
@@ -134,7 +219,7 @@ function Q.Drain(a)
                e.reservedCount > 0 and e.reservedCount <= cap and integer(reserved) and reserved >= e.reservedCount and reserved <= cap and
                (e.amount == reward or (e.amount == 0 and e.reservedCount == cap)) then
                 local seen = 'DEED_' .. e.deed .. '_' .. e.identity
-                if a.Get(e.leader, seen) == nil then
+                if a.Get(e.leader, seen) == nil and a.Get(e.leader, 'DEED_UNKNOWN_' .. e.deed .. '_' .. e.identity) == nil then
                     -- No save or other callback can run inside this synchronous
                     -- Gameplay commit. Mark a receipt before callback-visible work.
                     a.Set(e.leader, seen, e.turn)
@@ -180,31 +265,51 @@ mod tests {
         lua.load(adapter()).exec().unwrap();
         lua.load(r#"
             local q=JAC_PersonaMeritQueue
-            local pending,buckets,sequence
+            local pending,buckets,sequence,recovery,recoverySequence
             Game={GetProperty=function(_,key)
                 if key=='JAC_PERSONA_PENDING_DEEDS' then return pending end
                 if key=='JAC_PERSONA_MERIT_BUCKETS_V2' then return buckets end
                 if key=='JAC_PERSONA_PENDING_SEQUENCE' then return sequence end
+                if key=='JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1' then return recovery end
+                if key=='JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1' then return recoverySequence end
             end,GetCurrentGameTurn=function() return 1 end,
                 SetProperty=function() error('malformed capture modified saved data') end}
             GameInfo={JAC_PersonaTreePeople={L={MeritProfile='P'}},JAC_PersonaMeritRules={P={BUILDING=3}}}
             local a={Get=function(_,f) if f=='OWNER' then return 0 end end,
                 Player=function() return true end,Parameter=function() return 2 end,
                 Merit=function() return 0 end,Set=function() error('unexpected award') end}
+            local tombstones={}
+            a.Get=function(_,f) if f=='OWNER' then return 0 end return tombstones[f] end
+            a.Set=function(_,f,v)
+                assert(f=='DEED_UNKNOWN_BUILDING_one','invalid state granted merit')
+                tombstones[f]=v
+            end
+            Game.SetProperty=function(_,key,value)
+                if key=='JAC_PERSONA_PENDING_NATIVE_HISTORY' then assert(value==1); return end
+                if key=='JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1' then recovery=value; return end
+                if key=='JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1' then recoverySequence=value; return end
+                if key=='JAC_PERSONA_PENDING_DEEDS' then assert(pending==nil or type(pending)=='table'); pending=value; return end
+                if key=='JAC_PERSONA_MERIT_BUCKETS_V2' then assert(buckets==nil or type(buckets)=='table'); buckets=value; return end
+                error('damaged ordering value was replaced')
+            end
             local city={GetID=function() return 1 end,GetOwner=function() return 0 end}
             for _,value in ipairs({false,0.5,1,'invalid'}) do
-                pending=value; buckets=nil; q.Drain(a)
-                assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
+                tombstones={}; recovery=nil; sequence=false; pending=value; buckets=nil; q.Drain(a)
+                assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==true)
+                assert(recovery.L_BUILDING_one.amount==3 and recovery.L_BUILDING_one.sequenceDeferred==true)
+                assert(pending==value and sequence==false)
+                tombstones={}; recovery=nil
                 pending=nil; buckets=value; q.Drain(a)
                 assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
-                buckets=nil; sequence=value
-                if value~=1 then assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false) end
+                assert(tombstones.DEED_UNKNOWN_BUILDING_one.eligibilityUnknown==true)
             end
-            pending=nil; buckets={L_BUILDING_1=0.5}; sequence=0
+            tombstones={}; recovery=nil; pending=nil; buckets={L_BUILDING_1=0.5}; sequence=0
             assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
-            buckets=nil
+            buckets=nil; tombstones={}
             sequence=9007199254740991
-            assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
+            assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==true)
+            assert(pending.L_BUILDING_one.amount==3 and pending.L_BUILDING_one.sequenceDeferred==true)
+            q.Drain(a); assert(sequence==9007199254740991)
             assert(q.Reserve(true,'bad',2,3)==nil)
             assert(q.Reserve(true,0.5,2,3)==nil)
             assert(q.Reserve(true,0,'bad',3)==nil)
