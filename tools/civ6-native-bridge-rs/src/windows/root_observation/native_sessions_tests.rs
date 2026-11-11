@@ -17,6 +17,36 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 };
 
 #[test]
+fn observed_native_session_return_keeps_its_initial_world_binding_usable() {
+    if !child("observed_native_session_return_keeps_its_initial_world_binding_usable") {
+        return;
+    }
+    let mut fixture = Fixture::new();
+    HOST_PREPARED.store(true, Ordering::Release);
+    let before = worlds::capture_birth_window().unwrap();
+    let lease = fixture.birth(true).unwrap();
+    assert_eq!(worlds::capture_birth_window(), Some(before));
+    let target = state()
+        .bootstrap_target(
+            fixture.owner.as_ptr() as u64,
+            fixture.session.as_ptr() as u64,
+        )
+        .unwrap();
+    let world = worlds::fixture_world_birth();
+    assert!(before.matches(world));
+    assert_eq!(bind_bootstrap_world(target, world), Ok(()));
+    assert_eq!(
+        state().world(lease),
+        Ok(WorldReceipt {
+            binding_id: world.serial,
+            epoch: world.epoch
+        })
+    );
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    assert!(FRAMES.get().unwrap().healthy());
+}
+
+#[test]
 fn null_session_factory_finishes_the_window_without_world_authority() {
     if !child("null_session_factory_finishes_the_window_without_world_authority") {
         return;
