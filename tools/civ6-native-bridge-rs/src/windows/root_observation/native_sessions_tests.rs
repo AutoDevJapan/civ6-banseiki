@@ -17,6 +17,70 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 };
 
 #[test]
+fn null_session_factory_finishes_the_window_without_world_authority() {
+    if !child("null_session_factory_finishes_the_window_without_world_authority") {
+        return;
+    }
+    let x = Fixture::new();
+    HOST_PREPARED.store(true, Ordering::Release);
+    REGISTRIES
+        .lock()
+        .unwrap()
+        .insert(x.registry.as_ptr() as u64, 9);
+    for kind in [0, 4] {
+        let before = worlds::capture_birth_window().unwrap();
+        let mut outer: Saved = unsafe { std::mem::zeroed() };
+        outer.invocation.kind = 70;
+        outer.gpr[0] = x.registry.as_ptr() as u64;
+        outer.gpr[1] = kind;
+        outer.gpr[2] = x.owner.as_ptr() as u64;
+        begin(&mut outer);
+        assert!(worlds::capture_birth_window().is_none());
+        let mut factory: Saved = unsafe { std::mem::zeroed() };
+        factory.invocation.kind = 71;
+        factory.invocation.caller = caller_override(0x7f8cf5).unwrap();
+        factory.gpr[2] = 17;
+        factory.gpr[3] = x.owner.as_ptr() as u64;
+        begin(&mut factory);
+        factory.gpr[4] = 0;
+        finish(&mut factory, false);
+        outer.gpr[4] = 17;
+        finish(&mut outer, false);
+        assert_eq!(worlds::capture_birth_window(), Some(before));
+        assert!(state()
+            .bootstrap_target(x.owner.as_ptr() as u64, 0)
+            .is_none());
+    }
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    assert!(FRAMES.get().unwrap().healthy());
+}
+
+#[test]
+fn unfinished_native_session_birth_cannot_cross_world_publication() {
+    if !child("unfinished_native_session_birth_cannot_cross_world_publication") {
+        return;
+    }
+    HOST_PREPARED.store(true, Ordering::Release);
+    let lease = fixture_bootstrap_session(10, 20);
+    let target = state().bootstrap_target(10, 20).unwrap();
+    let mut pending: Saved = unsafe { std::mem::zeroed() };
+    pending.invocation.kind = 70;
+    pending.gpr[1] = 4;
+    // Unknown registry is read only; the real original call is not replaced
+    // or skipped. This test drives only the ordinary observer's entry/return.
+    begin(&mut pending);
+    let born = worlds::fixture_world_birth();
+    assert_eq!(bind_bootstrap_world(target, born), Err(Error::Unresolved));
+    assert_eq!(state().world(lease), Err(Error::Unbound));
+    finish(&mut pending, false);
+    assert!(
+        bind_bootstrap_world(target, born).is_err(),
+        "a producer that crossed publication cannot be erased by its later return"
+    );
+    assert_eq!(state().world(lease), Err(Error::Unbound));
+}
+
+#[test]
 fn bootstrap_binding_requires_the_matching_observed_world_birth() {
     if !child("bootstrap_binding_requires_the_matching_observed_world_birth") {
         return;

@@ -198,6 +198,13 @@ impl Ledger {
             _ => Err(Error::Stale),
         }
     }
+    pub fn observed_birth_return(&self, lease: Lease) -> bool {
+        self.records.get(&lease.0).is_some_and(|record| {
+            record.registry_lifetime.is_some()
+                && record.native_id.is_some()
+                && matches!(record.phase, Phase::Open | Phase::Null)
+        })
+    }
     /// The caller owns the exact World/session event proof. Neither lookup
     /// nor the current epoch substitutes for this single-use relation.
     pub fn bind_world(&mut self, lease: Lease, world: WorldReceipt) -> Result<(), Error> {

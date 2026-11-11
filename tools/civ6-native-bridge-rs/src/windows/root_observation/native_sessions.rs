@@ -94,6 +94,7 @@ pub(super) fn fixture_snapshot_message<R>(lease: SessionLease, body: impl FnOnce
             thread: 0,
             unproven_hold: None,
             packet: None,
+            birth: None,
         })
     });
     let result = body();
@@ -306,6 +307,7 @@ struct Call {
     thread: u64,
     unproven_hold: Option<u64>,
     packet: Option<PacketReceipt>,
+    birth: Option<worlds::SessionBirth>,
 }
 thread_local! {
     static REGISTRY:RefCell<Vec<(u64,u64)>>=const {RefCell::new(Vec::new())};
@@ -634,9 +636,11 @@ extern "system" fn begin(raw: *mut Saved) {
             thread: 0,
             unproven_hold: None,
             packet: None,
+            birth: None,
         };
         match c.kind {
             70 => {
+                c.birth = worlds::session_birth_begin(c.serial, raw.gpr[1] as u32);
                 census::event(match raw.gpr[1] as u32 {
                     0 => census::SemanticEvent::Birth0,
                     1 => census::SemanticEvent::Birth1,
@@ -665,7 +669,7 @@ extern "system" fn begin(raw: *mut Saved) {
                             .birth(c.registry, lifetime, c.owner, raw.gpr[1] as u32)
                             .unwrap_or_else(|_| fault()),
                     );
-                    if let Some(window) = worlds::capture_birth_window() {
+                    if let Some(window) = c.birth.and_then(|birth| birth.window) {
                         state().record_birth_window(c.lease.unwrap(), window);
                     }
                 }
@@ -1037,6 +1041,16 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             frames.mark_unresolved();
         }
         frames.leave(hold).unwrap_or_else(|_| fault());
+    }
+    if let Some(birth) = c.birth {
+        let observed = c
+            .lease
+            .is_some_and(|lease| state().observed_birth_return(lease));
+        if !worlds::session_birth_end(birth, exceptional, observed) {
+            // Losing an observation denies future binding. It does not mean
+            // this original Session return lost an owned native reservation.
+            diagnostic(2064);
+        }
     }
 }
 extern "system" fn end(raw: *mut Saved) {

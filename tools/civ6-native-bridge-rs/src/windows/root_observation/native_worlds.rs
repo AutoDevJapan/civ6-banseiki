@@ -30,6 +30,11 @@ pub(super) struct BirthWindow {
     epoch: u64,
     observation: u64,
 }
+#[derive(Clone, Copy)]
+pub(super) struct SessionBirth {
+    token: u64,
+    pub window: Option<BirthWindow>,
+}
 impl BirthWindow {
     pub(super) fn matches(self, world: WorldLease) -> bool {
         world.serial == self.serial
@@ -64,6 +69,7 @@ struct Bindings {
     exhausted: bool,
     uncertain_games: HashSet<u64>,
     active_unproven: HashMap<u64, (u64, bool)>,
+    session_births: HashMap<u64, u32>,
 }
 static BINDINGS: std::sync::LazyLock<Mutex<Bindings>> =
     std::sync::LazyLock::new(|| Mutex::new(Bindings::default()));
@@ -87,6 +93,37 @@ fn value(address: u64) -> u64 {
         .unwrap_or_else(|| fault())
 }
 impl Bindings {
+    fn session_birth_begin(&mut self, token: u64, kind: u32) -> Option<SessionBirth> {
+        if token == 0 || self.session_births.contains_key(&token) {
+            self.exhausted = true;
+            return None;
+        }
+        let window = self.birth_window();
+        if self
+            .contexts
+            .values()
+            .any(|birth| !birth.closed && birth.world.is_some())
+        {
+            self.note_gap(0, false)?;
+        }
+        self.session_births.insert(token, kind);
+        Some(SessionBirth { token, window })
+    }
+    fn session_birth_end(
+        &mut self,
+        birth: SessionBirth,
+        exceptional: bool,
+        observed: bool,
+    ) -> bool {
+        let Some(kind) = self.session_births.remove(&birth.token) else {
+            self.exhausted = true;
+            return false;
+        };
+        if (exceptional || !observed || kind > 4) && self.note_gap(0, false).is_none() {
+            return false;
+        }
+        true
+    }
     fn coverage_gap(&self) -> bool {
         self.exhausted || !self.active_unproven.is_empty()
     }
@@ -150,7 +187,7 @@ impl Bindings {
         true
     }
     fn birth_window(&self) -> Option<BirthWindow> {
-        if self.coverage_gap() {
+        if self.coverage_gap() || !self.session_births.is_empty() {
             return None;
         }
         let live: Vec<_> = self
@@ -206,6 +243,10 @@ impl Bindings {
         Ok(())
     }
     fn world(&mut self, game: u64, world: u64, epoch: u64) -> Result<WorldLease, &'static str> {
+        if !self.session_births.is_empty() {
+            self.note_gap(0, false)
+                .ok_or("World observation exhausted")?;
+        }
         if world == 0
             || self
                 .contexts
@@ -265,6 +306,7 @@ impl Bindings {
     }
     fn owns_birth(&self, lease: WorldLease) -> bool {
         !self.coverage_gap()
+            && self.session_births.is_empty()
             && lease.observation == self.observation
             && self.contexts.get(&lease.context).is_some_and(|birth| {
                 birth.serial == lease.serial
@@ -287,6 +329,17 @@ pub(super) fn with_observed_birth<R>(lease: WorldLease, bind: impl FnOnce() -> R
     // Keep the exact birth open until the binding consumer finishes. A close
     // cannot invalidate the check between this read and the consumer's write.
     Some(bind())
+}
+pub(super) fn session_birth_begin(token: u64, kind: u32) -> Option<SessionBirth> {
+    if !HOST_PREPARED.load(Ordering::Acquire) {
+        return None;
+    }
+    BINDINGS.lock().ok()?.session_birth_begin(token, kind)
+}
+pub(super) fn session_birth_end(birth: SessionBirth, exceptional: bool, observed: bool) -> bool {
+    BINDINGS
+        .lock()
+        .is_ok_and(|mut b| b.session_birth_end(birth, exceptional, observed))
 }
 pub(super) fn closing(world: u64) -> Option<WorldLease> {
     BINDINGS.lock().ok()?.closing(world)
@@ -356,6 +409,7 @@ fn begin_unproven(raw: &mut Saved, bindings: &mut Bindings, close: bool) {
     }
     diagnostic(if close { 2062 } else { 2063 });
 }
+#[cfg(test)]
 pub(super) fn capture_birth_window() -> Option<BirthWindow> {
     if !HOST_PREPARED.load(Ordering::Acquire) {
         return None;
@@ -959,6 +1013,75 @@ mod tests {
             );
             assert_eq!(owners, 0, "World preflight refusal retained an entry");
             assert_eq!(after, before, "World preflight refusal patched an entry");
+        }
+    }
+    #[test]
+    fn every_session_kind_retains_its_prepublication_birth_until_original_return() {
+        for kind in [0, 1, 2, 3, 4, u32::MAX] {
+            let mut b = Bindings::default();
+            b.context(10, 20, 1).unwrap();
+            let window = b.birth_window().unwrap();
+            let birth = b.session_birth_begin(100, kind).unwrap();
+            assert_eq!(birth.window, Some(window));
+            assert_eq!(b.session_births.get(&100), Some(&kind));
+            assert!(b.birth_window().is_none());
+            assert!(b.session_birth_end(birth, false, true));
+            let fresh = b.birth_window().unwrap();
+            let world = b.world(20, 30, 1).unwrap();
+            assert_eq!(window.matches(world), kind <= 4);
+            assert!(fresh.matches(world));
+            assert!(b.owns_birth(world));
+        }
+    }
+    #[test]
+    fn unobserved_session_return_cannot_preserve_a_preexisting_window() {
+        let mut b = Bindings::default();
+        b.context(10, 20, 1).unwrap();
+        let old = b.birth_window().unwrap();
+        let birth = b.session_birth_begin(100, 2).unwrap();
+        assert!(b.session_birth_end(birth, false, false));
+        let fresh = b.birth_window().unwrap();
+        let world = b.world(20, 30, 1).unwrap();
+        assert!(!old.matches(world));
+        assert!(fresh.matches(world) && b.owns_birth(world));
+        assert!(b.unobserved_birth);
+    }
+    #[test]
+    fn duplicate_birth_settlement_refuses_future_bindings_without_dropping_other_births() {
+        let mut b = Bindings::default();
+        let first = b.session_birth_begin(1, 2).unwrap();
+        let second = b.session_birth_begin(2, 4).unwrap();
+        assert!(b.session_birth_end(first, false, true));
+        assert!(!b.session_birth_end(first, false, true));
+        assert_eq!(b.session_births.get(&2), Some(&4));
+        assert!(b.birth_window().is_none());
+        assert!(b.session_birth_end(second, false, true));
+        assert!(b.birth_window().is_none());
+    }
+    #[test]
+    fn unfinished_or_exceptional_session_birth_invalidates_only_observation_authority() {
+        for kind in [0, 1, 2, 3, 4, u32::MAX] {
+            for exceptional in [false, true] {
+                let mut b = Bindings::default();
+                b.context(10, 20, 1).unwrap();
+                let window = b.birth_window().unwrap();
+                let birth = b.session_birth_begin(100, kind).unwrap();
+                let world = b.world(20, 30, 1).unwrap();
+                assert!(!b.owns_birth(world), "pending birth cannot qualify a World");
+                assert!(!window.matches(world));
+                assert!(b.session_birth_end(birth, exceptional, true));
+                assert!(
+                    !window.matches(world),
+                    "return cannot recover an old window"
+                );
+                assert!(!b.exhausted);
+                assert_eq!(b.close(20), Some(world));
+                assert!(b.closed(20, world.serial));
+                b.context(10, 20, 2).unwrap();
+                let fresh = b.birth_window().unwrap();
+                let next = b.world(20, 30, 2).unwrap();
+                assert!(fresh.matches(next) && b.owns_birth(next));
+            }
         }
     }
     #[test]

@@ -304,6 +304,7 @@ impl Fixture {
             thread: 0,
             unproven_hold: None,
             packet: None,
+            birth: None,
         };
         super::super::CALLS.with(|s| s.borrow_mut().push(c));
         unsafe {
@@ -713,6 +714,7 @@ fn unknown_deferred_slot_never_borrows_an_unrelated_outer_incoming_receipt() {
         thread: 0,
         unproven_hold: None,
         packet: None,
+        birth: None,
     };
     super::super::CALLS.with(|s| s.borrow_mut().push(c));
     assert_eq!(f.pump(), 0x8811);
@@ -761,6 +763,7 @@ fn unknown_packet_identity_survives_native_serialization_free_and_delayed_dispat
         thread: 0,
         unproven_hold: None,
         packet: Some(packet),
+        birth: None,
     };
     super::super::CALLS.with(|calls| calls.borrow_mut().push(call));
     unsafe {
