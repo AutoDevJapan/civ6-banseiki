@@ -16,6 +16,7 @@ pub struct WorldReceipt {
 pub(in super::super) struct BootstrapTarget {
     pub lease: Lease,
     pub window: BirthWindow,
+    pub transport: Option<u64>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -245,6 +246,7 @@ impl Ledger {
         Some(BootstrapTarget {
             lease,
             window: record.birth_window?,
+            transport: None,
         })
     }
     pub fn bootstrap_packet_matches(&self, lease: Lease, incarnation: u64) -> bool {
@@ -265,6 +267,12 @@ impl Ledger {
         let record = self.records.get(&target.lease.0).ok_or(Error::Unknown)?;
         if record.unproven_transport.is_some() {
             return Err(Error::Unresolved);
+        }
+        if target
+            .transport
+            .is_some_and(|transport| !self.bootstrap_packet_matches(target.lease, transport))
+        {
+            return Err(Error::Stale);
         }
         if self.unresolved
             || record.birth_window != Some(target.window)

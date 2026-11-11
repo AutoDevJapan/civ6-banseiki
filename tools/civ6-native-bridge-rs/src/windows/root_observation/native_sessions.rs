@@ -349,7 +349,7 @@ pub(super) fn bootstrap_load_target(
     session: u64,
     packet: Option<PacketReceipt>,
 ) -> Option<BootstrapTarget> {
-    let target = state().bootstrap_target(owner, session)?;
+    let mut target = state().bootstrap_target(owner, session)?;
     if (NativeSessionApi::admission_active() || super::unproven_input_active()) && packet.is_none()
     {
         return None;
@@ -361,6 +361,7 @@ pub(super) fn bootstrap_load_target(
     }) {
         return None;
     }
+    target.transport = packet.map(|packet| packet.transport);
     Some(target)
 }
 #[cfg(test)]
@@ -373,6 +374,27 @@ pub(super) fn fixture_bootstrap_session(owner: u64, session: u64) -> SessionLeas
         .unwrap();
     ledger.published(lease, lease.0 as u32).unwrap();
     lease
+}
+#[cfg(test)]
+pub(super) fn fixture_pre_world_packet(lease: SessionLease) -> PacketReceipt {
+    let transport = state().publish_transport(lease, 900, 90, 100, 110).unwrap();
+    PacketReceipt {
+        serial: 1,
+        lease,
+        transport: transport.incarnation,
+        world: None,
+    }
+}
+#[cfg(test)]
+pub(super) fn fixture_replace_pre_world_transport(lease: SessionLease) {
+    let mut state = state();
+    let old = state.transport(lease).unwrap();
+    state.transport_disconnect_begin(lease).unwrap();
+    state
+        .transport_join_result(lease, old, old.thread, 1)
+        .unwrap();
+    state.transport_disconnect_end(lease).unwrap();
+    state.publish_transport(lease, 901, 90, 100, 110).unwrap();
 }
 #[cfg(test)]
 pub(super) fn fixture_bound_session_world(lease: SessionLease) -> Option<SessionWorldReceipt> {

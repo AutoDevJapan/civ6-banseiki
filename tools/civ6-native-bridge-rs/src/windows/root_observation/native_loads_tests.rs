@@ -393,6 +393,86 @@ fn accepted_request_with_world_order(unproven: bool, world_first: bool) {
         .seal_and_wait(Instant::now() + Duration::from_secs(1))
         .unwrap();
 }
+fn accepted_pre_world_packet_order(replace: bool) {
+    let lease = sessions::fixture_bootstrap_session(10, 20);
+    let packet = sessions::fixture_pre_world_packet(lease);
+    let target = sessions::bootstrap_load_target(10, 20, Some(packet)).unwrap();
+    if replace {
+        sessions::fixture_replace_pre_world_transport(lease);
+    }
+    let world = worlds::fixture_world_birth();
+    let request = {
+        let mut state = state();
+        let request = state.ledger.enter().unwrap();
+        state.sources.insert(
+            request.0,
+            Source {
+                session: None,
+                wire: None,
+                bootstrap: Some(target),
+            },
+        );
+        state.worlds.insert(request.0, world);
+        request
+    };
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 81;
+    raw.invocation.cookie = COOKIE;
+    raw.invocation.token = 1;
+    raw.gpr[4] = 0x1234_5601;
+    CALLS.with(|calls| {
+        calls.borrow_mut().push(Call {
+            serial: 1,
+            kind: 81,
+            source: None,
+            request: Some(request),
+            invocation: None,
+            pointer: 0,
+            descriptor: 0,
+            engine: 0,
+            allocation: None,
+            joined: false,
+        })
+    });
+    finish(&mut raw, false);
+    assert_eq!(
+        raw.gpr[4], 0x1234_5601,
+        "binding refusal changed original load success"
+    );
+    assert_eq!(raw.invocation.cookie, 0);
+    assert!(state().accepted.contains(&request.0));
+    assert!(CALLS.with(|calls| calls.borrow().is_empty()));
+    if replace {
+        assert_eq!(
+            state().binding_rejections.get(&request.0),
+            Some(&sessions::SessionError::Stale)
+        );
+        assert_eq!(sessions::fixture_bound_session_world(lease), None);
+    } else {
+        assert!(state().binding_rejections.is_empty());
+        assert_eq!(
+            sessions::fixture_bound_session_world(lease),
+            Some(sessions::SessionWorldReceipt {
+                binding_id: world.serial,
+                epoch: world.epoch,
+            })
+        );
+    }
+}
+#[test]
+fn accepted_pre_world_packet_load_refuses_a_replaced_issuing_transport() {
+    if !child("accepted_pre_world_packet_load_refuses_a_replaced_issuing_transport") {
+        return;
+    }
+    accepted_pre_world_packet_order(true);
+}
+#[test]
+fn accepted_pre_world_packet_load_binds_its_unchanged_issuing_transport() {
+    if !child("accepted_pre_world_packet_load_binds_its_unchanged_issuing_transport") {
+        return;
+    }
+    accepted_pre_world_packet_order(false);
+}
 
 #[test]
 fn world_before_load_return_keeps_unproven_session_as_rejection() {

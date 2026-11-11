@@ -17,6 +17,49 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 };
 
 #[test]
+fn preworld_packet_bootstrap_proposal_cannot_survive_transport_replacement() {
+    if !child("preworld_packet_bootstrap_proposal_cannot_survive_transport_replacement") {
+        return;
+    }
+    let lease = fixture_bootstrap_session(10, 20);
+    let old = state().publish_transport(lease, 900, 90, 100, 110).unwrap();
+    let packet = PacketReceipt {
+        serial: 1,
+        lease,
+        transport: old.incarnation,
+        world: None,
+    };
+    let stale = bootstrap_load_target(10, 20, Some(packet)).unwrap();
+    state().transport_disconnect_begin(lease).unwrap();
+    state()
+        .transport_join_result(lease, old, old.thread, 1)
+        .unwrap();
+    state().transport_disconnect_end(lease).unwrap();
+    let current = state().publish_transport(lease, 901, 90, 100, 110).unwrap();
+    let world = worlds::fixture_world_birth();
+    assert_eq!(bind_bootstrap_world(stale, world), Err(Error::Stale));
+    assert_eq!(state().world(lease), Err(Error::Unbound));
+    assert!(bootstrap_load_target(10, 20, Some(packet)).is_none());
+    let fresh = bootstrap_load_target(
+        10,
+        20,
+        Some(PacketReceipt {
+            transport: current.incarnation,
+            ..packet
+        }),
+    )
+    .unwrap();
+    assert_eq!(bind_bootstrap_world(fresh, world), Ok(()));
+    assert_eq!(
+        state().world(lease),
+        Ok(WorldReceipt {
+            binding_id: world.serial,
+            epoch: world.epoch
+        })
+    );
+}
+
+#[test]
 fn observed_native_session_return_keeps_its_initial_world_binding_usable() {
     if !child("observed_native_session_return_keeps_its_initial_world_binding_usable") {
         return;
