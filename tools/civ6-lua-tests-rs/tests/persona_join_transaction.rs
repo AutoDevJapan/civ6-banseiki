@@ -286,3 +286,194 @@ assert(same(valid,Game:GetProperty(STORE)))
 "#,
     );
 }
+
+#[test]
+fn saved_join_between_person_fields_recovers_in_a_new_lua_context() {
+    for field in [
+        "SOURCE",
+        "NAME",
+        "PORTRAIT",
+        "PERSONALITY",
+        "TRAIT",
+        "EVOLUTION_COST",
+        "UNIT",
+        "OWNER",
+        "STATE",
+        "MERIT",
+    ] {
+        let first = scene();
+        first.globals().set("CUT_FIELD", field).unwrap();
+        exec(
+            &first,
+            r#"
+local get,set=Game.GetProperty,Game.SetProperty
+Game.SetProperty=function(self,key,value)
+ set(self,key,clone(value))
+ if key==KEY..CUT_FIELD and value~=nil and not savedJoin then
+  savedJoin={}
+  for _,field in ipairs({'SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','EVOLUTION_COST','UNIT','OWNER','STATE','MERIT','JOIN_TRANSACTION'}) do
+   savedJoin[KEY..field]=clone(get(self,KEY..field))
+  end
+  savedJoin[STORE]=clone(get(self,STORE))
+  for _,unit in Players[0]:GetUnits():Members() do savedPerson=unit:GetID() end
+ end
+end
+assert(api.Join(0,1)=='JOINED' and people()==1)
+assert(savedJoin and savedJoin[KEY..CUT_FIELD]~=nil,
+ 'checkpoint did not cut the actual Join between person writes')
+assert(type(savedJoin[KEY..'JOIN_TRANSACTION'])=='table')
+"#,
+        );
+        fn transfer(lua: &Lua, value: mlua::Value) -> mlua::Value {
+            match value {
+                mlua::Value::String(s) => {
+                    mlua::Value::String(lua.create_string(s.as_bytes()).unwrap())
+                }
+                mlua::Value::Table(table) => {
+                    let copy = lua.create_table().unwrap();
+                    for pair in table.pairs::<mlua::Value, mlua::Value>() {
+                        let (key, value) = pair.unwrap();
+                        copy.set(transfer(lua, key), transfer(lua, value)).unwrap();
+                    }
+                    mlua::Value::Table(copy)
+                }
+                other => other,
+            }
+        }
+        let second = scene();
+        second
+            .globals()
+            .set(
+                "savedJoin",
+                transfer(&second, first.globals().get("savedJoin").unwrap()),
+            )
+            .unwrap();
+        second
+            .globals()
+            .set(
+                "savedPerson",
+                first.globals().get::<u32>("savedPerson").unwrap(),
+            )
+            .unwrap();
+        exec(
+            &second,
+            r#"
+for key,value in pairs(savedJoin) do Game:SetProperty(key,clone(value)) end
+local individual=GameInfo.GreatPersonIndividuals[ROW.PersonType]
+Game.GetGreatPeople():GrantPerson(individual.Hash,4000,5000,0,0,false)
+assert(Players[0]:GetUnits():FindID(savedPerson),'physical fixture person was not restored')
+RESET_CONTEXTS(); assert(loadstring(GAMEPLAY_SOURCE))(); api=ExposedMembers.JAC_LeaderPersona
+assert(api.Join(0,1)=='NATIVE_UNAVAILABLE',
+ 'saved Join field prefix must compensate without repeating its grant')
+assert(people()==0 and SPAWNS==1 and DESTROYS==1)
+for _,field in ipairs({'SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','EVOLUTION_COST','UNIT','OWNER','STATE','MERIT','JOIN_TRANSACTION'}) do
+ assert(Game:GetProperty(KEY..field)==nil,'old Join field was not compensated: '..field)
+end
+assert(Game:GetProperty(STORE).prices[LEADER]==nil and Players[0].spent==0)
+assert(api.Join(0,1)=='JOINED' and people()==1 and SPAWNS==2,
+ 'fresh Join must progress after the saved prefix is compensated')
+"#,
+        );
+    }
+}
+
+#[test]
+fn complete_join_undo_image_is_saved_before_fields_and_keeps_prior_tables_detached() {
+    let lua = scene();
+    exec(
+        &lua,
+        r#"
+local set=Game.SetProperty
+local initial,full,fieldWrites
+fieldWrites=0
+Game.SetProperty=function(self,key,value)
+ if key==KEY..'JOIN_TRANSACTION' and type(value)=='table' then
+  if value.after.UNIT then
+   assert(fieldWrites==0,'undo image was saved after a person field changed')
+   assert(initial and next(initial.after)==nil,'old saved undo image was mutated through an alias')
+   assert(value~=initial and value.before~=initial.before and value.price~=initial.price,
+    'persisted undo image shares mutable transaction tables')
+   full=value
+  else initial=value end
+ elseif key:sub(1,#KEY)==KEY and key~=KEY..'JOIN_TRANSACTION' then
+  fieldWrites=fieldWrites+1
+  assert(full and full.after.UNIT and full.after.STATE=='GREAT_PERSON' and full.after.OWNER==0,
+   'person field preceded the complete saved undo image')
+ end
+ return set(self,key,value)
+end
+assert(api.Join(0,1)=='JOINED' and people()==1 and fieldWrites==10)
+assert(initial and next(initial.after)==nil and full.after.OWNER==0 and full.after.UNIT)
+assert(Game:GetProperty(KEY..'JOIN_TRANSACTION')==nil)
+assert(api.Join(0,1)=='ALREADY_JOINED' and SPAWNS==1 and DESTROYS==0)
+"#,
+    );
+}
+
+#[test]
+fn rejected_complete_join_undo_image_changes_no_fields_and_can_progress_later() {
+    for fault in ["reject", "throw_after_write"] {
+        let lua = scene();
+        lua.globals().set("SAVE_FAULT", fault).unwrap();
+        exec(
+            &lua,
+            r#"
+local before=clone(Game:GetProperty(STORE)); local set=Game.SetProperty
+local fullWrites,fieldWrites=0,0
+Game.SetProperty=function(self,key,value)
+ if key==KEY..'JOIN_TRANSACTION' and type(value)=='table' and value.after.UNIT then
+  fullWrites=fullWrites+1
+  if SAVE_FAULT=='throw_after_write' then set(self,key,clone(value)); error('saved undo writer threw') end
+  return
+ elseif key:sub(1,#KEY)==KEY and key~=KEY..'JOIN_TRANSACTION' then fieldWrites=fieldWrites+1 end
+ return set(self,key,clone(value))
+end
+assert(api.Join(0,1)=='NATIVE_UNAVAILABLE'); refused(before)
+assert(fullWrites>0 and fieldWrites==0,'person fields were published without an accepted undo boundary')
+assert(SPAWNS==1 and DESTROYS==1 and Game:GetProperty(KEY..'JOIN_TRANSACTION')==nil)
+Game.SetProperty=set
+assert(api.Join(0,1)=='JOINED' and people()==1 and SPAWNS==2)
+assert(api.Join(0,1)=='ALREADY_JOINED' and SPAWNS==2)
+"#,
+        );
+    }
+}
+
+#[test]
+fn saved_complete_join_undo_never_replaces_a_foreign_field_or_existing_person() {
+    for existing in [false, true] {
+        let lua = scene();
+        lua.globals().set("EXISTING_PERSON", existing).unwrap();
+        exec(
+            &lua,
+            r#"
+local individual=GameInfo.GreatPersonIndividuals[ROW.PersonType]
+if EXISTING_PERSON then Game.GetGreatPeople():GrantPerson(individual.Hash,4000,5000,0,0,false) end
+local set=Game.SetProperty; local saved
+Game.SetProperty=function(self,key,value)
+ set(self,key,clone(value))
+ if key==KEY..'JOIN_TRANSACTION' and type(value)=='table' and value.after.UNIT and not saved then saved=clone(value) end
+end
+assert(api.Join(0,1)=='JOINED' and people()==1 and saved)
+Game.SetProperty=set
+-- Recreate a load cut after NAME, retaining a distinct current value whose
+-- owner is outside this transaction. Recovery has no authority over it.
+for _,field in ipairs({'SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','EVOLUTION_COST','UNIT','OWNER','STATE','MERIT'}) do
+ Game:SetProperty(KEY..field,saved.before[field])
+end
+Game:SetProperty(KEY..'SOURCE',saved.after.SOURCE)
+Game:SetProperty(KEY..'NAME','a distinct saved name')
+Game:SetProperty(KEY..'JOIN_TRANSACTION',clone(saved))
+RESET_CONTEXTS(); assert(loadstring(GAMEPLAY_SOURCE))(); api=ExposedMembers.JAC_LeaderPersona
+assert(api.Join(0,1)=='JOIN_ROLLBACK_PENDING')
+assert(Game:GetProperty(KEY..'NAME')=='a distinct saved name' and SPAWNS==1)
+assert(people()==(EXISTING_PERSON and 1 or 0) and DESTROYS==(EXISTING_PERSON and 0 or 1))
+assert(Game:GetProperty(KEY..'JOIN_TRANSACTION')~=nil and Players[0].spent==0)
+Game:SetProperty(KEY..'NAME',saved.after.NAME)
+assert(api.Join(0,1)=='NATIVE_UNAVAILABLE' and Game:GetProperty(KEY..'JOIN_TRANSACTION')==nil)
+assert(Game:GetProperty(KEY..'NAME')==saved.before.NAME)
+assert(api.Join(0,1)=='JOINED' and people()==1 and SPAWNS==(EXISTING_PERSON and 1 or 2))
+"#,
+        );
+    }
+}
