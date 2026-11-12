@@ -699,8 +699,11 @@ mod platform {
                         && (!matches!(mode, BridgeMode::PromotionCall | BridgeMode::AssignCalibration)
                             || (row["quiescence_proven"] == false
                                 && row["counter_scope"] == "snapshot_observation_not_complete_call_history"))
-                        && row["observed_calls"].as_u64().is_some_and(|n| {
-                            n == entries as u64 + row["dropped"].as_u64().unwrap_or(u64::MAX)
+                        && row["dropped"].as_u64().is_some_and(|dropped| {
+                            dropped <= u32::MAX as u64
+                                && (entries as u64).checked_add(dropped).is_some_and(|total| {
+                                    row["observed_calls"].as_u64() == Some(total)
+                                })
                         })
                         && (if matches!(
                             mode,
@@ -743,13 +746,11 @@ mod platform {
                                     BridgeMode::PropertyScoped
                                         | BridgeMode::PropertyAdmissionScoped
                                 ) || row["filtered_calls"].as_u64().is_some_and(|filtered| {
-                                    row["getter_calls_seen"].as_u64()
-                                        == Some(
-                                            filtered
-                                                + row["observed_calls"]
-                                                    .as_u64()
-                                                    .unwrap_or(u64::MAX),
-                                        )
+                                    row["observed_calls"].as_u64().is_some_and(|observed| {
+                                        filtered.checked_add(observed).is_some_and(|total| {
+                                            row["getter_calls_seen"].as_u64() == Some(total)
+                                        })
+                                    })
                                 }))
                                 && row["dropped"]
                                     .as_u64()
@@ -1987,6 +1988,63 @@ mod platform {
         }
 
         #[test]
+        fn malformed_terminal_counters_return_errors_without_unwinding() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("counter-proof.jsonl");
+            let rows = [
+                json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"can-ever","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":false}),
+                json!({"kind":"entry","sequence":1}),
+                json!({"kind":"stop","result":"ok","rows":1,"dropped":0,
+                    "observed_calls":1,"in_flight":0,"snapshot_stable":true,
+                    "classification":"can_ever_entry","prefix_retained_until_exit":false}),
+            ];
+            let write = |values: &[Value]| {
+                std::fs::write(
+                    &path,
+                    values
+                        .iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap();
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::CanEver).unwrap(),
+                1
+            );
+            for value in [
+                None,
+                Some(json!("0")),
+                Some(json!(null)),
+                Some(json!(-1)),
+                Some(json!(u64::MAX)),
+            ] {
+                let mut invalid = rows.to_vec();
+                if let Some(value) = value {
+                    invalid[4]["dropped"] = value;
+                } else {
+                    invalid[4].as_object_mut().unwrap().remove("dropped");
+                }
+                write(&invalid);
+                let checked = std::panic::catch_unwind(|| {
+                    terminal_artifact(&path, 7, 123, BridgeMode::CanEver)
+                });
+                assert!(
+                    checked.is_ok(),
+                    "malformed dropped counter unwound instead of returning Err"
+                );
+                assert!(checked.unwrap().is_err());
+            }
+        }
+
+        #[test]
         fn terminal_proof_requires_one_restoration_and_one_real_entry() {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("trace.jsonl");
@@ -2233,6 +2291,40 @@ mod platform {
                 terminal_artifact(&path, 7, 123, BridgeMode::PropertyScoped).unwrap(),
                 2
             );
+            let mut boundary = rows.to_vec();
+            boundary[5]["filtered_calls"] = json!(u64::MAX - 2);
+            boundary[5]["getter_calls_seen"] = json!(u64::MAX);
+            write(&boundary);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::PropertyScoped).unwrap(),
+                2
+            );
+            for value in [
+                None,
+                Some(json!("120002")),
+                Some(json!(-1)),
+                Some(json!(u64::MAX)),
+            ] {
+                let mut invalid = rows.to_vec();
+                invalid[5]["filtered_calls"] = json!(u64::MAX);
+                if let Some(value) = value {
+                    invalid[5]["getter_calls_seen"] = value;
+                } else {
+                    invalid[5]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("getter_calls_seen");
+                }
+                write(&invalid);
+                let checked = std::panic::catch_unwind(|| {
+                    terminal_artifact(&path, 7, 123, BridgeMode::PropertyScoped)
+                });
+                assert!(
+                    checked.is_ok(),
+                    "overflowing scoped counters unwound instead of returning Err"
+                );
+                assert!(checked.unwrap().is_err());
+            }
             for (index, field, value) in [
                 (0, "scope_key_ids", json!([853271, 853270])),
                 (3, "key_id", json!(583956078)),
