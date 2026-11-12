@@ -98,6 +98,23 @@ local function sample(readGate)
  return out
 end
 "#;
+/// Saved-state comparisons retain the person's values and the shared deed
+/// queues. These reads neither reconcile nor dispatch pending work.
+pub const SAVED_LEDGER: &str = r#"
+local function boxed(value) return {kind=type(value),value=value} end
+local saved={person={},queue={}}
+for _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT',
+ 'EVOLUTION_COST','EVOLUTION_SURCHARGE','PRICE_CONTRACT','MERIT','CATEGORY','GOVERN_LAST_TURN','AI_LAST_TURN',
+ 'ALLIANCES_BASELINED','GOVERN_TURN_COUNT','GOVERN_TURN_COUNT_TURN','BUILDING_COUNT','BUILDING_COUNT_TURN',
+ 'VICTORY_COUNT','VICTORY_COUNT_TURN','ALLIANCE_COUNT','ALLIANCE_COUNT_TURN'}) do
+ saved.person[field]=boxed(Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))
+end
+for _,key in ipairs({'JAC_PERSONA_PENDING_DEEDS','JAC_PERSONA_MERIT_BUCKETS_V2','JAC_PERSONA_PENDING_SEQUENCE',
+ 'JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1','JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1','JAC_PERSONA_PENDING_NATIVE_HISTORY'}) do
+ saved.queue[key]=boxed(Game:GetProperty(key))
+end
+v.saved=saved
+"#;
 /// UI and Gameplay audits deliberately enumerate independent native objects.
 pub const AI_GOVERNORS: &str = r#"
 local owners,pairs=0,0
@@ -319,6 +336,7 @@ return 'UI: 21 AI / 462 unjoined permissions closed and governors absent after a
 local v=assert(sample(false)); assert(v.phase=='full' and v.assigned==v.city)
 -- Saved values only. Restart removes the resident runtime; neither this
 -- snapshot nor its restored comparison queries or proves the native gate.
+{SAVED_LEDGER}
 {SERIAL}
 return serial(v)
 "#

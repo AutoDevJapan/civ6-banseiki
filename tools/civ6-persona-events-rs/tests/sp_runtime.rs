@@ -538,3 +538,108 @@ local gs=Players[0]:GetGovernors(); gs.HasGovernor=function() return false end; 
     wrong["steps"][1]["players"][4]["leader"] = "wrong".into();
     assert!(sp_runtime::build_with_cost(&wrong, 3).is_err());
 }
+
+#[test]
+fn generated_saved_comparison_rejects_lost_person_merit_and_recovery_state() {
+    let mut omitted = Vec::new();
+    for cost in [2, 3] {
+        let scene = sp_runtime::build_with_cost(&template(), cost).unwrap();
+        let steps = scene["steps"].as_array().unwrap();
+        let before = steps
+            .iter()
+            .find(|s| s["capture_as"] == "NORMAL_SP_SAVED")
+            .unwrap()["code"]
+            .as_str()
+            .unwrap();
+        let after = steps
+            .iter()
+            .find(|s| s["equals_capture"] == "NORMAL_SP_SAVED")
+            .unwrap()["code"]
+            .as_str()
+            .unwrap();
+        for (suffix, value) in [
+            ("MERIT", "3"),
+            ("GOVERN_TURN_COUNT", "1"),
+            ("BUILDING_COUNT_TURN", "17"),
+            ("PRICE_CONTRACT", "{cost=2,schema=1}"),
+            (
+                "JAC_PERSONA_PENDING_DEEDS",
+                "{building={owner=0,turn=17,sequence=1}}",
+            ),
+            ("JAC_PERSONA_MERIT_BUCKETS_V2", "{[17]={BUILDING=1}}"),
+            ("JAC_PERSONA_PENDING_SEQUENCE", "1"),
+            (
+                "JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1",
+                "{building={owner=0,turn=17,recoverySequence=2}}",
+            ),
+            ("JAC_PERSONA_MERIT_RECOVERY_SEQUENCE_V1", "2"),
+            ("JAC_PERSONA_PENDING_NATIVE_HISTORY", "false"),
+        ] {
+            let lua = saved_world(cost, suffix, value);
+            let saved: String = lua.load(before).eval().unwrap();
+            let restored = saved_world(cost, suffix, value);
+            assert_eq!(restored.load(after).eval::<String>().unwrap(), saved);
+            restored.load("savedProps[SAVED_KEY]=nil").exec().unwrap();
+            if restored.load(after).eval::<String>().unwrap() == saved {
+                omitted.push(format!("cost{cost}/{suffix}"));
+            }
+        }
+    }
+    assert!(
+        omitted.is_empty(),
+        "generated saved comparison ignored loss of {omitted:?}"
+    );
+}
+
+fn saved_world(cost: u8, suffix: &str, value: &str) -> Lua {
+    let lua = if cost == 2 { world() } else { three_world() };
+    lua.globals().set("SAVED_KEY", suffix).unwrap();
+    lua.load(format!(
+        r#"
+full(); assigned=true
+Players[0]:GetGovernors().CanAssignGovernor=function() error('runtime absent after restart') end
+if string.sub(SAVED_KEY,1,12)~='JAC_PERSONA_' then SAVED_KEY='JAC_PERSONA_'..L..'_'..SAVED_KEY end
+savedProps={{[SAVED_KEY]={value}}}
+local original=Game.GetProperty
+Game.GetProperty=function(self,key)
+ if key==SAVED_KEY then return savedProps[key] end
+ return original(self,key)
+end
+"#
+    ))
+    .exec()
+    .unwrap();
+    lua
+}
+
+#[test]
+fn generated_saved_comparison_distinguishes_types_and_nested_queue_changes() {
+    let scene = sp_runtime::build(&template()).unwrap();
+    let steps = scene["steps"].as_array().unwrap();
+    let code = steps
+        .iter()
+        .find(|s| s["capture_as"] == "NORMAL_SP_SAVED")
+        .unwrap()["code"]
+        .as_str()
+        .unwrap();
+    for (key, initial, changed) in [
+        ("MERIT", "3", "'3'"),
+        ("GOVERN_LAST_TURN", "17", "18"),
+        ("JAC_PERSONA_PENDING_NATIVE_HISTORY", "nil", "false"),
+        ("JAC_PERSONA_PENDING_SEQUENCE", "1", "0"),
+        (
+            "JAC_PERSONA_MERIT_RECOVERY_DEEDS_V1",
+            "{entry={owner=0,turn=17,recoverySequence=2}}",
+            "{entry={owner=1,turn=17,recoverySequence=2}}",
+        ),
+        (
+            "JAC_PERSONA_MERIT_BUCKETS_V2",
+            "{[17]={BUILDING=1}}",
+            "{[17]={BUILDING=0}}",
+        ),
+    ] {
+        let before: String = saved_world(2, key, initial).load(code).eval().unwrap();
+        let after: String = saved_world(2, key, changed).load(code).eval().unwrap();
+        assert_ne!(before, after, "saved comparison ignored {key}");
+    }
+}
