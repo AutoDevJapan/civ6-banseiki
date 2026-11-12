@@ -247,6 +247,10 @@ fn saved_price_and_join_regressions_are_registered_separately() {
                 "rejection_when_adopting_an_existing_person_never_destroys_or_renames_it",
                 "reentrant_grant_and_throw_after_creation_do_not_duplicate_or_leak_persons",
                 "corrupt_rollback_price_image_never_rewrites_another_person_contract",
+                "saved_join_between_person_fields_recovers_in_a_new_lua_context",
+                "complete_join_undo_image_is_saved_before_fields_and_keeps_prior_tables_detached",
+                "rejected_complete_join_undo_image_changes_no_fields_and_can_progress_later",
+                "saved_complete_join_undo_never_replaces_a_foreign_field_or_existing_person",
             ][..],
         ),
     ] {
