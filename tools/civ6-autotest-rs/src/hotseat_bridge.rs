@@ -464,7 +464,7 @@ fn parse_frames_inner(log: &str, run_id: &str, allow_incomplete_tail: bool) -> R
         return Err(Error::scenario("invalid expected nonce"));
     }
     let mut frames = Vec::new();
-    let mut last_serial = None;
+    let mut last_serial: Option<usize> = None;
     let mut current: Option<Chunk> = None;
     let mut hex = String::new();
     let lines: Vec<_> = log.split_inclusive('\n').collect();
@@ -506,7 +506,7 @@ fn parse_frames_inner(log: &str, run_id: &str, allow_incomplete_tail: bool) -> R
                 .collect::<Result<Vec<_>>>()?;
             let body =
                 String::from_utf8(bytes).map_err(|_| Error::scenario("invalid hotseat UTF-8"))?;
-            if last_serial.is_some_and(|previous| chunk.serial != previous + 1) {
+            if last_serial.is_some_and(|previous| previous.checked_add(1) != Some(chunk.serial)) {
                 return Err(Error::scenario(
                     "duplicate or out-of-order hotseat frame serial",
                 ));
@@ -685,7 +685,7 @@ pub fn validate_load_epoch(
     if boot.nonce != expected_nonce
         || boot.kind != "BOOT"
         || boot.step != 0
-        || observed_boots != prior_boots + 1
+        || prior_boots.checked_add(1) != Some(observed_boots)
     {
         return Err(Error::scenario(
             "load did not produce exactly one fresh nonce-matched InGame scene",
