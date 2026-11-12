@@ -2950,7 +2950,19 @@ impl Runner {
         if let Some(parent) = self.output.parent().filter(|p| !p.as_os_str().is_empty()) {
             fs::create_dir_all(parent)?;
         }
-        fs::create_dir(&self.output)?;
+        fs::create_dir(&self.output).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                Error::new(
+                    ErrorKind::Io,
+                    format!(
+                        "Output directory already exists: {}: {error}",
+                        self.output.display()
+                    ),
+                )
+            } else {
+                Error::from(error)
+            }
+        })?;
         let scenario_name = text(&self.scenario, "name").to_owned();
         self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;

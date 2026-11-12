@@ -18,8 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && matrix.os || fromJSON(format(matrix.os == 'ubuntu-latest' && '["self-hosted","Linux","X64","civ6-ci-linux","civ6-ci-run-{0}-{1}-test-Linux"]' || '["self-hosted","Windows","X64","civ6-ci-windows","civ6-ci-run-{0}-{1}-test-Windows"]', github.run_id, github.run_attempt)) }}
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -31,7 +31,7 @@ jobs:
         run: cargo fmt --manifest-path tools/Cargo.toml --all -- --check
       - name: Run all Rust and Lua tests
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
-      - name: Run workspace doctests
+      - name: Run all workspace doctests
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --doc
       - name: Build all tools
         run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
