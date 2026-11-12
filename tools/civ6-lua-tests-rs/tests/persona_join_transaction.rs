@@ -477,3 +477,76 @@ assert(api.Join(0,1)=='JOINED' and people()==1 and SPAWNS==(EXISTING_PERSON and 
         );
     }
 }
+
+#[test]
+fn initial_join_journal_reentry_cannot_compensate_or_replace_its_active_transaction() {
+    for timing in ["before_write", "after_write"] {
+        let lua = scene();
+        lua.globals().set("REENTRY_TIMING", timing).unwrap();
+        exec(
+            &lua,
+            r#"
+local set=Game.SetProperty; local entered=false
+local function reenter()
+ entered=true
+ nestedResult=api.Join(0,1)
+end
+Game.SetProperty=function(self,key,value)
+ local first=key==KEY..'JOIN_TRANSACTION' and type(value)=='table' and not value.after.UNIT and not entered
+ if first and REENTRY_TIMING=='before_write' then reenter() end
+ set(self,key,clone(value))
+ if first and REENTRY_TIMING=='after_write' then reenter() end
+end
+local result=api.Join(0,1)
+assert(entered and nestedResult=='NATIVE_UNAVAILABLE',
+ 'initial journal callback reentered its active Join transaction')
+assert(result=='JOINED' and people()==1 and SPAWNS==1 and DESTROYS==0,
+ 'initial journal reentry prevented or duplicated the original Join')
+assert(Game:GetProperty(KEY..'JOIN_TRANSACTION')==nil and Players[0].spent==0)
+assert(api.Join(0,1)=='ALREADY_JOINED' and SPAWNS==1 and DESTROYS==0)
+"#,
+        );
+    }
+}
+
+#[test]
+fn initial_join_journal_failures_release_the_guard_without_regranting() {
+    for fault in ["reject", "throw_after_write", "readback_error"] {
+        let lua = scene();
+        lua.globals().set("INITIAL_FAULT", fault).unwrap();
+        exec(
+            &lua,
+            r#"
+local get,set=Game.GetProperty,Game.SetProperty
+local readback=false
+Game.SetProperty=function(self,key,value)
+ if key==KEY..'JOIN_TRANSACTION' and type(value)=='table' then
+  if INITIAL_FAULT=='reject' then return end
+  set(self,key,clone(value)); readback=true
+  if INITIAL_FAULT=='throw_after_write' then error('initial journal writer threw after saving') end
+  return
+ end
+ return set(self,key,value)
+end
+Game.GetProperty=function(self,key)
+ if key==KEY..'JOIN_TRANSACTION' and readback and INITIAL_FAULT=='readback_error' then
+  error('initial journal readback unavailable')
+ end
+ return get(self,key)
+end
+assert(api.Join(0,1)=='NATIVE_UNAVAILABLE')
+assert(people()==0 and SPAWNS==0 and DESTROYS==0 and Players[0].spent==0,
+ 'initial journal failure reached native grant')
+Game.GetProperty,Game.SetProperty=get,set
+if Game:GetProperty(KEY..'JOIN_TRANSACTION')~=nil then
+ assert(api.Join(0,1)=='NATIVE_UNAVAILABLE' and Game:GetProperty(KEY..'JOIN_TRANSACTION')==nil,
+  'saved initial journal could not compensate after storage recovered')
+ assert(SPAWNS==0 and DESTROYS==0)
+end
+assert(api.Join(0,1)=='JOINED' and people()==1 and SPAWNS==1 and DESTROYS==0,
+ 'initial journal failure left the Join guard permanently busy')
+assert(api.Join(0,1)=='ALREADY_JOINED' and SPAWNS==1)
+"#,
+        );
+    }
+}

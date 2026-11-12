@@ -251,6 +251,8 @@ fn saved_price_and_join_regressions_are_registered_separately() {
                 "complete_join_undo_image_is_saved_before_fields_and_keeps_prior_tables_detached",
                 "rejected_complete_join_undo_image_changes_no_fields_and_can_progress_later",
                 "saved_complete_join_undo_never_replaces_a_foreign_field_or_existing_person",
+                "initial_join_journal_reentry_cannot_compensate_or_replace_its_active_transaction",
+                "initial_join_journal_failures_release_the_guard_without_regranting",
             ][..],
         ),
     ] {

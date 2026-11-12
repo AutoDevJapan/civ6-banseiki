@@ -108,9 +108,15 @@ local function Join(owner, source, personality, trait)
     local transaction={version=1,leader=leader,owner=owner,source=source,price=price,before={},after={},existing={}};
     for _,field in ipairs(joinFields) do transaction.before[field]=JoinCopy(Get(leader,field)); end
     for _,unit in ipairs(people) do transaction.existing[unit:GetID()]=true; end
-    local staged=pcall(Set,leader,"JOIN_TRANSACTION",JoinCopy(transaction));
-    if not staged or not JoinEqual(Get(leader,"JOIN_TRANSACTION"),transaction) then return Finish(owner,"NATIVE_UNAVAILABLE"); end
     joinBusy[leader]=true;
+    local staged,accepted=pcall(function()
+        Set(leader,"JOIN_TRANSACTION",JoinCopy(transaction));
+        return JoinEqual(Get(leader,"JOIN_TRANSACTION"),transaction);
+    end);
+    if not staged or not accepted then
+        joinBusy[leader]=nil;
+        return Finish(owner,"NATIVE_UNAVAILABLE");
+    end
     local result="NATIVE_UNAVAILABLE";
     local ok=pcall(function()
         local unit=people[1];
