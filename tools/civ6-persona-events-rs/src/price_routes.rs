@@ -2,8 +2,13 @@
 //! Only these bounded fragments are replaced; no Lua output is edited by hand.
 
 pub fn gameplay(source: &str) -> Result<String, String> {
-    let source = super::route(
+    let source = replace(
         source,
+        "local function Reconcile(onlyOwner)\n    SyncAshinaAdmission(false);",
+        "local function Reconcile(onlyOwner)\n    if not PersonaEvents.RetryPersistence() then\n        SyncProductionAdmission(true, onlyOwner);\n        return;\n    end\n    SyncAshinaAdmission(false);",
+    )?;
+    let source = super::route(
+        &source,
         "local function ReservedOutstandingCost(owner, rows, spent)",
         "local function CorePaymentComplete",
         RESERVED,

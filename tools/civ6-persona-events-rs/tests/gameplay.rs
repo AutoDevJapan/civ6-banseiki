@@ -3,6 +3,7 @@ use mlua::Lua;
 use std::{fs, path::PathBuf};
 include!("support/normal_cases.rs");
 include!("support/ai_turn_cases.rs");
+include!("support/persistence_write_cases.rs");
 include!("support/spending_continuity_cases.rs");
 include!("support/native_rejection_cases.rs");
 include!("support/confirmed_debit_cases.rs");

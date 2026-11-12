@@ -6,6 +6,7 @@ local E=PersonaEvents
 local STORE='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'
 local SOURCE='civ6-persona-events-rs/v3/normal-Gameplay'
 local registrations={}
+local pendingState
 local function subscribed() return registrations.GovernorAppointed==true and registrations.GovernorPromoted==true end
 local function integer(n,limit) return type(n)=='number' and n>=0 and n<(limit or 9007199254740991) and n%1==0 end
 local function hash(n) return type(n)=='number' and n>=-2147483648 and n<=4294967295 and n%1==0 end
@@ -313,6 +314,7 @@ local function readState(ignoreAdmissionSchema,snapshot)
 end
 local function state()
     local s,c=readState()
+    if pendingState then return nil,c end
     if not subscribed() or (s and s.continuityTainted) then return nil,c end
     return s,c
 end
@@ -350,6 +352,76 @@ local function same(a,b)
     for key,value in pairs(a) do if not same(value,b[key]) then return false end end
     for key in pairs(b) do if a[key]==nil then return false end end
     return true
+end
+-- Domain updates own their before/after images even if Game returns a live
+-- reference to a saved table. Persistence is established by exact readback.
+local function stageState(s)
+    local before=copy(s)
+    return before,copy(before)
+end
+local persisting=false
+local function initialPersistenceAllowed(s)
+    local c=catalog(); local turn=configuredStartTurn()
+    if not s or not c or c.binding~=s.binding or turn~=s.turn or Game.GetCurrentGameTurn()~=s.turn or
+       not subscribed() or E.Enabled() or Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')~=3 or
+       Game:GetProperty('JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA')~=nil then return false end
+    for _,key in ipairs({'JAC_TEST853_ADMISSION_ACTIVE','JAC_TEST853_ADMISSION_MANUAL_APPOINT',
+        'JAC_TEST853_PAID_ASSIGNMENT_V1'}) do if Game:GetProperty(key)~=nil then return false end end
+    for _,owner in ipairs(s.owners) do
+        if not Player(owner,true) or spent(owner)~=0 then return false end
+        local player=Players[owner]
+        if player:GetProperty(902000+owner)~=true then return false end
+        local cfg=PlayerConfigurations[owner]; local d=cfg and c.leaders[cfg:GetLeaderTypeName()]
+        if not d or s.sources[d.leader]~=owner or cfg:GetCivilizationTypeName()~=d.civilization then return false end
+        for _,person in ipairs(c.rows) do
+            if player:GetProperty(903000+person.governor)~=true or
+               player:GetProperty(901000+person.governor)~=false or
+               player:GetProperty(900000+person.governor)~=true then return false end
+        end
+    end
+    for owner=0,63 do
+        if Player(owner,false) and (not s.accounts[owner] or spent(owner)~=0) then return false end
+    end
+    for _,d in ipairs(c.rows) do
+        for _,field in ipairs({'OWNER','SOURCE','STATE','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE'}) do
+            if Get(d.leader,field)~=nil then return false end
+        end
+    end
+    return true
+end
+local function retryState()
+    if not pendingState then return true end
+    if persisting then return false end
+    persisting=true
+    local attempt=pendingState
+    local read,current=pcall(Game.GetProperty,Game,STORE)
+    local accepted=read and same(current,attempt.after)
+    if attempt.before==nil and not accepted then
+        local checked,allowed=pcall(initialPersistenceAllowed,attempt.after)
+        if not checked or allowed~=true then
+            persisting=false
+            return false
+        end
+    end
+    if read and not accepted and same(current,attempt.before) then
+        pcall(Game.SetProperty,Game,STORE,copy(attempt.after))
+        local observed,value=pcall(Game.GetProperty,Game,STORE)
+        accepted=observed and same(value,attempt.after)
+    end
+    if accepted then
+        if pendingState==attempt then pendingState=nil
+        elseif same(pendingState.before,attempt.before) then
+            -- A synchronous notification joined this write. Its immutable
+            -- after-image includes this accepted prefix; persist only the rest.
+            pendingState.before=copy(attempt.after)
+        end
+    end
+    persisting=false
+    return pendingState==nil
+end
+local function persistState(before,after)
+    pendingState={before=copy(before),after=copy(after)}
+    return retryState()
 end
 function E.PrepareJoinPrice(owner,source,row)
     if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 or Get(row.LeaderType,'OWNER')~=nil then return nil end
@@ -519,12 +591,24 @@ function E.NormalCommit(ok,forceClosed)
         end
     end
     s.commit={nativeClosedAll22=true,schema=3,binding=s.binding,context='Gameplay',turn=s.turn}
-    Game:SetProperty(STORE,s)
+    if not persistState(nil,s) then
+        initialization.stage='commit_storage_pending'
+        return
+    end
     initialization.stage='committed'; initialization.owner=nil
 end
 -- Publication only verifies authority. A durable debit confirmation is a
 -- domain step for real operations and later callbacks, never for a load.
 local readOnly=0
+function E.RetryPersistence()
+    if E.Enabled() then return true end
+    if readOnly>0 then return pendingState==nil end
+    local accepted=retryState()
+    if accepted and initialization.stage=='commit_storage_pending' then
+        initialization.stage='committed'; initialization.owner=nil
+    end
+    return accepted
+end
 function E.ReadOnly(f,...)
     readOnly=readOnly+1
     local ok,err=pcall(f,...)
@@ -535,8 +619,11 @@ end
 -- Unexpected excess spending cannot settle earlier pending records.
 function E.Confirm(owner)
     if E.Enabled() or readOnly>0 then return end
+    if not retryState() then return false end
     local s=state(); local a=s and s.accounts[owner]; local n=spent(owner)
     if not a or a.tainted or n==nil or n~=a.expected then return end
+    local before
+    before,s=stageState(s); a=s.accounts[owner]
     local changed=false
     for _,r in ipairs(a.debits) do
         if not r.confirmed and not r.invalidated and r.floorSerial==a.floorSerial then
@@ -545,11 +632,11 @@ function E.Confirm(owner)
             changed=true
         end
     end
-    if changed then Game:SetProperty(STORE,s) end
+    if changed then return persistState(before,s) end
 end
 function E.BeforeEvolution(owner,row)
     if E.Enabled() then return true end
-    E.Confirm(owner)
+    if E.Confirm(owner)==false then return false end
     local s,c=state(); local d=c and row and c.leaders[row.LeaderType]
     local n=spent(owner); local a=s and s.accounts[owner]
     if not s or not d or not a or a.tainted or n==nil or Get(d.leader,'STATE')~='GREAT_PERSON' or
@@ -559,6 +646,8 @@ function E.BeforeEvolution(owner,row)
     if n<a.expected then return false end
     local e=s.people[d.leader]
     if e and (e.tainted or next(e.acquired)) then return false end
+    local before
+    before,s=stageState(s); a=s.accounts[owner]; e=s.people[d.leader]
     if n>a.expected then
         if a.floorSerial>=9007199254740990 then return false end
         -- Preserve confirmed history. A new baseline is only for new work;
@@ -570,8 +659,8 @@ function E.BeforeEvolution(owner,row)
     e=e or {owner=owner,sourcePlayer=Get(d.leader,'SOURCE'),acquired={}}
     e.reservation={owner=owner,sourcePlayer=e.sourcePlayer,binding=s.binding,baseline=n,
         expected=a.expected,serial=a.serial,floorSerial=a.floorSerial,sequence=s.sequence,turn=Game.GetCurrentGameTurn()}
-    s.people[d.leader]=e; Game:SetProperty(STORE,s)
-    return true
+    s.people[d.leader]=e
+    return persistState(before,s)
 end
 local function absence(s,c,owner,d,entry)
     if not entry or not entry.reservation or next(entry.acquired) then return false end
@@ -688,7 +777,15 @@ local function officialBase(c,governor)
 end
 local function receive(name,...)
     if E.Enabled() then return end
-    local s,c=state(); if not s or s.sequence>=9007199254740990 then return end
+    retryState()
+    local s,c
+    if pendingState then
+        s,c=readState(false,pendingState.after)
+        if not subscribed() or (s and s.continuityTainted) then return end
+    else s,c=state() end
+    if not s or s.sequence>=9007199254740990 then return end
+    local before=pendingState and copy(pendingState.before) or copy(s)
+    s=copy(s)
     local arity=select('#',...); local args={...}; local app=name=='GovernorAppointed'
     local raw={}
     for i=1,math.min(arity,8) do
@@ -749,7 +846,7 @@ local function receive(name,...)
         end
     end
     s.receipts[#s.receipts+1]=r; if #s.receipts>64 then table.remove(s.receipts,1) end
-    Game:SetProperty(STORE,s)
+    persistState(before,s)
 end
 for _,name in ipairs({'GovernorAppointed','GovernorPromoted'}) do
     local ok=pcall(function() Events[name].Add(function(...) receive(name,...) end) end)
@@ -761,10 +858,12 @@ if not subscribed() then
     -- later successful Add cannot make an unobserved appointment absent.
     local s=readState(true)
     if s then
+        local before
+        before,s=stageState(s)
         s.continuityTainted=true
         s.subscriptionGap={source=SOURCE,context='Gameplay',turn=Game.GetCurrentGameTurn(),sequence=s.sequence,
             appointed=registrations.GovernorAppointed,promoted=registrations.GovernorPromoted}
-        Game:SetProperty(STORE,s)
+        persistState(before,s)
     end
 end
 function E.NormalStatus(owner,leader)
