@@ -356,8 +356,9 @@ end
 -- Domain updates own their before/after images even if Game returns a live
 -- reference to a saved table. Persistence is established by exact readback.
 local function stageState(s)
-    local before=copy(s)
-    return before,copy(before)
+    local before
+    if pendingState then before=copy(pendingState.before) else before=copy(s) end
+    return before,copy(s)
 end
 local persisting=false
 local function initialPersistenceAllowed(s)
@@ -784,8 +785,8 @@ local function receive(name,...)
         if not subscribed() or (s and s.continuityTainted) then return end
     else s,c=state() end
     if not s or s.sequence>=9007199254740990 then return end
-    local before=pendingState and copy(pendingState.before) or copy(s)
-    s=copy(s)
+    local before
+    before,s=stageState(s)
     local arity=select('#',...); local args={...}; local app=name=='GovernorAppointed'
     local raw={}
     for i=1,math.min(arity,8) do

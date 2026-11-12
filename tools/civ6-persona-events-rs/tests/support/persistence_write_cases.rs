@@ -352,3 +352,39 @@ assert(used[0]==1 and operations==0 and uiReads==0)
 "#,
     );
 }
+
+#[test]
+fn rejected_notification_during_the_first_pending_write_keeps_the_nil_before_image() {
+    let lua = normal_context(
+        r#"
+blocked=true; writes=0
+local setter=Game.SetProperty
+Game.SetProperty=function(self,key,value)
+ if key=='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1' then
+  writes=writes+1; if blocked then return end
+ end
+ return setter(self,key,value)
+end
+"#,
+    );
+    run(
+        &lua,
+        r#"
+local api=ExposedMembers.JAC_LeaderPersona
+local l=PlayerConfigurations[1]:GetLeaderTypeName()
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil)
+emit(Events,'GovernorPromoted','bad-owner',0,0)
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil and used[0]==0)
+blocked=false
+for i=1,3 do api.Reconcile() end
+assert(api.EventsGameplayStatus(0,l).active,
+ 'rejected initial notification lost the nil before-image and prevented storage recovery')
+local saved=properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1
+assert(saved.sequence==1 and saved.receipts[1].accepted==false)
+emit(Events,'GovernorPromoted','bad-owner',0,0)
+assert(api.EventsGameplayStatus(0,l).active and saved.sequence==1)
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.sequence==2)
+assert(operations==0 and uiReads==0 and used[0]==0)
+"#,
+    );
+}
