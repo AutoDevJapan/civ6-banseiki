@@ -397,6 +397,7 @@ local function retryState()
     local attempt=pendingState
     local read,current=pcall(Game.GetProperty,Game,STORE)
     local accepted=read and same(current,attempt.after)
+    local writeFailure
     if attempt.before==nil and not accepted then
         local checked,allowed=pcall(initialPersistenceAllowed,attempt.after)
         if not checked or allowed~=true then
@@ -405,7 +406,8 @@ local function retryState()
         end
     end
     if read and not accepted and same(current,attempt.before) then
-        pcall(Game.SetProperty,Game,STORE,copy(attempt.after))
+        local written,why=pcall(Game.SetProperty,Game,STORE,copy(attempt.after))
+        if not written then writeFailure=why or 'normal storage write failed' end
         local observed,value=pcall(Game.GetProperty,Game,STORE)
         accepted=observed and same(value,attempt.after)
     end
@@ -418,7 +420,7 @@ local function retryState()
         end
     end
     persisting=false
-    return pendingState==nil
+    return pendingState==nil,writeFailure
 end
 local function persistState(before,after)
     pendingState={before=copy(before),after=copy(after)}
@@ -467,8 +469,19 @@ function E.RecordJoinPrice(owner,source,row,plan)
     local checked=E.PrepareJoinPrice(owner,source,row)
     if not plan or not checked or plan.key~=checked.key or
        not same(plan.before,checked.before) or not same(plan.after,checked.after) then return false end
-    Game:SetProperty(plan.key,copy(plan.after))
-    return same(Game:GetProperty(plan.key),plan.after)
+    if plan.key~=STORE then
+        Game:SetProperty(plan.key,copy(plan.after))
+        return same(Game:GetProperty(plan.key),plan.after)
+    end
+    local accepted,writeFailure=persistState(plan.before,plan.after)
+    if writeFailure~=nil then error(writeFailure,0) end
+    -- A callback can join the write synchronously. After the original writer
+    -- returns, settle that captured suffix once; never replay the operation.
+    if not accepted and pendingState and not same(pendingState.after,plan.after) then
+        accepted,writeFailure=retryState()
+        if writeFailure~=nil then error(writeFailure,0) end
+    end
+    return accepted
 end
 function E.UndoJoinPrice(plan)
     if type(plan)~='table' or not Definition(plan.leader) or not integer(plan.owner,64) or
@@ -505,6 +518,32 @@ function E.UndoJoinPrice(plan)
            not same(p,{version=1,leader=plan.leader,owner=plan.owner,sourcePlayer=plan.source,
               governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=p.cost}) or
            (plan.before~=nil and not same(plan.before,p)) then return false end
+    end
+    if plan.key==STORE then
+        -- Compensate only this price. Notifications observed since preparation
+        -- belong to the current graph and cannot be rolled back with the price.
+        local current=pendingState and pendingState.after or Game:GetProperty(STORE)
+        local s=readState(false,current)
+        if not s or Get(plan.leader,'OWNER')~=nil then return false end
+        local identity,original=copy(s),copy(plan.before)
+        for _,key in ipairs({'accounts','people','receipts','sequence','spendingSerial','prices','priceVersion'}) do
+            identity[key]=nil; original[key]=nil
+        end
+        if not same(identity,original) then return false end
+        local prior=plan.before.prices and plan.before.prices[plan.leader]
+        local price=s.prices and s.prices[plan.leader]
+        if same(price,prior) then return retryState() end
+        if not s.prices or not same(price,plan.after.prices[plan.leader]) then return false end
+        local before,after=stageState(s)
+        after.prices[plan.leader]=copy(prior)
+        if plan.before.prices==nil then
+            local imported=copy(plan.after.prices); imported[plan.leader]=nil
+            if same(after.prices,imported) then after.prices=nil; after.priceVersion=nil end
+        end
+        if not readState(false,after) then return false end
+        local accepted=persistState(before,after)
+        if not accepted and pendingState and not same(pendingState.after,after) then accepted=retryState() end
+        return accepted
     end
     local current=Game:GetProperty(plan.key)
     if same(current,plan.before) then return true end
