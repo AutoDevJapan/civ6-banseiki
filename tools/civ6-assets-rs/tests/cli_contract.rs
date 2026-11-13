@@ -49,7 +49,9 @@ fn command(name: &str, cwd: &Path) -> Command {
     cmd
 }
 fn success(cmd: &mut Command) -> Output {
-    let out = cmd.output().unwrap();
+    let out = cmd
+        .output()
+        .unwrap_or_else(|error| panic!("spawn {cmd:?}: {error}"));
     assert!(
         out.status.success(),
         "{cmd:?}\n{}\n{}",
@@ -75,6 +77,58 @@ fn install_process_fixture(destination: &Path) {
 #[cfg(target_os = "linux")]
 #[test]
 fn fixture_alias_runs_when_a_writable_executable_copy_would_be_busy() {
+    const CHILD: &str = "JAC_ASSETS_BUSY_INODE_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        // A concurrent test can fork while this test holds the writable inode.
+        // Its child retains that writer until exec, even after our local Drop.
+        // Keep the writer and both exec controls in a one-test subprocess.
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "fixture_alias_runs_when_a_writable_executable_copy_would_be_busy",
+                "--test-threads=1",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+        let out_reader = std::thread::spawn(move || {
+            let mut out = Vec::new();
+            stdout.read_to_end(&mut out).unwrap();
+            out
+        });
+        let err_reader = std::thread::spawn(move || {
+            let mut out = Vec::new();
+            stderr.read_to_end(&mut out).unwrap();
+            out
+        });
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let mut expired = false;
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if std::time::Instant::now() >= end {
+                child.kill().unwrap();
+                expired = true;
+                break child.wait().unwrap();
+            }
+            std::thread::yield_now();
+        };
+        let stdout = String::from_utf8(out_reader.join().unwrap()).unwrap();
+        let stderr = String::from_utf8(err_reader.join().unwrap()).unwrap();
+        print!("{stdout}");
+        assert!(
+            !expired && status.success() && busy_inode_child_ran_once(&stdout),
+            "isolated executable-inode fixture: {status}, expired={expired}; {stdout}; {stderr}"
+        );
+        return;
+    }
     let t = temp();
     let legacy = t.path().join("legacy-copy");
     fs::copy(env!("CARGO_BIN_EXE_jac-process-fixture"), &legacy).unwrap();
@@ -97,10 +151,100 @@ fn fixture_alias_runs_when_a_writable_executable_copy_would_be_busy() {
         .env("JAC_ASSETS_TEST_PROCESS", "1");
     let output = success(&mut command);
     assert!(String::from_utf8_lossy(&output.stderr).contains("Logged in using ChatGPT"));
+    println!("BUSY_INODE_WRITER_HELD_ALIAS_EXECUTED");
+    // Prove why dropping only this process's writer cannot authorize exec
+    // while a forked child still owns the same writable inode.
+    let mut holder = Command::new("sh")
+        .args(["-c", "read release"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::from(writer.try_clone().unwrap()))
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    assert!(holder.try_wait().unwrap().is_none());
     drop(writer);
+    assert_eq!(
+        legacy_command.output().unwrap_err().raw_os_error(),
+        Some(26)
+    );
+    println!("BUSY_INODE_CHILD_WRITER_AFTER_PARENT_CLOSE_REJECTED");
+    {
+        use std::io::Write;
+        holder
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"release\n")
+            .unwrap();
+    }
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if let Some(status) = holder.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if std::time::Instant::now() >= end {
+            holder.kill().unwrap();
+            let _ = holder.wait();
+            panic!("owned writable-inode holder did not release");
+        }
+        std::thread::yield_now();
+    }
     legacy_command.current_dir(t.path());
     success(&mut legacy_command);
+    println!("BUSY_INODE_WRITER_CLOSED_COPY_EXECUTED");
 }
+
+fn busy_inode_child_ran_once(stdout: &str) -> bool {
+    [
+        "BUSY_INODE_WRITER_HELD_ALIAS_EXECUTED",
+        "BUSY_INODE_CHILD_WRITER_AFTER_PARENT_CLOSE_REJECTED",
+        "BUSY_INODE_WRITER_CLOSED_COPY_EXECUTED",
+    ]
+    .into_iter()
+    .all(|marker| {
+        stdout
+            .split_whitespace()
+            .filter(|token| *token == marker)
+            .count()
+            == 1
+    }) && stdout
+        .lines()
+        .filter(|line| line.trim() == "running 1 test")
+        .count()
+        == 1
+        && stdout
+            .lines()
+            .filter(|line| line.starts_with("test result: ok. 1 passed; 0 failed; 0 ignored;"))
+            .count()
+            == 1
+}
+
+#[test]
+fn busy_inode_fixture_child_cannot_pass_with_zero_tests_or_missing_execution_markers() {
+    let output="running 1 test\nBUSY_INODE_WRITER_HELD_ALIAS_EXECUTED\nBUSY_INODE_CHILD_WRITER_AFTER_PARENT_CLOSE_REJECTED\nBUSY_INODE_WRITER_CLOSED_COPY_EXECUTED\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.01s\n";
+    assert!(busy_inode_child_ran_once(output));
+    assert!(busy_inode_child_ran_once(&output.replace(
+        "BUSY_INODE_WRITER_HELD_ALIAS_EXECUTED",
+        "test fixture_alias ... BUSY_INODE_WRITER_HELD_ALIAS_EXECUTED"
+    )));
+    for marker in [
+        "BUSY_INODE_WRITER_HELD_ALIAS_EXECUTED",
+        "BUSY_INODE_CHILD_WRITER_AFTER_PARENT_CLOSE_REJECTED",
+        "BUSY_INODE_WRITER_CLOSED_COPY_EXECUTED",
+    ] {
+        assert!(!busy_inode_child_ran_once(&output.replace(marker, "")));
+        assert!(!busy_inode_child_ran_once(&format!("{output}{marker}\n")));
+    }
+    assert!(!busy_inode_child_ran_once("running 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s\n"));
+    assert!(!busy_inode_child_ran_once(
+        &output.replace("1 passed", "0 passed")
+    ));
+    assert!(!busy_inode_child_ran_once(
+        &output.replace("running 1 test", "running 0 tests")
+    ));
+}
+
 fn normalized(e: &xmltree::Element) -> Value {
     json!({"tag":e.name,"attrs":e.attributes.iter().collect::<std::collections::BTreeMap<_,_>>(),"text":e.get_text().filter(|t|!t.trim().is_empty()),"children":civ6_assets_rs::elements(e).map(normalized).collect::<Vec<_>>()})
 }

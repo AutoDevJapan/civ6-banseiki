@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-pr-head-v2-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
+
 jobs:
   test:
     strategy:
@@ -20,7 +24,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Install Rust
         run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
       - name: Check formatting
@@ -31,6 +35,16 @@ jobs:
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --doc
       - name: Build all tools
         run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
+      - name: Record release binary hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $source -notmatch '^[0-9a-f]{40}$') { throw 'Source revision is unavailable' }
+          $files = @(Get-ChildItem -LiteralPath './tools/target/release' -File | Where-Object { if ($IsWindows) { $_.Extension -eq '.exe' } else { $_.Extension -eq '' } })
+          if ($files.Count -eq 0) { throw 'No release binaries found' }
+          $hashes = @($files | ForEach-Object { @{ name = $_.Name; bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } })
+          @{ source_sha = $source; runner_os = $env:RUNNER_OS; binaries = $hashes } | ConvertTo-Json -Depth 5
       - name: Check existing scenario JSON
         shell: pwsh
         run: |

@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-pr-head-v2-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
+
 jobs:
   live-chain:
     runs-on: windows-latest
@@ -21,7 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
       - run: cargo +stable fmt --check
       - run: cargo +stable test --locked
