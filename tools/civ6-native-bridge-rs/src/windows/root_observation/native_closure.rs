@@ -56,7 +56,7 @@ pub(in super::super) enum Violation {
     PublicationPending,
     PublicationIdentity,
 }
-/// An admitted Add/Push frame for one observed manager incarnation. This
+/// An admitted Add/Push/Spawn frame for one observed manager incarnation. This
 /// retains its native publication window without granting a World epoch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Publication {
@@ -275,25 +275,27 @@ impl Ledger {
         self.publications.swap_remove(index.unwrap());
         Ok(())
     }
-    fn spawn(&mut self, list: u32) -> Result<(), Violation> {
-        if list == 0 {
-            return Ok(());
-        }
+    fn spawn_index(&self, list: u32) -> Option<usize> {
         // Only a list that the manager still owns can be attributed. A freed
         // id may already belong to another subsystem, so a released lease no
         // longer matches.
-        let Some(m) = self
-            .managers
-            .iter_mut()
-            .filter(|m| {
-                m.list == list
+        self.managers
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| {
+                list != 0
+                    && m.list == list
                     && !m.released
                     && matches!(m.phase, Phase::Open | Phase::Closing | Phase::Waited)
             })
-            .max_by_key(|m| priority(m))
-        else {
+            .max_by_key(|(_, m)| priority(m))
+            .map(|(index, _)| index)
+    }
+    fn spawn(&mut self, list: u32) -> Result<(), Violation> {
+        let Some(index) = self.spawn_index(list) else {
             return Ok(());
         };
+        let m = &mut self.managers[index];
         match m.phase {
             Phase::Open => Ok(()),
             Phase::Closing if !m.repeated => {
@@ -307,6 +309,25 @@ impl Ledger {
                 Ok(())
             }
         }
+    }
+    fn begin_spawn_publication(&mut self, list: u32) -> Result<Option<Publication>, Violation> {
+        let Some(index) = self.spawn_index(list) else {
+            return Ok(None);
+        };
+        self.healthy()?;
+        self.spawn(list)?;
+        let manager = self.managers[index];
+        if manager.phase == Phase::Waited {
+            // Late Spawn remains transparent, but its receipt stays incomplete.
+            return Ok(None);
+        }
+        let publication = Publication {
+            id: self.bump()?,
+            manager: manager.manager,
+            serial: manager.serial,
+        };
+        self.publications.push(publication);
+        Ok(Some(publication))
     }
     fn wait_returned(&mut self, manager: u64) -> Result<(), Violation> {
         self.healthy()?;
@@ -469,12 +490,13 @@ pub(super) fn finish_publication(publication: Publication) -> Result<(), Violati
     CHANGED.notify_all();
     result
 }
-/// Host Spawn/reissue list id (low 32 bits).
-pub(in super::super) fn spawn(list: u32) -> Result<(), Violation> {
+/// Retain a known live list's Spawn/reissue until its original frame returns.
+/// This grants no World or job and never adopts a freed or unrelated list.
+pub(super) fn begin_spawn_publication(list: u32) -> Result<Option<Publication>, Violation> {
     if ACTIVE.load(Ordering::Acquire) == 0 {
-        return Ok(());
+        return Ok(None);
     }
-    ledger()?.spawn(list)
+    ledger()?.begin_spawn_publication(list)
 }
 /// Core 9922C0 normal return for this manager's set.
 #[cfg(test)]
@@ -482,7 +504,7 @@ pub(in super::super) fn wait_returned(manager: u64) -> Result<(), Violation> {
     ledger()?.wait_returned(manager)
 }
 /// Complete the native Wait observation only after every already-admitted
-/// Add/Push frame for this manager has returned. Entry and the Waited fence
+/// Add/Push/Spawn frame for this manager has returned. Entry and the Waited fence
 /// use this same mutex, so no publisher can enter between zero and the fence.
 pub(in super::super) fn wait_returned_until(
     manager: u64,

@@ -2,7 +2,7 @@ use super::*;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
+    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
 };
 
 #[link(name = "kernel32")]
@@ -100,6 +100,100 @@ fn other_manager_publication_does_not_block_a_drained_manager() {
     assert!(l.world_closed(WORLD).unwrap().complete());
     assert_eq!(l.publications, vec![other]);
     l.finish_publication(other).unwrap();
+}
+
+#[test]
+fn spawn_publication_keeps_its_exact_incarnation_until_original_return() {
+    let mut l = Ledger::new();
+    assert_eq!(l.begin_spawn_publication(LIST), Ok(None));
+    let serial = l.init_returned(MANAGER, LIST).unwrap();
+    assert_eq!(l.begin_spawn_publication(0), Ok(None));
+    assert_eq!(l.begin_spawn_publication(LIST + 1), Ok(None));
+    let publication = l.begin_spawn_publication(LIST).unwrap().unwrap();
+    assert_eq!((publication.manager, publication.serial), (MANAGER, serial));
+    assert_eq!(
+        l.init_returned(MANAGER, LIST),
+        Err(Violation::PublicationPending)
+    );
+    for bad in [
+        Publication {
+            manager: MANAGER + 1,
+            ..publication
+        },
+        Publication {
+            serial: serial + 1,
+            ..publication
+        },
+        Publication {
+            id: u64::MAX,
+            ..publication
+        },
+    ] {
+        assert_eq!(
+            l.finish_publication(bad),
+            Err(Violation::PublicationIdentity)
+        );
+        assert_eq!(l.publications, vec![publication]);
+    }
+    l.close_begin(WORLD, MANAGER, LIST).unwrap();
+    assert_eq!(l.wait_returned(MANAGER), Err(Violation::PublicationPending));
+    l.finish_publication(publication).unwrap();
+    assert_eq!(
+        l.finish_publication(publication),
+        Err(Violation::PublicationIdentity)
+    );
+    l.wait_returned(MANAGER).unwrap();
+    l.list_released(LIST, true, MANAGER).unwrap();
+    assert_eq!(l.begin_spawn_publication(LIST), Ok(None));
+    l.close_end(MANAGER).unwrap();
+    assert!(!l.world_closed(WORLD).unwrap().complete());
+    l.init_returned(MANAGER, LIST).unwrap();
+    let next = l.begin_spawn_publication(LIST).unwrap().unwrap();
+    assert_eq!(
+        l.finish_publication(publication),
+        Err(Violation::PublicationIdentity)
+    );
+    assert_eq!(l.publications, vec![next]);
+    l.finish_publication(next).unwrap();
+    l.close_begin(WORLD + 1, MANAGER, LIST).unwrap();
+    l.wait_returned(MANAGER).unwrap();
+    l.list_released(LIST, true, MANAGER).unwrap();
+    l.close_end(MANAGER).unwrap();
+    assert!(l.world_closed(WORLD + 1).unwrap().complete());
+}
+
+#[test]
+fn spawn_publication_uses_the_live_list_owner_and_does_not_block_another_manager() {
+    let mut l = Ledger::new();
+    l.init_returned(MANAGER, LIST).unwrap();
+    l.init_returned(0x6000, LIST + 1).unwrap();
+    let other = l.begin_spawn_publication(LIST + 1).unwrap().unwrap();
+    l.close_begin(WORLD, MANAGER, LIST).unwrap();
+    let own = l.begin_spawn_publication(LIST).unwrap().unwrap();
+    l.finish_publication(own).unwrap();
+    l.wait_returned(MANAGER).unwrap();
+    l.list_released(LIST, true, MANAGER).unwrap();
+    l.close_end(MANAGER).unwrap();
+    assert!(l.world_closed(WORLD).unwrap().complete());
+    assert_eq!(l.publications, vec![other]);
+    l.finish_publication(other).unwrap();
+
+    // An owned Waited list wins over an older Open record with the same id.
+    let mut l = Ledger::new();
+    l.init_returned(0x8000, LIST).unwrap();
+    l.init_returned(MANAGER, LIST).unwrap();
+    l.close_begin(WORLD, MANAGER, LIST).unwrap();
+    l.wait_returned(MANAGER).unwrap();
+    assert_eq!(l.begin_spawn_publication(LIST), Ok(None));
+    assert!(!l.managers[0].late_spawn && l.managers[1].late_spawn);
+    assert!(l.publications.is_empty());
+    l.list_released(LIST, true, MANAGER).unwrap();
+    l.close_end(MANAGER).unwrap();
+    assert!(!l.world_closed(WORLD).unwrap().complete());
+    // After release the same id may belong to the other native owner.
+    let live = l.begin_spawn_publication(LIST).unwrap().unwrap();
+    assert_eq!(live.manager, 0x8000);
+    l.finish_publication(live).unwrap();
 }
 
 #[test]

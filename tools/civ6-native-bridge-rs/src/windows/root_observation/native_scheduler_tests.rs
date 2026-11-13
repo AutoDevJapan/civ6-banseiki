@@ -1,7 +1,7 @@
 use super::*;
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
+    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
 };
 static ACTUAL_ALLOC: AtomicBool = AtomicBool::new(false);
 static ALLOC_TARGET: AtomicU64 = AtomicU64::new(0);
@@ -11,6 +11,111 @@ static TASK: AtomicU64 = AtomicU64::new(0);
 static ACTION: AtomicU64 = AtomicU64::new(0);
 static OBSERVED: AtomicU64 = AtomicU64::new(0);
 static EARLY_DISPATCH: AtomicU64 = AtomicU64::new(0);
+
+#[test]
+fn unbound_spawn_is_retained_until_full_return_before_wait() {
+    if !child("unbound_spawn_is_retained_until_full_return_before_wait") {
+        return;
+    }
+    // Rust observer calls with modeled arguments, no original native body.
+    assert!(FRAMES.get().is_none());
+    const MANAGER: u64 = 0x2000;
+    const LIST: u32 = 7;
+    const CORE: u64 = 0x100000;
+    closure::bind_core(CORE);
+    closure::init_returned(MANAGER, LIST).unwrap();
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 132;
+    raw.gpr[0] = u64::from(LIST);
+    unsafe { SetLastError(0x4321) };
+    begin(&mut raw);
+    assert_eq!(unsafe { GetLastError() }, 0x4321);
+    assert!(SCOPES.with(|scopes| {
+        let scopes = scopes.borrow();
+        let scope = scopes.last().unwrap();
+        scope.hold.is_none() && scope.job.is_none()
+    }));
+    closure::close_begin(0x1000, MANAGER, LIST).unwrap();
+    eprintln!("SPAWN_ORIGINAL_STILL_ACTIVE");
+    assert_eq!(
+        closure::wait_returned(MANAGER),
+        Err(closure::Violation::PublicationPending),
+        "native Wait accepted a Spawn whose original frame has not returned"
+    );
+    raw.gpr[4] = 0x7788;
+    // Model the original body's LastError after the assertion/diagnostic APIs.
+    unsafe { SetLastError(0x4321) };
+    end(&mut raw);
+    assert_eq!((raw.gpr[4], unsafe { GetLastError() }), (0x7788, 0x4321));
+    assert!(SCOPES.with(|scopes| scopes.borrow().is_empty()));
+    closure::wait_returned(MANAGER).unwrap();
+    closure::list_released(LIST, CORE + 0x4a120e, MANAGER).unwrap();
+    closure::close_end(MANAGER).unwrap();
+    let receipt = closure::world_closed(0x1000).unwrap();
+    assert!(receipt.publication_overlap && !receipt.complete());
+
+    // Returning before Wait lets the next normal incarnation make progress.
+    closure::init_returned(MANAGER, LIST + 1).unwrap();
+    raw.gpr[0] = u64::from(LIST + 1);
+    begin(&mut raw);
+    end(&mut raw);
+    closure::close_begin(0x1001, MANAGER, LIST + 1).unwrap();
+    closure::wait_returned(MANAGER).unwrap();
+    closure::list_released(LIST + 1, CORE + 0x4a120e, MANAGER).unwrap();
+    closure::close_end(MANAGER).unwrap();
+    assert!(closure::world_closed(0x1001).unwrap().complete());
+    assert!(!FAILED.load(Ordering::Acquire));
+}
+
+#[test]
+fn unrelated_and_released_spawn_lists_remain_transparent() {
+    if !child("unrelated_and_released_spawn_lists_remain_transparent") {
+        return;
+    }
+    closure::bind_core(0x100000);
+    closure::init_returned(0x2000, 7).unwrap();
+    closure::close_begin(0x1000, 0x2000, 7).unwrap();
+    closure::wait_returned(0x2000).unwrap();
+    closure::list_released(7, 0x100000 + 0x4a120e, 0x2000).unwrap();
+    for list in [0, 7, 99] {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.invocation.kind = 132;
+        raw.gpr[0] = list;
+        begin(&mut raw);
+        assert!(SCOPES.with(|scopes| scopes.borrow().last().unwrap().publication.is_none()));
+        raw.gpr[4] = 0x7788;
+        unsafe { SetLastError(0x4321) };
+        end(&mut raw);
+        assert_eq!((raw.gpr[4], unsafe { GetLastError() }), (0x7788, 0x4321));
+    }
+    closure::close_end(0x2000).unwrap();
+    let receipt = closure::world_closed(0x1000).unwrap();
+    assert!(!receipt.late_spawn && receipt.complete());
+    assert!(!FAILED.load(Ordering::Acquire));
+}
+
+#[test]
+fn spawn_publication_unwind_cannot_certify_wait_or_a_new_incarnation() {
+    if !child("spawn_publication_unwind_cannot_certify_wait_or_a_new_incarnation") {
+        return;
+    }
+    closure::init_returned(0x2000, 7).unwrap();
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 132;
+    raw.gpr[0] = 7;
+    begin(&mut raw);
+    closure::close_begin(0x1000, 0x2000, 7).unwrap();
+    finish(&mut raw, true);
+    assert!(SCOPES.with(|scopes| scopes.borrow().is_empty()));
+    assert_eq!(
+        closure::wait_returned(0x2000),
+        Err(closure::Violation::Unwound)
+    );
+    assert_eq!(
+        closure::init_returned(0x2000, 7),
+        Err(closure::Violation::Unwound)
+    );
+}
 
 #[test]
 fn unbound_publisher_is_retained_until_full_return_before_wait() {
@@ -114,21 +219,39 @@ fn unbound_publication_wait_keeps_its_deadline_and_resumes_after_normal_return()
     if !child("unbound_publication_wait_keeps_its_deadline_and_resumes_after_normal_return") {
         return;
     }
+    publication_wait_case(131);
+}
+
+#[test]
+fn spawn_publication_wait_keeps_its_deadline_and_resumes_after_normal_return() {
+    if !child("spawn_publication_wait_keeps_its_deadline_and_resumes_after_normal_return") {
+        return;
+    }
+    publication_wait_case(132);
+}
+
+fn publication_wait_case(kind: u64) {
     use std::sync::mpsc;
-    closure::init_returned(0x2000, 0).unwrap();
+    let list = if kind == 132 { 7 } else { 0 };
+    closure::bind_core(0x100000);
+    closure::init_returned(0x2000, list).unwrap();
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
     let publisher = std::thread::spawn(move || {
         let mut raw: Saved = unsafe { std::mem::zeroed() };
-        raw.invocation.kind = 131;
-        raw.gpr[2] = 0x2400;
+        raw.invocation.kind = kind;
+        if kind == 132 {
+            raw.gpr[0] = u64::from(list);
+        } else {
+            raw.gpr[2] = 0x2400;
+        }
         begin(&mut raw);
         entered_tx.send(()).unwrap();
         release_rx.recv_timeout(Duration::from_secs(2)).unwrap();
         end(&mut raw);
     });
     entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-    closure::close_begin(0x1000, 0x2000, 0).unwrap();
+    closure::close_begin(0x1000, 0x2000, list).unwrap();
     // An expired budget cannot create a Waited receipt or erase the hold.
     assert_eq!(
         closure::wait_returned_until(0x2000, Instant::now()),
@@ -165,6 +288,9 @@ fn unbound_publication_wait_keeps_its_deadline_and_resumes_after_normal_return()
         Ok(())
     );
     waiter.join().unwrap();
+    if list != 0 {
+        closure::list_released(list, 0x100000 + 0x4a120e, 0x2000).unwrap();
+    }
     closure::close_end(0x2000).unwrap();
     let receipt = closure::world_closed(0x1000).unwrap();
     assert!(receipt.publication_overlap && !receipt.complete());

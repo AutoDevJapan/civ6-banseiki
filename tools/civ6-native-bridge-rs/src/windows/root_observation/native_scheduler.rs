@@ -179,7 +179,11 @@ extern "system" fn begin(raw: *mut Saved) {
                         .unwrap_or_else(|v| closure::fault(v));
                 Ok(())
             }
-            132 => closure::spawn(raw.gpr[0] as u32),
+            132 => {
+                c.publication = closure::begin_spawn_publication(raw.gpr[0] as u32)
+                    .unwrap_or_else(|v| closure::fault(v));
+                Ok(())
+            }
             137 => {
                 c.arg = raw.gpr[0];
                 c.caller = raw.invocation.caller;
