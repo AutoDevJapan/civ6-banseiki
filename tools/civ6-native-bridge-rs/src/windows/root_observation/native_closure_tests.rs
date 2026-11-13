@@ -2,7 +2,7 @@ use super::*;
 use std::io::{Read, Seek, SeekFrom};
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
+    RtlLookupFunctionEntry, IMAGE_RUNTIME_FUNCTION_ENTRY,
 };
 
 #[link(name = "kernel32")]
