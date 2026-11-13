@@ -6,7 +6,7 @@ use std::{
 };
 use tempfile::TempDir;
 
-pub fn root() -> PathBuf {
+pub fn source_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -20,7 +20,7 @@ pub fn tempdir() -> TempDir {
 }
 
 pub fn repo_text(path: &str) -> String {
-    fs::read_to_string(root().join(path))
+    fs::read_to_string(source_root().join(path))
         .unwrap()
         .replace("\r\n", "\n")
 }
@@ -128,7 +128,7 @@ pub fn calendar() -> Value {
 
 pub fn arbitration_lua(civs: &[String]) -> Lua {
     let lua = Lua::new();
-    let rules = root()
+    let rules = source_root()
         .join("poc/JAC_PoC_CourtArbitration/Scripts/JAC_CourtArbitration_Rules.lua")
         .to_string_lossy()
         .replace('\\', "/");

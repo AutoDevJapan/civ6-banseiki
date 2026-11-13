@@ -1,8 +1,12 @@
 //! Civ VI scenario driver, with platform-independent protocol and artifact handling.
+pub mod bootstrap_scenario;
 pub mod capture;
 mod carrier_mp;
 pub mod carrier_sync;
 pub mod carrier_transport;
+pub mod catalog_check;
+pub mod catalog_scenario;
+pub mod checkpoint;
 pub mod click;
 pub mod error;
 pub mod growth_roster;
@@ -10,15 +14,30 @@ pub mod growth_sync;
 pub mod hotseat_bridge;
 pub mod hotseat_native_carrier;
 pub mod judge;
+pub mod live_lease;
 pub mod metrics;
+pub mod native_bridge;
 pub mod native_carrier_witness;
 mod native_inventory;
+pub mod native_order;
+pub mod native_recovery;
+#[cfg(all(test, windows))]
+#[path = "../../cc-live-rs/src/process_tree.rs"]
+pub(crate) mod native_recovery_test_tree;
+pub mod native_trace;
+pub mod payment_scenario;
+pub mod persona_payment;
+#[path = "../../native_recovery_protocol.rs"]
+pub mod recovery_protocol;
 pub mod reliability;
 pub mod restart;
 pub mod runner;
 pub mod save_isolation;
 pub mod scenario;
 pub mod session;
+pub mod spy_completed_failure;
+pub mod spy_failures;
+pub mod spy_research;
 pub mod startup;
 pub mod startup_idle;
 pub mod startup_screen;

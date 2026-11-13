@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PR86 diagnostic only. Never enable with the native-slot/title-proxy fixtures. -->
+<Mod id="c678a216-58ab-4d40-a614-8f309d36ac86" version="1">
+  <Properties>
+    <Name>JAC TEST ONLY: static persona eligibility and native appointment</Name>
+    <Description>Closes all 22 persona Governor types and observes one official appointment request after regular joining.</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="Gathering Storm"/>
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="JAC PoC: Leader Persona"/>
+  </Dependencies>
+  <ActionCriteria>
+    <Criteria id="JAC_StaticPersonaGate_15km">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_StaticPersonaGate_Data" criteria="JAC_StaticPersonaGate_15km">
+      <Properties><LoadOrder>410</LoadOrder></Properties>
+      <File>Data/JAC_StaticPersonaGate.sql</File>
+    </UpdateDatabase>
+    <AddGameplayScripts id="JAC_StaticPersonaGate_Gameplay" criteria="JAC_StaticPersonaGate_15km">
+      <Properties><LoadOrder>900</LoadOrder></Properties>
+      <File>Scripts/JAC_StaticPersonaGate_Gameplay.lua</File>
+    </AddGameplayScripts>
+    <ImportFiles id="JAC_StaticPersonaGate_Imports" criteria="JAC_StaticPersonaGate_15km">
+      <File>UI/JAC_StaticPersonaGate_View.lua</File>
+      <File>UI/JAC_StaticPersonaGate_View.xml</File>
+    </ImportFiles>
+    <AddUserInterfaces id="JAC_StaticPersonaGate_View" criteria="JAC_StaticPersonaGate_15km">
+      <Properties><LoadOrder>900</LoadOrder><Context>InGame</Context></Properties>
+      <File>UI/JAC_StaticPersonaGate_View.xml</File>
+    </AddUserInterfaces>
+  </InGameActions>
+  <Files>
+    <File>Data/JAC_StaticPersonaGate.sql</File>
+    <File>Scripts/JAC_StaticPersonaGate_Gameplay.lua</File>
+    <File>UI/JAC_StaticPersonaGate_View.lua</File>
+    <File>UI/JAC_StaticPersonaGate_View.xml</File>
+  </Files>
+</Mod>

@@ -31,6 +31,12 @@ impl LogCursor {
         match File::open(path) {
             Ok(mut file) => Self::capture(&mut file),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) if cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33)) => {
+                Err(Error::new(
+                    crate::ErrorKind::SteamLogBusy,
+                    format!("Steam log temporarily locked at {}: {e}", path.display()),
+                ))
+            }
             Err(e) => Err(e.into()),
         }
     }
@@ -353,6 +359,28 @@ pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn sharing_violation_is_not_an_empty_cursor_and_reopen_preserves_original_bytes() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cloud_log.txt");
+        std::fs::write(&path, b"original Steam bytes\n").unwrap();
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(&path)
+            .unwrap();
+        let error = LogCursor::mark(&path).unwrap_err();
+        assert_eq!(error.kind, crate::ErrorKind::SteamLogBusy);
+        assert!(error.message.contains("cloud_log.txt") && error.message.contains("os error 32"));
+        drop(lock);
+        let cursor = LogCursor::mark(&path).unwrap();
+        assert!(cursor.generation.is_some());
+        assert_eq!(cursor.offset, 21);
+        assert_eq!(std::fs::read(&path).unwrap(), b"original Steam bytes\n");
+    }
     #[test]
     fn stage_failures_are_journaled_and_only_issued_launch_can_recover() {
         for failure in [

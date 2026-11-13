@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal14" FontStyle="Shadow" Hidden="1">
+  <Grid Anchor="C,C" Size="1020,720" Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22" ConsumeAllMouse="1">
+    <Image ID="Portrait" Anchor="L,T" Offset="18,12" Size="64,64"/>
+    <Label ID="Name" Offset="94,14" Anchor="L,T"/>
+    <Label ID="Merit" Offset="94,42" Anchor="L,T"/>
+    <GridButton ID="NextPerson" Anchor="R,T" Offset="162,18" Size="120,30" Style="ButtonControl" String="LOC_JAC_PERSONA_NEXT_PERSON"/>
+    <GridButton ID="Close" Anchor="R,T" Offset="22,18" Size="120,30" Style="ButtonControl" String="LOC_JAC_PERSONA_CLOSE"/>
+    <Label ID="Commitment" Anchor="L,T" Offset="18,82" WrapWidth="982"/>
+    <Label Anchor="L,T" Offset="18,109" WrapWidth="982" String="LOC_JAC_PERSONA_PERMANENT"/>
+    <Stack ID="Categories" Anchor="L,T" Offset="18,151" StackGrowth="Right" Padding="6"/>
+    <ScrollPanel ID="NodesScroll" Anchor="L,T" Offset="18,198" Size="982,376" Vertical="1" AutoScrollBar="1">
+      <Stack ID="Nodes" StackGrowth="Down" Padding="5"/>
+    </ScrollPanel>
+    <Label ID="Selection" Anchor="L,T" Offset="18,587" WrapWidth="982"/>
+    <Label ID="Effect" Anchor="L,T" Offset="18,614" WrapWidth="982"/>
+    <Label ID="Result" Anchor="L,T" Offset="18,641" WrapWidth="982"/>
+    <Label Anchor="L,B" Offset="18,18" WrapWidth="982" String="LOC_JAC_PERSONA_TREE_HELP"/>
+    <Grid ID="Confirmation" Anchor="C,C" Size="920,330" Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22" Hidden="1" ConsumeAllMouse="1">
+      <Label ID="ConfirmText" Anchor="L,T" Offset="20,20" WrapWidth="880"/>
+      <Label ID="Locks" Anchor="L,T" Offset="20,78" WrapWidth="880"/>
+      <Label Anchor="L,T" Offset="20,160" WrapWidth="880" String="LOC_JAC_PERSONA_PERMANENT"/>
+      <GridButton ID="Confirm" Anchor="L,B" Offset="20,20" Size="420,34" Style="ButtonControl" String="LOC_JAC_PERSONA_CONFIRM_BUTTON"/>
+      <GridButton ID="Cancel" Anchor="R,B" Offset="20,20" Size="420,34" Style="ButtonControl" String="LOC_JAC_PERSONA_CANCEL"/>
+    </Grid>
+  </Grid>
+  <Instance Name="PersonaCategory">
+    <GridButton ID="Root" Size="240,38" Style="ButtonControl"/>
+  </Instance>
+  <Instance Name="PersonaSkill">
+    <GridButton ID="Root" Size="964,72" Style="ButtonControl">
+      <Label ID="Route" Anchor="L,T" Offset="10,4" WrapWidth="940"/>
+      <Label ID="Node" Anchor="L,T" Offset="10,26" WrapWidth="940"/>
+      <Label ID="Effect" Anchor="L,T" Offset="10,49" WrapWidth="940"/>
+    </GridButton>
+  </Instance>
+</Context>

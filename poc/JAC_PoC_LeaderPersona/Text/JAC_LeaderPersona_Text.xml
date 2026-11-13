@@ -1,0 +1,2630 @@
+<?xml version='1.0' encoding='utf-8'?>
+<GameData>
+  <LocalizedText>
+    <Row Tag="LOC_JAC_PERSONA_MOD_NAME" Language="ja_JP">
+      <Text>JAC PoC：指導者の人物化</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_NAME" Language="en_US">
+      <Text>JAC PoC: Leader Persona</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_NAME" Language="ru_RU">
+      <Text>JAC PoC: лидер как персонаж</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_DESCRIPTION" Language="ja_JP">
+      <Text>加入した指導者を偉人にし、同名の総督へ進化させる検証。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_DESCRIPTION" Language="en_US">
+      <Text>Joined leaders become Great People and evolve into Governors of the same name.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MOD_DESCRIPTION" Language="ru_RU">
+      <Text>Присоединившиеся лидеры становятся великими людьми и затем губернаторами с тем же именем.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLASS" Language="ja_JP">
+      <Text>仲間の指導者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLASS" Language="en_US">
+      <Text>Joined leader</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLASS" Language="ru_RU">
+      <Text>Присоединившийся лидер</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="ja_JP">
+      <Text>城主</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="en_US">
+      <Text>Castellan</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_TITLE" Language="ru_RU">
+      <Text>Комендант</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_NAME" Language="ja_JP"><Text>進化の追加称号</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_NAME" Language="en_US"><Text>Additional evolution title</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_NAME" Language="ru_RU"><Text>Дополнительное звание для превращения</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION" Language="ja_JP"><Text>人物の進化費用として公式の総督称号を1個消費する。</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION" Language="en_US"><Text>Spends one native Governor title toward this person's evolution cost.</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_TITLE_PAYMENT_DESCRIPTION" Language="ru_RU"><Text>Тратит одно звание губернатора на превращение персонажа.</Text></Row>
+    <Row Tag="LOC_JAC_PERSONA_PANEL" Language="ja_JP">
+      <Text>仲間の指導者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PANEL" Language="en_US">
+      <Text>Joined leaders</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PANEL" Language="ru_RU">
+      <Text>Присоединившиеся лидеры</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OPEN_GOVERNORS" Language="ja_JP">
+      <Text>総督の画面を開く</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OPEN_GOVERNORS" Language="en_US">
+      <Text>Open Governors</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OPEN_GOVERNORS" Language="ru_RU">
+      <Text>Открыть губернаторов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE" Language="ja_JP">
+      <Text>総督へ進化</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE" Language="en_US">
+      <Text>Evolve to Governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE" Language="ru_RU">
+      <Text>Стать губернатором</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GREAT_PERSON" Language="ja_JP">
+      <Text>偉人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GREAT_PERSON" Language="en_US">
+      <Text>Great Person</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GREAT_PERSON" Language="ru_RU">
+      <Text>Великий человек</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_EVOLVING" Language="ja_JP">
+      <Text>総督の任命待ち</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_EVOLVING" Language="en_US">
+      <Text>Awaiting appointment</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_EVOLVING" Language="ru_RU">
+      <Text>Ожидает назначения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="ja_JP">
+      <Text>総督</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="en_US">
+      <Text>Governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_STATE_GOVERNOR" Language="ru_RU">
+      <Text>Губернатор</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ja_JP">
+      <Text>人物固有の技能を持つ総督。都市への定着後に技能が働く。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="en_US">
+      <Text>A governor with personal skills, active after establishment in a city.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_GOVERNOR_DESCRIPTION" Language="ru_RU">
+      <Text>Губернатор с личными навыками, действующими после освоения в городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE_COST" Language="ja_JP">
+      <Text>総督へ（称号{1}）</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE_COST" Language="en_US">
+      <Text>Evolve ({1} titles)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EVOLVE_COST" Language="ru_RU">
+      <Text>Назначить ({1})</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST_HELP" Language="ja_JP">
+      <Text>必要な称号：{1}。使える称号：{2}。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST_HELP" Language="en_US">
+      <Text>Titles required: {1}. Available: {2}.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST_HELP" Language="ru_RU">
+      <Text>Нужно титулов: {1}. Доступно: {2}.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BRAVE" Language="ja_JP">
+      <Text>勇敢</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BRAVE" Language="en_US">
+      <Text>Brave</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BRAVE" Language="ru_RU">
+      <Text>Храбрый</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CALM" Language="ja_JP">
+      <Text>冷静</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CALM" Language="en_US">
+      <Text>Calm</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CALM" Language="ru_RU">
+      <Text>Хладнокровный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CAREFUL" Language="ja_JP">
+      <Text>慎重</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CAREFUL" Language="en_US">
+      <Text>Careful</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_CAREFUL" Language="ru_RU">
+      <Text>Осторожный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_JOLLY" Language="ja_JP">
+      <Text>陽気</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_JOLLY" Language="en_US">
+      <Text>Jolly</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_JOLLY" Language="ru_RU">
+      <Text>Жизнерадостный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_GENTLE" Language="ja_JP">
+      <Text>温厚</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_GENTLE" Language="en_US">
+      <Text>Gentle</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_GENTLE" Language="ru_RU">
+      <Text>Мягкий</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BOLD" Language="ja_JP">
+      <Text>強気</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BOLD" Language="en_US">
+      <Text>Bold</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_BOLD" Language="ru_RU">
+      <Text>Напористый</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_FICKLE" Language="ja_JP">
+      <Text>自由</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_FICKLE" Language="en_US">
+      <Text>Fickle</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_FICKLE" Language="ru_RU">
+      <Text>Переменчивый</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_LOYAL" Language="ja_JP">
+      <Text>忠実</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_LOYAL" Language="en_US">
+      <Text>Loyal</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERSONALITY_LOYAL" Language="ru_RU">
+      <Text>Верный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_VALIANT" Language="ja_JP">
+      <Text>武人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_VALIANT" Language="en_US">
+      <Text>Valiant</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_VALIANT" Language="ru_RU">
+      <Text>Доблестный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_FIERCE" Language="ja_JP">
+      <Text>鬼神</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_FIERCE" Language="en_US">
+      <Text>Fierce</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_FIERCE" Language="ru_RU">
+      <Text>Грозный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASTUTE" Language="ja_JP">
+      <Text>策士</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASTUTE" Language="en_US">
+      <Text>Astute</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASTUTE" Language="ru_RU">
+      <Text>Хитроумный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_SHREWD" Language="ja_JP">
+      <Text>魔神</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_SHREWD" Language="en_US">
+      <Text>Shrewd</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_SHREWD" Language="ru_RU">
+      <Text>Сверхъестественный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_DEVOUT" Language="ja_JP">
+      <Text>教者</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_DEVOUT" Language="en_US">
+      <Text>Devout</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_DEVOUT" Language="ru_RU">
+      <Text>Просветитель</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASCETIC" Language="ja_JP">
+      <Text>霊神</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASCETIC" Language="en_US">
+      <Text>Ascetic</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ASCETIC" Language="ru_RU">
+      <Text>Духовный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_MUNDANE" Language="ja_JP">
+      <Text>凡人</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_MUNDANE" Language="en_US">
+      <Text>Mundane</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_MUNDANE" Language="ru_RU">
+      <Text>Обычный</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ADEPT" Language="ja_JP">
+      <Text>天才</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ADEPT" Language="en_US">
+      <Text>Adept</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TRAIT_ADEPT" Language="ru_RU">
+      <Text>Гений</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_DATE_TANEMUNE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：策士。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_DATE_TANEMUNE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Astute. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_DATE_TANEMUNE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Хитроумный. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_NAME" Language="ja_JP">
+      <Text>南奥の秩序</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_NAME" Language="en_US">
+      <Text>Order in Southern Oshu</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_NAME" Language="ru_RU">
+      <Text>Порядок в Южном Осю</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_DATE_TANEMUNE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHINA_MORIKIYO_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：凡人。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHINA_MORIKIYO_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Mundane. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHINA_MORIKIYO_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Обычный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_NAME" Language="ja_JP">
+      <Text>会津の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_NAME" Language="en_US">
+      <Text>Aizu Provisions</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_NAME" Language="ru_RU">
+      <Text>Запасы Айдзу</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHINA_MORIKIYO_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HOJO_UJITSUNA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HOJO_UJITSUNA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HOJO_UJITSUNA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_NAME" Language="ja_JP">
+      <Text>小田原の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_NAME" Language="en_US">
+      <Text>Odawara Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_NAME" Language="ru_RU">
+      <Text>Учёт Одавары</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HOJO_UJITSUNA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：忠実。特性：凡人。進化には総督の称号3個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Loyal. Trait: Mundane. Evolution costs 3 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Верный. Черта: Обычный. Назначение стоит 3 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_NAME" Language="ja_JP">
+      <Text>管領家の継承</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_NAME" Language="en_US">
+      <Text>Kanrei Heritage</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_NAME" Language="ru_RU">
+      <Text>Наследие канрэя</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_YAMANOUCHI_UESUGI_NORIMASA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TAKEDA_NOBUTORA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：強気。特性：武人。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TAKEDA_NOBUTORA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Bold. Trait: Valiant. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TAKEDA_NOBUTORA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Напористый. Черта: Доблестный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_NAME" Language="ja_JP">
+      <Text>甲斐の動員</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_NAME" Language="en_US">
+      <Text>Kai Mobilization</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_NAME" Language="ru_RU">
+      <Text>Мобилизация Каи</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_TAKEDA_NOBUTORA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NAGAO_TAMEKAGE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：強気。特性：武人。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NAGAO_TAMEKAGE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Bold. Trait: Valiant. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NAGAO_TAMEKAGE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Напористый. Черта: Доблестный. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_NAME" Language="ja_JP">
+      <Text>越後の統率</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_NAME" Language="en_US">
+      <Text>Echigo Command</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_NAME" Language="ru_RU">
+      <Text>Командование Этиго</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_NAGAO_TAMEKAGE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_IMAGAWA_UJITERU_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：教者。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_IMAGAWA_UJITERU_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Devout. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_IMAGAWA_UJITERU_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Просветитель. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_NAME" Language="ja_JP">
+      <Text>駿府の礼法</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_NAME" Language="en_US">
+      <Text>Sunpu Etiquette</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_NAME" Language="ru_RU">
+      <Text>Этикет Сумпу</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_IMAGAWA_UJITERU_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ODA_NOBUHIDE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：強気。特性：策士。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ODA_NOBUHIDE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Bold. Trait: Astute. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ODA_NOBUHIDE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Напористый. Черта: Хитроумный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_NAME" Language="ja_JP">
+      <Text>津島の商い</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_NAME" Language="en_US">
+      <Text>Tsushima Commerce</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_NAME" Language="ru_RU">
+      <Text>Торговля Цусимы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ODA_NOBUHIDE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MATSUDAIRA_KIYOYASU_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：勇敢。特性：武人。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MATSUDAIRA_KIYOYASU_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Brave. Trait: Valiant. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MATSUDAIRA_KIYOYASU_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Храбрый. Черта: Доблестный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_NAME" Language="ja_JP">
+      <Text>三河の動員</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_NAME" Language="en_US">
+      <Text>Mikawa Mobilization</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_NAME" Language="ru_RU">
+      <Text>Мобилизация Микавы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MATSUDAIRA_KIYOYASU_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASAKURA_TAKAKAGE_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASAKURA_TAKAKAGE_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASAKURA_TAKAKAGE_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_NAME" Language="ja_JP">
+      <Text>一乗谷の学芸</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_NAME" Language="en_US">
+      <Text>Ichijodani Learning</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_NAME" Language="ru_RU">
+      <Text>Учёность Итидзёдани</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASAKURA_TAKAKAGE_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHIKAGA_YOSHIHARU_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：忠実。特性：教者。進化には総督の称号3個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHIKAGA_YOSHIHARU_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Loyal. Trait: Devout. Evolution costs 3 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ASHIKAGA_YOSHIHARU_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Верный. Черта: Просветитель. Назначение стоит 3 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_NAME" Language="ja_JP">
+      <Text>将軍家の儀礼</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_NAME" Language="en_US">
+      <Text>Shogunal Ceremony</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_NAME" Language="ru_RU">
+      <Text>Церемонии сёгуна</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ASHIKAGA_YOSHIHARU_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MIYOSHI_NAGAYOSHI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：策士。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MIYOSHI_NAGAYOSHI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Astute. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MIYOSHI_NAGAYOSHI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Хитроумный. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_NAME" Language="ja_JP">
+      <Text>若き家の再建</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_NAME" Language="en_US">
+      <Text>Young Household Renewal</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_NAME" Language="ru_RU">
+      <Text>Восстановление молодого клана</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MIYOSHI_NAGAYOSHI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROKKAKU_SADAYORI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROKKAKU_SADAYORI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROKKAKU_SADAYORI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_NAME" Language="ja_JP">
+      <Text>近江の流通</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_NAME" Language="en_US">
+      <Text>Omi Circulation</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_NAME" Language="ru_RU">
+      <Text>Торговля Оми</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_ROKKAKU_SADAYORI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HONGANJI_SHONYO_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：温厚。特性：霊神。進化には総督の称号3個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HONGANJI_SHONYO_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Gentle. Trait: Ascetic. Evolution costs 3 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_HONGANJI_SHONYO_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Мягкий. Черта: Духовный. Назначение стоит 3 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_NAME" Language="ja_JP">
+      <Text>門徒の結集</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_NAME" Language="en_US">
+      <Text>Community of Believers</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_NAME" Language="ru_RU">
+      <Text>Единство верующих</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の信仰力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Faith in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_HONGANJI_SHONYO_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% веры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OUCHI_YOSHITAKA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：陽気。特性：教者。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OUCHI_YOSHITAKA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Jolly. Trait: Devout. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OUCHI_YOSHITAKA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Жизнерадостный. Черта: Просветитель. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_NAME" Language="ja_JP">
+      <Text>山口の学芸</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_NAME" Language="en_US">
+      <Text>Yamaguchi Learning</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_NAME" Language="ru_RU">
+      <Text>Учёность Ямагути</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の文化力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Culture in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OUCHI_YOSHITAKA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% культуры в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AMAGO_TSUNEHISA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：策士。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AMAGO_TSUNEHISA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Astute. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AMAGO_TSUNEHISA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Хитроумный. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_NAME" Language="ja_JP">
+      <Text>月山の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_NAME" Language="en_US">
+      <Text>Gassan Readiness</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_NAME" Language="ru_RU">
+      <Text>Готовность Гассана</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の生産力+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Production in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AMAGO_TSUNEHISA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% производства в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MORI_MOTONARI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：策士。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MORI_MOTONARI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Astute. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MORI_MOTONARI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Хитроумный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_NAME" Language="ja_JP">
+      <Text>郡山の備蓄</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_NAME" Language="en_US">
+      <Text>Koriyama Stores</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_NAME" Language="ru_RU">
+      <Text>Запасы Кориямы</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_MORI_MOTONARI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CHOSOKABE_KUNICHIKA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：勇敢。特性：凡人。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CHOSOKABE_KUNICHIKA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Brave. Trait: Mundane. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CHOSOKABE_KUNICHIKA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Храбрый. Черта: Обычный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_NAME" Language="ja_JP">
+      <Text>岡豊の再興</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_NAME" Language="en_US">
+      <Text>Oko Recovery</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_NAME" Language="ru_RU">
+      <Text>Возрождение Око</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_CHOSOKABE_KUNICHIKA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OTOMO_YOSHIAKI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：冷静。特性：教者。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OTOMO_YOSHIAKI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Calm. Trait: Devout. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_OTOMO_YOSHIAKI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Хладнокровный. Черта: Просветитель. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_NAME" Language="ja_JP">
+      <Text>府内の勘定</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_NAME" Language="en_US">
+      <Text>Funai Accounts</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_NAME" Language="ru_RU">
+      <Text>Учёт Фуная</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_OTOMO_YOSHIAKI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SHIMAZU_TAKAHISA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：勇敢。特性：武人。進化には総督の称号1個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SHIMAZU_TAKAHISA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Brave. Trait: Valiant. Evolution costs 1 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SHIMAZU_TAKAHISA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Храбрый. Черта: Доблестный. Назначение стоит 1 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_NAME" Language="ja_JP">
+      <Text>伊作の結束</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_NAME" Language="en_US">
+      <Text>Izaku Cohesion</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_NAME" Language="ru_RU">
+      <Text>Единство Идзаку</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市で軍事ユニットを生産する際の生産力+20%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+20% Production toward military units in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_SHIMAZU_TAKAHISA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+20% к производству военных юнитов в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_RYUKYU_SHO_SEI_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：温厚。特性：教者。進化には総督の称号3個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_RYUKYU_SHO_SEI_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Gentle. Trait: Devout. Evolution costs 3 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_RYUKYU_SHO_SEI_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Мягкий. Черта: Просветитель. Назначение стоит 3 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_NAME" Language="ja_JP">
+      <Text>海路の交易</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_NAME" Language="en_US">
+      <Text>Maritime Commerce</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_NAME" Language="ru_RU">
+      <Text>Морская торговля</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市のゴールド+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Gold in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_RYUKYU_SHO_SEI_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% золота в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AINU_TARIKONA_DESCRIPTION" Language="ja_JP">
+      <Text>初期設計の性格：慎重。特性：凡人。進化には総督の称号2個が必要。功績で独自の技能を取得する。最初の技能で専攻が固定され、技能と排他的な分岐は取り消せない。性格・技能は史実を手掛かりにしたゲーム設計。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AINU_TARIKONA_DESCRIPTION" Language="en_US">
+      <Text>Designed initial personality: Careful. Trait: Mundane. Evolution costs 2 Governor title(s). Personal merit buys custom skills. The first skill locks one major category; skills and exclusive branches are permanent. Personality and skills are game design inspired by history.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_AINU_TARIKONA_DESCRIPTION" Language="ru_RU">
+      <Text>Исходный характер (проект): Осторожный. Черта: Обычный. Назначение стоит 2 титул(а). Личные заслуги позволяют изучать навыки. Первый навык закрепляет направление; навыки и исключающие ветви необратимы. Характер и навыки созданы для игры по мотивам истории.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_NAME" Language="ja_JP">
+      <Text>集落の備え</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_NAME" Language="en_US">
+      <Text>Community Provisions</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_NAME" Language="ru_RU">
+      <Text>Запасы общины</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_DESCRIPTION" Language="ja_JP">
+      <Text>定着した都市の食料+10%。</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_DESCRIPTION" Language="en_US">
+      <Text>+10% Food in the established city.</Text>
+    </Row>
+    <Row Tag="LOC_GOVERNOR_PROMOTION_JAC_PERSONA_AINU_TARIKONA_BASE_DESCRIPTION" Language="ru_RU">
+      <Text>+10% пищи в освоенном городе.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_MILITARY" Language="ja_JP">
+      <Text>軍務</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_MILITARY" Language="en_US">
+      <Text>Military service</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_MILITARY" Language="ru_RU">
+      <Text>Военное дело</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_ADMIN" Language="ja_JP">
+      <Text>領国経営</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_ADMIN" Language="en_US">
+      <Text>Domain administration</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_ADMIN" Language="ru_RU">
+      <Text>Управление владением</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_CONTACT" Language="ja_JP">
+      <Text>交渉と交易</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_CONTACT" Language="en_US">
+      <Text>Negotiation and trade</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_CONTACT" Language="ru_RU">
+      <Text>Переговоры и торговля</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_LEARNING" Language="ja_JP">
+      <Text>学芸と信仰</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_LEARNING" Language="en_US">
+      <Text>Learning and faith</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_LEARNING" Language="ru_RU">
+      <Text>Знания и вера</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_MUSTER" Language="ja_JP">
+      <Text>軍役動員</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_MUSTER" Language="en_US">
+      <Text>Muster</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_MUSTER" Language="ru_RU">
+      <Text>Мобилизация</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_1" Language="ja_JP">
+      <Text>徴集の割付</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_1" Language="en_US">
+      <Text>Levy register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_1" Language="ru_RU">
+      <Text>Учёт ополчения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_2" Language="ja_JP">
+      <Text>隊の訓練</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_2" Language="en_US">
+      <Text>Company training</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_2" Language="ru_RU">
+      <Text>Обучение отрядов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_3" Language="ja_JP">
+      <Text>軍役統括</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_3" Language="en_US">
+      <Text>Muster command</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MUSTER_3" Language="ru_RU">
+      <Text>Командование</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_FORTIFY" Language="ja_JP">
+      <Text>城郭普請</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_FORTIFY" Language="en_US">
+      <Text>Fortification</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_FORTIFY" Language="ru_RU">
+      <Text>Укрепления</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_1" Language="ja_JP">
+      <Text>普請の割付</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_1" Language="en_US">
+      <Text>Works register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_1" Language="ru_RU">
+      <Text>Учёт работ</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_2" Language="ja_JP">
+      <Text>工事の監督</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_2" Language="en_US">
+      <Text>Works oversight</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_2" Language="ru_RU">
+      <Text>Надзор за работами</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_3" Language="ja_JP">
+      <Text>防備の維持</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_3" Language="en_US">
+      <Text>Defence upkeep</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_FORTIFY_3" Language="ru_RU">
+      <Text>Содержание укреплений</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_SUPPLY" Language="ja_JP">
+      <Text>兵糧輸送</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_SUPPLY" Language="en_US">
+      <Text>Supply</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_SUPPLY" Language="ru_RU">
+      <Text>Снабжение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_1" Language="ja_JP">
+      <Text>兵糧帳</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_1" Language="en_US">
+      <Text>Supply ledger</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_1" Language="ru_RU">
+      <Text>Учёт припасов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_2" Language="ja_JP">
+      <Text>倉の管理</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_2" Language="en_US">
+      <Text>Storehouse care</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_2" Language="ru_RU">
+      <Text>Управление складами</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_3" Language="ja_JP">
+      <Text>輸送奉行</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_3" Language="en_US">
+      <Text>Supply magistrate</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SUPPLY_3" Language="ru_RU">
+      <Text>Начальник снабжения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_PAY" Language="ja_JP">
+      <Text>軍費勘定</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_PAY" Language="en_US">
+      <Text>War finance</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_PAY" Language="ru_RU">
+      <Text>Военные финансы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_1" Language="ja_JP">
+      <Text>給金帳</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_1" Language="en_US">
+      <Text>Pay ledger</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_1" Language="ru_RU">
+      <Text>Учёт жалованья</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_2" Language="ja_JP">
+      <Text>軍費の勘定</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_2" Language="en_US">
+      <Text>War accounts</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_2" Language="ru_RU">
+      <Text>Военные счета</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_3" Language="ja_JP">
+      <Text>御用商い</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_3" Language="en_US">
+      <Text>Army procurement</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_PAY_3" Language="ru_RU">
+      <Text>Снабжение армии</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_WORKS" Language="ja_JP">
+      <Text>城下普請</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_WORKS" Language="en_US">
+      <Text>Town works</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_WORKS" Language="ru_RU">
+      <Text>Городские работы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_1" Language="ja_JP">
+      <Text>町の割付</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_1" Language="en_US">
+      <Text>Town planning</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_1" Language="ru_RU">
+      <Text>Планировка</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_2" Language="ja_JP">
+      <Text>普請の監督</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_2" Language="en_US">
+      <Text>Construction oversight</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_2" Language="ru_RU">
+      <Text>Надзор за стройкой</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_3" Language="ja_JP">
+      <Text>城下の整備</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_3" Language="en_US">
+      <Text>Town development</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_WORKS_3" Language="ru_RU">
+      <Text>Развитие города</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_STORES" Language="ja_JP">
+      <Text>蔵と用水</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_STORES" Language="en_US">
+      <Text>Stores and irrigation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_STORES" Language="ru_RU">
+      <Text>Склады и орошение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_1" Language="ja_JP">
+      <Text>蔵の記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_1" Language="en_US">
+      <Text>Granary register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_1" Language="ru_RU">
+      <Text>Учёт зерна</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_2" Language="ja_JP">
+      <Text>用水の保全</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_2" Language="en_US">
+      <Text>Irrigation upkeep</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_2" Language="ru_RU">
+      <Text>Содержание каналов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_3" Language="ja_JP">
+      <Text>備蓄の統括</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_3" Language="en_US">
+      <Text>Reserve management</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STORES_3" Language="ru_RU">
+      <Text>Управление запасами</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_TAX" Language="ja_JP">
+      <Text>検地と勘定</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_TAX" Language="en_US">
+      <Text>Survey and taxation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_TAX" Language="ru_RU">
+      <Text>Межевание и налоги</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_1" Language="ja_JP">
+      <Text>所領の台帳</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_1" Language="en_US">
+      <Text>Land register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_1" Language="ru_RU">
+      <Text>Реестр земель</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_2" Language="ja_JP">
+      <Text>収納の勘定</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_2" Language="en_US">
+      <Text>Tax accounts</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_2" Language="ru_RU">
+      <Text>Налоговые счета</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_3" Language="ja_JP">
+      <Text>年貢の統括</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_3" Language="en_US">
+      <Text>Tax administration</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_TAX_3" Language="ru_RU">
+      <Text>Управление налогами</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_CARE" Language="ja_JP">
+      <Text>民生と相扶</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_CARE" Language="en_US">
+      <Text>Public welfare</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_CARE" Language="ru_RU">
+      <Text>Забота о населении</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_1" Language="ja_JP">
+      <Text>村の備え</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_1" Language="en_US">
+      <Text>Village reserves</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_1" Language="ru_RU">
+      <Text>Запасы деревень</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_2" Language="ja_JP">
+      <Text>訴えの記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_2" Language="en_US">
+      <Text>Petition register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_2" Language="ru_RU">
+      <Text>Учёт прошений</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_3" Language="ja_JP">
+      <Text>家中の安定</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_3" Language="en_US">
+      <Text>Public stability</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CARE_3" Language="ru_RU">
+      <Text>Общественное спокойствие</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_ENVOYS" Language="ja_JP">
+      <Text>朝廷への取次</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_ENVOYS" Language="en_US">
+      <Text>Court mediation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_ENVOYS" Language="ru_RU">
+      <Text>Связи с двором</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_1" Language="ja_JP">
+      <Text>使節の作法</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_1" Language="en_US">
+      <Text>Envoy etiquette</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_1" Language="ru_RU">
+      <Text>Этикет послов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_2" Language="ja_JP">
+      <Text>書状の記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_2" Language="en_US">
+      <Text>Letter register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_2" Language="ru_RU">
+      <Text>Учёт писем</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_3" Language="ja_JP">
+      <Text>取次の統括</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_3" Language="en_US">
+      <Text>Court mediation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ENVOYS_3" Language="ru_RU">
+      <Text>Посредничество</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_EXCHANGE" Language="ja_JP">
+      <Text>商人との交渉</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_EXCHANGE" Language="en_US">
+      <Text>Merchant negotiation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_EXCHANGE" Language="ru_RU">
+      <Text>Связи с купцами</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_1" Language="ja_JP">
+      <Text>商いの窓口</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_1" Language="en_US">
+      <Text>Merchant liaison</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_1" Language="ru_RU">
+      <Text>Связь с купцами</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_2" Language="ja_JP">
+      <Text>価格の勘定</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_2" Language="en_US">
+      <Text>Price accounts</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_2" Language="ru_RU">
+      <Text>Учёт цен</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_3" Language="ja_JP">
+      <Text>交易の統括</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_3" Language="en_US">
+      <Text>Trade management</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_EXCHANGE_3" Language="ru_RU">
+      <Text>Управление торговлей</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_MARKET" Language="ja_JP">
+      <Text>市場の振興</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_MARKET" Language="en_US">
+      <Text>Market development</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_MARKET" Language="ru_RU">
+      <Text>Развитие рынков</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_1" Language="ja_JP">
+      <Text>市の記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_1" Language="en_US">
+      <Text>Market register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_1" Language="ru_RU">
+      <Text>Учёт рынков</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_2" Language="ja_JP">
+      <Text>商人の保護</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_2" Language="en_US">
+      <Text>Merchant protection</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_2" Language="ru_RU">
+      <Text>Защита купцов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_3" Language="ja_JP">
+      <Text>市の整備</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_3" Language="en_US">
+      <Text>Market development</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_MARKET_3" Language="ru_RU">
+      <Text>Развитие рынков</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_HOSTING" Language="ja_JP">
+      <Text>和親と接遇</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_HOSTING" Language="en_US">
+      <Text>Hospitality</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_HOSTING" Language="ru_RU">
+      <Text>Добрососедство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_1" Language="ja_JP">
+      <Text>客の備え</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_1" Language="en_US">
+      <Text>Guest provisions</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_1" Language="ru_RU">
+      <Text>Припасы для гостей</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_2" Language="ja_JP">
+      <Text>和親の作法</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_2" Language="en_US">
+      <Text>Neighbourly etiquette</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_2" Language="ru_RU">
+      <Text>Добрососедский этикет</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_3" Language="ja_JP">
+      <Text>関係の調和</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_3" Language="en_US">
+      <Text>Harmony</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_HOSTING_3" Language="ru_RU">
+      <Text>Согласие</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_SCHOOL" Language="ja_JP">
+      <Text>寺院学問</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_SCHOOL" Language="en_US">
+      <Text>Temple learning</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_SCHOOL" Language="ru_RU">
+      <Text>Храмовое обучение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_1" Language="ja_JP">
+      <Text>学問の記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_1" Language="en_US">
+      <Text>Learning register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_1" Language="ru_RU">
+      <Text>Учёт знаний</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_2" Language="ja_JP">
+      <Text>講義の支援</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_2" Language="en_US">
+      <Text>Teaching support</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_2" Language="ru_RU">
+      <Text>Поддержка обучения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_3" Language="ja_JP">
+      <Text>学問の継承</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_3" Language="en_US">
+      <Text>Scholarly succession</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_SCHOOL_3" Language="ru_RU">
+      <Text>Передача знаний</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_LITURGY" Language="ja_JP">
+      <Text>祭祀と教化</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_LITURGY" Language="en_US">
+      <Text>Liturgy</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_LITURGY" Language="ru_RU">
+      <Text>Обряды</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_1" Language="ja_JP">
+      <Text>祭祀の備え</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_1" Language="en_US">
+      <Text>Ritual provisions</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_1" Language="ru_RU">
+      <Text>Подготовка обрядов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_2" Language="ja_JP">
+      <Text>説法の支援</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_2" Language="en_US">
+      <Text>Sermon support</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_2" Language="ru_RU">
+      <Text>Поддержка проповедей</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_3" Language="ja_JP">
+      <Text>教えの継承</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_3" Language="en_US">
+      <Text>Religious succession</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_LITURGY_3" Language="ru_RU">
+      <Text>Передача учения</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_ARCHIVE" Language="ja_JP">
+      <Text>典籍と儀礼</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_ARCHIVE" Language="en_US">
+      <Text>Archives and ceremony</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_ARCHIVE" Language="ru_RU">
+      <Text>Книги и церемонии</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_1" Language="ja_JP">
+      <Text>典籍の記録</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_1" Language="en_US">
+      <Text>Archive register</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_1" Language="ru_RU">
+      <Text>Учёт книг</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_2" Language="ja_JP">
+      <Text>儀礼の支援</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_2" Language="en_US">
+      <Text>Ceremony support</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_2" Language="ru_RU">
+      <Text>Поддержка церемоний</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_3" Language="ja_JP">
+      <Text>文化の継承</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_3" Language="en_US">
+      <Text>Cultural succession</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_ARCHIVE_3" Language="ru_RU">
+      <Text>Передача культуры</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_CHARITY" Language="ja_JP">
+      <Text>施しと相扶</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_CHARITY" Language="en_US">
+      <Text>Charity</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_ROUTE_CHARITY" Language="ru_RU">
+      <Text>Благотворительность</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_1" Language="ja_JP">
+      <Text>施しの備え</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_1" Language="en_US">
+      <Text>Charity reserves</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_1" Language="ru_RU">
+      <Text>Запасы помощи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_2" Language="ja_JP">
+      <Text>相扶の教え</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_2" Language="en_US">
+      <Text>Mutual aid teaching</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_2" Language="ru_RU">
+      <Text>Учение о взаимопомощи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_3" Language="ja_JP">
+      <Text>門徒の調和</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_3" Language="en_US">
+      <Text>Community harmony</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_CHARITY_3" Language="ru_RU">
+      <Text>Согласие общины</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE" Language="ja_JP">
+      <Text>蔵方と和親</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE" Language="en_US">
+      <Text>Treasury and marriage ties</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE" Language="ru_RU">
+      <Text>Казна и родственные связи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_1" Language="ja_JP">
+      <Text>蔵方と和親 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_1" Language="en_US">
+      <Text>Treasury and marriage ties — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_1" Language="ru_RU">
+      <Text>Казна и родственные связи — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_2" Language="ja_JP">
+      <Text>蔵方と和親 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_2" Language="en_US">
+      <Text>Treasury and marriage ties — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_2" Language="ru_RU">
+      <Text>Казна и родственные связи — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_3" Language="ja_JP">
+      <Text>蔵方と和親 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_3" Language="en_US">
+      <Text>Treasury and marriage ties — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_DATE_TANEMUNE_3" Language="ru_RU">
+      <Text>Казна и родственные связи — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO" Language="ja_JP">
+      <Text>黒川の再建</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO" Language="en_US">
+      <Text>Kurokawa renewal</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO" Language="ru_RU">
+      <Text>Восстановление Курокавы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_1" Language="ja_JP">
+      <Text>黒川の再建 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_1" Language="en_US">
+      <Text>Kurokawa renewal — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_1" Language="ru_RU">
+      <Text>Восстановление Курокавы — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_2" Language="ja_JP">
+      <Text>黒川の再建 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_2" Language="en_US">
+      <Text>Kurokawa renewal — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_2" Language="ru_RU">
+      <Text>Восстановление Курокавы — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_3" Language="ja_JP">
+      <Text>黒川の再建 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_3" Language="en_US">
+      <Text>Kurokawa renewal — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHINA_MORIKIYO_3" Language="ru_RU">
+      <Text>Восстановление Курокавы — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA" Language="ja_JP">
+      <Text>小田原の町割</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA" Language="en_US">
+      <Text>Odawara planning</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA" Language="ru_RU">
+      <Text>Планировка Одавары</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_1" Language="ja_JP">
+      <Text>小田原の町割 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_1" Language="en_US">
+      <Text>Odawara planning — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_1" Language="ru_RU">
+      <Text>Планировка Одавары — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_2" Language="ja_JP">
+      <Text>小田原の町割 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_2" Language="en_US">
+      <Text>Odawara planning — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_2" Language="ru_RU">
+      <Text>Планировка Одавары — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_3" Language="ja_JP">
+      <Text>小田原の町割 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_3" Language="en_US">
+      <Text>Odawara planning — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HOJO_UJITSUNA_3" Language="ru_RU">
+      <Text>Планировка Одавары — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA" Language="ja_JP">
+      <Text>管領家の補佐</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA" Language="en_US">
+      <Text>Kanrei retainers</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA" Language="ru_RU">
+      <Text>Вассалы канрэя</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_1" Language="ja_JP">
+      <Text>管領家の補佐 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_1" Language="en_US">
+      <Text>Kanrei retainers — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_1" Language="ru_RU">
+      <Text>Вассалы канрэя — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_2" Language="ja_JP">
+      <Text>管領家の補佐 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_2" Language="en_US">
+      <Text>Kanrei retainers — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_2" Language="ru_RU">
+      <Text>Вассалы канрэя — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_3" Language="ja_JP">
+      <Text>管領家の補佐 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_3" Language="en_US">
+      <Text>Kanrei retainers — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_YAMANOUCHI_UESUGI_NORIMASA_3" Language="ru_RU">
+      <Text>Вассалы канрэя — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA" Language="ja_JP">
+      <Text>甲斐の統率</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA" Language="en_US">
+      <Text>Kai command</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA" Language="ru_RU">
+      <Text>Управление Каи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_1" Language="ja_JP">
+      <Text>甲斐の統率 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_1" Language="en_US">
+      <Text>Kai command — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_1" Language="ru_RU">
+      <Text>Управление Каи — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_2" Language="ja_JP">
+      <Text>甲斐の統率 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_2" Language="en_US">
+      <Text>Kai command — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_2" Language="ru_RU">
+      <Text>Управление Каи — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_3" Language="ja_JP">
+      <Text>甲斐の統率 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_3" Language="en_US">
+      <Text>Kai command — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_TAKEDA_NOBUTORA_3" Language="ru_RU">
+      <Text>Управление Каи — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE" Language="ja_JP">
+      <Text>春日山の統率</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE" Language="en_US">
+      <Text>Kasugayama command</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE" Language="ru_RU">
+      <Text>Управление Касугаямой</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_1" Language="ja_JP">
+      <Text>春日山の統率 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_1" Language="en_US">
+      <Text>Kasugayama command — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_1" Language="ru_RU">
+      <Text>Управление Касугаямой — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_2" Language="ja_JP">
+      <Text>春日山の統率 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_2" Language="en_US">
+      <Text>Kasugayama command — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_2" Language="ru_RU">
+      <Text>Управление Касугаямой — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_3" Language="ja_JP">
+      <Text>春日山の統率 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_3" Language="en_US">
+      <Text>Kasugayama command — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_NAGAO_TAMEKAGE_3" Language="ru_RU">
+      <Text>Управление Касугаямой — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU" Language="ja_JP">
+      <Text>駿府の家政</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU" Language="en_US">
+      <Text>Sunpu household</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU" Language="ru_RU">
+      <Text>Хозяйство Сумпу</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_1" Language="ja_JP">
+      <Text>駿府の家政 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_1" Language="en_US">
+      <Text>Sunpu household — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_1" Language="ru_RU">
+      <Text>Хозяйство Сумпу — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_2" Language="ja_JP">
+      <Text>駿府の家政 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_2" Language="en_US">
+      <Text>Sunpu household — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_2" Language="ru_RU">
+      <Text>Хозяйство Сумпу — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_3" Language="ja_JP">
+      <Text>駿府の家政 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_3" Language="en_US">
+      <Text>Sunpu household — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_IMAGAWA_UJITERU_3" Language="ru_RU">
+      <Text>Хозяйство Сумпу — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE" Language="ja_JP">
+      <Text>津島と勝幡</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE" Language="en_US">
+      <Text>Tsushima and Shobata</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE" Language="ru_RU">
+      <Text>Цусима и Сёбата</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_1" Language="ja_JP">
+      <Text>津島と勝幡 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_1" Language="en_US">
+      <Text>Tsushima and Shobata — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_1" Language="ru_RU">
+      <Text>Цусима и Сёбата — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_2" Language="ja_JP">
+      <Text>津島と勝幡 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_2" Language="en_US">
+      <Text>Tsushima and Shobata — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_2" Language="ru_RU">
+      <Text>Цусима и Сёбата — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_3" Language="ja_JP">
+      <Text>津島と勝幡 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_3" Language="en_US">
+      <Text>Tsushima and Shobata — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ODA_NOBUHIDE_3" Language="ru_RU">
+      <Text>Цусима и Сёбата — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU" Language="ja_JP">
+      <Text>岡崎の結束</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU" Language="en_US">
+      <Text>Okazaki unity</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU" Language="ru_RU">
+      <Text>Единство Окадзаки</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_1" Language="ja_JP">
+      <Text>岡崎の結束 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_1" Language="en_US">
+      <Text>Okazaki unity — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_1" Language="ru_RU">
+      <Text>Единство Окадзаки — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_2" Language="ja_JP">
+      <Text>岡崎の結束 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_2" Language="en_US">
+      <Text>Okazaki unity — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_2" Language="ru_RU">
+      <Text>Единство Окадзаки — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_3" Language="ja_JP">
+      <Text>岡崎の結束 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_3" Language="en_US">
+      <Text>Okazaki unity — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MATSUDAIRA_KIYOYASU_3" Language="ru_RU">
+      <Text>Единство Окадзаки — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE" Language="ja_JP">
+      <Text>一乗谷の庇護</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE" Language="en_US">
+      <Text>Ichijodani patronage</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE" Language="ru_RU">
+      <Text>Покровительство Итидзёдани</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_1" Language="ja_JP">
+      <Text>一乗谷の庇護 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_1" Language="en_US">
+      <Text>Ichijodani patronage — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_1" Language="ru_RU">
+      <Text>Покровительство Итидзёдани — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_2" Language="ja_JP">
+      <Text>一乗谷の庇護 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_2" Language="en_US">
+      <Text>Ichijodani patronage — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_2" Language="ru_RU">
+      <Text>Покровительство Итидзёдани — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_3" Language="ja_JP">
+      <Text>一乗谷の庇護 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_3" Language="en_US">
+      <Text>Ichijodani patronage — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASAKURA_TAKAKAGE_3" Language="ru_RU">
+      <Text>Покровительство Итидзёдани — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU" Language="ja_JP">
+      <Text>幕臣と御料所</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU" Language="en_US">
+      <Text>Retainers and shogunal lands</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU" Language="ru_RU">
+      <Text>Вассалы и земли сёгуна</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_1" Language="ja_JP">
+      <Text>幕臣と御料所 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_1" Language="en_US">
+      <Text>Retainers and shogunal lands — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_1" Language="ru_RU">
+      <Text>Вассалы и земли сёгуна — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_2" Language="ja_JP">
+      <Text>幕臣と御料所 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_2" Language="en_US">
+      <Text>Retainers and shogunal lands — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_2" Language="ru_RU">
+      <Text>Вассалы и земли сёгуна — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_3" Language="ja_JP">
+      <Text>幕臣と御料所 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_3" Language="en_US">
+      <Text>Retainers and shogunal lands — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ASHIKAGA_YOSHIHARU_3" Language="ru_RU">
+      <Text>Вассалы и земли сёгуна — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI" Language="ja_JP">
+      <Text>阿波の家臣団</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI" Language="en_US">
+      <Text>Awa retainers</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI" Language="ru_RU">
+      <Text>Вассалы Авы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_1" Language="ja_JP">
+      <Text>阿波の家臣団 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_1" Language="en_US">
+      <Text>Awa retainers — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_1" Language="ru_RU">
+      <Text>Вассалы Авы — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_2" Language="ja_JP">
+      <Text>阿波の家臣団 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_2" Language="en_US">
+      <Text>Awa retainers — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_2" Language="ru_RU">
+      <Text>Вассалы Авы — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_3" Language="ja_JP">
+      <Text>阿波の家臣団 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_3" Language="en_US">
+      <Text>Awa retainers — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MIYOSHI_NAGAYOSHI_3" Language="ru_RU">
+      <Text>Вассалы Авы — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI" Language="ja_JP">
+      <Text>観音寺と取次</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI" Language="en_US">
+      <Text>Kannonji mediation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI" Language="ru_RU">
+      <Text>Посредничество Каннондзи</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_1" Language="ja_JP">
+      <Text>観音寺と取次 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_1" Language="en_US">
+      <Text>Kannonji mediation — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_1" Language="ru_RU">
+      <Text>Посредничество Каннондзи — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_2" Language="ja_JP">
+      <Text>観音寺と取次 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_2" Language="en_US">
+      <Text>Kannonji mediation — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_2" Language="ru_RU">
+      <Text>Посредничество Каннондзи — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_3" Language="ja_JP">
+      <Text>観音寺と取次 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_3" Language="en_US">
+      <Text>Kannonji mediation — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_ROKKAKU_SADAYORI_3" Language="ru_RU">
+      <Text>Посредничество Каннондзи — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO" Language="ja_JP">
+      <Text>石山の門徒</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO" Language="en_US">
+      <Text>Ishiyama believers</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO" Language="ru_RU">
+      <Text>Верующие Исиямы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_1" Language="ja_JP">
+      <Text>石山の門徒 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_1" Language="en_US">
+      <Text>Ishiyama believers — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_1" Language="ru_RU">
+      <Text>Верующие Исиямы — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_2" Language="ja_JP">
+      <Text>石山の門徒 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_2" Language="en_US">
+      <Text>Ishiyama believers — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_2" Language="ru_RU">
+      <Text>Верующие Исиямы — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_3" Language="ja_JP">
+      <Text>石山の門徒 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_3" Language="en_US">
+      <Text>Ishiyama believers — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_HONGANJI_SHONYO_3" Language="ru_RU">
+      <Text>Верующие Исиямы — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA" Language="ja_JP">
+      <Text>山口の典籍</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA" Language="en_US">
+      <Text>Yamaguchi manuscripts</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA" Language="ru_RU">
+      <Text>Рукописи Ямагути</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_1" Language="ja_JP">
+      <Text>山口の典籍 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_1" Language="en_US">
+      <Text>Yamaguchi manuscripts — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_1" Language="ru_RU">
+      <Text>Рукописи Ямагути — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_2" Language="ja_JP">
+      <Text>山口の典籍 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_2" Language="en_US">
+      <Text>Yamaguchi manuscripts — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_2" Language="ru_RU">
+      <Text>Рукописи Ямагути — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_3" Language="ja_JP">
+      <Text>山口の典籍 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_3" Language="en_US">
+      <Text>Yamaguchi manuscripts — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OUCHI_YOSHITAKA_3" Language="ru_RU">
+      <Text>Рукописи Ямагути — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA" Language="ja_JP">
+      <Text>月山の国人衆</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA" Language="en_US">
+      <Text>Gassan local lords</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA" Language="ru_RU">
+      <Text>Местные владетели Гассана</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_1" Language="ja_JP">
+      <Text>月山の国人衆 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_1" Language="en_US">
+      <Text>Gassan local lords — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_1" Language="ru_RU">
+      <Text>Местные владетели Гассана — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_2" Language="ja_JP">
+      <Text>月山の国人衆 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_2" Language="en_US">
+      <Text>Gassan local lords — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_2" Language="ru_RU">
+      <Text>Местные владетели Гассана — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_3" Language="ja_JP">
+      <Text>月山の国人衆 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_3" Language="en_US">
+      <Text>Gassan local lords — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AMAGO_TSUNEHISA_3" Language="ru_RU">
+      <Text>Местные владетели Гассана — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI" Language="ja_JP">
+      <Text>郡山の国人結束</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI" Language="en_US">
+      <Text>Koriyama local unity</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI" Language="ru_RU">
+      <Text>Единство Кориямы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_1" Language="ja_JP">
+      <Text>郡山の国人結束 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_1" Language="en_US">
+      <Text>Koriyama local unity — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_1" Language="ru_RU">
+      <Text>Единство Кориямы — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_2" Language="ja_JP">
+      <Text>郡山の国人結束 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_2" Language="en_US">
+      <Text>Koriyama local unity — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_2" Language="ru_RU">
+      <Text>Единство Кориямы — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_3" Language="ja_JP">
+      <Text>郡山の国人結束 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_3" Language="en_US">
+      <Text>Koriyama local unity — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_MORI_MOTONARI_3" Language="ru_RU">
+      <Text>Единство Кориямы — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA" Language="ja_JP">
+      <Text>岡豊の旧領回復</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA" Language="en_US">
+      <Text>Oko restoration</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA" Language="ru_RU">
+      <Text>Восстановление Око</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_1" Language="ja_JP">
+      <Text>岡豊の旧領回復 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_1" Language="en_US">
+      <Text>Oko restoration — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_1" Language="ru_RU">
+      <Text>Восстановление Око — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_2" Language="ja_JP">
+      <Text>岡豊の旧領回復 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_2" Language="en_US">
+      <Text>Oko restoration — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_2" Language="ru_RU">
+      <Text>Восстановление Око — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_3" Language="ja_JP">
+      <Text>岡豊の旧領回復 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_3" Language="en_US">
+      <Text>Oko restoration — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_CHOSOKABE_KUNICHIKA_3" Language="ru_RU">
+      <Text>Восстановление Око — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI" Language="ja_JP">
+      <Text>府内の守護政務</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI" Language="en_US">
+      <Text>Funai shugo administration</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI" Language="ru_RU">
+      <Text>Администрация Фунай</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_1" Language="ja_JP">
+      <Text>府内の守護政務 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_1" Language="en_US">
+      <Text>Funai shugo administration — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_1" Language="ru_RU">
+      <Text>Администрация Фунай — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_2" Language="ja_JP">
+      <Text>府内の守護政務 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_2" Language="en_US">
+      <Text>Funai shugo administration — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_2" Language="ru_RU">
+      <Text>Администрация Фунай — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_3" Language="ja_JP">
+      <Text>府内の守護政務 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_3" Language="en_US">
+      <Text>Funai shugo administration — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_OTOMO_YOSHIAKI_3" Language="ru_RU">
+      <Text>Администрация Фунай — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA" Language="ja_JP">
+      <Text>伊作の相州家</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA" Language="en_US">
+      <Text>Izaku Soshu household</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA" Language="ru_RU">
+      <Text>Дом Сосю в Идзаку</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_1" Language="ja_JP">
+      <Text>伊作の相州家 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_1" Language="en_US">
+      <Text>Izaku Soshu household — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_1" Language="ru_RU">
+      <Text>Дом Сосю в Идзаку — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_2" Language="ja_JP">
+      <Text>伊作の相州家 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_2" Language="en_US">
+      <Text>Izaku Soshu household — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_2" Language="ru_RU">
+      <Text>Дом Сосю в Идзаку — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_3" Language="ja_JP">
+      <Text>伊作の相州家 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_3" Language="en_US">
+      <Text>Izaku Soshu household — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_SHIMAZU_TAKAHISA_3" Language="ru_RU">
+      <Text>Дом Сосю в Идзаку — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI" Language="ja_JP">
+      <Text>王府の海路</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI" Language="en_US">
+      <Text>Royal sea routes</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI" Language="ru_RU">
+      <Text>Морские пути королевства</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_1" Language="ja_JP">
+      <Text>王府の海路 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_1" Language="en_US">
+      <Text>Royal sea routes — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_1" Language="ru_RU">
+      <Text>Морские пути королевства — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_2" Language="ja_JP">
+      <Text>王府の海路 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_2" Language="en_US">
+      <Text>Royal sea routes — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_2" Language="ru_RU">
+      <Text>Морские пути королевства — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_3" Language="ja_JP">
+      <Text>王府の海路 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_3" Language="en_US">
+      <Text>Royal sea routes — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_RYUKYU_SHO_SEI_3" Language="ru_RU">
+      <Text>Морские пути королевства — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA" Language="ja_JP">
+      <Text>集落間の相扶</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA" Language="en_US">
+      <Text>Settlement mutual aid</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA" Language="ru_RU">
+      <Text>Взаимопомощь поселений</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_1" Language="ja_JP">
+      <Text>集落間の相扶 — 基礎</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_1" Language="en_US">
+      <Text>Settlement mutual aid — Foundation</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_1" Language="ru_RU">
+      <Text>Взаимопомощь поселений — Основы</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_2" Language="ja_JP">
+      <Text>集落間の相扶 — 応用</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_2" Language="en_US">
+      <Text>Settlement mutual aid — Practice</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_2" Language="ru_RU">
+      <Text>Взаимопомощь поселений — Практика</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_3" Language="ja_JP">
+      <Text>集落間の相扶 — 大成</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_3" Language="en_US">
+      <Text>Settlement mutual aid — Mastery</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE_AINU_TARIKONA_3" Language="ru_RU">
+      <Text>Взаимопомощь поселений — Мастерство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MERIT" Language="ja_JP">
+      <Text>功績：{1_Num}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MERIT" Language="en_US">
+      <Text>Merit: {1_Num}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MERIT" Language="ru_RU">
+      <Text>Заслуги: {1_Num}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MERIT_HELP" Language="ja_JP">
+      <Text>人物ごとの功績です。定着中の統治・建物完成・近隣での勝利・新しい同盟で獲得し、技能取得で消費します。総督の称号は進化専用です。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MERIT_HELP" Language="en_US">
+      <Text>This governor earns personal merit from established governance, construction, nearby victories and new alliances. Skills spend merit; Governor Titles fund evolution.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_MERIT_HELP" Language="ru_RU">
+      <Text>Личные заслуги за управление, строительство, победы поблизости и новые союзы. Навыки тратят заслуги; титулы нужны для эволюции.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TREE" Language="ja_JP">
+      <Text>技能ツリー</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TREE" Language="en_US">
+      <Text>Skill tree</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TREE" Language="ru_RU">
+      <Text>Древо навыков</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TREE_HELP" Language="ja_JP">
+      <Text>↑↓：技能　←→：専攻　Enter：確認／取得　Esc：取消／閉じる　Tab：次の人物</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TREE_HELP" Language="en_US">
+      <Text>Up/Down: skill · Left/Right: category · Enter: review/learn · Esc: cancel/close · Tab: next person</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_TREE_HELP" Language="ru_RU">
+      <Text>Вверх/вниз: навык · Влево/вправо: направление · Enter: изучить · Esc: отмена/закрытие · Tab: следующий</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERMANENT" Language="ja_JP">
+      <Text>専攻は1種類だけ選べます。技能の取得、専攻、排他的な分岐は永久に固定されます。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERMANENT" Language="en_US">
+      <Text>Choose one major category. Learned skills, the category and exclusive branches are permanent.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_PERMANENT" Language="ru_RU">
+      <Text>Можно выбрать только одно направление. Навыки, направление и исключающие ветви закрепляются навсегда.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_LOCKED" Language="ja_JP">
+      <Text>専攻固定：{1_Name}。他の専攻は取得不可。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_LOCKED" Language="en_US">
+      <Text>Committed to {1_Name}. Other categories are locked.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CATEGORY_LOCKED" Language="ru_RU">
+      <Text>Выбрано: {1_Name}. Другие направления закрыты.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_UNCOMMITTED" Language="ja_JP">
+      <Text>専攻未選択。最初の技能で専攻が固定されます。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_UNCOMMITTED" Language="en_US">
+      <Text>No category chosen. The first skill locks your category.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_UNCOMMITTED" Language="ru_RU">
+      <Text>Направление не выбрано. Первый навык закрепит выбор.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST" Language="ja_JP">
+      <Text>費用：功績{1_Num}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST" Language="en_US">
+      <Text>Cost: {1_Num} merit</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_COST" Language="ru_RU">
+      <Text>Стоимость: {1_Num} заслуг</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE" Language="ja_JP">
+      <Text>{1_Name}　—　{2_Status}　（功績{3_Num}）</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE" Language="en_US">
+      <Text>{1_Name} — {2_Status} ({3_Num} merit)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE" Language="ru_RU">
+      <Text>{1_Name} — {2_Status} ({3_Num} заслуг)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT" Language="ja_JP">
+      <Text>定着した配置先：{1_Effect} +{2_Num}%。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT" Language="en_US">
+      <Text>Established assigned city: +{2_Num}% {1_Effect}.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT" Language="ru_RU">
+      <Text>Город после обустройства: +{2_Num}% {1_Effect}.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_AMENITIES" Language="ja_JP">
+      <Text>定着した配置先の快適性+{1_Num}。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_AMENITIES" Language="en_US">
+      <Text>Established assigned city: +{1_Num} Amenities.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_AMENITIES" Language="ru_RU">
+      <Text>Город после обустройства: +{1_Num} довольства.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_REQUIRES" Language="ja_JP">
+      <Text>前提：{1_Name}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_REQUIRES" Language="en_US">
+      <Text>Requires: {1_Name}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_REQUIRES" Language="ru_RU">
+      <Text>Требуется: {1_Name}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CONFIRM" Language="ja_JP">
+      <Text>「{1_Name}」を功績{2_Num}で取得します。取り消せません。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CONFIRM" Language="en_US">
+      <Text>Learn {1_Name} for {2_Num} merit. This cannot be undone.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CONFIRM" Language="ru_RU">
+      <Text>Изучить {1_Name} за {2_Num} заслуг. Отменить нельзя.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_LOCKS" Language="ja_JP">
+      <Text>取得すると選べなくなるもの：{1_List}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_LOCKS" Language="en_US">
+      <Text>Learning this locks: {1_List}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_LOCKS" Language="ru_RU">
+      <Text>После изучения будут закрыты: {1_List}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NO_NEW_LOCKS" Language="ja_JP">
+      <Text>追加で固定される専攻・分岐はありません。</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NO_NEW_LOCKS" Language="en_US">
+      <Text>No additional categories or branches will be locked.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NO_NEW_LOCKS" Language="ru_RU">
+      <Text>Новые направления или ветви не будут закрыты.</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CONFIRM_BUTTON" Language="ja_JP">
+      <Text>永久に取得する</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CONFIRM_BUTTON" Language="en_US">
+      <Text>Learn permanently</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CONFIRM_BUTTON" Language="ru_RU">
+      <Text>Изучить навсегда</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CANCEL" Language="ja_JP">
+      <Text>取消</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CANCEL" Language="en_US">
+      <Text>Cancel</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CANCEL" Language="ru_RU">
+      <Text>Отмена</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLOSE" Language="ja_JP">
+      <Text>閉じる</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLOSE" Language="en_US">
+      <Text>Close</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_CLOSE" Language="ru_RU">
+      <Text>Закрыть</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE" Language="ja_JP">
+      <Text>固有ルート</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE" Language="en_US">
+      <Text>Signature route</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SIGNATURE" Language="ru_RU">
+      <Text>Особая ветвь</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SELECTED" Language="ja_JP">
+      <Text>選択中：{1_Name}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SELECTED" Language="en_US">
+      <Text>Selected: {1_Name}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_SELECTED" Language="ru_RU">
+      <Text>Выбрано: {1_Name}</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_OWNED" Language="ja_JP">
+      <Text>取得済み</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_OWNED" Language="en_US">
+      <Text>Learned</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_OWNED" Language="ru_RU">
+      <Text>Изучено</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_AVAILABLE" Language="ja_JP">
+      <Text>取得可能</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_AVAILABLE" Language="en_US">
+      <Text>Available</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_AVAILABLE" Language="ru_RU">
+      <Text>Доступно</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NO_MERIT" Language="ja_JP">
+      <Text>功績不足</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NO_MERIT" Language="en_US">
+      <Text>Insufficient merit</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NO_MERIT" Language="ru_RU">
+      <Text>Недостаточно заслуг</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_CATEGORY_LOCKED" Language="ja_JP">
+      <Text>他の専攻を選択済み</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_CATEGORY_LOCKED" Language="en_US">
+      <Text>Other category chosen</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_CATEGORY_LOCKED" Language="ru_RU">
+      <Text>Выбрано другое направление</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_BRANCH_LOCKED" Language="ja_JP">
+      <Text>排他的な分岐で取得不可</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_BRANCH_LOCKED" Language="en_US">
+      <Text>Exclusive sibling locked</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_BRANCH_LOCKED" Language="ru_RU">
+      <Text>Закрыто другой ветвью</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_PREREQ_LOCKED" Language="ja_JP">
+      <Text>前提技能が未取得</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_PREREQ_LOCKED" Language="en_US">
+      <Text>Prerequisite missing</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_PREREQ_LOCKED" Language="ru_RU">
+      <Text>Нет предыдущего навыка</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NOT_OWNED" Language="ja_JP">
+      <Text>自分の人物ではありません</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NOT_OWNED" Language="en_US">
+      <Text>Not your governor</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NOT_OWNED" Language="ru_RU">
+      <Text>Не ваш губернатор</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NOT_GOVERNOR" Language="ja_JP">
+      <Text>総督への進化が必要</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NOT_GOVERNOR" Language="en_US">
+      <Text>Evolution required</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_NOT_GOVERNOR" Language="ru_RU">
+      <Text>Нужна эволюция</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_INVALID_NODE" Language="ja_JP">
+      <Text>この人物の技能ではありません</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_INVALID_NODE" Language="en_US">
+      <Text>Not in this tree</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_INVALID_NODE" Language="ru_RU">
+      <Text>Не входит в это древо</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_CONFIRM_REQUIRED" Language="ja_JP">
+      <Text>取得前の確認が必要</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_CONFIRM_REQUIRED" Language="en_US">
+      <Text>Confirmation required</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_CONFIRM_REQUIRED" Language="ru_RU">
+      <Text>Требуется подтверждение</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_PURCHASED" Language="ja_JP">
+      <Text>技能を取得しました</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_PURCHASED" Language="en_US">
+      <Text>Skill learned</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NODE_STATUS_PURCHASED" Language="ru_RU">
+      <Text>Навык изучен</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_FOOD" Language="ja_JP">
+      <Text>食料</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_FOOD" Language="en_US">
+      <Text>Food</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_FOOD" Language="ru_RU">
+      <Text>Пища</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_PRODUCTION" Language="ja_JP">
+      <Text>生産力</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_PRODUCTION" Language="en_US">
+      <Text>Production</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_PRODUCTION" Language="ru_RU">
+      <Text>Производство</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_GOLD" Language="ja_JP">
+      <Text>ゴールド</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_GOLD" Language="en_US">
+      <Text>Gold</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_GOLD" Language="ru_RU">
+      <Text>Золото</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_CULTURE" Language="ja_JP">
+      <Text>文化力</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_CULTURE" Language="en_US">
+      <Text>Culture</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_CULTURE" Language="ru_RU">
+      <Text>Культура</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_SCIENCE" Language="ja_JP">
+      <Text>科学力</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_SCIENCE" Language="en_US">
+      <Text>Science</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_SCIENCE" Language="ru_RU">
+      <Text>Наука</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_FAITH" Language="ja_JP">
+      <Text>信仰力</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_FAITH" Language="en_US">
+      <Text>Faith</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_FAITH" Language="ru_RU">
+      <Text>Вера</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_MILITARY" Language="ja_JP">
+      <Text>軍事ユニット生産</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_MILITARY" Language="en_US">
+      <Text>Military unit production</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_EFFECT_MILITARY" Language="ru_RU">
+      <Text>Производство военных юнитов</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NEXT_PERSON" Language="ja_JP">
+      <Text>次の人物（Tab）</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NEXT_PERSON" Language="en_US">
+      <Text>Next person (Tab)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_NEXT_PERSON" Language="ru_RU">
+      <Text>Следующий (Tab)</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_KEYBOARD_OPEN" Language="ja_JP">
+      <Text>F8：人物の技能ツリーを開く</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_KEYBOARD_OPEN" Language="en_US">
+      <Text>F8: open persona skill tree</Text>
+    </Row>
+    <Row Tag="LOC_JAC_PERSONA_KEYBOARD_OPEN" Language="ru_RU">
+      <Text>F8: открыть древо навыков</Text>
+    </Row>
+  </LocalizedText>
+</GameData>

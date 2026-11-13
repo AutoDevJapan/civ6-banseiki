@@ -49,6 +49,7 @@
 			<File>UI/JAC_HouseNames.lua</File>
 			<File>UI/TechAndCivicUnlockables_JAC_HouseNames.lua</File>
 			<File>UI/CivilopediaPage_JAC_HouseNames.lua</File>
+			<File>UI/DiplomacyDealView_JAC_HouseNames.lua</File>
 			<File>UI/JAC_BoostUnlockedPopup.lua</File>
 			<File>UI/JAC_EraProgressPanel.lua</File>
 			<File>UI/JAC_EraCompletePopup.lua</File>
@@ -126,6 +127,7 @@
 		<File>UI/JAC_HouseNames.lua</File>
 		<File>UI/TechAndCivicUnlockables_JAC_HouseNames.lua</File>
 		<File>UI/CivilopediaPage_JAC_HouseNames.lua</File>
+		<File>UI/DiplomacyDealView_JAC_HouseNames.lua</File>
 		<File>UI/JAC_BoostUnlockedPopup.lua</File>
 		<File>UI/JAC_EraProgressPanel.lua</File>
 		<File>UI/JAC_EraCompletePopup.lua</File>

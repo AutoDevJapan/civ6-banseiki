@@ -14,6 +14,16 @@ fn sql_rows(out: &mut String, header: &str, rows: Vec<String>) {
     out.push_str(&rows.join(",\n"));
     out.push_str(";\n\n");
 }
+/// Supply the engine's normal citizen-name collection for all scenario factions.
+/// This adds database candidates only; it never renames a saved unit or captive.
+pub fn citizen_names_sql() -> String {
+    let civs = SEATS
+        .iter()
+        .map(|s| format!("'{}'", s.civ))
+        .collect::<Vec<_>>()
+        .join(",\n    ");
+    format!("-- Official Japanese citizen-name candidates, including gender and era flags.\n-- Keep existing rows and their IDs; unnamed legacy captives are not rebound.\nINSERT OR IGNORE INTO CivilizationCitizenNames (CivilizationType, CitizenName, Female, Modern)\nSELECT c.CivilizationType, n.CitizenName, n.Female, n.Modern\nFROM Civilizations AS c\nJOIN CivilizationCitizenNames AS n ON n.CivilizationType='CIVILIZATION_JAPAN'\nWHERE c.CivilizationType IN (\n    {civs}\n)\nORDER BY c.CivilizationType, n.CitizenName;\n\n")
+}
 pub fn gameplay() -> String {
     let extra = extras();
     let mut out = String::from(
@@ -59,6 +69,7 @@ pub fn gameplay() -> String {
     );
     out+="INSERT INTO Traits (TraitType, Name, Description) VALUES\n\n    ('TRAIT_JAC_1534_FACTION', 'LOC_JAC_1534_FACTION_TRAIT', 'LOC_TRAIT_JAC_CLAN_POC_DESCRIPTION'),\n\n    ('TRAIT_JAC_1534_LEADER', 'LOC_JAC_1534_LEADER_TRAIT', 'LOC_TRAIT_JAC_LEADER_POC_DESCRIPTION');\n\n";
     for(header,rows)in[("INSERT INTO CivilizationTraits (CivilizationType, TraitType) VALUES",extra.iter().map(|s|format!("    ('{}', 'TRAIT_JAC_1534_FACTION')",s.civ)).collect()),("INSERT INTO LeaderTraits (LeaderType, TraitType) VALUES",extra.iter().map(|s|format!("    ('{}', 'TRAIT_JAC_1534_LEADER')",s.leader)).collect()),("INSERT INTO CityNames (CivilizationType, CityName, SortIndex) VALUES",extra.iter().map(|s|format!("    ('{}', 'LOC_JAC_1534_CAPITAL_{}', -1)",s.civ,s.slug)).collect()),("INSERT INTO LoadingInfo (LeaderType, ForegroundImage, BackgroundImage, LeaderText, PlayDawnOfManAudio) VALUES",extra.iter().map(|s|format!("    ('{}', '{}_NEUTRAL', '{}_BACKGROUND', 'LOC_JAC_1534_LOADING', 0)",s.leader,s.leader,s.leader)).collect()),("INSERT INTO DiplomacyInfo (Type, BackgroundImage) VALUES",extra.iter().map(|s|format!("    ('{}', '{}_DIPLOMACY_BACKGROUND')",s.leader,s.leader)).collect())]{sql_rows(&mut out,header,rows);}
+    out.push_str(&citizen_names_sql());
     out.truncate(out.len() - 1);
     out
 }

@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<AssetObjects..GameDependencyData>
+  <ID>
+    <name text="JAC_PoC_LeaderPersona" />
+    <id text="91cf7b65-54bb-4f69-a452-19a65527cde2" />
+  </ID>
+  <RequiredGameArtIDs />
+  <SystemDependencies>
+    <Element>
+      <ConsumerName text="Units" />
+      <ArtDefDependencyPaths>
+        <Element text="Units.artdef" />
+      </ArtDefDependencyPaths>
+      <LibraryDependencies />
+      <LoadsLibraries>true</LoadsLibraries>
+    </Element>
+    <Element>
+      <ConsumerName text="WorldView_Translate" />
+      <ArtDefDependencyPaths>
+        <Element text="Units.artdef" />
+      </ArtDefDependencyPaths>
+      <LibraryDependencies />
+      <LoadsLibraries>true</LoadsLibraries>
+    </Element>
+    <Element>
+      <ConsumerName text="Audio" />
+      <ArtDefDependencyPaths>
+        <Element text="Units.artdef" />
+      </ArtDefDependencyPaths>
+      <LibraryDependencies />
+      <LoadsLibraries>true</LoadsLibraries>
+    </Element>
+  </SystemDependencies>
+  <ArtDefDependencies>
+    <Element>
+      <ArtDefPath text="Units.artdef" />
+      <ArtDefDependencyPaths />
+    </Element>
+  </ArtDefDependencies>
+  <LibraryDependencies />
+</AssetObjects..GameDependencyData>

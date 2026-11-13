@@ -1,6 +1,6 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, Error, ErrorKind, Result};
+use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error, ErrorKind, Result};
 use serde_json::json;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -438,6 +438,306 @@ fn test_wait_still_fails_when_nothing_was_open_or_retries_run_out() {
 }
 
 #[test]
+fn expected_captive_session_is_preserved_during_ingame_timeout() {
+    let fake = FakeBackend::new()
+        .states(|| {
+            Ok(vec![
+                "InGame".into(),
+                "DiplomacyDealView".into(),
+                "DiplomacyActionView".into(),
+            ])
+        })
+        .lua(|state, _| {
+            assert_eq!(state, "InGame", "expected native deal session was closed");
+            Err(Error::unknown(
+                "FireTuner response timed out after 0/8 bytes",
+            ))
+        });
+    let mut h = Harness::new(json!({}), fake);
+    let step = json!({"action":"wait_for","timeout":60,"condition":{
+        "type":"lua","state_name":"InGame","code":"return false",
+        "preserve_diplomacy_session":true
+    }});
+    assert_eq!(
+        h.runner.run_step(&step).unwrap_err().kind,
+        ErrorKind::LuaResponseUnknown
+    );
+    assert!(h.calls().iter().all(|(state, _)| state == "InGame"));
+    assert!(!h.log().contains("ingame_unblock"));
+}
+
+fn captive_session_probe_backend(
+    deal_view_reply: bool,
+    deal_view_id: &str,
+    deal_view_from: &str,
+    binding_noack: bool,
+) -> FakeBackend {
+    captive_session_probe_with_visibility_failures(
+        deal_view_reply,
+        deal_view_id,
+        deal_view_from,
+        binding_noack,
+        0,
+    )
+}
+
+fn captive_session_probe_with_visibility_failures(
+    deal_view_reply: bool,
+    deal_view_id: &str,
+    deal_view_from: &str,
+    binding_noack: bool,
+    visibility_failures: usize,
+) -> FakeBackend {
+    let deal_view_id = deal_view_id.to_owned();
+    let deal_view_from = deal_view_from.to_owned();
+    let visibility_failures = Mutex::new(visibility_failures);
+    FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into(), "DiplomacyDealView".into()]))
+        .lua(move |state, code| {
+            if state == "DiplomacyDealView" && !deal_view_reply {
+                return Err(Error::unknown(
+                    "FireTuner response timed out after 0/8 bytes",
+                ));
+            }
+            if code == "return ContextPtr:IsHidden()" {
+                let mut left = visibility_failures.lock().unwrap();
+                if *left > 0 {
+                    *left -= 1;
+                    return Err(Error::unknown("visibility acknowledgment unavailable"));
+                }
+                return Ok("false".into());
+            }
+            if code.contains("CaptiveExchangeSessionReadOnly()") {
+                return Ok("0|1|2|true|false|nil".into());
+            }
+            if code.contains("FindOpenSessionID(0,1)") {
+                return Ok(if state == "DiplomacyDealView" {
+                    deal_view_id.clone()
+                } else {
+                    "44".into()
+                });
+            }
+            if code.contains("GetSessionInfo(44)") {
+                return Ok(if state == "DiplomacyDealView" {
+                    deal_view_from.clone()
+                } else {
+                    "0".into()
+                });
+            }
+            if code.contains("PinObservedCaptiveExchangeSession(44)") {
+                assert_eq!(state, "InGame");
+                if binding_noack {
+                    return Err(Error::unknown(
+                        "binding acknowledgment lost after 0/8 bytes",
+                    ));
+                }
+                return Ok("44".into());
+            }
+            panic!("unexpected captive session query: {state} {code}");
+        })
+}
+
+#[test]
+fn visibility_is_rechecked_once_after_live_session_evidence_without_replaying_binding() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,"timeout":120,"lua_timeout":12});
+    let mut recovered = Harness::new(
+        json!({}),
+        captive_session_probe_with_visibility_failures(true, "44", "0", false, 1),
+    );
+    assert!(recovered
+        .runner
+        .run_step(&step)
+        .unwrap()
+        .contains("observed and bound"));
+    assert_eq!(recovered.calls().len(), 9);
+    assert_eq!(
+        recovered
+            .calls()
+            .iter()
+            .filter(|(_, c)| c == "return ContextPtr:IsHidden()")
+            .count(),
+        2
+    );
+    assert_eq!(
+        recovered
+            .calls()
+            .iter()
+            .filter(|(_, c)| c.contains("PinObservedCaptiveExchangeSession"))
+            .count(),
+        1
+    );
+    assert!(recovered.log().contains("deal_view_hidden_recheck=false"));
+    let mut unavailable = Harness::new(
+        json!({}),
+        captive_session_probe_with_visibility_failures(true, "44", "0", false, 2),
+    );
+    assert_eq!(
+        unavailable.runner.run_step(&step).unwrap_err().kind,
+        ErrorKind::Scenario
+    );
+    assert_eq!(unavailable.calls().len(), 8);
+    assert!(unavailable
+        .calls()
+        .iter()
+        .all(|(_, c)| !c.contains("PinObservedCaptiveExchangeSession")
+            && !c.contains("SendWorkingDeal")));
+}
+
+#[test]
+fn captive_session_observation_requires_matching_native_ids_and_initiators() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
+        "timeout":120,"lua_timeout":12});
+    let mut observed = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "44", "0", false),
+    );
+    assert!(observed
+        .runner
+        .run_step(&step)
+        .unwrap()
+        .contains("session 44 observed and bound"));
+    assert_eq!(observed.calls().len(), 8);
+    assert!(observed
+        .calls()
+        .last()
+        .unwrap()
+        .1
+        .contains("PinObservedCaptiveExchangeSession(44)"));
+    assert!(observed.calls().iter().all(|(_, code)| {
+        !code.contains("RequestSession")
+            && !code.contains("SendWorkingDeal")
+            && !code.contains("CloseSession")
+    }));
+    assert!(observed.timeouts.lock().unwrap().iter().all(|n| *n <= 12.0));
+
+    let mut wrong = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "44", "1", false),
+    );
+    let error = wrong.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.to_string().contains("from=Some(\"0\")/Some(\"1\")"));
+    assert_eq!(wrong.calls().len(), 7);
+    let mut replaced = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "45", "0", false),
+    );
+    let error = replaced.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error
+        .to_string()
+        .contains("native_ids=Some(\"44\")/Some(\"45\")"));
+    assert_eq!(replaced.calls().len(), 7);
+}
+
+#[test]
+fn hidden_session_can_become_visible_before_exact_session_binding() {
+    let mut backend = captive_session_probe_backend(true, "44", "0", false);
+    let mut original = std::mem::replace(&mut backend.on_lua, Box::new(|_, _| unreachable!()));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |state, code| {
+        if code == "return ContextPtr:IsHidden()" {
+            reads += 1;
+            if reads == 1 {
+                return Ok("true".into());
+            }
+        }
+        original(state, code)
+    });
+    let mut h = Harness::new(json!({}), backend);
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,"timeout":120,"lua_timeout":12});
+    assert!(h
+        .runner
+        .run_step(&step)
+        .unwrap()
+        .contains("observed and bound"));
+    assert!(
+        h.log().contains("deal_view_hidden=true")
+            && h.log().contains("deal_view_hidden_recheck=false")
+    );
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, c)| c.contains("PinObservedCaptiveExchangeSession"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn captive_session_observation_records_noack_in_one_context_without_closing_it() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
+        "timeout":120,"lua_timeout":12});
+    let mut h = Harness::new(
+        json!({}),
+        captive_session_probe_backend(false, "44", "0", false),
+    );
+    let error = h.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.to_string().contains("native_ids=Some(\"44\")/None"));
+    assert_eq!(h.calls().len(), 7);
+    assert!(
+        h.log().contains("deal_view_hidden")
+            && h.log().contains("ingame_session_id=44")
+            && h.log().contains("deal_view_session_id")
+            && !h.log().contains("closed AI deal proposal")
+    );
+    assert!(h.timeouts.lock().unwrap().iter().all(|n| *n <= 12.0));
+}
+
+#[test]
+fn captive_session_binding_noack_stops_without_retrying_or_proposing() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
+        "timeout":120,"lua_timeout":12});
+    let mut h = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "44", "0", true),
+    );
+    let error = h.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LuaResponseUnknown);
+    assert_eq!(h.calls().len(), 8);
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, code)| code.contains("PinObservedCaptiveExchangeSession"))
+            .count(),
+        1
+    );
+    assert!(h
+        .calls()
+        .last()
+        .unwrap()
+        .1
+        .contains("PinObservedCaptiveExchangeSession(44)"));
+    assert!(
+        h.log().contains("binding acknowledgment unknown")
+            && !h
+                .calls()
+                .iter()
+                .any(|(_, code)| code.contains("SendWorkingDeal") || code.contains("CloseSession"))
+    );
+}
+
+#[test]
+fn captive_session_observation_rejects_invalid_roles_and_budgets() {
+    let valid = json!({"name":"session probe","steps":[{"action":"observe_captive_session",
+        "attacker":0,"captor":1,"timeout":120,"lua_timeout":12}]});
+    assert!(scenario::validate_scenario(&valid).is_ok());
+    for (field, value) in [
+        ("attacker", json!("0")),
+        ("captor", json!(0)),
+        ("lua_timeout", json!(0)),
+        ("lua_timeout", json!(21)),
+        ("timeout", json!(121)),
+        ("timeout", json!("120")),
+    ] {
+        let mut invalid = valid.clone();
+        invalid["steps"][0][field] = value;
+        assert!(scenario::validate_scenario(&invalid).is_err(), "{field}");
+    }
+}
+
+#[test]
 fn test_ui_lua_is_never_replayed_after_it_may_have_run() {
     let fake = FakeBackend::new().lua(|state, _| {
         if state == "DiplomacyActionView" {
@@ -449,7 +749,9 @@ fn test_ui_lua_is_never_replayed_after_it_may_have_run() {
     let mut h = Harness::new(json!({}), fake);
     assert_eq!(
         h.runner
-            .run_step(&json!({"action":"ui_lua","state_name":"InGame","code":"return 1"}))
+            .run_step(
+                &json!({"action":"ui_lua","state_name":"InGame","code":"return 1","lua_timeout":30})
+            )
             .unwrap_err()
             .kind,
         ErrorKind::LuaResponseUnknown
@@ -461,4 +763,5 @@ fn test_ui_lua_is_never_replayed_after_it_may_have_run() {
             .collect::<Vec<_>>(),
         ["InGame"]
     );
+    assert_eq!(*h.timeouts.lock().unwrap(), [30.0]);
 }

@@ -101,9 +101,16 @@ end
 
 local unpackArguments = table.unpack or unpack
 
-local function WrapLookup(original)
+local function WrapLookup(original, contextName, methodName)
 	return function(tag, ...)
 		local count = select("#", ...)
+		if tag == nil and count == 0 and methodName == "Lookup" and
+			contextName == "DiplomacyDealView" then
+			local provider = ExposedMembers and
+				ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey
+			local key = type(provider) == "function" and provider() or nil
+			if type(key) == "string" then tag = key end
+		end
 		if count == 0 then return JAC_ApplyHouseNames(original(JAC_ResolveHouseTag(tag))) end
 		local arguments = { ... }
 		for i = 1, count do arguments[i] = JAC_ResolveHouseTag(arguments[i]) end
@@ -127,7 +134,9 @@ function JAC_InstallHouseNames(contextName)
 		local base = Locale
 		local shadow = setmetatable({}, { __index = base })
 		for _, name in ipairs({ "Lookup", "ToUpper", "ConvertTextKey" }) do
-			if type(base[name]) == "function" then shadow[name] = WrapLookup(base[name]) end
+			if type(base[name]) == "function" then
+				shadow[name] = WrapLookup(base[name], contextName, name)
+			end
 		end
 		Locale = shadow
 		if Locale ~= shadow then error("global Locale was not replaced") end

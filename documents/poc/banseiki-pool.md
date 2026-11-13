@@ -1,6 +1,6 @@
 # 万世紀プールの登録と2人プレイ
 
-仕様は [SSOT 4.7](../spec/ssot/04-factions-characters.md)、人物は [台帳](../spec/data/banseiki-pool.json) を正本とする。
+仕様は [SSOT 4.8](../spec/ssot/04-factions-characters.md)、人物は [台帳](../spec/data/banseiki-pool.json) を正本とする。
 
 ## 登録
 

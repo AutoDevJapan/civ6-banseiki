@@ -1,0 +1,18 @@
+{
+  "name": "Queue one official new spy in the preserved failed game with proven capacity",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); assert(r.current==2 and r.mode=='PRODUCE' and r.archive.eventID==0 and not Game:GetProperty('JAC_BOUNDARY_SPY'),'new spy requires archived failed mission and an empty retry reference'); ExposedMembers.JAC_PersonaBoundary.Queue('SPAWN_SPY'); return 'official civic prerequisite check queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPAWN_SPY' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_SPY_PREPARED')~=nil"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; b.SpyPrerequisitesReady(); b.Queue('BUILD_SPY'); return 'official native BUILD requested once'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BUILD_SPY' or a=='REJECTED_BUILD_SPY' then error(a) end; return a=='READY_BUILD_SPY'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY'); return 'one native AddProgress(500) queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_PROGRESS_SPY' then error(a) end; return Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS')~=nil"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local p=assert(Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION')); assert(p.progressed and p.beforeCount==0,'production receipt differs'); return 'PRODUCTION_QUEUED'"},
+    {"action":"exit_to_menu"}
+  ]
+}

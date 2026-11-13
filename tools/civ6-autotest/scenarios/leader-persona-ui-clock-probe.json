@@ -1,0 +1,49 @@
+{
+  "name": "Read UI elapsed time against two real host pauses without changing the failed mission",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300,
+      "action": "load"
+    },
+    {
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[Game.GetLocalPlayer()]:IsTurnActive() and type(UI.GetElapsedTime)=='function'"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "return 'CLOCK_A ui='..UI.GetElapsedTime()..' turn='..Game.GetCurrentGameTurn()",
+      "action": "ui_lua"
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "state_name": "InGame",
+      "code": "return 'CLOCK_B ui='..UI.GetElapsedTime()..' turn='..Game.GetCurrentGameTurn()",
+      "action": "ui_lua"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "state_name": "InGame",
+      "code": "return 'CLOCK_C ui='..UI.GetElapsedTime()..' turn='..Game.GetCurrentGameTurn()",
+      "action": "ui_lua"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

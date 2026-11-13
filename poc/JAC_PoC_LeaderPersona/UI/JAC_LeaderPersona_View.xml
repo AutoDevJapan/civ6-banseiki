@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Context Style="FontNormal14" FontStyle="Shadow">
+  <GridButton ID="PersonaToggle" Anchor="L,T" Offset="10,190" Size="150,28" Style="ButtonControl" String="LOC_JAC_PERSONA_PANEL"/>
+  <Grid ID="PersonaPanel" Anchor="L,T" Offset="10,224" Size="440,auto" SizePadding="0,16"
+        Texture="Controls_DropdownPanel" SliceCorner="10,10" SliceTextureSize="22,22" Hidden="1" ConsumeAllMouse="1">
+    <Stack ID="Rows" Anchor="L,T" Offset="10,10" StackGrowth="Down" Padding="6">
+      <Label String="LOC_JAC_PERSONA_PANEL"/>
+      <GridButton ID="Governors" Size="190,28" Style="ButtonControl" String="LOC_JAC_PERSONA_OPEN_GOVERNORS"/>
+    </Stack>
+  </Grid>
+  <Instance Name="PersonaRow">
+    <Container ID="Root" Size="420,96">
+      <Image ID="Portrait" Size="64,64" Anchor="L,C"/>
+      <Label ID="Name" Anchor="L,T" Offset="74,5"/>
+      <Label ID="Status" Anchor="L,T" Offset="74,29"/>
+      <Label ID="Merit" Anchor="L,T" Offset="74,55"/>
+      <GridButton ID="Tree" Anchor="R,B" Offset="0,5" Size="130,28" Style="ButtonControl" String="LOC_JAC_PERSONA_TREE"/>
+      <GridButton ID="Evolve" Anchor="R,C" Size="130,28" Style="ButtonControl" String="LOC_JAC_PERSONA_EVOLVE"/>
+    </Container>
+  </Instance>
+</Context>

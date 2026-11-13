@@ -1,0 +1,835 @@
+[
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_all_22_factions_keep_their_leader_identity",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_all_22_factions_keep_their_leader_identity"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_no_recruitment_or_retirement_effects",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_no_recruitment_or_retirement_effects"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_native_bases_and_cost_only_payment_promotions_are_registered",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_native_bases_and_cost_only_payment_promotions_are_registered"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_all_persons_have_reusable_chains_choices_and_one_unique_signature",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_all_persons_have_reusable_chains_choices_and_one_unique_signature"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_cost_defaults_and_all_22_designs_match_named_provisional_formula",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_cost_defaults_and_all_22_designs_match_named_provisional_formula"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_base_and_shared_effects_use_official_types_and_conservative_magnitudes",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_base_and_shared_effects_use_official_types_and_conservative_magnitudes"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_titles_come_only_from_15_sengoku_civics_and_only_persona_governors_exist",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_titles_come_only_from_15_sengoku_civics_and_only_persona_governors_exist"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaDatabaseTests",
+    "test": "test_official_governor_removal_preserves_another_mods_governor_and_children",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_official_governor_removal_preserves_another_mods_governor_and_children"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaStaticTests",
+    "test": "test_modinfo_files_exist_and_every_action_is_scoped_to_a_japan_map",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_modinfo_files_exist_and_every_action_is_scoped_to_a_japan_map"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaStaticTests",
+    "test": "test_each_text_tag_has_exactly_the_three_required_languages",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_each_text_tag_has_exactly_the_three_required_languages"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaStaticTests",
+    "test": "test_governor_icons_reference_the_correct_existing_leader_and_unique_pk",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_governor_icons_reference_the_correct_existing_leader_and_unique_pk"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaStaticTests",
+    "test": "test_gameplay_never_registers_ui_events_or_uses_a_void_unit_return",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_gameplay_never_registers_ui_events_or_uses_a_void_unit_return"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaStaticTests",
+    "test": "test_dedicated_persona_unit_loads_the_official_general_model_on_all_target_maps",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_dedicated_persona_unit_loads_the_official_general_model_on_all_target_maps"
+  },
+  {
+    "source": "tests/test_leader_persona.py",
+    "class": "LeaderPersonaStaticTests",
+    "test": "test_live_scenario_compiles_and_asserts_civic_titles_merit_and_permanent_locks",
+    "rust_file": "tools/civ6-data-rs/tests/persona.rs",
+    "rust_test": "test_live_scenario_compiles_and_asserts_civic_titles_merit_and_permanent_locks"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_all_live_save_snapshots_accept_properties_with_no_return_value",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_all_live_save_snapshots_accept_properties_with_no_return_value"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_gameplay_without_ui_governor_methods_uses_fresh_native_reads",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_gameplay_without_ui_governor_methods_uses_fresh_native_reads"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_missing_native_reader_never_creates_or_removes_a_person",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_missing_native_reader_never_creates_or_removes_a_person"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_non_great_person_unit_type_never_reads_an_individual_identity",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_non_great_person_unit_type_never_reads_an_individual_identity"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_purchase_is_only_available_through_the_gameplay_event",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_purchase_is_only_available_through_the_gameplay_event"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_governor_panel_preserves_foreign_governors_but_blocks_official_and_unjoined_personas",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_governor_panel_preserves_foreign_governors_but_blocks_official_and_unjoined_personas"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_only_established_unneutralized_city_governance_earns_once_across_reload",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_only_established_unneutralized_city_governance_earns_once_across_reload"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_personal_profiles_pay_different_amounts_and_never_share_balances",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_personal_profiles_pay_different_amounts_and_never_share_balances"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_building_deeds_reject_repairs_wrong_city_duplicates_and_enforce_cap",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_building_deeds_reject_repairs_wrong_city_duplicates_and_enforce_cap"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_nearby_victories_pay_personal_merit_and_ignore_nonlethal_or_distant_battles",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_nearby_victories_pay_personal_merit_and_ignore_nonlethal_or_distant_battles"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_unproven_building_and_victory_notifications_survive_reload_without_late_rewards",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_unproven_building_and_victory_notifications_survive_reload_without_late_rewards"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_same_turn_assignment_establishment_or_recovery_cannot_make_old_construction_eligible",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_same_turn_assignment_establishment_or_recovery_cannot_make_old_construction_eligible"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_ai_turn_dispatch_uses_committed_state_when_ui_reader_is_missing",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_ai_turn_dispatch_uses_committed_state_when_ui_reader_is_missing"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_unproven_deeds_cannot_pay_again_on_later_turns",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_unproven_deeds_cannot_pay_again_on_later_turns"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_deferred_events_preserve_ai_turn_before_later_construction",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_deferred_events_preserve_ai_turn_before_later_construction"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_historical_pending_deed_is_kept_without_inventing_eligibility",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_historical_pending_deed_is_kept_without_inventing_eligibility"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_turn_scan_records_alliances_without_inventing_formation_state",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_turn_scan_records_alliances_without_inventing_formation_state"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_eligible_alliance_formation_pays_eight_once_across_update_reload_and_renewal",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_eligible_alliance_formation_pays_eight_once_across_update_reload_and_renewal"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_preexisting_alliance_does_not_pay_on_relationship_updates",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_preexisting_alliance_does_not_pay_on_relationship_updates"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_alliance_cap_records_two_new_partners_without_next_turn_payment",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_alliance_cap_records_two_new_partners_without_next_turn_payment"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_absent_gamecore_alliance_event_keeps_turn_scan_unproven",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_absent_gamecore_alliance_event_keeps_turn_scan_unproven"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_transfer_does_not_revalue_old_city_deed_and_new_city_can_earn",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_transfer_does_not_revalue_old_city_deed_and_new_city_can_earn"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_ai_six_point_boundary_is_independent_of_ui_reader",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_ai_six_point_boundary_is_independent_of_ui_reader"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_zero_markers_are_ineligible_without_history_but_duplicate_markers_are_unknown",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_zero_markers_are_ineligible_without_history_but_duplicate_markers_are_unknown"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_alliance_formed_before_assignment_establishment_or_recovery_never_pays_late",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_alliance_formed_before_assignment_establishment_or_recovery_never_pays_late"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_same_turn_assignment_establishment_and_recovery_never_revalue_unknown_alliance",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_same_turn_assignment_establishment_and_recovery_never_revalue_unknown_alliance"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_skill_purchase_requires_own_person_prerequisite_merit_and_confirmation",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_skill_purchase_requires_own_person_prerequisite_merit_and_confirmation"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_malformed_gameplay_requests_do_not_reach_native_lookups_or_change_state",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_malformed_gameplay_requests_do_not_reach_native_lookups_or_change_state"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_irreversible_category_and_exclusive_sibling_locks_survive_load",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_irreversible_category_and_exclusive_sibling_locks_survive_load"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_all_six_shared_promotions_and_three_signature_nodes_can_be_acquired",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_all_six_shared_promotions_and_three_signature_nodes_can_be_acquired"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_owned_node_flags_follow_native_assignment_and_new_city_centres",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_owned_node_flags_follow_native_assignment_and_new_city_centres"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_ai_uses_personality_role_preference_and_only_one_purchase_each_turn",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_ai_uses_personality_role_preference_and_only_one_purchase_each_turn"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_tree_confirmation_lists_losses_and_cancel_changes_nothing",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_tree_confirmation_lists_losses_and_cancel_changes_nothing"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_tree_spends_only_via_gameplay_request_and_rechecks_queued_duplicates",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_tree_spends_only_via_gameplay_request_and_rechecks_queued_duplicates"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_queued_conflicting_confirmations_cannot_buy_sibling_or_other_category",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_queued_conflicting_confirmations_cannot_buy_sibling_or_other_category"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_tree_rechecks_stale_balance_at_confirmation_and_respects_inactive_turn",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_tree_rechecks_stale_balance_at_confirmation_and_respects_inactive_turn"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_tree_only_shows_matching_new_purchase_receipts_and_never_replays_old_results",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_tree_only_shows_matching_new_purchase_receipts_and_never_replays_old_results"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_live_reopen_assertion_accepts_empty_native_label_and_rejects_old_receipt",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_live_reopen_assertion_accepts_empty_native_label_and_rejects_old_receipt"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_keyboard_can_review_cancel_commit_switch_categories_and_cycle_governors",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_keyboard_can_review_cancel_commit_switch_categories_and_cycle_governors"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_promotion_titles_fixture_is_removed_and_official_candidates_are_hidden",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_promotion_titles_fixture_is_removed_and_official_candidates_are_hidden"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_void_creation_keeps_named_individual_and_metadata",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_void_creation_keeps_named_individual_and_metadata"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_synchronized_join_validates_source_and_replays_only_once",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_synchronized_join_validates_source_and_replays_only_once"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_designed_personality_trait_and_cost_are_join_defaults",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_designed_personality_trait_and_cost_are_join_defaults"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_fixed_trait_cannot_be_replaced_at_join",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_fixed_trait_cannot_be_replaced_at_join"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_partial_titles_refuse_costlier_date_but_suffice_for_oda",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_partial_titles_refuse_costlier_date_but_suffice_for_oda"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_pending_surcharge_survives_reload_and_spending_without_double_charge",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_pending_surcharge_survives_reload_and_spending_without_double_charge"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_two_pending_evolutions_cannot_share_the_native_appointment_title",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_two_pending_evolutions_cannot_share_the_native_appointment_title"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_negative_point_change_is_not_required_for_native_payment",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_negative_point_change_is_not_required_for_native_payment"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_rejected_second_native_payment_waits_and_resumes_without_double_charge",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_rejected_second_native_payment_waits_and_resumes_without_double_charge"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_upper_cost_consumes_two_extra_titles_and_one_native_once",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_upper_cost_consumes_two_extra_titles_and_one_native_once"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_joined_cost_is_fixed_even_if_balance_data_changes",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_joined_cost_is_fixed_even_if_balance_data_changes"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_native_individual_identity_is_resolved_through_gameinfo",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_native_individual_identity_is_resolved_through_gameinfo"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_repeated_join_and_other_owner_do_not_spawn_or_replace_metadata",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_repeated_join_and_other_owner_do_not_spawn_or_replace_metadata"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_invalid_requests_never_create_a_person",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_invalid_requests_never_create_a_person"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_no_city_failed_spawn_and_retry",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_no_city_failed_spawn_and_retry"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_evolution_requires_ownership_person_and_native_title",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_evolution_requires_ownership_person_and_native_title"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_native_type_rejection_keeps_person_and_titles_without_reserving_evolution",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_native_type_rejection_keeps_person_and_titles_without_reserving_evolution"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_pending_evolution_rechecks_native_type_before_requesting_appointment",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_pending_evolution_rechecks_native_type_before_requesting_appointment"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_native_reader_uses_requested_owner_and_target_type_independently_of_pool",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_native_reader_uses_requested_owner_and_target_type_independently_of_pool"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_missing_type_getter_is_unavailable_and_never_uses_pool_as_eligibility",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_missing_type_getter_is_unavailable_and_never_uses_pool_as_eligibility"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_pending_appointment_keeps_unit_until_native_success",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_pending_appointment_keeps_unit_until_native_success"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_delayed_removal_does_not_mark_evolution_complete",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_delayed_removal_does_not_mark_evolution_complete"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_native_candidate_object_without_appointment_does_not_remove_the_person",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_native_candidate_object_without_appointment_does_not_remove_the_person"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_reload_contexts_preserves_unit_and_reconciles_only_pending",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_reload_contexts_preserves_unit_and_reconciles_only_pending"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_ui_uses_native_operation_indices_and_engine_requester",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_ui_uses_native_operation_indices_and_engine_requester"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_ui_rejects_inactive_turn_and_unowned_governor",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_ui_rejects_inactive_turn_and_unowned_governor"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_official_governor_panel_hides_unjoined_candidates_and_keeps_native_buttons",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_official_governor_panel_hides_unjoined_candidates_and_keeps_native_buttons"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_unit_panel_uses_the_leader_portrait_and_preserves_other_units",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_unit_panel_uses_the_leader_portrait_and_preserves_other_units"
+  },
+  {
+    "source": "tests/test_leader_persona_lua.py",
+    "class": "LeaderPersonaLuaTests",
+    "test": "test_governor_details_preserve_native_refresh_then_set_the_leader_portrait",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_lua.rs",
+    "rust_test": "test_governor_details_preserve_native_refresh_then_set_the_leader_portrait"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_closed_unjoined_engine_candidates_pass_with_21_positive_ai_budgets",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_closed_unjoined_engine_candidates_pass_with_21_positive_ai_budgets"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_hidden_ui_candidate_cannot_hide_native_can_ever_eligibility",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_hidden_ui_candidate_cannot_hide_native_can_ever_eligibility"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_no_titles_cannot_hide_native_can_ever_eligibility",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_no_titles_cannot_hide_native_can_ever_eligibility"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_native_can_appoint_is_checked_even_if_can_ever_reports_false",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_native_can_appoint_is_checked_even_if_can_ever_reports_false"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_wrong_owner_and_already_appointed_unjoined_governor_are_rejected",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_wrong_owner_and_already_appointed_unjoined_governor_are_rejected"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_stale_owner_without_a_native_person_cannot_bypass_the_qualification_gate",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_stale_owner_without_a_native_person_cannot_bypass_the_qualification_gate"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_committed_governor_needs_a_native_instance_and_no_surviving_great_person",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_committed_governor_needs_a_native_instance_and_no_surviving_great_person"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_all_22_players_and_types_are_required",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_all_22_players_and_types_are_required"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_hash_index_disagreement_is_not_treated_as_a_closed_gate",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_hash_index_disagreement_is_not_treated_as_a_closed_gate"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_native_methods_must_exist_in_the_ui_context",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_native_methods_must_exist_in_the_ui_context"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_diagnostic_keeps_real_turn_payment_reloads_and_existing_full_assertions",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_diagnostic_keeps_real_turn_payment_reloads_and_existing_full_assertions"
+  },
+  {
+    "source": "tests/test_leader_persona_native_eligibility.py",
+    "class": "NativeEligibilityDiagnosticTests",
+    "test": "test_all_diagnostic_chunks_compile",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_native_eligibility.rs",
+    "rust_test": "test_all_diagnostic_chunks_compile"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_resolution_rejects_property_only_or_wrong_native_instance",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_resolution_rejects_property_only_or_wrong_native_instance"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_yields_effects_and_two_context_markers_are_in_same_record",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_yields_effects_and_two_context_markers_are_in_same_record"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_success_with_captured_escape_is_still_a_neutralization",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_success_with_captured_escape_is_still_a_neutralization"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_failed_wrong_city_or_pre_fixture_mission_cannot_pass_neutralization",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_failed_wrong_city_or_pre_fixture_mission_cannot_pass_neutralization"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_missing_enemy_history_is_reported_and_cannot_pass_spy_check",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_missing_enemy_history_is_reported_and_cannot_pass_spy_check"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_recovery_is_unassigned_and_never_an_automatic_return",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_recovery_is_unassigned_and_never_an_automatic_return"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_stale_settlement_active_skill_or_merit_is_rejected_after_loss",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_stale_settlement_active_skill_or_merit_is_rejected_after_loss"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_unknown_native_effect_inventory_is_not_treated_as_zero_effects",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_unknown_native_effect_inventory_is_not_treated_as_zero_effects"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_orphaned_native_subject_after_transfer_is_recorded_and_rejected",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_orphaned_native_subject_after_transfer_is_recorded_and_rejected"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_other_players_same_type_modifier_is_not_attributed_to_the_fixture",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_other_players_same_type_modifier_is_not_attributed_to_the_fixture"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_state_is_read_again_after_context_reload",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_state_is_read_again_after_context_reload"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_spy_travel_is_sent_once_from_an_ordinary_frame",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_spy_travel_is_sent_once_from_an_ordinary_frame"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_foreign_destination_is_selected_by_native_travel_eligibility",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_foreign_destination_is_selected_by_native_travel_eligibility"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_mission_refusal_and_enemy_control_are_not_replayed",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_mission_refusal_and_enemy_control_are_not_replayed"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_mission_request_is_not_itself_evidence_of_neutralization",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_mission_request_is_not_itself_evidence_of_neutralization"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_missing_or_unidentified_modifier_definition_cannot_report_zero_effects",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_missing_or_unidentified_modifier_definition_cannot_report_zero_effects"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_loss_rejects_replacement_city_and_missing_or_wrong_transfer_identity",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_loss_rejects_replacement_city_and_missing_or_wrong_transfer_identity"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_transfer_result_id_is_read_from_native_operation_not_inferred_later",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_transfer_result_id_is_read_from_native_operation_not_inferred_later"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_independent_gameplay_city_identity_missing_or_changed_cannot_pass",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_independent_gameplay_city_identity_missing_or_changed_cannot_pass"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_gameplay_only_city_with_active_or_inactive_marker_is_rejected",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_gameplay_only_city_with_active_or_inactive_marker_is_rejected"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_fixture_prepare_uses_civic_completion_and_regular_join_with_noncapital_city",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_fixture_prepare_uses_civic_completion_and_regular_join_with_noncapital_city"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_fixture_prepare_rejects_incorrect_native_title_grant_before_join",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_fixture_prepare_rejects_incorrect_native_title_grant_before_join"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_native_city_transfer_and_spy_creation_do_not_write_persona_state",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_native_city_transfer_and_spy_creation_do_not_write_persona_state"
+  },
+  {
+    "source": "tests/test_persona_boundary_lua.py",
+    "class": "PersonaBoundaryLuaTests",
+    "test": "test_real_persona_gameplay_stops_all_four_merit_sources_at_each_boundary",
+    "rust_file": "tools/civ6-lua-tests-rs/tests/persona_boundary.rs",
+    "rust_test": "test_real_persona_gameplay_stops_all_four_merit_sources_at_each_boundary"
+  }
+]

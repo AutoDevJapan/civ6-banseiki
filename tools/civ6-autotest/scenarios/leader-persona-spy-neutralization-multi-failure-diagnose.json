@@ -1,0 +1,12 @@
+{
+  "name": "Read the latest two native spy failures and classify captive counts without changing the save",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008","exact_name":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.ReadEnemyResultDiagnostic()"},
+    {"action":"inspect_native_spy_failures","timeout":60},
+    {"action":"exit_to_menu"}
+  ]
+}

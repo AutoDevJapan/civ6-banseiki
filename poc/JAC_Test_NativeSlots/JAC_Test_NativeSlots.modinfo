@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Enable only for the PR86 short diagnostic; no existing persona component is changed. -->
+<Mod id="a1faab65-5371-4e25-9a46-7522075f865d" version="1">
+  <Properties>
+    <Name>LOC_JAC_NATIVE_SLOTS_MOD_NAME</Name>
+    <Teaser>LOC_JAC_NATIVE_SLOTS_MOD_DESCRIPTION</Teaser>
+    <Description>LOC_JAC_NATIVE_SLOTS_MOD_DESCRIPTION</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="LOC_JAC_PERSONA_MOD_NAME"/>
+    <Mod id="5d4393c0-c02a-48bf-83d2-7b6839d4e5cb" title="LOC_JAC_TITLE_PROXY_TEST_NAME"/>
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_NATIVE_SLOTS_MOD_NAME">
+      <ja_JP>JAC テスト専用：汎用総督枠</ja_JP>
+      <en_US>JAC TEST ONLY: native governor slot</en_US>
+      <ru_RU>JAC ТЕСТ: место губернатора</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_NATIVE_SLOTS_MOD_DESCRIPTION">
+      <ja_JP>任命と都市配置の証跡を測る。枠の任命1個は追加検証の支出。</ja_JP>
+      <en_US>Measures appointment and city assignment receipts. The slot appointment costs one additional diagnostic title.</en_US>
+      <ru_RU>Проверяет назначение и размещение. Место стоит один дополнительный титул для теста.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_NativeSlots_15km">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_NativeSlots_Data" criteria="JAC_NativeSlots_15km">
+      <Properties><LoadOrder>450</LoadOrder></Properties>
+      <File>Data/JAC_NativeSlots_Probe.sql</File>
+    </UpdateDatabase>
+    <UpdateText id="JAC_NativeSlots_Text" criteria="JAC_NativeSlots_15km">
+      <Properties><LoadOrder>450</LoadOrder></Properties>
+      <File>Text/JAC_NativeSlots_Text.xml</File>
+    </UpdateText>
+    <AddGameplayScripts id="JAC_NativeSlots_Core" criteria="JAC_NativeSlots_15km">
+      <Properties><LoadOrder>450</LoadOrder></Properties>
+      <File>Scripts/JAC_NativeSlots_GameCore.lua</File>
+    </AddGameplayScripts>
+    <ImportFiles id="JAC_NativeSlots_Import" criteria="JAC_NativeSlots_15km">
+      <File>UI/JAC_NativeSlots_View.lua</File>
+      <File>UI/JAC_NativeSlots_View.xml</File>
+    </ImportFiles>
+    <AddUserInterfaces id="JAC_NativeSlots_View" criteria="JAC_NativeSlots_15km">
+      <Properties><LoadOrder>450</LoadOrder><Context>InGame</Context></Properties>
+      <File>UI/JAC_NativeSlots_View.xml</File>
+    </AddUserInterfaces>
+  </InGameActions>
+  <Files>
+    <File>Data/JAC_NativeSlots_Probe.sql</File>
+    <File>Text/JAC_NativeSlots_Text.xml</File>
+    <File>Scripts/JAC_NativeSlots_GameCore.lua</File>
+    <File>UI/JAC_NativeSlots_View.lua</File>
+    <File>UI/JAC_NativeSlots_View.xml</File>
+  </Files>
+</Mod>

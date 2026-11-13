@@ -95,7 +95,7 @@ fn seed_xml(
             let marks = vec!["?"; values.len()].join(",");
             db.execute(
                 &format!(
-                    "INSERT OR IGNORE INTO {} ({names}) VALUES ({marks})",
+                    "INSERT INTO {} ({names}) VALUES ({marks})",
                     identifier(section.tag_name().name())
                 ),
                 params_from_iter(values.values()),

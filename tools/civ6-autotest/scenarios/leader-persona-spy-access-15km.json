@@ -1,0 +1,458 @@
+{
+  "name": "Native-produced spy travel acceptance; incoming persona-neutralization control is unresolved",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2",
+        "4a72b1c0-958b-4bd5-81e4-a094f86ce643"
+      ],
+      "disable_ids": [
+        "8c615430-5a09-4431-877a-bfd03bca9e80",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0",
+        "61320778-2e75-4c11-9009-94101b519aba",
+        "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb",
+        "a1faab65-5371-4e25-9a46-7522075f865d"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE'); return 'queued for an ordinary UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_PREPARE' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_PREPARE'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GREAT_PERSON' and Game:GetProperty('JAC_BOUNDARY_CONFIG')~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('EVOLVE'); return 'queued for an ordinary UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_EVOLVE' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_EVOLVE'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); local b=ExposedMembers.JAC_PersonaBoundary; local s=b.Read(); if s.personOwner~=c.owner or s.state~='GOVERNOR' or s.greatPeople~=0 or not s.native.base then error('regular GP/native Governor identity missing') end; if s.titles.total~=c.total or s.titles.spent~=c.spent+1 then error('native one-title evolution did not complete') end; return b.Record('NATIVE_EVOLVED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('ASSIGN'); return 'queued for an ordinary UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_ASSIGN' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_ASSIGN'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); return s.native.cityOwner==s.owner and s.native.cityID==s.target.id"
+      }
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('INITIAL_ESTABLISH_1')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('INITIAL_ESTABLISH_2')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('INITIAL_ESTABLISH_3')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('INITIAL_ESTABLISH_4')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('INITIAL_ESTABLISH_5')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.Read(); if not s.native.established or s.native.neutralized~=0 then error('native five-turn establishment failed') end; return ExposedMembers.JAC_PersonaBoundary.Record('BASE_ACTIVE')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('EARN_SKILL_1')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('EARN_SKILL_2')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('EARN_SKILL_3')"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('EARN_SKILL_4')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('BUY'); return 'queued for an ordinary UI frame'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_BUY' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_BUY'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local c=Game:GetProperty('JAC_BOUNDARY_CONFIG'); return Game:GetProperty('JAC_PERSONA_'..c.leader..'_NODE_'..c.skill)==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Check('SETTLED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('SPAWN_SPY'); return 'native spy civic preparation queued'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPAWN_SPY' then error(b.lastAction) end; return b.lastAction=='SUBMITTED_SPAWN_SPY'"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_BOUNDARY_SPY_PREPARED')~=nil"
+      }
+    },
+    {
+      "turns": 1,
+      "action": "end_turn",
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; b.SpyPrerequisitesReady(); b.Queue('BUILD_SPY'); return 'native city BUILD request queued once'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BUILD_SPY' or a=='REJECTED_BUILD_SPY' then error('native spy production was refused: '..a) end; return a=='READY_BUILD_SPY'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY'); return 'one native AddProgress request queued'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_PROGRESS_SPY' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS')~=nil"
+      }
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('BIND_SPY'); return 'native production result identity check queued'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_BIND_SPY' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_SPY')~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local target=b.FindSpyDestination(); b.Probe(target.owner,target.city); b.Queue('SPY_TRAVEL',target); return 'foreign travel queued for one official UI dispatch'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_SPY_TRAVEL' or b.lastAction=='REJECTED_SPY_TRAVEL' or b.lastAction=='UNKNOWN_SPY_TRAVEL' then error('native spy travel acceptance failed or remains unconfirmed: '..b.lastAction) end; return b.lastAction=='ACCEPTED_SPY_TRAVEL'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.Record('TRAVEL_ACCEPTED_NO_NEUTRALIZATION_CLAIM')"
+    }
+  ]
+}

@@ -1,0 +1,1740 @@
+//! Natural shutdown control frames. Their successful normal returns do not
+//! stand in for native producer coverage or a scheduler's full join proof.
+use super::*;
+use std::cell::RefCell;
+static CLOSING: AtomicBool = AtomicBool::new(false);
+static WAITED: AtomicBool = AtomicBool::new(false);
+static SHUTDOWN_RETURNED: AtomicBool = AtomicBool::new(false);
+// Observed manager/list close evidence for the current World close. It is a
+// necessary condition for ready() and never a native seal by itself.
+static CLOSURE_COMPLETE: AtomicBool = AtomicBool::new(false);
+static WORLD: AtomicU64 = AtomicU64::new(0);
+static WORLD_BIRTH: Mutex<Option<worlds::WorldLease>> = Mutex::new(None);
+static CORE: AtomicU64 = AtomicU64::new(0);
+// This observation token never grants a World/Wait/shutdown receipt.
+const UNOBSERVED_CLOSE: u64 = 0xd730;
+static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
+pub(super) fn hook_entries_owned() -> bool {
+    owns_hook_entries(&HOOKS, NATIVE_CONTROL_CONTINUE.len())
+}
+#[unsafe(no_mangle)]
+static NATIVE_CONTROL_CONTINUE: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+thread_local! {static STACK:RefCell<Vec<(u64,u64,u64)>>=const {RefCell::new(Vec::new())};}
+#[track_caller]
+fn fault() -> ! {
+    census::fault(
+        census::module(module_path!()),
+        std::panic::Location::caller().line(),
+    );
+    diagnostic(30);
+    FAILED.store(true, Ordering::Release);
+    TRACE.0[6].store(1, Ordering::Release);
+    std::process::abort()
+}
+pub(super) fn request_close() {
+    CLOSING.store(true, Ordering::Release);
+}
+pub(super) fn owns_operation_cleanup(caller: u64) -> bool {
+    caller == CORE.load(Ordering::Acquire) + 0x63e239 && owns_inert_cleanup()
+}
+/// A verified World shutdown is still inside its original destruction body,
+/// after its own set Wait. Pure inert-storage cleanup may retain that same
+/// lifetime; this does not reopen producer or product admission.
+pub(super) fn owns_inert_cleanup() -> bool {
+    if !CLOSING.load(Ordering::Acquire) || !WAITED.load(Ordering::Acquire) {
+        return false;
+    }
+    STACK.with(|s| {
+        s.borrow()
+            .last()
+            .is_some_and(|(kind, world, _)| *kind == 30 && *world == WORLD.load(Ordering::Acquire))
+    })
+}
+pub(super) fn ready() -> bool {
+    #[cfg(test)]
+    if CORE.load(Ordering::Acquire) == 0 {
+        return true;
+    }
+    // The installed adapters establish one path and tracked reservations.
+    // They do not establish all producer admission/copy/cancel domains. Do
+    // not convert their zero count or normal Wait return into new authority.
+    native_coverage_complete() && observed_shutdown_complete()
+}
+/// Necessary local lifetime facts, deliberately separate from coverage.
+pub(super) fn observed_shutdown_complete() -> bool {
+    CORE.load(Ordering::Acquire) != 0
+        && CLOSING.load(Ordering::Acquire)
+        && WAITED.load(Ordering::Acquire)
+        && SHUTDOWN_RETURNED.load(Ordering::Acquire)
+        && CLOSURE_COMPLETE.load(Ordering::Acquire)
+        && WORLD_BIRTH.lock().is_ok_and(|birth| {
+            birth.is_some_and(|birth| {
+                worlds::completed(birth)
+                    && sessions::retire_world(sessions::SessionWorldReceipt {
+                        binding_id: birth.serial,
+                        epoch: birth.epoch,
+                    })
+                    .is_ok()
+            })
+        })
+}
+fn native_coverage_complete() -> bool {
+    // Explicitly absent producer/receive/window proofs, rather than mistaking
+    // owned hooks or balanced local counters for these native guarantees.
+    // These diagnostics grant no receipt and cannot make ready() successful.
+    census::event(census::SemanticEvent::ReopenMissingProducerSeal);
+    census::event(census::SemanticEvent::ReopenMissingReceiveEpoch);
+    census::event(census::SemanticEvent::ReopenMissingSessionWindow);
+    if FRAMES.get().is_none_or(|frames| {
+        !frames
+            .drain_status()
+            .is_ok_and(|status| status.locally_drained())
+    }) {
+        census::event(census::SemanticEvent::ReopenMissingLocalDrain);
+    }
+    if !observed_shutdown_complete() {
+        census::event(census::SemanticEvent::ReopenMissingWorldClose);
+    }
+    diagnostic(2101);
+    false
+}
+pub(super) fn reopened() {
+    CLOSING.store(false, Ordering::Release);
+    WAITED.store(false, Ordering::Release);
+    SHUTDOWN_RETURNED.store(false, Ordering::Release);
+    CLOSURE_COMPLETE.store(false, Ordering::Release);
+    WORLD.store(0, Ordering::Release);
+    *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = None;
+}
+extern "system" fn begin(raw: *mut Saved) {
+    let error = unsafe { GetLastError() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = unsafe { &mut *raw };
+        if raw.invocation.kind == 31
+            && STACK.with(|s| s.borrow().last().is_none_or(|(kind, _, _)| *kind != 30))
+        {
+            // 4A1150 outside the tracked World close, such as a manager recycle
+            // at 63D443. Recorded only; never a closing certificate.
+            scheduler::closure::unowned_shutdown();
+        }
+        if !CLOSING.load(Ordering::Acquire) {
+            return;
+        }
+        let core = CORE.load(Ordering::Acquire);
+        let parent = STACK.with(|s| s.borrow().last().copied());
+        match raw.invocation.kind {
+            30 => {
+                // Other real callers stop/reinitialize this subsystem during
+                // ordinary play. Only the fixed destruction caller belongs
+                // to this control chain; none of the others supplies a reload
+                // receipt or a reason to abort the original call.
+                if raw.invocation.caller != core + 0x471c2 {
+                    return;
+                }
+                // A no-op is an ordinary native return, never a failed Wait.
+                // The caller's earlier guard read can race a prior shutdown.
+                if copy_current::<1>(raw.gpr[0] + 0x2a4) != Some([1]) {
+                    return;
+                }
+                raw.invocation.world = raw.gpr[0];
+                if worlds::installed() {
+                    let Some(birth) = worlds::birth(raw.gpr[0]) else {
+                        if let Some(token) = worlds::unobserved_close() {
+                            raw.invocation.errors = UNOBSERVED_CLOSE;
+                            raw.invocation.token = token;
+                        }
+                        return;
+                    };
+                    if Some(birth) != worlds::closing(raw.gpr[0]) {
+                        fault();
+                    }
+                    *WORLD_BIRTH.lock().unwrap_or_else(|_| fault()) = Some(birth);
+                    sessions::seal_world(sessions::SessionWorldReceipt {
+                        binding_id: birth.serial,
+                        epoch: birth.epoch,
+                    })
+                    .unwrap_or_else(|_| fault());
+                }
+                if raw.gpr[0] == 0 {
+                    fault();
+                }
+                let old = WORLD
+                    .compare_exchange(0, raw.gpr[0], Ordering::AcqRel, Ordering::Acquire)
+                    .unwrap_or_else(|old| old);
+                if old != 0 && old != raw.gpr[0] {
+                    fault();
+                }
+            }
+            31 => {
+                let Some((30, world, _)) = parent else {
+                    return;
+                };
+                if raw.invocation.caller != core + 0x63e1d5
+                    || copy_current::<8>(world + 0x250).map(u64::from_le_bytes) != Some(raw.gpr[0])
+                {
+                    fault();
+                }
+                raw.invocation.world = world;
+                raw.invocation.manager = raw.gpr[0];
+                let list = copy_current::<4>(raw.gpr[0] + 0x410)
+                    .map(u32::from_le_bytes)
+                    .unwrap_or_else(|| fault());
+                scheduler::closure::close_begin(world, raw.gpr[0], list)
+                    .unwrap_or_else(|v| scheduler::closure::fault(v));
+            }
+            32 => {
+                let Some((31, world, manager)) = parent else {
+                    return;
+                };
+                if raw.invocation.caller != core + 0x4a1196 || raw.gpr[0] != manager + 0x400 {
+                    fault();
+                }
+                raw.invocation.world = world;
+                raw.invocation.manager = manager;
+            }
+            _ => fault(),
+        }
+        raw.invocation.cookie = COOKIE;
+        STACK.with(|s| {
+            s.borrow_mut().push((
+                raw.invocation.kind,
+                raw.invocation.world,
+                raw.invocation.manager,
+            ))
+        });
+    }))
+    .is_err()
+    {
+        fault();
+    }
+    unsafe { SetLastError(error) };
+}
+fn finish(raw: &mut Saved, exceptional: bool) {
+    if exceptional {
+        census::terminal(census::module(module_path!()), raw.invocation.kind);
+    }
+    if raw.invocation.errors == UNOBSERVED_CLOSE {
+        if raw.invocation.kind != 30 || raw.invocation.cookie != 0 {
+            fault();
+        }
+        let token = raw.invocation.token;
+        raw.invocation.errors = 0;
+        raw.invocation.token = 0;
+        if !worlds::unobserved_close_returned(token, exceptional) {
+            fault();
+        }
+        return;
+    }
+    if raw.invocation.cookie != COOKIE {
+        return;
+    }
+    raw.invocation.cookie = 0;
+    let expected = (
+        raw.invocation.kind,
+        raw.invocation.world,
+        raw.invocation.manager,
+    );
+    if STACK.with(|s| s.borrow_mut().pop()) != Some(expected) {
+        fault();
+    }
+    if exceptional {
+        if let Some(f) = FRAMES.get() {
+            f.mark_unresolved();
+        }
+        FAILED.store(true, Ordering::Release);
+        TRACE.0[6].store(1, Ordering::Release);
+        WAITED.store(false, Ordering::Release);
+        SHUTDOWN_RETURNED.store(false, Ordering::Release);
+        CLOSURE_COMPLETE.store(false, Ordering::Release);
+        return;
+    }
+    match raw.invocation.kind {
+        32 => {
+            // Native shutdown progressed through its own Wait. This gate is
+            // BEFORE returning to4A1196 and its subsequent cleanup calls.
+            // Jobs are settled by their original execute/destructor wrappers.
+            // Inert serialized nodes remain for later original 380B0 cleanup;
+            // their presence is not an executing job and cannot block Wait.
+            let host_receipt = consumers::take_wait_receipt(
+                raw.invocation.manager + 0x400,
+                raw.invocation.native_rsp,
+            );
+            if consumers::require_wait_receipt() && host_receipt.is_none() {
+                #[cfg(test)]
+                if std::env::var_os("CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD").is_some() {
+                    println!("HOST_CURRENT_ARENA_RECEIPT_REFUSED");
+                    use std::io::Write;
+                    std::io::stdout().flush().unwrap();
+                }
+                fault();
+            }
+            let deadline = Instant::now() + Duration::from_secs(2);
+            scheduler::closure::wait_returned_until(raw.invocation.manager, deadline)
+                .unwrap_or_else(|v| scheduler::closure::fault(v));
+            if FRAMES
+                .get()
+                .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
+                || !super::close_executions(deadline)
+            {
+                fault();
+            }
+            WAITED.store(true, Ordering::Release);
+        }
+        30 => {
+            if !WAITED.load(Ordering::Acquire)
+                || !super::close(Instant::now() + Duration::from_secs(2))
+            {
+                fault();
+            }
+            let receipt = scheduler::closure::world_closed(raw.invocation.world)
+                .unwrap_or_else(|v| scheduler::closure::fault(v));
+            CLOSURE_COMPLETE.store(receipt.complete(), Ordering::Release);
+            if let Some(birth) = worlds::birth(raw.invocation.world) {
+                match sessions::retire_world(sessions::SessionWorldReceipt {
+                    binding_id: birth.serial,
+                    epoch: birth.epoch,
+                }) {
+                    Ok(()) => {}
+                    Err(sessions::SessionError::Busy | sessions::SessionError::Unresolved) => {
+                        // Native storage cleanup can finish after this body's
+                        // return. Keep product grants closed and recheck at the
+                        // complete World boundary; do not abort ordinary cleanup.
+                        diagnostic(2102);
+                    }
+                    Err(_) => fault(),
+                }
+            }
+            SHUTDOWN_RETURNED.store(true, Ordering::Release);
+        }
+        31 => {
+            if !WAITED.load(Ordering::Acquire) {
+                fault();
+            }
+            scheduler::closure::close_end(raw.invocation.manager)
+                .unwrap_or_else(|v| scheduler::closure::fault(v));
+        }
+        _ => fault(),
+    }
+}
+extern "system" fn end(raw: *mut Saved) {
+    let e = unsafe { GetLastError() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        finish(unsafe { &mut *raw }, false)
+    }))
+    .is_err()
+    {
+        fault();
+    }
+    unsafe { SetLastError(e) };
+}
+unsafe extern "system" fn unwind(
+    r: *const EXCEPTION_RECORD,
+    frame: usize,
+    _: *mut CONTEXT,
+    _: *mut c_void,
+) -> i32 {
+    let e = unsafe { GetLastError() };
+    if !r.is_null() && unsafe { (*r).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
+        finish(unsafe { &mut *((frame + 0x20) as *mut Saved) }, true);
+    }
+    unsafe { SetLastError(e) };
+    1
+}
+global_asm!(
+    ".globl native_control_world_original",
+    ".seh_proc native_control_world_original",
+    "native_control_world_original:",
+    "push rbx",
+    ".seh_pushreg rbx",
+    "sub rsp,0x20",
+    ".seh_stackalloc 0x20",
+    ".seh_endprologue",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+NATIVE_CONTROL_CONTINUE]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
+    ".globl native_control_manager_original",
+    ".seh_proc native_control_manager_original",
+    "native_control_manager_original:",
+    "mov [rsp+0x10],rbx",
+    ".seh_savereg rbx,0x10",
+    ".seh_endprologue",
+    "mov [rsp+8],rax",
+    "mov rax,[rip+NATIVE_CONTROL_CONTINUE+8]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+8]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
+    ".globl native_control_wait_original",
+    ".seh_proc native_control_wait_original",
+    "native_control_wait_original:",
+    "mov [rsp+8],rbx",
+    ".seh_savereg rbx,8",
+    ".seh_endprologue",
+    "mov [rsp+0x10],rax",
+    "mov rax,[rip+NATIVE_CONTROL_CONTINUE+16]",
+    "mov [rsp+0x18],rax",
+    "mov rax,[rsp+0x10]",
+    "jmp qword ptr [rsp+0x18]",
+    ".seh_endproc",
+);
+unsafe extern "system" {
+    fn native_control_world_original();
+    fn native_control_manager_original();
+    fn native_control_wait_original();
+    fn native_control_world_gateway();
+    fn native_control_manager_gateway();
+    fn native_control_wait_gateway();
+}
+gateway!(
+    "native_control_world_gateway",
+    "30",
+    native_control_world_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_control_manager_gateway",
+    "31",
+    native_control_manager_original,
+    begin,
+    end,
+    unwind
+);
+gateway!(
+    "native_control_wait_gateway",
+    "32",
+    native_control_wait_original,
+    begin,
+    end,
+    unwind
+);
+fn sites() -> [(usize, [u8; 8], usize, usize); 3] {
+    [
+        (
+            0x63e160,
+            [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9],
+            6,
+            native_control_world_gateway as *const () as usize,
+        ),
+        (
+            0x4a1150,
+            [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83],
+            5,
+            native_control_manager_gateway as *const () as usize,
+        ),
+        (
+            0x9922c0,
+            [0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83],
+            5,
+            native_control_wait_gateway as *const () as usize,
+        ),
+    ]
+}
+fn entry_protection(core: usize, rva: usize, expected: [u8; 8]) -> Result<u32, &'static str> {
+    let entry = (core + rva) as *const u8;
+    if copy_current::<8>(entry as u64) != Some(expected) {
+        return Err("native control entry differs");
+    }
+    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+    if unsafe { VirtualQuery(entry.cast(), &mut info, std::mem::size_of_val(&info)) } == 0
+        || !entry.addr().is_multiple_of(8)
+        || info.State != MEM_COMMIT
+        || info.Protect & PAGE_GUARD != 0
+        || info.Protect & 0xff != PAGE_EXECUTE_READ
+    {
+        return Err("native control protection");
+    }
+    Ok(info.Protect)
+}
+pub(super) unsafe fn install(core: usize) -> Result<(), &'static str> {
+    let sites = sites();
+    let mut owners = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
+    if !owners.is_empty() {
+        return Err("native control hooks already installed");
+    }
+    // Refuse invalid bindings before publishing a Core identity. Initialize
+    // before the first entry exchange so concurrent callbacks never see zero;
+    // each exchange still rechecks its bytes and protection below.
+    for (rva, expected, _, _) in sites {
+        entry_protection(core, rva, expected)?;
+    }
+    let previous_core = CORE.swap(core as u64, Ordering::AcqRel);
+    let result = (|| -> Result<(), &'static str> {
+        for (i, (rva, expected, n, gateway)) in sites.into_iter().enumerate() {
+            #[cfg(test)]
+            tests::before_publication(core, i);
+            let entry = (core + rva) as *mut u8;
+            let protection = entry_protection(core, rva, expected)?;
+            let code = unsafe { executable_near(entry as usize, entry as usize, n) }
+                .ok_or("native control relay unavailable")?;
+            let mut unpublished = Unpublished(code);
+            unsafe {
+                ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), code, 6);
+                ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), code.add(6), 8);
+            }
+            let mut old = 0;
+            if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut old) } == 0
+                || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), 14) } == 0
+            {
+                return Err("native control relay publication");
+            }
+            let (patched, prefix) = native_entry::plan(entry, expected, code)?;
+            NATIVE_CONTROL_CONTINUE[i].store((core + rva + n) as u64, Ordering::Release);
+            owners.push(OwnedHook {
+                hook: Hook {
+                    target: entry,
+                    original: expected,
+                    patched,
+                    prefix,
+                    _code: code,
+                },
+                protection,
+            });
+            unpublished.0 = null_mut();
+            let r = unsafe {
+                native_entry::publish(&owners.last().ok_or("native hook owner missing")?.hook)
+            }?;
+            if !r.exchanged || !r.protection_restored || !r.cache_flushed {
+                return Err("critical: native control publication");
+            }
+        }
+        Ok(())
+    })();
+    // An unpublished refusal can return to the prior state. Retained entries
+    // may have fetched their relay, so their callbacks still need this Core.
+    if result.is_err() && owners.is_empty() {
+        CORE.store(previous_core, Ordering::Release);
+    }
+    result
+}
+pub(super) unsafe fn restore() -> Result<(), &'static str> {
+    let mut o = HOOKS.lock().map_err(|_| "native control owner poisoned")?;
+    o.retain(|x| {
+        let h = &x.hook;
+        let now = copy_current::<8>(h.target as u64);
+        let ok = now == Some(h.original)
+            || (now == Some(h.patched)
+                && unsafe {
+                    exchange_entry(
+                        h.target,
+                        u64::from_le_bytes(h.patched),
+                        u64::from_le_bytes(h.original),
+                    )
+                }
+                .is_ok_and(|r| r.exchanged && r.protection_restored && r.cache_flushed));
+        let mut old = 0;
+        !(ok && unsafe { VirtualProtect(h.target.cast(), 8, x.protection, &mut old) } != 0)
+    });
+    if o.is_empty() {
+        Ok(())
+    } else {
+        Err("critical: native control restoration")
+    }
+}
+
+#[cfg(test)]
+pub(super) fn fixture_observation_resume_guards(resume: fn() -> bool, complete: fn() -> bool) {
+    tests::observation_resume_guards(resume, complete);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+    #[test]
+    fn missing_native_domain_diagnostics_do_not_promote_a_locally_drained_epoch() {
+        if !child("missing_native_domain_diagnostics_do_not_promote_a_locally_drained_epoch") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(1, Ordering::Release);
+        let missing = census::SemanticEvent::ReopenMissingLocalDrain;
+        let before = census::event_count(missing);
+        assert!(!native_coverage_complete());
+        assert_eq!(census::event_count(missing), before + 1);
+        let frames = FRAMES.get().unwrap();
+        frames
+            .seal_executions_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        assert!(frames.drain_status().unwrap().locally_drained());
+        let local = census::event_count(missing);
+        let producers = census::event_count(census::SemanticEvent::ReopenMissingProducerSeal);
+        assert!(!native_coverage_complete());
+        assert_eq!(census::event_count(missing), local);
+        assert_eq!(
+            census::event_count(census::SemanticEvent::ReopenMissingProducerSeal),
+            producers + 1
+        );
+        assert!(!ready());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert_eq!(TRACE.0[13].load(Ordering::Acquire), 2101);
+    }
+    #[test]
+    fn entry_validation_rejects_unaligned_guarded_and_uncommitted_data() {
+        worlds::install_fixture::rejects_invalid_entry_data(entry_protection);
+    }
+    #[test]
+    fn protected_control_preflight_publishes_no_entry_or_core() {
+        if !child("protected_control_preflight_publishes_no_entry_or_core") {
+            return;
+        }
+        let entries = sites().map(|(rva, original, _, _)| (rva, original));
+        let memory = worlds::install_fixture::Memory::new(&entries);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        memory.protect(entries[1].0, PAGE_READWRITE);
+        let before = entries.map(|(rva, _)| memory.bytes(rva));
+        let result = unsafe { install(memory.base) };
+        let core = CORE.load(Ordering::Acquire);
+        let owners = HOOKS.lock().unwrap().len();
+        unsafe { restore() }.unwrap();
+        CORE.store(0, Ordering::Release);
+        assert_eq!(result, Err("native control protection"));
+        assert_eq!(core, 0);
+        assert_eq!(owners, 0);
+        assert_eq!(entries.map(|(rva, _)| memory.bytes(rva)), before);
+    }
+    static FAIL_SITE: AtomicUsize = AtomicUsize::new(usize::MAX);
+    pub(super) fn before_publication(core: usize, index: usize) {
+        if FAIL_SITE.load(Ordering::Acquire) == index {
+            assert_eq!(CORE.load(Ordering::Acquire), core as u64);
+            let (rva, mut original, _, _) = sites()[index];
+            original[0] ^= 1;
+            unsafe { worlds::install_fixture::write_at(core + rva, &original) };
+        }
+    }
+    #[test]
+    fn failed_control_recheck_rolls_back_only_without_retained_owners() {
+        if !child("failed_control_recheck_rolls_back_only_without_retained_owners") {
+            return;
+        }
+        let entries = sites().map(|(rva, original, _, _)| (rva, original));
+        {
+            let refused = worlds::install_fixture::Memory::new(&entries);
+            refused.protect_all(PAGE_EXECUTE_READ);
+            FAIL_SITE.store(0, Ordering::Release);
+            let result = unsafe { install(refused.base) };
+            FAIL_SITE.store(usize::MAX, Ordering::Release);
+            assert_eq!(result, Err("native control entry differs"));
+            assert!(HOOKS.lock().unwrap().is_empty());
+            assert_eq!(
+                CORE.load(Ordering::Acquire),
+                0,
+                "empty install must return its Core binding"
+            );
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "failed_control_recheck_rolls_back_only_without_retained_owners",
+        ) else {
+            return;
+        };
+        let memory = worlds::install_fixture::Memory::new(&entries);
+        memory.protect_all(PAGE_EXECUTE_READ);
+        FAIL_SITE.store(1, Ordering::Release);
+        let result = unsafe { install(memory.base) };
+        FAIL_SITE.store(usize::MAX, Ordering::Release);
+        assert_eq!(result, Err("native control entry differs"));
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(HOOKS.lock().unwrap().len(), 1);
+        assert_ne!(memory.bytes(entries[0].0), entries[0].1);
+        assert_eq!(
+            unsafe { install(1) },
+            Err("native control hooks already installed")
+        );
+        assert_eq!(CORE.load(Ordering::Acquire), memory.base as u64);
+        assert_eq!(HOOKS.lock().unwrap().len(), 1);
+        unsafe { restore() }.unwrap();
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(memory.bytes(entries[0].0), entries[0].1);
+    }
+    fn child(name: &str) -> bool {
+        const ENV: &str = "CIV6_NATIVE_CONTROL_OWNED_CHILD";
+        if std::env::var_os(ENV).is_some() {
+            return true;
+        }
+        let mut p = std::process::Command::new(std::env::current_exe().unwrap())
+            .creation_flags(0x08000000)
+            .env(ENV, "1")
+            .args([
+                "--exact",
+                &format!("windows::root_observation::native_frames::control::tests::{name}"),
+                "--nocapture",
+            ])
+            .spawn()
+            .unwrap();
+        let d = Instant::now() + Duration::from_secs(20);
+        loop {
+            if let Some(s) = p.try_wait().unwrap() {
+                assert!(s.success());
+                break;
+            }
+            if Instant::now() >= d {
+                let _ = p.kill();
+                let _ = p.wait();
+                panic!("native control child timeout");
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+    fn raw(kind: u64, input: u64, caller: u64) -> Saved {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.gpr[0] = input;
+        raw.invocation.kind = kind;
+        raw.invocation.caller = caller;
+        raw
+    }
+    #[test]
+    fn failed_control_binding_does_not_activate_a_core() {
+        if !child("failed_control_binding_does_not_activate_a_core") {
+            return;
+        }
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        assert_eq!(
+            unsafe { install(0x1000) },
+            Err("native control entry differs")
+        );
+        assert!(HOOKS.lock().unwrap().is_empty());
+        assert_eq!(CORE.load(Ordering::Acquire), 0);
+        assert!(!observed_shutdown_complete());
+    }
+    #[test]
+    fn later_control_entry_failure_publishes_no_early_hook_or_core() {
+        if !child("later_control_entry_failure_publishes_no_early_hook_or_core") {
+            return;
+        }
+        // The last entry is deliberately invalid. This must return before
+        // any entry exchange, including on CPUs that cannot run the fixture.
+        let size = 0x9a0000;
+        let base =
+            unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
+                as usize;
+        assert_ne!(base, 0);
+        let entries = [
+            (0x63e160, [0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9]),
+            (0x4a1150, [0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83]),
+        ];
+        for (rva, bytes) in entries {
+            unsafe {
+                ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, bytes.len())
+            };
+        }
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        let result = unsafe { install(base) };
+        let core = CORE.load(Ordering::Acquire);
+        let no_owners = HOOKS.lock().unwrap().is_empty();
+        let unchanged = entries
+            .into_iter()
+            .all(|(rva, original)| copy_current::<8>((base + rva) as u64) == Some(original));
+        if !no_owners {
+            unsafe { restore() }.unwrap();
+        }
+        assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+        assert_eq!(result, Err("native control entry differs"));
+        assert_eq!(core, 0);
+        assert!(no_owners && unchanged);
+    }
+    static MIXED_BASE: AtomicU64 = AtomicU64::new(0);
+    static MIXED_PARALLEL: AtomicBool = AtomicBool::new(false);
+    static SIX_STARTED: std::sync::OnceLock<std::sync::Barrier> = std::sync::OnceLock::new();
+    static SIX_RELEASE: std::sync::OnceLock<std::sync::Barrier> = std::sync::OnceLock::new();
+    static SIX_WORKER: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+    extern "system" fn mixed_outer_control(world: *mut u64) {
+        assert_eq!(super::super::counts()[3], 6);
+        if MIXED_PARALLEL.load(Ordering::Acquire) {
+            SIX_STARTED.get().unwrap().wait();
+            SIX_RELEASE.get().unwrap().wait();
+            return;
+        }
+        println!("SIX_NATIVE_OUTER_ACTIVE_BEFORE_CONTROL");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
+        let invoke: unsafe extern "system" fn(*mut u64) =
+            unsafe { std::mem::transmute((MIXED_BASE.load(Ordering::Acquire) + 0x471b0) as usize) };
+        unsafe { invoke(world) };
+    }
+    extern "system" fn mixed_native_wait() {
+        assert_eq!(super::super::counts()[3], 6);
+        SIX_RELEASE.get().unwrap().wait();
+        SIX_WORKER.lock().unwrap().take().unwrap().join().unwrap();
+        assert_eq!(super::super::counts()[3], 0);
+    }
+    #[test]
+    fn same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return",
+        ) else {
+            return;
+        };
+        const ENV: &str = "CIV6_NATIVE_CONTROL_SIX_STACK_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            let out = crate::windows::test_child_output::run(std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(ENV,"1").args([
+                    "--exact","windows::root_observation::native_frames::control::tests::same_stack_six_outer_gateways_cannot_authorize_destructive_wait_return","--nocapture"
+                ]),Duration::from_secs(10)).unwrap();
+            assert!(!out.status.success());
+            assert!(
+                String::from_utf8_lossy(&out.stdout)
+                    .contains("SIX_NATIVE_OUTER_ACTIVE_BEFORE_CONTROL"),
+                "did not reach six live original gateways: {:?}",
+                out
+            );
+            assert!(
+                String::from_utf8_lossy(&out.stdout)
+                    .contains("SIX_NATIVE_FRAMES_REENTRANT_AT_WAIT"),
+                "original control chain did not reach the expected Wait drain: {:?}",
+                out
+            );
+            return;
+        }
+        mixed_fixture(false, false);
+    }
+    #[test]
+    fn original_wait_joins_worker_through_six_full_gateways_before_cleanup() {
+        if !child("original_wait_joins_worker_through_six_full_gateways_before_cleanup") {
+            return;
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "original_wait_joins_worker_through_six_full_gateways_before_cleanup",
+        ) else {
+            return;
+        };
+        mixed_fixture(true, false);
+    }
+    #[test]
+    fn real_host_wait_receipt_reaches_control_after_six_worker_frames_return() {
+        if !child("real_host_wait_receipt_reaches_control_after_six_worker_frames_return") {
+            return;
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "real_host_wait_receipt_reaches_control_after_six_worker_frames_return",
+        ) else {
+            return;
+        };
+        mixed_fixture(true, true);
+    }
+    #[test]
+    fn current_arena_normal_return_never_reaches_destructive_control_cleanup() {
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "current_arena_normal_return_never_reaches_destructive_control_cleanup",
+        ) else {
+            return;
+        };
+        const ENV: &str = "CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD";
+        if std::env::var_os(ENV).is_none() {
+            let out = crate::windows::test_child_output::run(std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(ENV,"1").args([
+                    "--exact","windows::root_observation::native_frames::control::tests::current_arena_normal_return_never_reaches_destructive_control_cleanup","--nocapture"
+                ]),Duration::from_secs(10)).unwrap();
+            assert!(!out.status.success());
+            assert!(
+                String::from_utf8_lossy(&out.stdout).contains("HOST_CURRENT_ARENA_RECEIPT_REFUSED"),
+                "missing exact control refusal: {:?}",
+                out
+            );
+            return;
+        }
+        mixed_fixture(true, true);
+        panic!("current arena returned through destructive control cleanup");
+    }
+    fn mixed_fixture(parallel: bool, with_host: bool) {
+        MIXED_PARALLEL.store(parallel, Ordering::Release);
+        if parallel {
+            SIX_STARTED.set(std::sync::Barrier::new(2)).unwrap();
+            SIX_RELEASE.set(std::sync::Barrier::new(2)).unwrap();
+        }
+        let size = if with_host { 0xe50000 } else { 0xa00000 };
+        let base =
+            unsafe { VirtualAlloc(null_mut(), size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) }
+                as usize;
+        assert_ne!(base, 0);
+        MIXED_BASE.store(base as u64, Ordering::Release);
+        let put = |rva: usize, bytes: &[u8]| unsafe {
+            ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, bytes.len())
+        };
+        let call = |rva: usize, target: usize| {
+            let mut b = [0xe8u8; 5];
+            b[1..].copy_from_slice(&((target as i64 - rva as i64 - 5) as i32).to_le_bytes());
+            put(rva, &b);
+        };
+        let extensions: [&[u8]; 6] = [
+            &[0x48, 0x8b, 0xd9],
+            &[0x48, 0x8b, 0xf1],
+            &[0x55, 0x56, 0x57, 0x48, 0x83, 0xec, 0x20],
+            &[],
+            &[0x48, 0x83, 0xec, 0x28],
+            &[],
+        ];
+        let tails: [&[u8]; 6] = [
+            &[0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3],
+            &[0x48, 0x83, 0xc4, 0x50, 0x5e, 0xc3],
+            &[
+                0x48, 0x83, 0xc4, 0x20, 0x5f, 0x5e, 0x5d, 0x48, 0x8b, 0x5c, 0x24, 0x18, 0xc3,
+            ],
+            &[0x48, 0x81, 0xc4, 0x90, 2, 0, 0, 0x5f, 0x5d, 0x5b, 0xc3],
+            &[0x48, 0x83, 0xc4, 0x28, 0x41, 0x5e, 0x5d, 0xc3],
+            &[0x48, 0x81, 0xc4, 0xd8, 0, 0, 0, 0x5f, 0x5b, 0xc3],
+        ];
+        for (i, (rva, prefix, n)) in super::super::SITES.into_iter().take(6).enumerate() {
+            let mut code = prefix[..n].to_vec();
+            code.extend(extensions[i]);
+            if i < 5 {
+                let pos = rva + code.len();
+                code.push(0xe8);
+                code.extend(
+                    ((super::super::SITES[i + 1].0 as i64 - pos as i64 - 5) as i32).to_le_bytes(),
+                );
+            } else {
+                code.extend([0x48, 0xb8]);
+                code.extend((mixed_outer_control as *const () as u64).to_le_bytes());
+                code.extend([0xff, 0xd0]);
+            }
+            code.extend(tails[i]);
+            put(rva, &code);
+        }
+        super::super::outer_tests::seed_extra(base);
+        unsafe {
+            ptr::write_bytes((base + 0x63e160) as *mut u8, 0x90, 0x200);
+            ptr::write_bytes((base + 0x4a1150) as *mut u8, 0x90, 0x80);
+        }
+        put(
+            0x63e160,
+            &[
+                0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xa4, 2, 0, 0, 0, 0x48, 0x8b, 0xd9,
+            ],
+        );
+        put(0x63e1c9, &[0x48, 0x8b, 0x8b, 0x50, 2, 0, 0]);
+        call(0x63e1d0, 0x4a1150);
+        put(0x63e1d5, &[0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3]);
+        put(
+            0x4a1150,
+            &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(0x4a117f, &[0x48, 0x81, 0xc1, 0, 4, 0, 0]);
+        call(0x4a1191, 0x9922c0);
+        put(
+            0x4a1196,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x48, 0x48, 0x83, 0xc4, 0x30, 0x5e, 0xc3,
+            ],
+        );
+        put(
+            0x9922c0,
+            &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(
+            0x9922ca,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ],
+        );
+        if parallel {
+            let mut wait_tail = vec![0x48, 0xb8];
+            wait_tail.extend((mixed_native_wait as *const () as u64).to_le_bytes());
+            wait_tail.extend([
+                0xff, 0xd0, 0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ]);
+            put(0x9922ca, &wait_tail);
+        }
+        if with_host {
+            unsafe {
+                ptr::write_bytes((base + 0x9922ca) as *mut u8, 0x90, 0x40);
+            }
+            call(0x9922fc, 0x986240);
+            put(
+                0x992301,
+                &[
+                    0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+                ],
+            );
+            for rva in [0xe417d0, 0xe41c00] {
+                put(rva, &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x48, 0x89, 0x74]);
+            }
+            unsafe {
+                ptr::write_bytes((base + 0x986240) as *mut u8, 0x90, 0x60);
+            }
+            put(
+                0x986240,
+                &[
+                    0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8b, 0xf9,
+                    0x48, 0x8b, 0x49, 8,
+                ],
+            );
+            call(0x98626b, 0xe3eaf0);
+            put(
+                0x986270,
+                &[
+                    0x48, 0xc7, 0x47, 8, 0, 0, 0, 0, 0x48, 0x8b, 0x5c, 0x24, 0x30, 0x48, 0x83,
+                    0xc4, 0x20, 0x5f, 0xc3,
+                ],
+            );
+            let mut arena = vec![
+                0x40, 0x55, 0x53, 0x56, 0x48, 0x8d, 0x6c, 0x24, 0xb9, 0x48, 0x83, 0xec, 0x20, 0x48,
+                0xb8,
+            ];
+            arena.extend((mixed_native_wait as *const () as u64).to_le_bytes());
+            arena.extend([0xff, 0xd0, 0x48, 0x83, 0xc4, 0x20, 0x5e, 0x5b, 0x5d, 0xc3]);
+            put(0xe3eaf0, &arena);
+        }
+        put(0x471b0, &[0x48, 0x83, 0xec, 0x28]);
+        unsafe {
+            ptr::write_bytes((base + 0x471b4) as *mut u8, 0x90, 9);
+        }
+        call(0x471bd, 0x63e160);
+        put(0x471c2, &[0x48, 0x83, 0xc4, 0x28, 0xc3]);
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, size, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        unsafe { super::super::fixture_install(base) }.unwrap();
+        unsafe { install(base) }.unwrap();
+        if with_host {
+            unsafe { consumers::fixture_install(base, base) }.unwrap();
+            if std::env::var_os("CIV6_NATIVE_CONTROL_CURRENT_ARENA_CHILD").is_some() {
+                consumers::fixture_current_arena();
+            }
+        }
+        runtime::fixture_invocation_runtime();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let mut manager = vec![0u64; 0x500 / 8];
+        let mut arena = 0u64;
+        if with_host {
+            manager[0x408 / 8] = &mut arena as *mut u64 as u64;
+        }
+        world[0x250 / 8] = manager.as_mut_ptr() as u64;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let invoke: unsafe extern "system" fn(*mut u64) =
+            unsafe { std::mem::transmute(base + super::super::SITES[0].0) };
+        if parallel {
+            let raw_world = world.as_mut_ptr() as usize;
+            *SIX_WORKER.lock().unwrap() = Some(std::thread::spawn(move || unsafe {
+                invoke(raw_world as *mut u64)
+            }));
+            SIX_STARTED.get().unwrap().wait();
+        }
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        if parallel {
+            let control: unsafe extern "system" fn(*mut u64) =
+                unsafe { std::mem::transmute(base + 0x471b0) };
+            unsafe { control(world.as_mut_ptr()) };
+            assert!(WAITED.load(Ordering::Acquire));
+            assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+            if with_host {
+                assert_eq!(manager[0x408 / 8], 0);
+                assert!(
+                    consumers::take_wait_receipt(manager.as_ptr() as u64 + 0x400, 0).is_none(),
+                    "control must consume once"
+                );
+            }
+            assert_eq!(super::super::counts(), [6, 6, 0, 0, 0]);
+            assert_eq!(
+                runtime::BridgeRuntimeRebuild(null_mut()),
+                BridgeStatus::Critical as u32
+            );
+            unsafe { restore() }.unwrap();
+            unsafe { super::super::restore() }.unwrap();
+            assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+            return;
+        }
+        unsafe { invoke(world.as_mut_ptr()) };
+        panic!("destructive Wait returned while original outer frames were still active");
+    }
+    #[test]
+    fn native_shutdown_progresses_after_grant_close_and_gates_before_cleanup() {
+        if !child("native_shutdown_progresses_after_grant_close_and_gates_before_cleanup") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let _install: unsafe fn(usize) -> Result<(), &'static str> = install;
+        let f = FRAMES.get().unwrap();
+        let job = f.issue(100).unwrap();
+        f.pushed(job, 200).unwrap();
+        assert!(!ready());
+        request_close(); // No blocking seal before native shutdown.
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        world[0x250 / 8] = key;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
+        begin(&mut w);
+        let mut m = raw(31, key, 0x18063e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, key + 0x400, 0x1804a1196);
+        begin(&mut wait);
+        // Original natural Wait completes the already reserved native work.
+        assert_eq!(f.execute(200, 100), Ok(job));
+        f.completed(job).unwrap();
+        finish(&mut wait, false);
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(!ready());
+        finish(&mut m, false);
+        assert!(!ready());
+        finish(&mut w, false);
+        assert!(
+            !ready(),
+            "one native path must not certify all publisher/copy/cancel domains"
+        );
+        assert!(!super::reopen());
+    }
+    #[test]
+    fn unobserved_world_shutdown_never_acquires_a_closure_receipt() {
+        if !child("unobserved_world_shutdown_never_acquires_a_closure_receipt") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let core = 0x180000000;
+        CORE.store(core, Ordering::Release);
+        worlds::fixture_cold_observer(core);
+        let frames = FRAMES.get().unwrap();
+        HOST_PREPARED.store(true, Ordering::Release);
+        let prior = worlds::capture_birth_window().unwrap();
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        world[0x250 / 8] = key;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, core + 0x471c2);
+        begin(&mut w);
+        assert_eq!(w.invocation.cookie, 0);
+        assert!(worlds::capture_birth_window().is_none());
+        assert!(!worlds::unobserved_close_returned(
+            w.invocation.token + 1,
+            false
+        ));
+        assert!(
+            worlds::capture_birth_window().is_none(),
+            "wrong completion must retain the original interval"
+        );
+        let mut m = raw(31, key, core + 0x63e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, key + 0x400, core + 0x4a1196);
+        begin(&mut wait);
+        finish(&mut wait, false);
+        finish(&mut m, false);
+        finish(&mut w, false);
+        assert_ne!(worlds::capture_birth_window().unwrap(), prior);
+        HOST_PREPARED.store(false, Ordering::Release);
+        assert!(STACK.with(|s| s.borrow().is_empty()));
+        assert!(!WAITED.load(Ordering::Acquire));
+        assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!observed_shutdown_complete());
+        assert!(!super::super::reopen());
+        assert!(!super::super::resume_unqualified_observation());
+        assert!(!FAILED.load(Ordering::Acquire));
+        assert!(frames.healthy());
+        let later = frames.enter().unwrap();
+        frames.leave(later).unwrap();
+    }
+    static UNKNOWN_BODY_HITS: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_WINDOW_BLOCKED: AtomicBool = AtomicBool::new(false);
+    static UNKNOWN_INPUT_ERROR: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_UNWIND: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_LANDING: AtomicU64 = AtomicU64::new(0);
+    static UNKNOWN_NORMAL_RETURNS: AtomicU64 = AtomicU64::new(0);
+    extern "system" fn unobserved_original_body() -> u64 {
+        UNKNOWN_INPUT_ERROR.store(u64::from(unsafe { GetLastError() }), Ordering::Release);
+        UNKNOWN_BODY_HITS.fetch_add(1, Ordering::AcqRel);
+        UNKNOWN_WINDOW_BLOCKED.store(worlds::capture_birth_window().is_none(), Ordering::Release);
+        unsafe { SetLastError(0x24681357) };
+        0x1122334455667788
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn RtlUnwindEx(
+            frame: *const c_void,
+            ip: *const c_void,
+            record: *const EXCEPTION_RECORD,
+            value: *const c_void,
+            context: *const CONTEXT,
+            history: *const c_void,
+        );
+    }
+    global_asm!(
+        ".p2align 4",".globl control_unknown_driver",".seh_proc control_unknown_driver","control_unknown_driver:",
+        "push rbx",".seh_pushreg rbx","sub rsp,0x80",".seh_stackalloc 0x80",".seh_endprologue",
+        "mov [rcx],rsp","lea rax,[rip+control_unknown_landed]","mov [rcx+8],rax","mov rcx,rdx",
+        "call {gateway}",".globl control_unknown_return","control_unknown_return:","jmp 2f",
+        "control_unknown_landed:","mov rax,0x9988776655443322","2:","lea rsp,[rsp+0x80]","pop rbx","ret",".seh_endproc",
+        ".p2align 4",".globl control_unknown_original",".seh_proc control_unknown_original","control_unknown_original:",
+        ".byte 0x40,0x53",".seh_pushreg rbx","sub rsp,0x20",".seh_stackalloc 0x20",
+        "sub rsp,0x530",".seh_stackalloc 0x530",".seh_endprologue","call {body}",
+        "cmp qword ptr [rip+{unwind}],0","je 3f",
+        "mov r10,[rip+{landing}]","mov rcx,[r10]","mov rdx,[r10+8]",
+        "lea r10,[rsp+0x40]","mov r11d,0x9a","1:","mov qword ptr [r10],0","lea r10,[r10+8]","dec r11d","jnz 1b",
+        "lea r10,[rsp+0x40]","mov [rsp+0x20],r10","mov qword ptr [rsp+0x28],0","xor r8d,r8d","xor r9d,r9d","call {unwind_ex}","int3",
+        "3:","inc qword ptr [rip+{normal_returns}]","lea rsp,[rsp+0x550]","pop rbx","ret",".seh_endproc",
+        gateway=sym native_control_world_gateway,body=sym unobserved_original_body,
+        unwind=sym UNKNOWN_UNWIND,landing=sym UNKNOWN_LANDING,normal_returns=sym UNKNOWN_NORMAL_RETURNS,unwind_ex=sym RtlUnwindEx,
+    );
+    unsafe extern "system" {
+        fn control_unknown_driver(state: *mut u64, world: *mut u64) -> u64;
+        fn control_unknown_return();
+        fn control_unknown_original();
+    }
+    fn unobserved_gateway_interval(exceptional: bool) {
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let core = control_unknown_return as *const () as u64 - 0x471c2;
+        CORE.store(core, Ordering::Release);
+        worlds::fixture_cold_observer(core);
+        HOST_PREPARED.store(true, Ordering::Release);
+        let before = worlds::capture_birth_window()
+            .expect("the observation window must be armed before testing its exclusion");
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut landing = [0u64; 2];
+        UNKNOWN_LANDING.store(landing.as_mut_ptr() as u64, Ordering::Release);
+        UNKNOWN_UNWIND.store(u64::from(exceptional), Ordering::Release);
+        NATIVE_CONTROL_CONTINUE[0].store(
+            control_unknown_original as *const () as u64 + 6,
+            Ordering::Release,
+        );
+        unsafe { SetLastError(0x87654321) };
+        let result = unsafe { control_unknown_driver(landing.as_mut_ptr(), world.as_mut_ptr()) };
+        let output_error = unsafe { GetLastError() };
+        let during_blocked = UNKNOWN_WINDOW_BLOCKED.load(Ordering::Acquire);
+        let after = worlds::capture_birth_window();
+        NATIVE_CONTROL_CONTINUE[0].store(0, Ordering::Release);
+        HOST_PREPARED.store(false, Ordering::Release);
+        assert_eq!(UNKNOWN_BODY_HITS.load(Ordering::Acquire), 1);
+        assert_eq!(UNKNOWN_INPUT_ERROR.load(Ordering::Acquire), 0x87654321);
+        assert_eq!(
+            UNKNOWN_NORMAL_RETURNS.load(Ordering::Acquire),
+            u64::from(!exceptional)
+        );
+        assert_eq!(
+            result,
+            if exceptional {
+                0x9988776655443322
+            } else {
+                0x1122334455667788
+            }
+        );
+        if !exceptional {
+            assert_eq!(output_error, 0x24681357);
+        }
+        assert!(
+            after.is_some(),
+            "a completed observation interval must permit a fresh window"
+        );
+        assert_ne!(after, Some(before), "the old empty window is invalidated");
+        assert!(!WAITED.load(Ordering::Acquire) && !SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!observed_shutdown_complete() && !FAILED.load(Ordering::Acquire));
+        assert!(FRAMES.get().unwrap().healthy());
+        assert!(STACK.with(|stack| stack.borrow().is_empty()));
+        assert!(
+            during_blocked,
+            "an original unobserved close still executing cannot issue a new birth window"
+        );
+    }
+    #[test]
+    fn unobserved_shutdown_blocks_birth_window_inside_original_until_normal_return() {
+        if child("unobserved_shutdown_blocks_birth_window_inside_original_until_normal_return") {
+            unobserved_gateway_interval(false);
+        }
+    }
+    #[test]
+    fn unobserved_shutdown_blocks_birth_window_until_real_native_unwind() {
+        if child("unobserved_shutdown_blocks_birth_window_until_real_native_unwind") {
+            unobserved_gateway_interval(true);
+        }
+    }
+    #[test]
+    fn shutdown_outside_the_tracked_world_close_is_recorded_without_a_closing_certificate() {
+        if !child(
+            "shutdown_outside_the_tracked_world_close_is_recorded_without_a_closing_certificate",
+        ) {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        // 63D443 calls 4A1150 outside 63E160. It is seen before and after
+        // Close was requested, but never becomes a tracked close.
+        let mut before = raw(31, key, 0x18063d448);
+        begin(&mut before);
+        assert_eq!(scheduler::closure::unowned_count(), 1);
+        request_close();
+        let mut after = raw(31, key, 0x18063d448);
+        begin(&mut after);
+        assert_eq!(scheduler::closure::unowned_count(), 2);
+        finish(&mut after, false);
+        assert!(scheduler::closure::world_closed(0x1000).is_err());
+        assert!(!WAITED.load(Ordering::Acquire));
+        assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!ready());
+    }
+    #[test]
+    fn inert_operation_storage_survives_wait_until_owned_original_cleanup() {
+        if !child("inert_operation_storage_survives_wait_until_owned_original_cleanup") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        let f = FRAMES.get().unwrap();
+        let p = f.begin_queue_producer().unwrap();
+        f.queue_allocated(p, 123, None).unwrap();
+        f.queue_producer_returned(p).unwrap();
+        request_close();
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let manager = vec![0u64; 0x500 / 8];
+        let key = manager.as_ptr() as u64;
+        world[0x250 / 8] = key;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let mut w = raw(30, world.as_ptr() as u64, 0x1800471c2);
+        begin(&mut w);
+        let mut m = raw(31, key, 0x18063e1d5);
+        begin(&mut m);
+        let mut wait = raw(32, key + 0x400, 0x1804a1196);
+        begin(&mut wait);
+        finish(&mut wait, false);
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(f.contains_task(123));
+        finish(&mut m, false);
+        assert!(!owns_operation_cleanup(0x180036fef));
+        assert!(owns_operation_cleanup(0x18063e239));
+        let cleanup = f.begin_native_cleanup().unwrap();
+        let node = f.retire_queue(123).unwrap();
+        f.queue_retired(node).unwrap();
+        f.leave(cleanup).unwrap();
+        finish(&mut w, false);
+        assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert!(!ready(), "local drain is not all producer coverage");
+    }
+    global_asm!(
+        ".p2align 4",
+        ".globl native_control_probe_world",
+        ".seh_proc native_control_probe_world",
+        "native_control_probe_world:",
+        ".byte 0x40,0x53",
+        ".seh_pushreg rbx",
+        "sub rsp,0x20",
+        ".seh_stackalloc 0x20",
+        ".seh_endprologue",
+        "inc qword ptr [rcx]",
+        "mov eax,0x1122",
+        "mov rbx,[rsp+0x20]",
+        "lea rsp,[rsp+0x28]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_control_probe_manager",
+        ".seh_proc native_control_probe_manager",
+        "native_control_probe_manager:",
+        "mov [rsp+0x10],rbx",
+        ".seh_savereg rbx,0x10",
+        ".seh_endprologue",
+        "inc qword ptr [rcx]",
+        "mov eax,0x2233",
+        "mov rbx,[rsp+0x10]",
+        "ret",
+        ".seh_endproc",
+        ".p2align 4",
+        ".globl native_control_probe_wait",
+        ".seh_proc native_control_probe_wait",
+        "native_control_probe_wait:",
+        "mov [rsp+8],rbx",
+        ".seh_savereg rbx,8",
+        ".seh_endprologue",
+        "inc qword ptr [rcx]",
+        "mov eax,0x3344",
+        "mov rbx,[rsp+8]",
+        "ret",
+        ".seh_endproc",
+    );
+    unsafe extern "system" {
+        fn native_control_probe_world();
+        fn native_control_probe_manager();
+        fn native_control_probe_wait();
+    }
+    #[test]
+    fn control_gateways_run_original_once_without_claiming_a_shutdown_receipt() {
+        if !child("control_gateways_run_original_once_without_claiming_a_shutdown_receipt") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let _install: unsafe fn(usize) -> Result<(), &'static str> = install;
+        for (i, (body, gateway, result)) in [
+            (
+                native_control_probe_world as *const () as u64,
+                native_control_world_gateway as *const () as usize,
+                0x1122,
+            ),
+            (
+                native_control_probe_manager as *const () as u64,
+                native_control_manager_gateway as *const () as usize,
+                0x2233,
+            ),
+            (
+                native_control_probe_wait as *const () as u64,
+                native_control_wait_gateway as *const () as usize,
+                0x3344,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            NATIVE_CONTROL_CONTINUE[i].store(body + if i == 0 { 6 } else { 5 }, Ordering::Release);
+            let invoke: unsafe extern "system" fn(*mut u64) -> u64 =
+                unsafe { std::mem::transmute(gateway) };
+            let mut n = 0;
+            assert_eq!(unsafe { invoke(&mut n) }, result);
+            assert_eq!(n, 1);
+        }
+        assert!(!WAITED.load(Ordering::Acquire));
+        assert!(!SHUTDOWN_RETURNED.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn unrelated_world_shutdown_caller_never_creates_a_reload_receipt() {
+        if !child("unrelated_world_shutdown_caller_never_creates_a_reload_receipt") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        request_close();
+        for caller in [0x180046a7b, 0x18063deb7, 0x180597999] {
+            let mut w = raw(30, 1, caller);
+            begin(&mut w);
+            assert_eq!(w.invocation.cookie, 0);
+            finish(&mut w, false);
+            assert_eq!(WORLD.load(Ordering::Acquire), 0);
+            assert!(!WAITED.load(Ordering::Acquire));
+        }
+
+        let world = vec![0u8; 0x2b0];
+        let mut no_op = raw(30, world.as_ptr() as u64, 0x1800471c2);
+        begin(&mut no_op);
+        assert_eq!(no_op.invocation.cookie, 0);
+        finish(&mut no_op, false);
+        assert_eq!(WORLD.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn complete_world_observation_waits_for_pre_world_input_storage_without_abort() {
+        if !child("complete_world_observation_waits_for_pre_world_input_storage_without_abort") {
+            return;
+        }
+        let world = worlds::fixture_world_birth();
+        let lease = sessions::fixture_bootstrap_session(10, 20);
+        let packet = sessions::fixture_pre_world_packet(lease);
+        let hold = sessions::fixture_retain_packet_input(packet);
+        let target = sessions::bootstrap_load_target(10, 20, Some(packet)).unwrap();
+        sessions::bind_bootstrap_world(target, world).unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        WORLD.store(world.world, Ordering::Release);
+        *WORLD_BIRTH.lock().unwrap() = Some(world);
+        for flag in [&CLOSING, &WAITED, &SHUTDOWN_RETURNED, &CLOSURE_COMPLETE] {
+            flag.store(true, Ordering::Release);
+        }
+        worlds::fixture_world_close(world);
+        assert!(!observed_shutdown_complete());
+        assert!(!FAILED.load(Ordering::Acquire));
+        sessions::fixture_release_packet_input(hold);
+        assert!(observed_shutdown_complete());
+        assert!(
+            !native_coverage_complete(),
+            "storage drain is not full coverage"
+        );
+    }
+    #[test]
+    fn observation_resume_requires_the_exact_closed_world_and_settled_uses_without_product_grants()
+    {
+        if !child("observation_resume_requires_the_exact_closed_world_and_settled_uses_without_product_grants") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        CORE.store(0x180000000, Ordering::Release);
+        assert!(!super::super::resume_unqualified_observation());
+        // Policy unit fixture: ownership alone is injected. The licensed
+        // integration fixture runs the same guards with real installed tables.
+        fixture_observation_resume_guards(
+            || super::super::resume_observation_with_owned_entries(true),
+            || super::super::resume_observation_with_owned_entries(true),
+        );
+    }
+
+    pub(super) fn observation_resume_guards(resume: fn() -> bool, complete: fn() -> bool) {
+        assert_ne!(CORE.load(Ordering::Acquire), 0);
+        let frames = FRAMES.get().unwrap();
+        runtime::fixture_invocation_runtime();
+        let birth = worlds::fixture_world_birth();
+        *WORLD_BIRTH.lock().unwrap() = Some(birth);
+        WORLD.store(birth.world, Ordering::Release);
+        CLOSING.store(true, Ordering::Release);
+        WAITED.store(true, Ordering::Release);
+        SHUTDOWN_RETURNED.store(true, Ordering::Release);
+        CLOSURE_COMPLETE.store(true, Ordering::Release);
+        // Make every other premise true before removing one. A false ownership
+        // table must not short-circuit the condition being tested.
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        let state = || {
+            (
+                frames.observation_state_for_test(),
+                census::observation_resumes_for_test(),
+                TRACE.0[12].load(Ordering::Acquire),
+                *WORLD_BIRTH.lock().unwrap(),
+                WORLD.load(Ordering::Acquire),
+                [
+                    CLOSING.load(Ordering::Acquire),
+                    WAITED.load(Ordering::Acquire),
+                    SHUTDOWN_RETURNED.load(Ordering::Acquire),
+                    CLOSURE_COMPLETE.load(Ordering::Acquire),
+                ],
+                (
+                    runtime::fixture_product_inactive(),
+                    runtime::fixture_invocation_closed(),
+                ),
+                CORE.load(Ordering::Acquire),
+            )
+        };
+        let rejected = |reason: &str| {
+            let before = state();
+            assert!(!resume(), "{reason}");
+            assert_eq!(
+                state(),
+                before,
+                "refusal changed retirement state: {reason}"
+            );
+        };
+        assert!(!observed_shutdown_complete());
+        rejected("World's outer return is still absent");
+        worlds::fixture_world_close(birth);
+        assert!(observed_shutdown_complete());
+        let installed_core = CORE.swap(0, Ordering::AcqRel);
+        rejected("unbound Core cannot finish a World");
+        CORE.store(installed_core, Ordering::Release);
+        for flag in [&CLOSING, &WAITED, &SHUTDOWN_RETURNED, &CLOSURE_COMPLETE] {
+            flag.store(false, Ordering::Release);
+            rejected("one shutdown receipt is absent");
+            flag.store(true, Ordering::Release);
+        }
+        *WORLD_BIRTH.lock().unwrap() = Some(worlds::WorldLease {
+            serial: birth.serial + 1,
+            ..birth
+        });
+        rejected("an address alias cannot finish the saved World");
+        *WORLD_BIRTH.lock().unwrap() = Some(birth);
+        FAILED.store(true, Ordering::Release);
+        rejected("a prior native failure remains latched");
+        assert!(FAILED.load(Ordering::Acquire));
+        FAILED.store(false, Ordering::Release);
+        // Open the runtime while the native frame ledger is fully settled, so
+        // its own reopen guard cannot mask the product-permission premise.
+        runtime::fixture_invocation_runtime();
+        rejected("product permission is still open");
+        assert!(!runtime::fixture_product_inactive());
+        assert!(
+            !runtime::fixture_invocation_closed(),
+            "the second invocation generation is open"
+        );
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        assert!(!super::super::resume_observation_with_owned_entries(false));
+        let (frame_state, observation_resumes, qualified_reopens, ..) = state();
+        assert!(complete());
+        assert!(runtime::fixture_product_inactive());
+        assert!(runtime::fixture_invocation_closed());
+        assert_eq!(runtime::invocation_start(), 0);
+        assert_eq!(frames.observation_state_for_test().0, frame_state.0 + 1);
+        assert_eq!(
+            census::observation_resumes_for_test(),
+            observation_resumes + 1
+        );
+        assert_eq!(TRACE.0[12].load(Ordering::Acquire), qualified_reopens);
+        assert_eq!(*WORLD_BIRTH.lock().unwrap(), None);
+        let next = frames.enter().unwrap();
+        assert!(
+            frames.healthy(),
+            "ordinary native work can execute after the settled boundary"
+        );
+        frames.leave(next).unwrap();
+        rejected("one close receipt cannot be replayed");
+    }
+
+    #[test]
+    fn observation_resume_keeps_a_live_frame_and_its_retirement_state() {
+        if !child("observation_resume_keeps_a_live_frame_and_its_retirement_state") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        runtime::fixture_invocation_runtime();
+        CORE.store(0x180000000, Ordering::Release);
+        let birth = worlds::fixture_world_birth();
+        worlds::fixture_world_close(birth);
+        *WORLD_BIRTH.lock().unwrap() = Some(birth);
+        WORLD.store(birth.world, Ordering::Release);
+        WAITED.store(true, Ordering::Release);
+        SHUTDOWN_RETURNED.store(true, Ordering::Release);
+        CLOSURE_COMPLETE.store(true, Ordering::Release);
+        let frames = FRAMES.get().unwrap();
+        let pending = frames.enter().unwrap();
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        assert_eq!(
+            frames.seal_and_wait(Instant::now()),
+            Err(crate::native_flight::Error::Reentrant)
+        );
+        let before = frames.observation_state_for_test();
+        let resumed = census::observation_resumes_for_test();
+        let certified = TRACE.0[12].load(Ordering::Acquire);
+        assert!(!super::super::resume_observation_with_owned_entries(true));
+        assert_eq!(frames.observation_state_for_test(), before);
+        assert_eq!(census::observation_resumes_for_test(), resumed);
+        assert_eq!(TRACE.0[12].load(Ordering::Acquire), certified);
+        assert_eq!(*WORLD_BIRTH.lock().unwrap(), Some(birth));
+        frames.leave(pending).unwrap();
+        frames
+            .seal_and_wait(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        assert!(super::super::resume_observation_with_owned_entries(true));
+    }
+
+    #[test]
+    fn unresolved_native_use_never_turns_into_a_transparent_rebuild_status() {
+        if !child("unresolved_native_use_never_turns_into_a_transparent_rebuild_status") {
+            return;
+        }
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        runtime::fixture_invocation_runtime();
+        FRAMES.get().unwrap().mark_unresolved();
+        assert_eq!(
+            runtime::BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::Critical as u32
+        );
+        assert!(runtime::fixture_product_inactive());
+        assert!(runtime::fixture_invocation_closed());
+    }
+    #[test]
+    fn actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage() {
+        if !child(
+            "actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage",
+        ) {
+            return;
+        }
+        let Some(_fixture) = crate::windows::atomic_fixture::require(
+            "actual_three_control_cas_chain_keeps_runtime_rebuild_closed_without_full_coverage",
+        ) else {
+            return;
+        };
+        FRAMES.set(NativeFrames::new()).ok().unwrap();
+        let base = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                0xa00000,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            )
+        } as usize;
+        assert_ne!(base, 0);
+        let put = |rva: usize, bytes: &[u8]| unsafe {
+            ptr::copy_nonoverlapping(bytes.as_ptr(), (base + rva) as *mut u8, bytes.len())
+        };
+        let call = |rva: usize, target: usize| {
+            let mut b = [0u8; 5];
+            b[0] = 0xe8;
+            b[1..].copy_from_slice(&((target as i64 - rva as i64 - 5) as i32).to_le_bytes());
+            put(rva, &b);
+        };
+        // All native bodies are process-owned fixture instructions. The
+        // original control gateways, CAS, Close and Rebuild are real code.
+        unsafe {
+            ptr::write_bytes((base + 0x63e160) as *mut u8, 0x90, 0x200);
+            ptr::write_bytes((base + 0x4a1150) as *mut u8, 0x90, 0x80);
+        }
+        put(
+            0x63e160,
+            &[
+                0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x80, 0xb9, 0xa4, 2, 0, 0, 0, 0x48, 0x8b, 0xd9,
+            ],
+        );
+        put(0x63e1c9, &[0x48, 0x8b, 0x8b, 0x50, 2, 0, 0]);
+        call(0x63e1d0, 0x4a1150);
+        put(0x63e1d5, &[0x48, 0x83, 0xc4, 0x20, 0x5b, 0xc3]);
+        put(
+            0x4a1150,
+            &[0x48, 0x89, 0x5c, 0x24, 0x10, 0x56, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(0x4a117f, &[0x48, 0x81, 0xc1, 0, 4, 0, 0]);
+        call(0x4a1191, 0x9922c0);
+        put(
+            0x4a1196,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x48, 0x48, 0x83, 0xc4, 0x30, 0x5e, 0xc3,
+            ],
+        );
+        put(
+            0x9922c0,
+            &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x30],
+        );
+        put(
+            0x9922ca,
+            &[
+                0x48, 0x8b, 0x5c, 0x24, 0x40, 0x48, 0x83, 0xc4, 0x30, 0x5f, 0xc3,
+            ],
+        );
+        put(0x471b0, &[0x48, 0x83, 0xec, 0x28]);
+        unsafe {
+            ptr::write_bytes((base + 0x471b4) as *mut u8, 0x90, 9);
+        }
+        call(0x471bd, 0x63e160);
+        put(0x471c2, &[0x48, 0x83, 0xc4, 0x28, 0xc3]);
+        let mut old = 0;
+        assert_ne!(
+            unsafe { VirtualProtect(base as _, 0xa00000, PAGE_EXECUTE_READ, &mut old) },
+            0
+        );
+        unsafe { install(base) }.unwrap();
+        runtime::fixture_invocation_runtime();
+        assert_eq!(
+            runtime::BridgeRuntimeClose(null_mut()),
+            BridgeStatus::Ok as u32
+        );
+        let mut world = vec![0u64; 0x2b0 / 8];
+        let mut manager = vec![0u64; 0x500 / 8];
+        world[0x250 / 8] = manager.as_mut_ptr() as u64;
+        world[0x2a0 / 8] = 1u64 << 32;
+        let invoke: unsafe extern "system" fn(*mut u64) =
+            unsafe { std::mem::transmute(base + 0x471b0) };
+        unsafe {
+            invoke(world.as_mut_ptr());
+        }
+        assert!(WAITED.load(Ordering::Acquire));
+        assert!(SHUTDOWN_RETURNED.load(Ordering::Acquire));
+        assert_eq!(
+            runtime::BridgeRuntimeRebuild(null_mut()),
+            BridgeStatus::Critical as u32
+        );
+        assert!(runtime::fixture_product_inactive());
+        unsafe { restore() }.unwrap();
+        assert_ne!(unsafe { VirtualFree(base as _, 0, MEM_RELEASE) }, 0);
+    }
+}

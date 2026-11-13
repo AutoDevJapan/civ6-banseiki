@@ -74,7 +74,9 @@ fn adapters() -> Result<(Vec<AdapterCoverage>, Vec<String>)> {
             AdapterLuid: adapter.AdapterLuid,
             ..Default::default()
         };
-        if unsafe { D3DKMTQueryStatistics(&raw mut query) } != 0 {
+        // The ABI accepts a const pointer, but QueryResult is filled in place.
+        // Keep writable storage without introducing an immutable reference.
+        if unsafe { D3DKMTQueryStatistics(std::ptr::addr_of_mut!(query)) } != 0 {
             return Err(Error::input("kernel GPU engine count is unknown"));
         }
         let nodes = unsafe { query.QueryResult.AdapterInformation.NodeCount };

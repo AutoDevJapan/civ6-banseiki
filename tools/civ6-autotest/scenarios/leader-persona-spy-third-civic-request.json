@@ -1,0 +1,95 @@
+{
+  "name": "Research the test-only native third-spy Civic once from the preserved second failure",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008",
+      "exact_name": true,
+      "timeout": 300
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyCivicStatus(); assert(s.stage=='NOT_REQUESTED' and s.prerequisiteOwned and s.capacity==2,'third native spy research preconditions missing'); return s.stage"
+    },
+    {
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT'); return 'one durable research intent queued'",
+      "state_name": "InGame",
+      "lua_timeout": 20,
+      "action": "ui_lua",
+      "timeout": 60
+    },
+    {
+      "condition": {
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_THIRD_SPY_CIVIC_INTENT' or a=='UNKNOWN_THIRD_SPY_CIVIC_INTENT' or a=='REJECTED_THIRD_SPY_CIVIC_INTENT' then error(a) end; return a=='ACCEPTED_THIRD_SPY_CIVIC_INTENT'",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for",
+      "timeout": 60
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC'); return 'one official Civic research request queued'"
+    },
+    {
+      "condition": {
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_THIRD_SPY_CIVIC' or a=='UNKNOWN_THIRD_SPY_CIVIC' or a=='REJECTED_THIRD_SPY_CIVIC' then error(a) end; return a=='ACCEPTED_THIRD_SPY_CIVIC'",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for",
+      "timeout": 60
+    },
+    {
+      "action": "inspect_native_spy_research",
+      "phase": "after_acceptance",
+      "timeout": 60
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "timeout": 300,
+      "checkpoint": true
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "action": "inspect_native_spy_research",
+      "phase": "after_reload",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ use crate::{read_repo, repo_root};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{functions::FunctionFlags, types::ValueRef, Connection, MAIN_DB};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -235,87 +235,11 @@ fn ident(value: &str) -> String {
 fn text_literal(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
-fn xml_value(value: &str) -> String {
-    match value.to_ascii_lowercase().as_str() {
-        "true" => "1".into(),
-        "false" => "0".into(),
-        _ => text_literal(value),
-    }
-}
-fn fields(node: roxmltree::Node<'_, '_>) -> BTreeMap<String, String> {
-    let mut fields: BTreeMap<_, _> = node
-        .attributes()
-        .map(|a| (a.name().into(), xml_value(a.value())))
-        .collect();
-    for child in node.children().filter(|n| n.is_element()) {
-        fields.insert(
-            child.tag_name().name().into(),
-            xml_value(child.text().unwrap_or("")),
-        );
-    }
-    fields
-}
-fn clause(fields: &BTreeMap<String, String>) -> String {
-    if fields.is_empty() {
-        return "1".into();
-    }
-    fields
-        .iter()
-        .map(|(k, v)| format!("{}={v}", ident(k)))
-        .collect::<Vec<_>>()
-        .join(" AND ")
-}
-
 fn load_xml(db: &Connection, path: &Path, tables: &HashSet<String>) {
     let source = std::fs::read_to_string(path).unwrap();
-    let doc = roxmltree::Document::parse(source.trim_start_matches('\u{feff}')).unwrap();
-    for table in doc.root_element().children().filter(|n| n.is_element()) {
-        let name = table.tag_name().name();
-        if !tables.contains(name) {
-            continue;
-        }
-        for op in table.children().filter(|n| n.is_element()) {
-            let sql = match op.tag_name().name() {
-                "Row" | "Replace" => {
-                    let row = fields(op);
-                    let verb = if op.has_tag_name("Replace") {
-                        "INSERT OR REPLACE"
-                    } else {
-                        "INSERT OR IGNORE"
-                    };
-                    format!(
-                        "{verb} INTO {} ({}) VALUES ({})",
-                        ident(name),
-                        row.keys().map(|s| ident(s)).collect::<Vec<_>>().join(","),
-                        row.values().cloned().collect::<Vec<_>>().join(",")
-                    )
-                }
-                "Update" => {
-                    let wh = fields(op.children().find(|n| n.has_tag_name("Where")).unwrap());
-                    let sets = fields(op.children().find(|n| n.has_tag_name("Set")).unwrap());
-                    format!(
-                        "UPDATE {} SET {} WHERE {}",
-                        ident(name),
-                        sets.iter()
-                            .map(|(k, v)| format!("{}={v}", ident(k)))
-                            .collect::<Vec<_>>()
-                            .join(","),
-                        clause(&wh)
-                    )
-                }
-                "Delete" => format!("DELETE FROM {} WHERE {}", ident(name), clause(&fields(op))),
-                _ => continue,
-            };
-            if op.has_tag_name("Delete") {
-                db.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
-            }
-            db.execute_batch(&sql)
-                .unwrap_or_else(|e| panic!("{}: {sql}: {e}", path.display()));
-            if op.has_tag_name("Delete") {
-                db.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
-            }
-        }
-    }
+    let tables = tables.iter().cloned().collect();
+    civ6_data_rs::cascade::load_xml(db, source.trim_start_matches('\u{feff}'), &tables)
+        .unwrap_or_else(|error| panic!("{}: {error:#}", path.display()));
 }
 
 /// Read installed assets once to refresh the CI fixture. Does not start Civ6.
