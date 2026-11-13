@@ -198,6 +198,7 @@ extern "system" fn begin(raw: *mut Saved) {
             // birth. Attaching this creator to the old World would make its
             // normal reload close wait for the very worker doing the close.
             let delegated_load = c.kind == 130 && caller(raw, 0x98618b);
+            let existing_push = c.kind == 131 && caller(raw, 0x986497) && shared_push_reserved();
             // Dispatch entry's RDX is scheduler metadata, never a T or a World ticket.
             // Post-Wait set/list teardown is not execution admission. These
             // observers attach only if an actual recorded T destructor is
@@ -208,19 +209,28 @@ extern "system" fn begin(raw: *mut Saved) {
             {
                 c.hold = f.enter_inherited().unwrap_or_else(|_| fault());
             }
+            if !delegated_load
+                && matches!(c.kind, 130 | 131)
+                && c.hold.is_none()
+                && c.publication.is_some()
+                && !existing_push
+            {
+                // The exact live set owns this publication, but that does not
+                // supply its caller's World. Keep the issued T across worker
+                // dispatch and original return with zero provenance instead
+                // of losing it when the publication frame returns.
+                c.hold = Some(f.enter_with_provenance(true).unwrap_or_else(|_| fault()));
+            }
             if c.kind == 133 && c.hold.is_none() {
                 c.hold = f.consumer_enter(raw.gpr[1]).unwrap_or_else(|_| fault());
             }
-            if c.hold.is_some() && matches!(c.kind, 130 | 131) {
-                let existing = c.kind == 131 && caller(raw, 0x986497) && shared_push_reserved();
-                if !existing {
-                    let (payload, set) = if c.kind == 130 {
-                        (raw.gpr[0], raw.gpr[1])
-                    } else {
-                        (raw.gpr[1], raw.gpr[2])
-                    };
-                    c.job = Some(f.issue_on_set(payload, set).unwrap_or_else(|_| fault()));
-                }
+            if c.hold.is_some() && matches!(c.kind, 130 | 131) && !existing_push {
+                let (payload, set) = if c.kind == 130 {
+                    (raw.gpr[0], raw.gpr[1])
+                } else {
+                    (raw.gpr[1], raw.gpr[2])
+                };
+                c.job = Some(f.issue_on_set(payload, set).unwrap_or_else(|_| fault()));
             }
         }
         raw.invocation.cookie = COOKIE;

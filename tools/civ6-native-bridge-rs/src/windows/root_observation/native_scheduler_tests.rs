@@ -13,6 +13,240 @@ static OBSERVED: AtomicU64 = AtomicU64::new(0);
 static EARLY_DISPATCH: AtomicU64 = AtomicU64::new(0);
 
 #[test]
+fn known_set_unbound_add_keeps_its_task_without_granting_an_epoch() {
+    if child("known_set_unbound_add_keeps_its_task_without_granting_an_epoch") {
+        known_set_unbound_publication_case(130);
+    }
+}
+
+#[test]
+fn known_set_unbound_push_keeps_its_task_without_granting_an_epoch() {
+    if child("known_set_unbound_push_keeps_its_task_without_granting_an_epoch") {
+        known_set_unbound_publication_case(131);
+    }
+}
+
+fn known_set_unbound_publication_case(kind: u64) {
+    // Direct Rust observers with modeled registers, never a native original.
+    prepare();
+    let f = FRAMES.get().unwrap();
+    const MANAGER: u64 = 0x2000;
+    const LIST: u32 = 7;
+    const TASK: u64 = 0x300;
+    const PAYLOAD: u64 = 0x100;
+    closure::bind_core(0x100000);
+    closure::init_returned(MANAGER, LIST).unwrap();
+    assert!(!f.unproven_on_current_thread());
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = kind;
+    raw.gpr[if kind == 130 { 0 } else { 1 }] = PAYLOAD;
+    raw.gpr[if kind == 130 { 1 } else { 2 }] = MANAGER + 0x400;
+    begin(&mut raw);
+    let mut allocation: Saved = unsafe { std::mem::zeroed() };
+    allocation.invocation.kind = 23;
+    allocation.invocation.caller = fixture_alloc_return as *const () as u64;
+    allocation.gpr[4] = TASK;
+    allocated(&allocation, false);
+    raw.gpr[4] = 0x7788;
+    unsafe { SetLastError(0x4321) };
+    end(&mut raw);
+    assert_eq!((raw.gpr[4], unsafe { GetLastError() }), (0x7788, 0x4321));
+    eprintln!("KNOWN_SET_TASK_AFTER_PUBLICATION_RETURN kind={kind}");
+    assert_eq!(
+        f.pending_on_set(MANAGER + 0x400),
+        Ok(1),
+        "the known set lost its unbound publisher's native task at original return"
+    );
+    assert!(f.contains_task(TASK));
+    assert!(!f.unproven_on_current_thread());
+    assert_eq!(
+        f.seal_executions_and_wait(Instant::now()),
+        Err(crate::native_flight::Error::Timeout),
+        "returning the publisher cannot drain the still-pending T"
+    );
+    // The worker carries the original zero-provenance job, not current World.
+    let worker = std::thread::spawn(move || {
+        let hold = f.consumer_enter(TASK).unwrap().unwrap();
+        assert!(f.unproven_on_current_thread());
+        let job = f.execute(TASK, PAYLOAD).unwrap();
+        f.completed(job).unwrap();
+        assert!(f.unproven_on_current_thread());
+        f.consumer_exit(hold).unwrap();
+        assert!(!f.unproven_on_current_thread());
+    });
+    worker.join().unwrap();
+    assert_eq!(f.pending_on_set(MANAGER + 0x400), Ok(0));
+    closure::close_begin(0x1000, MANAGER, LIST).unwrap();
+    closure::wait_returned(MANAGER).unwrap();
+    closure::list_released(LIST, 0x100000 + 0x4a120e, MANAGER).unwrap();
+    closure::close_end(MANAGER).unwrap();
+    assert!(closure::world_closed(0x1000).unwrap().complete());
+    f.seal_executions_and_wait(Instant::now() + Duration::from_secs(1))
+        .unwrap();
+    f.seal_and_wait(Instant::now() + Duration::from_secs(1))
+        .unwrap();
+    f.reopen().unwrap();
+    let next = f.enter().unwrap();
+    assert!(!f.unproven_on_current_thread());
+    f.leave(next).unwrap();
+    assert!(f.healthy());
+}
+
+#[test]
+fn known_set_unbound_publication_preserves_null_execution_and_destructor_outcomes() {
+    if !child("known_set_unbound_publication_preserves_null_execution_and_destructor_outcomes") {
+        return;
+    }
+    prepare();
+    let f = FRAMES.get().unwrap();
+    for kind in [130, 131] {
+        for outcome in 0..4 {
+            let manager = 0x2000 + kind * 0x1000 + outcome * 0x100;
+            let set = manager + 0x400;
+            closure::init_returned(manager, 0).unwrap();
+            let mut raw: Saved = unsafe { std::mem::zeroed() };
+            raw.invocation.kind = kind;
+            raw.gpr[if kind == 130 { 0 } else { 1 }] = 0x100;
+            raw.gpr[if kind == 130 { 1 } else { 2 }] = set;
+            begin(&mut raw);
+            assert!(f.unproven_on_current_thread());
+            let task = if outcome == 0 { 0 } else { 0x300 };
+            let mut allocation: Saved = unsafe { std::mem::zeroed() };
+            allocation.invocation.kind = 23;
+            allocation.invocation.caller = fixture_alloc_return as *const () as u64;
+            allocation.gpr[4] = task;
+            let expected_caller = allocation.invocation.caller;
+            allocation.invocation.caller = expected_caller + 1;
+            allocated(&allocation, false);
+            assert!(SCOPES.with(|s| !s.borrow().last().unwrap().allocated));
+            assert!(!f.contains_task(0x300));
+            allocation.invocation.caller = expected_caller;
+            allocated(&allocation, false);
+            if outcome == 1 {
+                let job = f.execute(task, 0x100).unwrap();
+                f.completed(job).unwrap();
+            } else if outcome == 3 {
+                let retirement = f.retire_task(task).unwrap().unwrap();
+                f.task_retired(retirement).unwrap();
+            }
+            assert_eq!(f.pending_on_set(set), Ok(1));
+            raw.gpr[4] = 0x7788;
+            unsafe { SetLastError(0x4321) };
+            end(&mut raw);
+            assert_eq!((raw.gpr[4], unsafe { GetLastError() }), (0x7788, 0x4321));
+            assert!(!f.unproven_on_current_thread());
+            if outcome == 2 {
+                assert_eq!(f.pending_on_set(set), Ok(1));
+                let hold = f.consumer_enter(task).unwrap().unwrap();
+                assert!(f.unproven_on_current_thread());
+                let retirement = f.retire_task(task).unwrap().unwrap();
+                f.task_retired(retirement).unwrap();
+                assert!(f.unproven_on_current_thread());
+                f.consumer_exit(hold).unwrap();
+            }
+            assert_eq!(f.pending_on_set(set), Ok(0));
+            assert!(!f.contains_task(0x300));
+            assert!(!f.unproven_on_current_thread());
+            assert!(f.healthy());
+        }
+    }
+    f.seal_executions_and_wait(Instant::now() + Duration::from_secs(1))
+        .unwrap();
+    f.reopen().unwrap();
+}
+
+#[test]
+fn known_set_shared_push_keeps_its_original_zero_provenance_reservation() {
+    if !child("known_set_shared_push_keeps_its_original_zero_provenance_reservation") {
+        return;
+    }
+    prepare();
+    let f = FRAMES.get().unwrap();
+    closure::init_returned(0x2000, 0).unwrap();
+    let job = f.issue_on_set_with_provenance(0x100, 0x2400, true).unwrap();
+    SHARED_PUSH.store(true, Ordering::Release);
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 131;
+    raw.invocation.caller = fixture_shared_return as *const () as u64;
+    raw.gpr[1] = 0x100;
+    raw.gpr[2] = 0x2400;
+    begin(&mut raw);
+    assert!(SCOPES.with(|s| {
+        let scopes = s.borrow();
+        let scope = scopes.last().unwrap();
+        scope.publication.is_some() && scope.hold.is_none() && scope.job.is_none()
+    }));
+    f.bind_before_publication(job, 0x300).unwrap();
+    end(&mut raw);
+    assert_eq!(f.pending_on_set(0x2400), Ok(1));
+    f.pushed(job, 0x300).unwrap();
+    let hold = f.consumer_enter(0x300).unwrap().unwrap();
+    assert!(f.unproven_on_current_thread());
+    assert_eq!(f.execute(0x300, 0x100), Ok(job));
+    f.completed(job).unwrap();
+    f.consumer_exit(hold).unwrap();
+    assert_eq!(f.pending_on_set(0x2400), Ok(0));
+    assert!(f.healthy());
+}
+
+#[test]
+fn unknown_set_publication_does_not_adopt_a_known_manager_or_world() {
+    if !child("unknown_set_publication_does_not_adopt_a_known_manager_or_world") {
+        return;
+    }
+    prepare();
+    let f = FRAMES.get().unwrap();
+    closure::init_returned(0x2000, 0).unwrap();
+    for kind in [130, 131] {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.invocation.kind = kind;
+        raw.gpr[if kind == 130 { 0 } else { 1 }] = 0x100;
+        raw.gpr[if kind == 130 { 1 } else { 2 }] = 0x9000;
+        begin(&mut raw);
+        assert!(SCOPES.with(|s| {
+            let scopes = s.borrow();
+            let scope = scopes.last().unwrap();
+            scope.publication.is_none() && scope.hold.is_none() && scope.job.is_none()
+        }));
+        raw.gpr[4] = 0x7788;
+        unsafe { SetLastError(0x4321) };
+        end(&mut raw);
+        assert_eq!((raw.gpr[4], unsafe { GetLastError() }), (0x7788, 0x4321));
+        assert_eq!(f.pending_on_set(0x9000), Ok(0));
+        assert!(!f.unproven_on_current_thread());
+    }
+    let status = f.drain_status().unwrap();
+    assert_eq!((status.active_frames, status.retained_jobs), (0, 0));
+    assert!(f.healthy());
+}
+
+#[test]
+fn known_set_unbound_publication_unwind_keeps_the_task_unresolved() {
+    if !child("known_set_unbound_publication_unwind_keeps_the_task_unresolved") {
+        return;
+    }
+    prepare();
+    let f = FRAMES.get().unwrap();
+    closure::init_returned(0x2000, 0).unwrap();
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 130;
+    raw.gpr[0] = 0x100;
+    raw.gpr[1] = 0x2400;
+    begin(&mut raw);
+    let mut allocation: Saved = unsafe { std::mem::zeroed() };
+    allocation.invocation.kind = 23;
+    allocation.invocation.caller = fixture_alloc_return as *const () as u64;
+    allocation.gpr[4] = 0x300;
+    allocated(&allocation, false);
+    finish(&mut raw, true);
+    let status = f.drain_status().unwrap();
+    assert!(status.unresolved);
+    assert_eq!((status.active_frames, status.retained_jobs), (0, 1));
+    assert_eq!(f.reopen(), Err(crate::native_flight::Error::Unresolved));
+    assert!(SCOPES.with(|s| s.borrow().is_empty()));
+}
+
+#[test]
 fn unbound_spawn_is_retained_until_full_return_before_wait() {
     if !child("unbound_spawn_is_retained_until_full_return_before_wait") {
         return;
@@ -823,19 +1057,20 @@ fn load_creator_uses_its_existing_birth_carrier_without_oldworld_reservation() {
     prepare();
     let f = FRAMES.get().unwrap();
     let outer = f.enter().unwrap();
+    closure::init_returned(0x2000, 0).unwrap();
     let mut raw: Saved = unsafe { std::mem::zeroed() };
     raw.invocation.kind = 130;
     raw.invocation.caller = exe(0x98618b);
     raw.gpr[0] = 0x100;
-    raw.gpr[1] = 0x400;
+    raw.gpr[1] = 0x2400;
     begin(&mut raw);
     assert!(SCOPES.with(|s| {
         let s = s.borrow();
         let c = s.last().unwrap();
-        c.hold.is_none() && c.job.is_none()
+        c.publication.is_some() && c.hold.is_none() && c.job.is_none()
     }));
     finish(&mut raw, false);
-    assert_eq!(f.pending_on_set(0x400), Ok(0));
+    assert_eq!(f.pending_on_set(0x2400), Ok(0));
     f.leave(outer).unwrap();
 }
 
