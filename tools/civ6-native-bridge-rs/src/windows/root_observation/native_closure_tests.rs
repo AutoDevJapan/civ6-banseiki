@@ -31,6 +31,78 @@ fn waited(l: &mut Ledger) {
 }
 
 #[test]
+fn pending_publication_is_incarnation_bound_and_rejected_without_consuming_another() {
+    let mut l = Ledger::new();
+    assert_eq!(l.begin_publication(SET), Ok(None));
+    let serial = l.init_returned(MANAGER, LIST).unwrap();
+    let first = l.begin_publication(SET).unwrap().unwrap();
+    assert_eq!(first.serial, serial);
+    assert_eq!(
+        l.init_returned(MANAGER, LIST),
+        Err(Violation::PublicationPending)
+    );
+    l.close_begin(WORLD, MANAGER, LIST).unwrap();
+    let second = l.begin_publication(SET).unwrap().unwrap();
+    assert_eq!(l.wait_returned(MANAGER), Err(Violation::PublicationPending));
+    for bad in [
+        Publication {
+            manager: MANAGER + 1,
+            ..first
+        },
+        Publication {
+            serial: serial + 1,
+            ..first
+        },
+        Publication {
+            id: u64::MAX,
+            ..first
+        },
+    ] {
+        assert_eq!(
+            l.finish_publication(bad),
+            Err(Violation::PublicationIdentity)
+        );
+        assert_eq!(l.publications.len(), 2);
+    }
+    l.finish_publication(first).unwrap();
+    assert_eq!(
+        l.finish_publication(first),
+        Err(Violation::PublicationIdentity)
+    );
+    assert_eq!(l.wait_returned(MANAGER), Err(Violation::PublicationPending));
+    l.finish_publication(second).unwrap();
+    l.wait_returned(MANAGER).unwrap();
+    assert_eq!(l.begin_publication(SET), Err(Violation::LateSubmit));
+    l.list_released(LIST, true, MANAGER).unwrap();
+    l.close_end(MANAGER).unwrap();
+    let receipt = l.world_closed(WORLD).unwrap();
+    assert!(receipt.publication_overlap && !receipt.complete());
+    assert!(l.init_returned(MANAGER, LIST + 1).unwrap() > serial);
+    let next = l.begin_publication(SET).unwrap().unwrap();
+    assert_eq!(
+        l.finish_publication(second),
+        Err(Violation::PublicationIdentity)
+    );
+    assert_eq!(l.publications, vec![next]);
+    l.finish_publication(next).unwrap();
+    assert!(l.publications.is_empty());
+}
+
+#[test]
+fn other_manager_publication_does_not_block_a_drained_manager() {
+    let mut l = Ledger::new();
+    l.init_returned(MANAGER, 0).unwrap();
+    l.init_returned(0x6000, 0).unwrap();
+    let other = l.begin_publication(0x6400).unwrap().unwrap();
+    l.close_begin(WORLD, MANAGER, 0).unwrap();
+    l.wait_returned(MANAGER).unwrap();
+    l.close_end(MANAGER).unwrap();
+    assert!(l.world_closed(WORLD).unwrap().complete());
+    assert_eq!(l.publications, vec![other]);
+    l.finish_publication(other).unwrap();
+}
+
+#[test]
 fn closed_manager_is_a_tombstone_until_a_real_new_initialization() {
     let mut l = Ledger::new();
     let first = l.init_returned(MANAGER, LIST).unwrap();
@@ -55,6 +127,7 @@ fn closed_manager_is_a_tombstone_until_a_real_new_initialization() {
             repeated: false,
             list_released: true,
             late_spawn: false,
+            publication_overlap: false,
         }
     );
     assert!(receipt.complete());

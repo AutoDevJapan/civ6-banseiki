@@ -35,6 +35,7 @@ static NATIVE_SCHEDULER_CONTINUE: [AtomicU64; 8] = [const { AtomicU64::new(0) };
 struct Scope {
     serial: u64,
     kind: u64,
+    publication: Option<closure::Publication>,
     hold: Option<u64>,
     job: Option<u64>,
     task: u64,
@@ -160,6 +161,7 @@ extern "system" fn begin(raw: *mut Saved) {
         let mut c = Scope {
             serial: serial(),
             kind: raw.invocation.kind,
+            publication: None,
             hold: None,
             job: None,
             task: 0,
@@ -171,8 +173,12 @@ extern "system" fn begin(raw: *mut Saved) {
         // Host Add/Push set, Spawn list and FreeJobList identity are observed
         // before the original runs. The ledger is empty until a manager is seen.
         match c.kind {
-            130 => closure::submit(raw.gpr[1]),
-            131 => closure::submit(raw.gpr[2]),
+            130 | 131 => {
+                c.publication =
+                    closure::begin_publication(raw.gpr[if c.kind == 130 { 1 } else { 2 }])
+                        .unwrap_or_else(|v| closure::fault(v));
+                Ok(())
+            }
             132 => closure::spawn(raw.gpr[0] as u32),
             137 => {
                 c.arg = raw.gpr[0];
@@ -246,6 +252,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
     if (c.serial, c.kind) != (raw.invocation.token, raw.invocation.kind) {
         fault();
     }
+    if exceptional && c.publication.is_some() {
+        closure::unwound();
+    }
     if c.kind == 137 {
         if exceptional {
             closure::unwound();
@@ -276,6 +285,9 @@ fn finish(raw: &mut Saved, exceptional: bool) {
             .unwrap()
             .consumer_exit(hold)
             .unwrap_or_else(|_| fault());
+    }
+    if let Some(publication) = c.publication {
+        closure::finish_publication(publication).unwrap_or_else(|v| closure::fault(v));
     }
 }
 extern "system" fn end(raw: *mut Saved) {

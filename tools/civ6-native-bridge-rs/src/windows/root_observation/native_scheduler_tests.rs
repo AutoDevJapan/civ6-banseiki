@@ -11,6 +11,165 @@ static TASK: AtomicU64 = AtomicU64::new(0);
 static ACTION: AtomicU64 = AtomicU64::new(0);
 static OBSERVED: AtomicU64 = AtomicU64::new(0);
 static EARLY_DISPATCH: AtomicU64 = AtomicU64::new(0);
+
+#[test]
+fn unbound_publisher_is_retained_until_full_return_before_wait() {
+    if !child("unbound_publisher_is_retained_until_full_return_before_wait") {
+        return;
+    }
+    // Call the production observers directly. No installed native entries,
+    // native game function, or FRAMES authority is needed for this gap.
+    assert!(FRAMES.get().is_none());
+    for kind in [130, 131] {
+        let manager = 0x2000 + kind * 0x1000;
+        let world = manager + 0x800;
+        closure::init_returned(manager, 0).unwrap();
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.invocation.kind = kind;
+        raw.gpr[if kind == 130 { 1 } else { 2 }] = manager + 0x400;
+        unsafe { SetLastError(0x1234) };
+        begin(&mut raw);
+        assert_eq!(unsafe { GetLastError() }, 0x1234);
+        assert!(SCOPES.with(|scopes| {
+            let scopes = scopes.borrow();
+            let scope = scopes.last().unwrap();
+            scope.hold.is_none() && scope.job.is_none()
+        }));
+        closure::close_begin(world, manager, 0).unwrap();
+        assert!(
+            closure::wait_returned(manager).is_err(),
+            "native Wait accepted an Add/Push whose original frame has not returned"
+        );
+        end(&mut raw);
+        assert_eq!(unsafe { GetLastError() }, 0x1234);
+        assert!(SCOPES.with(|scopes| scopes.borrow().is_empty()));
+        closure::wait_returned(manager).unwrap();
+        closure::close_end(manager).unwrap();
+        let receipt = closure::world_closed(world).unwrap();
+        assert!(receipt.publication_overlap && !receipt.complete());
+        // The next real incarnation can complete when publication returns
+        // before the native Wait, rather than losing progress permanently.
+        closure::init_returned(manager, 0).unwrap();
+        begin(&mut raw);
+        end(&mut raw);
+        closure::close_begin(world + 1, manager, 0).unwrap();
+        closure::wait_returned(manager).unwrap();
+        closure::close_end(manager).unwrap();
+        assert!(closure::world_closed(world + 1).unwrap().complete());
+    }
+}
+
+#[test]
+fn unbound_publication_unwind_cannot_certify_wait_or_a_new_incarnation() {
+    if !child("unbound_publication_unwind_cannot_certify_wait_or_a_new_incarnation") {
+        return;
+    }
+    closure::init_returned(0x2000, 0).unwrap();
+    let mut raw: Saved = unsafe { std::mem::zeroed() };
+    raw.invocation.kind = 130;
+    raw.gpr[1] = 0x2400;
+    begin(&mut raw);
+    closure::close_begin(0x1000, 0x2000, 0).unwrap();
+    finish(&mut raw, true);
+    assert!(SCOPES.with(|scopes| scopes.borrow().is_empty()));
+    assert_eq!(
+        closure::wait_returned(0x2000),
+        Err(closure::Violation::Unwound)
+    );
+    assert_eq!(
+        closure::init_returned(0x2000, 0),
+        Err(closure::Violation::Unwound)
+    );
+}
+
+#[test]
+fn unrelated_publisher_keeps_original_return_without_a_manager_receipt() {
+    if !child("unrelated_publisher_keeps_original_return_without_a_manager_receipt") {
+        return;
+    }
+    closure::init_returned(0x2000, 0).unwrap();
+    for kind in [130, 131] {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.invocation.kind = kind;
+        raw.gpr[if kind == 130 { 1 } else { 2 }] = 0x8400;
+        begin(&mut raw);
+        assert!(SCOPES.with(|scopes| scopes.borrow().last().unwrap().publication.is_none()));
+        raw.gpr[4] = 0x12345678;
+        unsafe { SetLastError(0x5678) };
+        end(&mut raw);
+        assert_eq!(
+            (raw.gpr[4], unsafe { GetLastError() }),
+            (0x12345678, 0x5678)
+        );
+    }
+    assert!(!FAILED.load(Ordering::Acquire));
+    closure::close_begin(0x1000, 0x2000, 0).unwrap();
+    closure::wait_returned(0x2000).unwrap();
+    closure::close_end(0x2000).unwrap();
+    assert!(closure::world_closed(0x1000).unwrap().complete());
+}
+
+#[test]
+fn unbound_publication_wait_keeps_its_deadline_and_resumes_after_normal_return() {
+    if !child("unbound_publication_wait_keeps_its_deadline_and_resumes_after_normal_return") {
+        return;
+    }
+    use std::sync::mpsc;
+    closure::init_returned(0x2000, 0).unwrap();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let publisher = std::thread::spawn(move || {
+        let mut raw: Saved = unsafe { std::mem::zeroed() };
+        raw.invocation.kind = 131;
+        raw.gpr[2] = 0x2400;
+        begin(&mut raw);
+        entered_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        end(&mut raw);
+    });
+    entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    closure::close_begin(0x1000, 0x2000, 0).unwrap();
+    // An expired budget cannot create a Waited receipt or erase the hold.
+    assert_eq!(
+        closure::wait_returned_until(0x2000, Instant::now()),
+        Err(closure::Violation::PublicationPending)
+    );
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let (complete_tx, complete_rx) = mpsc::channel();
+    let waiter = std::thread::spawn(move || {
+        complete_tx
+            .send(closure::wait_returned_until(0x2000, deadline))
+            .unwrap();
+    });
+    let ready_deadline = Instant::now() + Duration::from_secs(2);
+    while closure::PUBLICATION_WAITERS.load(Ordering::Acquire) == 0 {
+        assert!(
+            Instant::now() < ready_deadline,
+            "Wait observer did not reach its drain"
+        );
+        std::thread::yield_now();
+    }
+    // The publisher is explicitly parked; zero original jobs is not a drain.
+    assert_eq!(
+        closure::wait_returned(0x2000),
+        Err(closure::Violation::PublicationPending)
+    );
+    assert!(matches!(
+        complete_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
+    release_tx.send(()).unwrap();
+    publisher.join().unwrap();
+    assert_eq!(
+        complete_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+        Ok(())
+    );
+    waiter.join().unwrap();
+    closure::close_end(0x2000).unwrap();
+    let receipt = closure::world_closed(0x1000).unwrap();
+    assert!(receipt.publication_overlap && !receipt.complete());
+}
+
 pub(super) fn caller_override(rva: u64) -> Option<u64> {
     if !FLOW.load(Ordering::Acquire) {
         return None;

@@ -3,7 +3,7 @@
 //! normal return starts a new incarnation. Raw address or list-id reuse never
 //! does. This is not an all-producer seal and never makes native coverage true.
 use super::*;
-use std::sync::MutexGuard;
+use std::sync::{Condvar, MutexGuard};
 #[path = "native_closure_fixed.rs"]
 mod fixed;
 
@@ -17,6 +17,9 @@ const RELEASE_RETURN: u64 = 0x4a120e;
 static CORE: AtomicU64 = AtomicU64::new(0);
 static ACTIVE: AtomicU64 = AtomicU64::new(0);
 static LEDGER: Mutex<Ledger> = Mutex::new(Ledger::new());
+static CHANGED: Condvar = Condvar::new();
+#[cfg(test)]
+pub(super) static PUBLICATION_WAITERS: AtomicU64 = AtomicU64::new(0);
 static HOOKS: Mutex<Vec<OwnedHook>> = Mutex::new(Vec::new());
 pub(super) fn hook_entries_owned() -> bool {
     owns_hook_entries(&HOOKS, [ENTRY].len())
@@ -50,6 +53,16 @@ pub(in super::super) enum Violation {
     Exhausted,
     Poisoned,
     ReleaseList,
+    PublicationPending,
+    PublicationIdentity,
+}
+/// An admitted Add/Push frame for one observed manager incarnation. This
+/// retains its native publication window without granting a World epoch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Publication {
+    id: u64,
+    manager: u64,
+    serial: u64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Manager {
@@ -64,6 +77,7 @@ struct Manager {
     closing_submits: u32,
     released: bool,
     late_spawn: bool,
+    publication_overlap: bool,
 }
 /// Evidence for one natural World close. It records only observed entry
 /// events and is not a native shutdown certificate.
@@ -78,6 +92,7 @@ pub(in super::super) struct Receipt {
     pub repeated: bool,
     pub list_released: bool,
     pub late_spawn: bool,
+    pub publication_overlap: bool,
 }
 impl Receipt {
     /// Complete only for an incarnation whose 49C7C0 return was observed, that
@@ -91,11 +106,13 @@ impl Receipt {
             && self.init_observed
             && !self.repeated
             && !self.late_spawn
+            && !self.publication_overlap
             && (self.list == 0 || self.list_released)
     }
 }
 struct Ledger {
     managers: Vec<Manager>,
+    publications: Vec<Publication>,
     next: u64,
     unresolved: bool,
     // 4A1150 outside the tracked World close is recorded only. It is never a
@@ -115,6 +132,7 @@ impl Ledger {
     const fn new() -> Self {
         Self {
             managers: Vec::new(),
+            publications: Vec::new(),
             next: 0,
             unresolved: false,
             unowned: 0,
@@ -144,6 +162,9 @@ impl Ledger {
             .filter(|_| manager != 0)
             .ok_or(Violation::Unreadable)?;
         let existing = self.index(manager);
+        if self.publications.iter().any(|p| p.manager == manager) {
+            return Err(Violation::PublicationPending);
+        }
         if existing.is_some_and(|i| {
             matches!(
                 self.managers[i].phase,
@@ -165,6 +186,7 @@ impl Ledger {
             closing_submits: 0,
             released: false,
             late_spawn: false,
+            publication_overlap: false,
         };
         match existing {
             Some(i) => self.managers[i] = fresh,
@@ -192,6 +214,7 @@ impl Ledger {
                 closing_submits: 0,
                 released: false,
                 late_spawn: false,
+                publication_overlap: false,
             });
             return Ok(());
         };
@@ -208,6 +231,7 @@ impl Ledger {
         m.list = list;
         m.released = false;
         m.late_spawn = false;
+        m.publication_overlap = false;
         m.closing_submits = 0;
         Ok(())
     }
@@ -223,6 +247,33 @@ impl Ledger {
             }
             _ => Err(Violation::LateSubmit),
         }
+    }
+    fn begin_publication(&mut self, set: u64) -> Result<Option<Publication>, Violation> {
+        self.submit(set)?;
+        let Some(manager) = self.managers.iter().find(|m| m.set == set).copied() else {
+            return Ok(None);
+        };
+        self.healthy()?;
+        let publication = Publication {
+            id: self.bump()?,
+            manager: manager.manager,
+            serial: manager.serial,
+        };
+        self.publications.push(publication);
+        Ok(Some(publication))
+    }
+    fn finish_publication(&mut self, publication: Publication) -> Result<(), Violation> {
+        let index = self.publications.iter().position(|p| *p == publication);
+        if !self
+            .managers
+            .iter()
+            .any(|m| m.manager == publication.manager && m.serial == publication.serial)
+            || index.is_none()
+        {
+            return Err(Violation::PublicationIdentity);
+        }
+        self.publications.swap_remove(index.unwrap());
+        Ok(())
     }
     fn spawn(&mut self, list: u32) -> Result<(), Violation> {
         if list == 0 {
@@ -258,8 +309,16 @@ impl Ledger {
         }
     }
     fn wait_returned(&mut self, manager: u64) -> Result<(), Violation> {
+        self.healthy()?;
         match self.managers.iter_mut().find(|m| m.manager == manager) {
             Some(m) if m.phase == Phase::Closing => {
+                if self.publications.iter().any(|p| p.manager == manager) {
+                    // Native Wait has already returned while a publisher is
+                    // still active. Draining that frame later cannot prove
+                    // its work was included in that earlier native Wait.
+                    m.publication_overlap = true;
+                    return Err(Violation::PublicationPending);
+                }
                 m.phase = Phase::Waited;
                 Ok(())
             }
@@ -354,6 +413,7 @@ impl Ledger {
             repeated: m.repeated,
             list_released: m.released,
             late_spawn: m.late_spawn,
+            publication_overlap: m.publication_overlap,
         };
         #[cfg(test)]
         {
@@ -391,11 +451,23 @@ pub(in super::super) fn close_begin(world: u64, manager: u64, list: u32) -> Resu
     result
 }
 /// Host Add/Push set. Zero active managers is the cheap normal path.
+#[cfg(test)]
 pub(in super::super) fn submit(set: u64) -> Result<(), Violation> {
     if ACTIVE.load(Ordering::Acquire) == 0 {
         return Ok(());
     }
     ledger()?.submit(set)
+}
+pub(super) fn begin_publication(set: u64) -> Result<Option<Publication>, Violation> {
+    if ACTIVE.load(Ordering::Acquire) == 0 {
+        return Ok(None);
+    }
+    ledger()?.begin_publication(set)
+}
+pub(super) fn finish_publication(publication: Publication) -> Result<(), Violation> {
+    let result = ledger()?.finish_publication(publication);
+    CHANGED.notify_all();
+    result
 }
 /// Host Spawn/reissue list id (low 32 bits).
 pub(in super::super) fn spawn(list: u32) -> Result<(), Violation> {
@@ -405,8 +477,38 @@ pub(in super::super) fn spawn(list: u32) -> Result<(), Violation> {
     ledger()?.spawn(list)
 }
 /// Core 9922C0 normal return for this manager's set.
+#[cfg(test)]
 pub(in super::super) fn wait_returned(manager: u64) -> Result<(), Violation> {
     ledger()?.wait_returned(manager)
+}
+/// Complete the native Wait observation only after every already-admitted
+/// Add/Push frame for this manager has returned. Entry and the Waited fence
+/// use this same mutex, so no publisher can enter between zero and the fence.
+pub(in super::super) fn wait_returned_until(
+    manager: u64,
+    deadline: Instant,
+) -> Result<(), Violation> {
+    let mut l = ledger()?;
+    loop {
+        match l.wait_returned(manager) {
+            Err(Violation::PublicationPending) => {}
+            result => return result,
+        }
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|remaining| !remaining.is_zero())
+            .ok_or(Violation::PublicationPending)?;
+        #[cfg(test)]
+        PUBLICATION_WAITERS.fetch_add(1, Ordering::Release);
+        let waited = CHANGED.wait_timeout(l, remaining);
+        #[cfg(test)]
+        PUBLICATION_WAITERS.fetch_sub(1, Ordering::Release);
+        let (next, timeout) = waited.map_err(|_| Violation::Poisoned)?;
+        l = next;
+        if timeout.timed_out() {
+            return Err(Violation::PublicationPending);
+        }
+    }
 }
 /// Host FreeJobList normal return, its native return address and the RBX it
 /// was entered with. At 4A1209 that RBX is the manager being shut down.
@@ -441,6 +543,7 @@ pub(in super::super) fn unwound() {
     if let Ok(mut l) = LEDGER.lock() {
         l.unresolved = true;
     }
+    CHANGED.notify_all();
     unresolved();
 }
 #[track_caller]

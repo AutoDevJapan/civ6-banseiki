@@ -268,12 +268,13 @@ fn finish(raw: &mut Saved, exceptional: bool) {
                 }
                 fault();
             }
-            scheduler::closure::wait_returned(raw.invocation.manager)
+            let deadline = Instant::now() + Duration::from_secs(2);
+            scheduler::closure::wait_returned_until(raw.invocation.manager, deadline)
                 .unwrap_or_else(|v| scheduler::closure::fault(v));
             if FRAMES
                 .get()
                 .is_none_or(|f| f.pending_on_set(raw.invocation.manager + 0x400) != Ok(0))
-                || !super::close_executions(Instant::now() + Duration::from_secs(2))
+                || !super::close_executions(deadline)
             {
                 fault();
             }
