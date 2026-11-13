@@ -614,10 +614,7 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
             .iter()
             .any(|excluded| image.eq_ignore_ascii_case(excluded))
     });
-    if !image_matches {
-        return Ok(false);
-    }
-    Ok(true)
+    Ok(image_matches)
 }
 /// Multi-hour runs (200/300-turn health and tuning runs) yield to short PR checks (todo 139, 2026-10-01).
 pub fn is_long(items: &[String]) -> bool {
