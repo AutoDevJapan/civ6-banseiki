@@ -535,6 +535,14 @@ impl NativeFrames {
         Ok(s.jobs.values().filter(|j| j.set == set).count())
     }
 
+    fn task_available(s: &State, id: u64, task: u64) -> bool {
+        task != 0
+            && !s
+                .jobs
+                .iter()
+                .any(|(other, job)| *other != id && job.task == task)
+    }
+
     /// R8 is the original wrapper's checked output T. It may already have
     /// started/finished on another thread before Push returns.
     pub fn pushed(&self, id: u64, task: u64) -> Result<(), Error> {
@@ -545,6 +553,9 @@ impl NativeFrames {
                 && !j.push_returned
                 && task != 0
                 && (j.bound_task == 0 || j.bound_task == task)
+                // A destructor releases its lookup key before its normal
+                // return; that old Push may return after a new allocation.
+                && (j.retiring || j.execution == 3 || Self::task_available(&s, id, task))
         });
         if !valid {
             s.unresolved = true;
@@ -576,7 +587,7 @@ impl NativeFrames {
                     && !j.retiring
                     && !j.push_returned
             })
-            && !s.jobs.values().any(|j| j.task == task);
+            && Self::task_available(&s, id, task);
         if !valid {
             s.unresolved = true;
             return Err(Error::Unresolved);
@@ -873,6 +884,11 @@ impl NativeFrames {
             s.unresolved = true;
             return Err(Error::Unresolved);
         };
+        if !Self::task_available(&s, id, task) {
+            s.unresolved = true;
+            self.changed.notify_all();
+            return Err(Error::Unresolved);
+        }
         if s.jobs[&id].generation == 0 || Self::unproven(&s, thread::current().id()) {
             Self::taint_thread(&mut s, thread::current().id());
             s.jobs.get_mut(&id).unwrap().generation = 0;
@@ -903,7 +919,7 @@ impl NativeFrames {
         self.changed.notify_all();
         Ok(())
     }
-    /// A normal T destructor may settle an unexecuted, already bound T. A
+    /// After a normal T destructor returns, settle an unexecuted, bound T. A
     /// destructor before binding/while executing remains unresolved; timeout
     /// or dropped accounting never cancels a job.
     pub fn cancelled(&self, task: u64) -> Result<(), Error> {
@@ -921,7 +937,9 @@ impl NativeFrames {
             if j.push_returned {
                 s.jobs.remove(&id);
             } else {
-                s.jobs.get_mut(&id).unwrap().execution = 3;
+                let job = s.jobs.get_mut(&id).unwrap();
+                job.task = 0;
+                job.execution = 3;
             }
             self.changed.notify_all();
         }
@@ -1253,6 +1271,127 @@ mod tests {
         f.seal_and_wait(deadline()).unwrap();
         f.reopen().unwrap();
         assert_eq!(f.consumer_enter(123), Ok(None));
+    }
+
+    #[test]
+    fn host_task_identity_rejects_push_return_collision_across_sets() {
+        for returned in [false, true] {
+            for unproven in [false, true] {
+                let f = NativeFrames::new();
+                let first = f.issue_on_set(100, 10).unwrap();
+                f.bind_before_publication(first, 123).unwrap();
+                if returned {
+                    f.pushed(first, 123).unwrap();
+                }
+                let second = f.issue_on_set_with_provenance(200, 11, unproven).unwrap();
+                assert_eq!(
+                    f.pushed(second, 123),
+                    Err(Error::Unresolved),
+                    "Push return must not give two retained jobs the same live T"
+                );
+                assert_eq!(f.drain_status().unwrap().retained_jobs, 2);
+                assert!(!f.healthy());
+                assert_eq!(f.seal_and_wait(deadline()), Err(Error::Unresolved));
+            }
+        }
+    }
+
+    #[test]
+    fn host_task_identity_rejects_unbound_execution_of_another_live_task() {
+        for executing in [false, true] {
+            let f = NativeFrames::new();
+            let first = f.issue_on_set(100, 10).unwrap();
+            f.bind_before_publication(first, 123).unwrap();
+            f.pushed(first, 123).unwrap();
+            if executing {
+                assert_eq!(f.execute(123, 100), Ok(first));
+            }
+            let second = f.issue_on_set(200, 11).unwrap();
+            assert_eq!(
+                f.execute(123, 200),
+                Err(Error::Unresolved),
+                "an unbound P must not adopt a T retained for a different P"
+            );
+            assert_eq!(f.drain_status().unwrap().retained_jobs, 2);
+            assert!(!f.healthy());
+            assert_eq!(f.seal_and_wait(deadline()), Err(Error::Unresolved));
+            assert_ne!(first, second);
+        }
+    }
+
+    #[test]
+    fn host_task_identity_allows_distinct_unbound_execution_and_completion() {
+        let f = NativeFrames::new();
+        let first = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(first, 123).unwrap();
+        f.pushed(first, 123).unwrap();
+        let second = f.issue_on_set(200, 11).unwrap();
+        assert_eq!(f.execute(456, 200), Ok(second));
+        f.completed(second).unwrap();
+        f.pushed(second, 456).unwrap();
+        assert_eq!(f.pending_on_set(11), Ok(0));
+        assert_eq!(f.retire_task(123), Ok(Some(first)));
+        f.task_retired(first).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert!(f.healthy());
+    }
+
+    #[test]
+    fn host_task_identity_all_claim_routes_reject_a_retained_queue_node() {
+        for claim in 0..3 {
+            let f = NativeFrames::new();
+            let producer = f.begin_queue_producer().unwrap();
+            f.queue_allocated(producer, 123, None).unwrap();
+            f.queue_producer_returned(producer).unwrap();
+            let job = f.issue_on_set(200, 10).unwrap();
+            let result = match claim {
+                0 => f.bind_before_publication(job, 123),
+                1 => f.pushed(job, 123),
+                _ => f.execute(123, 200).map(|_| ()),
+            };
+            assert_eq!(result, Err(Error::Unresolved));
+            assert_eq!(f.drain_status().unwrap().retained_jobs, 2);
+            assert_eq!(f.seal_and_wait(deadline()), Err(Error::Unresolved));
+        }
+    }
+
+    #[test]
+    fn host_task_identity_reuse_after_free_does_not_reclaim_old_push_return() {
+        let f = NativeFrames::new();
+        let old = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(old, 123).unwrap();
+        assert_eq!(f.retire_task(123), Ok(Some(old)));
+        f.task_retired(old).unwrap();
+        let new = f.issue_on_set(200, 11).unwrap();
+        assert_eq!(f.execute(123, 200), Ok(new));
+        f.completed(new).unwrap();
+        f.pushed(old, 123).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(0));
+        assert_eq!(f.pending_on_set(11), Ok(1));
+        f.pushed(new, 123).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert!(f.healthy());
+    }
+
+    #[test]
+    fn host_task_identity_completed_cancel_releases_lookup_before_old_push_return() {
+        let f = NativeFrames::new();
+        let old = f.issue_on_set(100, 10).unwrap();
+        f.bind_before_publication(old, 123).unwrap();
+        f.cancelled(123).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(1));
+        let new = f.issue_on_set(200, 11).unwrap();
+        assert_eq!(f.execute(123, 200), Ok(new));
+        f.completed(new).unwrap();
+        f.pushed(old, 123).unwrap();
+        assert_eq!(f.pending_on_set(10), Ok(0));
+        assert_eq!(f.pending_on_set(11), Ok(1));
+        f.pushed(new, 123).unwrap();
+        f.seal_and_wait(deadline()).unwrap();
+        f.reopen().unwrap();
+        assert!(f.healthy());
     }
 
     #[test]
