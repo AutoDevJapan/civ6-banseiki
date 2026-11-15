@@ -589,11 +589,18 @@ pub fn request_owned_close(lease: &mut RecoveryLease, game: GameProcess) -> Resu
 pub struct PinnedGame {
     pub game: GameProcess,
     handle: isize,
+    #[cfg(test)]
+    close_observer: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 impl Drop for PinnedGame {
     fn drop(&mut self) {
         unsafe {
-            CloseHandle(self.handle as HANDLE);
+            let closed = CloseHandle(self.handle as HANDLE);
+            #[cfg(test)]
+            if let Some(observer) = &self.close_observer {
+                observer.store(closed != 0, std::sync::atomic::Ordering::SeqCst);
+            }
+            let _ = closed;
         }
     }
 }
@@ -613,6 +620,36 @@ impl PinnedGame {
         Ok(())
     }
 }
+
+#[cfg(test)]
+impl PinnedGame {
+    pub(crate) fn current_test_process_pin(
+        close_observer: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<Self> {
+        use windows_sys::Win32::System::Threading::{
+            GetCurrentProcessId, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        };
+        let pid = unsafe { GetCurrentProcessId() };
+        let access = PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE;
+        let handle = open_process(pid, access)?;
+        let game = GameProcess {
+            pid,
+            started: unix_start(handle.0)?,
+        };
+        let raw = handle.0 as isize;
+        std::mem::forget(handle);
+        Ok(Self {
+            game,
+            handle: raw,
+            close_observer: Some(close_observer),
+        })
+    }
+
+    pub(crate) fn test_raw_handle(&self) -> isize {
+        self.handle
+    }
+}
+
 pub fn pin_launched_process(floor: f64) -> Result<Option<PinnedGame>> {
     let Some((pid, started)) = crate::restart::single_civ_process(0.0)? else {
         return Ok(None);
@@ -626,7 +663,12 @@ pub fn pin_launched_process(floor: f64) -> Result<Option<PinnedGame>> {
     let handle = pinned(game, 0x1000)?;
     let raw = handle.0 as isize;
     std::mem::forget(handle);
-    Ok(Some(PinnedGame { game, handle: raw }))
+    Ok(Some(PinnedGame {
+        game,
+        handle: raw,
+        #[cfg(test)]
+        close_observer: None,
+    }))
 }
 
 pub fn pin_window_process(hwnd: isize, floor: f64) -> Result<PinnedGame> {
@@ -661,7 +703,12 @@ pub fn pin_window_process(hwnd: isize, floor: f64) -> Result<PinnedGame> {
     }
     let raw = handle.0 as isize;
     std::mem::forget(handle); // Ownership transferred to the process pin, including during pending termination.
-    Ok(PinnedGame { game, handle: raw })
+    Ok(PinnedGame {
+        game,
+        handle: raw,
+        #[cfg(test)]
+        close_observer: None,
+    })
 }
 pub fn loading_evidence(
     game: GameProcess,

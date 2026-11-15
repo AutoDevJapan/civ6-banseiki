@@ -1036,13 +1036,14 @@ mod bootstrap_launch_identity_tests {
     #[test]
     fn bootstrap_preflight_preserves_the_same_owned_os_process_handle() {
         use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-        use windows_sys::Win32::Foundation::{FILETIME, WAIT_TIMEOUT};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use windows_sys::Win32::Foundation::{FILETIME, HANDLE, WAIT_TIMEOUT};
         use windows_sys::Win32::System::Threading::{
-            GetCurrentProcessId, GetProcessId, GetProcessTimes, OpenProcess, WaitForSingleObject,
+            GetProcessId, GetProcessTimes, OpenProcess, WaitForSingleObject,
             PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
         };
 
-        fn created(handle: &OwnedHandle) -> (u32, u32) {
+        fn created(handle: HANDLE) -> (u32, u32) {
             let (mut birth, mut exit, mut kernel, mut user) = (
                 FILETIME::default(),
                 FILETIME::default(),
@@ -1050,57 +1051,93 @@ mod bootstrap_launch_identity_tests {
                 FILETIME::default(),
             );
             assert_ne!(
-                unsafe {
-                    GetProcessTimes(
-                        handle.as_raw_handle(),
-                        &mut birth,
-                        &mut exit,
-                        &mut kernel,
-                        &mut user,
-                    )
-                },
+                unsafe { GetProcessTimes(handle, &mut birth, &mut exit, &mut kernel, &mut user) },
                 0
             );
             (birth.dwHighDateTime, birth.dwLowDateTime)
         }
 
-        let pid = unsafe { GetCurrentProcessId() };
-        let raw = unsafe {
+        let released = Arc::new(AtomicBool::new(false));
+        let pin = crate::startup::PinnedGame::current_test_process_pin(released.clone()).unwrap();
+        let expected = pin.game;
+        let raw = pin.test_raw_handle() as HANDLE;
+        let birth = created(raw);
+        let peer_raw = unsafe {
             OpenProcess(
                 PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
                 0,
-                pid,
+                expected.pid,
             )
         };
-        assert!(!raw.is_null());
-        let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
-        let peer = handle.try_clone().unwrap();
-        let birth = created(&handle);
-        let mut pending = Some(handle);
+        assert!(!peer_raw.is_null());
+        let peer = unsafe { OwnedHandle::from_raw_handle(peer_raw) };
+        let mut backend = SystemBackend {
+            startup_pin: Some(pin),
+            ..Default::default()
+        };
+        backend.retain_bootstrap_launch();
+        assert!(backend.startup_pin.is_none(), "actual startup pin was not moved");
+        let retained = backend
+            .bootstrap_launch_pin
+            .as_ref()
+            .expect("actual SystemBackend omitted the handoff");
+        assert_eq!(retained.game, expected);
+        assert_eq!(retained.test_raw_handle() as HANDLE, raw);
+        assert!(!released.load(Ordering::SeqCst));
+        backend.release_startup_lock();
+        assert!(backend.startup_pin.is_none());
+        assert!(!released.load(Ordering::SeqCst));
         let consumer = take_bootstrap_launch(
-            &mut pending,
+            &mut backend.bootstrap_launch_pin,
             std::time::Instant::now() + std::time::Duration::from_secs(5),
             false,
         )
         .unwrap();
-        assert!(pending.is_none());
-        assert_eq!(consumer.as_raw_handle(), raw);
-        assert_eq!(unsafe { GetProcessId(consumer.as_raw_handle()) }, pid);
-        assert_eq!(created(&consumer), birth);
+        assert_eq!(consumer.game, expected);
+        assert_eq!(consumer.test_raw_handle() as HANDLE, raw);
+        assert_eq!(unsafe { GetProcessId(raw) }, expected.pid);
+        assert_eq!(created(raw), birth);
         assert!(take_bootstrap_launch(
-            &mut pending,
+            &mut backend.bootstrap_launch_pin,
             std::time::Instant::now() + std::time::Duration::from_secs(5),
             false,
         )
         .is_err());
+        assert!(!released.load(Ordering::SeqCst));
         drop(consumer);
+        assert!(released.load(Ordering::SeqCst), "actual CloseHandle did not succeed");
         assert_eq!(
             unsafe { WaitForSingleObject(peer.as_raw_handle(), 0) },
             WAIT_TIMEOUT
         );
-        assert_eq!(created(&peer), birth);
+        assert_eq!(created(peer.as_raw_handle()), birth);
+
+        let cancelled_release = Arc::new(AtomicBool::new(false));
+        backend.startup_pin = Some(
+            crate::startup::PinnedGame::current_test_process_pin(cancelled_release.clone())
+                .unwrap(),
+        );
+        backend.retain_bootstrap_launch();
+        backend.release_startup_lock();
+        assert!(!cancelled_release.load(Ordering::SeqCst));
+        let mut runner = Runner::with_backend(
+            json!({"steps":[]}),
+            PathBuf::new(),
+            PathBuf::new(),
+            PathBuf::new(),
+            4318,
+            Box::new(backend),
+            Arc::new(SystemClock),
+        );
+        let error = runner.restart_game(0.0).unwrap_err();
+        assert_eq!(error.message, "restart timeout must be finite and positive");
+        assert!(cancelled_release.load(Ordering::SeqCst));
+        assert_eq!(
+            unsafe { WaitForSingleObject(peer.as_raw_handle(), 0) },
+            WAIT_TIMEOUT
+        );
         eprintln!(
-            "BOOTSTRAP_LAUNCH_HANDLE status=EXECUTED subject=current_test_process; native_session=NOT_EXECUTED; game=NOT_EXECUTED"
+            "BOOTSTRAP_LAUNCH_HANDLE status=EXECUTED subject=current_test_process path=SystemBackend; native_session=NOT_EXECUTED; game=NOT_EXECUTED"
         );
     }
 }
@@ -2719,6 +2756,7 @@ impl Runner {
         )))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
+        self.backend.clear_bootstrap_launch();
         let acquisition_deadline = std::time::Instant::now()
             + std::time::Duration::from_secs_f64(self.remaining(deadline)?);
         let result = (|| {
@@ -2860,13 +2898,13 @@ impl Runner {
         )))
     }
     pub fn restart_game(&mut self, timeout: f64) -> Result<String> {
+        self.backend.clear_bootstrap_launch();
         if !timeout.is_finite() || timeout <= 0.0 {
             return Err(Error::input("restart timeout must be finite and positive"));
         }
         let deadline = self.clock.now() + timeout;
         let acquisition_deadline =
             std::time::Instant::now() + std::time::Duration::from_secs_f64(timeout);
-        self.backend.clear_bootstrap_launch();
         self.backend.startup_cancel_check()?;
         let result = (|| {
             self.backend
@@ -3572,7 +3610,8 @@ impl Runner {
     }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
         let result = self.run_step_with_frontend_check(step, || Ok(()));
-        if result.is_err() && text(step, "action") == "start_native_bootstrap" {
+        let action = text(step, "action");
+        if result.is_err() && matches!(action, "start_native_bootstrap" | "restart_game") {
             self.backend.clear_bootstrap_launch();
         }
         result

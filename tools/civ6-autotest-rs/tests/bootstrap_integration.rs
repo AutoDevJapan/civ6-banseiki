@@ -3,7 +3,7 @@ use civ6_autotest_rs::{
     runner::{Backend, Runner, SystemBackend},
     scenario::{validate_scenario, ACTIONS},
     time::SystemClock,
-    Error, Result,
+    Error, ErrorKind, Result,
 };
 use serde_json::json;
 
@@ -429,15 +429,17 @@ fn bootstrap_without_a_completed_launch_refuses_before_process_or_file_access() 
 fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
     use std::sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex,
     };
     struct Preflight {
         mode: u8,
         pending: Arc<AtomicBool>,
         starts: Arc<AtomicUsize>,
+        trace: Arc<Mutex<Vec<&'static str>>>,
     }
     impl Backend for Preflight {
         fn check_native_bootstrap(&mut self) -> Result<()> {
+            self.trace.lock().unwrap().push("health");
             if self.mode == 0 {
                 Err(Error::input("fixture existing session changed"))
             } else {
@@ -445,18 +447,22 @@ fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
             }
         }
         fn native_bootstrap_lease_budget(&self) -> Result<Option<f64>> {
+            self.trace.lock().unwrap().push("lease");
             Ok((self.mode == 1).then_some(1.0))
         }
         fn require_single_process(&mut self) -> Result<()> {
             Ok(())
         }
         fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            self.trace.lock().unwrap().push("states");
             Ok(vec!["FrontEnd".into()])
         }
         fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+            self.trace.lock().unwrap().push("frontend");
             Err(Error::input("fixture frontend refused"))
         }
         fn clear_bootstrap_launch(&mut self) {
+            self.trace.lock().unwrap().push("clear");
             self.pending.store(false, Ordering::SeqCst);
         }
         fn start_native_bootstrap(
@@ -465,6 +471,7 @@ fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
             _: &serde_json::Value,
             _: std::time::Instant,
         ) -> Result<()> {
+            self.trace.lock().unwrap().push("start");
             self.starts.fetch_add(1, Ordering::SeqCst);
             Err(Error::input("fixture unexpected controller start"))
         }
@@ -472,6 +479,7 @@ fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
     for mode in 0..5 {
         let pending = Arc::new(AtomicBool::new(true));
         let starts = Arc::new(AtomicUsize::new(0));
+        let trace = Arc::new(Mutex::new(Vec::new()));
         let temp = tempfile::tempdir().unwrap();
         let mut runner = Runner::with_backend(
             json!({"name":"bootstrap preflight cleanup","steps":[]}),
@@ -483,6 +491,7 @@ fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
                 mode,
                 pending: pending.clone(),
                 starts: starts.clone(),
+                trace: trace.clone(),
             }),
             std::sync::Arc::new(SystemClock),
         );
@@ -496,13 +505,50 @@ fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
         } else if mode == 4 {
             step["timeout"] = json!(0);
         }
-        runner.run_step(&step).unwrap_err();
+        let error = runner.run_step(&step).unwrap_err();
+        let (kind, message, stages): (ErrorKind, &str, &[&str]) = match mode {
+            0 => (
+                ErrorKind::Input,
+                "fixture existing session changed",
+                &["health", "clear"],
+            ),
+            1 => (
+                ErrorKind::Input,
+                "live_chain lease cannot cover bootstrap observation",
+                &["health", "lease", "clear"],
+            ),
+            2 => (
+                ErrorKind::Scenario,
+                "controller_seconds must cover telemetry and be at most 1800",
+                &["health", "clear"],
+            ),
+            3 => (
+                ErrorKind::Input,
+                "fixture frontend refused",
+                &["health", "lease", "states", "frontend", "clear"],
+            ),
+            _ => (
+                ErrorKind::Scenario,
+                "Step deadline expired",
+                &["health", "clear"],
+            ),
+        };
+        assert_eq!(error.kind, kind, "mode {mode} wrong failure kind");
+        assert_eq!(error.message, message, "mode {mode} wrong failure reason");
+        assert_eq!(
+            trace.lock().unwrap().as_slice(),
+            stages,
+            "mode {mode} did not reach its intended failure stage"
+        );
         assert!(!pending.load(Ordering::SeqCst));
         assert_eq!(starts.load(Ordering::SeqCst), 0);
+        trace.lock().unwrap().clear();
         pending.store(true, Ordering::SeqCst);
         runner
             .run_step(&json!({"action":"unknown_fixture_action"}))
             .unwrap_err();
         assert!(pending.load(Ordering::SeqCst));
+        assert!(!trace.lock().unwrap().contains(&"clear"));
+        assert!(!trace.lock().unwrap().contains(&"start"));
     }
 }
