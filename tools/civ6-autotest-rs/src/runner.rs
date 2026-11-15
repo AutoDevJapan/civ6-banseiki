@@ -86,6 +86,9 @@ pub trait Backend: Send {
         ))
     }
     fn release_startup_lock(&mut self) {}
+    /// Move existing identity for a later Prepare, without admitting native work.
+    fn retain_bootstrap_launch(&mut self) {}
+    fn clear_bootstrap_launch(&mut self) {}
     /// Process identity alone grants no permission. All game shutdown and
     /// relaunch operations use the same invoking-chain lease as recovery.
     fn authorize_game_control(&mut self, game: Option<crate::startup::GameProcess>) -> Result<()> {
@@ -888,6 +891,220 @@ mod reliability_failure_tests {
     }
 }
 
+// A successful startup is the only source of a bootstrap target. A current
+// process lookup can confirm that identity, but cannot replace or create it.
+fn verify_bootstrap_launch_process(
+    launched: crate::startup::GameProcess,
+    observed: Option<(u32, f64)>,
+) -> Result<()> {
+    if observed != Some((launched.pid, launched.started)) {
+        return Err(Error::input(
+            "bootstrap target differs from completed startup launch",
+        ));
+    }
+    Ok(())
+}
+
+fn take_bootstrap_launch<T>(
+    pending: &mut Option<T>,
+    preparation_deadline: std::time::Instant,
+    another_session: bool,
+) -> Result<T> {
+    let launch = pending.take();
+    if std::time::Instant::now() >= preparation_deadline {
+        return Err(Error::scenario(
+            "bootstrap preparation deadline expired before process discovery",
+        ));
+    }
+    if another_session {
+        return Err(Error::scenario("another native session is active"));
+    }
+    launch.ok_or_else(|| Error::input("bootstrap requires a completed startup launch pin"))
+}
+
+#[cfg(test)]
+mod bootstrap_launch_identity_tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_target_requires_the_same_completed_launch_process() {
+        let launched = crate::startup::GameProcess {
+            pid: 31,
+            started: 101.0,
+        };
+        verify_bootstrap_launch_process(launched, Some((31, 101.0))).unwrap();
+        for observed in [None, Some((32, 101.0)), Some((31, 102.0))] {
+            assert_eq!(
+                verify_bootstrap_launch_process(launched, observed)
+                    .unwrap_err()
+                    .message,
+                "bootstrap target differs from completed startup launch"
+            );
+        }
+    }
+
+    #[derive(Debug)]
+    struct CountedPin {
+        id: u32,
+        dropped: Arc<std::sync::atomic::AtomicUsize>,
+    }
+    impl Drop for CountedPin {
+        fn drop(&mut self) {
+            self.dropped
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn bootstrap_preflight_consumes_a_refused_pin_without_releasing_a_peer() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let peer_drops = Arc::new(AtomicUsize::new(0));
+        let peer = CountedPin {
+            id: 99,
+            dropped: peer_drops.clone(),
+        };
+        for (expired, active) in [(true, false), (false, true), (true, true)] {
+            let dropped = Arc::new(AtomicUsize::new(0));
+            let mut pending = Some(CountedPin {
+                id: 31,
+                dropped: dropped.clone(),
+            });
+            let now = std::time::Instant::now();
+            let deadline = if expired {
+                now - std::time::Duration::from_secs(1)
+            } else {
+                now + std::time::Duration::from_secs(5)
+            };
+            let error = take_bootstrap_launch(&mut pending, deadline, active).unwrap_err();
+            assert_eq!(
+                error.message,
+                if expired {
+                    "bootstrap preparation deadline expired before process discovery"
+                } else {
+                    "another native session is active"
+                }
+            );
+            assert!(pending.is_none());
+            assert_eq!(dropped.load(Ordering::SeqCst), 1);
+            let next = take_bootstrap_launch(
+                &mut pending,
+                std::time::Instant::now() + std::time::Duration::from_secs(5),
+                false,
+            )
+            .unwrap_err();
+            assert_eq!(
+                next.message,
+                "bootstrap requires a completed startup launch pin"
+            );
+            assert_eq!(dropped.load(Ordering::SeqCst), 1);
+            assert_eq!(peer_drops.load(Ordering::SeqCst), 0);
+        }
+        assert_eq!(peer.id, 99);
+        drop(peer);
+        assert_eq!(peer_drops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn bootstrap_preflight_transfers_one_pin_to_the_consumer() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let mut pending = Some(CountedPin {
+            id: 31,
+            dropped: dropped.clone(),
+        });
+        let consumer = take_bootstrap_launch(
+            &mut pending,
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert_eq!(consumer.id, 31);
+        assert!(pending.is_none());
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        assert!(take_bootstrap_launch(
+            &mut pending,
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+            false,
+        )
+        .is_err());
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        drop(consumer);
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bootstrap_preflight_preserves_the_same_owned_os_process_handle() {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+        use windows_sys::Win32::Foundation::{FILETIME, WAIT_TIMEOUT};
+        use windows_sys::Win32::System::Threading::{
+            GetCurrentProcessId, GetProcessId, GetProcessTimes, OpenProcess, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        };
+
+        fn created(handle: &OwnedHandle) -> (u32, u32) {
+            let (mut birth, mut exit, mut kernel, mut user) = (
+                FILETIME::default(),
+                FILETIME::default(),
+                FILETIME::default(),
+                FILETIME::default(),
+            );
+            assert_ne!(
+                unsafe {
+                    GetProcessTimes(
+                        handle.as_raw_handle(),
+                        &mut birth,
+                        &mut exit,
+                        &mut kernel,
+                        &mut user,
+                    )
+                },
+                0
+            );
+            (birth.dwHighDateTime, birth.dwLowDateTime)
+        }
+
+        let pid = unsafe { GetCurrentProcessId() };
+        let raw = unsafe {
+            OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                0,
+                pid,
+            )
+        };
+        assert!(!raw.is_null());
+        let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let peer = handle.try_clone().unwrap();
+        let birth = created(&handle);
+        let mut pending = Some(handle);
+        let consumer = take_bootstrap_launch(
+            &mut pending,
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert!(pending.is_none());
+        assert_eq!(consumer.as_raw_handle(), raw);
+        assert_eq!(unsafe { GetProcessId(consumer.as_raw_handle()) }, pid);
+        assert_eq!(created(&consumer), birth);
+        assert!(take_bootstrap_launch(
+            &mut pending,
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+            false,
+        )
+        .is_err());
+        drop(consumer);
+        assert_eq!(
+            unsafe { WaitForSingleObject(peer.as_raw_handle(), 0) },
+            WAIT_TIMEOUT
+        );
+        assert_eq!(created(&peer), birth);
+        eprintln!(
+            "BOOTSTRAP_LAUNCH_HANDLE status=EXECUTED subject=current_test_process; native_session=NOT_EXECUTED; game=NOT_EXECUTED"
+        );
+    }
+}
+
 #[derive(Default)]
 pub struct SystemBackend {
     steam_session: Option<crate::steam_dialog::Session>,
@@ -899,6 +1116,7 @@ pub struct SystemBackend {
     startup_lease: Option<crate::startup::RecoveryLease>,
     launch_floor: Option<f64>,
     startup_pin: Option<crate::startup::PinnedGame>,
+    bootstrap_launch_pin: Option<crate::startup::PinnedGame>,
     diagnostic_session: crate::startup::DiagnosticSession,
     native_trace: Option<crate::native_trace::Session>,
     native_bridge: Option<crate::native_bridge::Session>,
@@ -930,35 +1148,38 @@ impl Backend for SystemBackend {
         step: &Value,
         preparation_deadline: std::time::Instant,
     ) -> Result<()> {
-        if std::time::Instant::now() >= preparation_deadline {
-            return Err(Error::scenario(
-                "bootstrap preparation deadline expired before process discovery",
-            ));
-        }
-        if self.native_bootstrap.is_some()
+        let another_session = self.native_bootstrap.is_some()
             || self.native_bridge.is_some()
             || self.native_trace.is_some()
             || self.native_runtime.is_some()
-            || self.native_order.is_some()
-        {
-            return Err(Error::scenario("another native session is active"));
-        }
-        let (pid, started) = self
-            .single_process(0.0)?
-            .ok_or_else(|| Error::input("bootstrap game missing"))?;
+            || self.native_order.is_some();
+        // Take first: even a preflight refusal consumes only our handoff, and
+        // never stops the unrelated session that caused the refusal.
+        let launch = take_bootstrap_launch(
+            &mut self.bootstrap_launch_pin,
+            preparation_deadline,
+            another_session,
+        )?;
+        launch.check_remaining()?;
+        let observed = self.single_process(0.0)?;
+        verify_bootstrap_launch_process(launch.game, observed)?;
+        let (pid, started) = (launch.game.pid, launch.game.started);
         if std::time::Instant::now() >= preparation_deadline {
             return Err(Error::scenario(
                 "bootstrap preparation deadline expired after process discovery",
             ));
         }
-        self.native_bootstrap = Some(crate::native_bridge::Session::start_bootstrap(
+        let session = crate::native_bridge::Session::start_bootstrap(
             pid,
             started,
             output,
             step,
             Box::new(crate::restart::terminate_civ_process),
             preparation_deadline,
-        )?);
+        )?;
+        // Session owns an independently verified pin of this process. Keep the
+        // original launch pin alive until this scope publishes that Session.
+        self.native_bootstrap = Some(session);
         Ok(())
     }
     fn stop_native_bootstrap(&mut self) -> Result<Option<PathBuf>> {
@@ -1108,6 +1329,14 @@ impl Backend for SystemBackend {
     fn release_startup_lock(&mut self) {
         self.startup_lease = None;
         self.startup_pin = None;
+    }
+    fn retain_bootstrap_launch(&mut self) {
+        // Startup already supplied this handle. Missing or changed identity is
+        // a Prepare refusal, not a new requirement for an ordinary restart.
+        self.bootstrap_launch_pin = self.startup_pin.take();
+    }
+    fn clear_bootstrap_launch(&mut self) {
+        self.bootstrap_launch_pin = None;
     }
     fn check_startup_process(&mut self, game: crate::startup::GameProcess) -> Result<()> {
         let pin = self
@@ -1413,6 +1642,7 @@ impl Backend for SystemBackend {
         metrics::process_memory(pid)
     }
     fn launch(&mut self) -> Result<()> {
+        self.clear_bootstrap_launch();
         self.acquire_startup_lock()?;
         self.authorize_game_control(None)?;
         if self.single_process(0.0)?.is_some() {
@@ -2636,12 +2866,16 @@ impl Runner {
         let deadline = self.clock.now() + timeout;
         let acquisition_deadline =
             std::time::Instant::now() + std::time::Duration::from_secs_f64(timeout);
+        self.backend.clear_bootstrap_launch();
         self.backend.startup_cancel_check()?;
         let result = (|| {
             self.backend
                 .acquire_startup_lock_until(acquisition_deadline)?;
             self.restart_game_inner(self.remaining(deadline)?)
         })();
+        if result.is_err() {
+            self.backend.clear_bootstrap_launch();
+        }
         self.backend.release_startup_lock();
         result
     }
@@ -2940,6 +3174,11 @@ impl Runner {
         if self.owner_start {
             self.disconnect();
             self.wait_startup_frontend(self.remaining(deadline)?, false, attempt)?;
+            self.remaining(deadline)?;
+            self.backend.startup_cancel_check()?;
+            self.backend.retain_bootstrap_launch();
+            self.remaining(deadline)?;
+            self.backend.startup_cancel_check()?;
             return Ok(
                 "Civ VI relaunched via Steam; opening played to the end; main menu visible and ready".into(),
             );
@@ -2950,6 +3189,11 @@ impl Runner {
         }
         self.disconnect();
         self.wait_startup_frontend(self.remaining(deadline)?, true, attempt)?;
+        self.remaining(deadline)?;
+        self.backend.startup_cancel_check()?;
+        self.backend.retain_bootstrap_launch();
+        self.remaining(deadline)?;
+        self.backend.startup_cancel_check()?;
         Ok(
             "Civ VI relaunched via Steam; opening skipped with a left click; main menu visible and ready"
                 .into(),
@@ -3327,7 +3571,11 @@ impl Runner {
         Ok(Some(value))
     }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
-        self.run_step_with_frontend_check(step, || Ok(()))
+        let result = self.run_step_with_frontend_check(step, || Ok(()));
+        if result.is_err() && text(step, "action") == "start_native_bootstrap" {
+            self.backend.clear_bootstrap_launch();
+        }
+        result
     }
     pub fn run_frontend_setup_step_checked(
         &mut self,
@@ -4907,6 +5155,7 @@ impl Runner {
             self.result_passed = false;
             self.failure = Some(format!("bootstrap cleanup: {e}"));
         }
+        self.backend.clear_bootstrap_launch();
         if !self.result_passed && self.failure.is_none() {
             self.failure = Some("Run did not finish".into());
         }

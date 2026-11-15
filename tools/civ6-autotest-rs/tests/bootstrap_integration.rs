@@ -405,3 +405,104 @@ fn root_scenario_keeps_same_process_load_and_legacy_request_meaning() {
         .push(json!({"action":"start_native_paid_runtime","max_seconds":60}));
     assert!(validate_scenario(&second).is_err());
 }
+
+#[test]
+fn bootstrap_without_a_completed_launch_refuses_before_process_or_file_access() {
+    let mut backend = SystemBackend::default();
+    backend.retain_bootstrap_launch();
+    let dir = tempfile::tempdir().unwrap();
+    let error = backend
+        .start_native_bootstrap(
+            dir.path(),
+            &json!({}),
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.message,
+        "bootstrap requires a completed startup launch pin"
+    );
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn bootstrap_step_preflight_failure_clears_only_its_own_handoff() {
+    use std::sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc,
+    };
+    struct Preflight {
+        mode: u8,
+        pending: Arc<AtomicBool>,
+        starts: Arc<AtomicUsize>,
+    }
+    impl Backend for Preflight {
+        fn check_native_bootstrap(&mut self) -> Result<()> {
+            if self.mode == 0 {
+                Err(Error::input("fixture existing session changed"))
+            } else {
+                Ok(())
+            }
+        }
+        fn native_bootstrap_lease_budget(&self) -> Result<Option<f64>> {
+            Ok((self.mode == 1).then_some(1.0))
+        }
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["FrontEnd".into()])
+        }
+        fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+            Err(Error::input("fixture frontend refused"))
+        }
+        fn clear_bootstrap_launch(&mut self) {
+            self.pending.store(false, Ordering::SeqCst);
+        }
+        fn start_native_bootstrap(
+            &mut self,
+            _: &std::path::Path,
+            _: &serde_json::Value,
+            _: std::time::Instant,
+        ) -> Result<()> {
+            self.starts.fetch_add(1, Ordering::SeqCst);
+            Err(Error::input("fixture unexpected controller start"))
+        }
+    }
+    for mode in 0..5 {
+        let pending = Arc::new(AtomicBool::new(true));
+        let starts = Arc::new(AtomicUsize::new(0));
+        let temp = tempfile::tempdir().unwrap();
+        let mut runner = Runner::with_backend(
+            json!({"name":"bootstrap preflight cleanup","steps":[]}),
+            temp.path().into(),
+            temp.path().into(),
+            temp.path().into(),
+            4318,
+            Box::new(Preflight {
+                mode,
+                pending: pending.clone(),
+                starts: starts.clone(),
+            }),
+            std::sync::Arc::new(SystemClock),
+        );
+        let mut step = json!({
+            "action": "start_native_bootstrap",
+            "max_seconds": 60,
+            "timeout": 40,
+        });
+        if mode == 2 {
+            step["controller_seconds"] = json!(0);
+        } else if mode == 4 {
+            step["timeout"] = json!(0);
+        }
+        runner.run_step(&step).unwrap_err();
+        assert!(!pending.load(Ordering::SeqCst));
+        assert_eq!(starts.load(Ordering::SeqCst), 0);
+        pending.store(true, Ordering::SeqCst);
+        runner
+            .run_step(&json!({"action":"unknown_fixture_action"}))
+            .unwrap_err();
+        assert!(pending.load(Ordering::SeqCst));
+    }
+}
