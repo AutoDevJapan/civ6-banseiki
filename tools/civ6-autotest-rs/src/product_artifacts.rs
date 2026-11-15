@@ -113,7 +113,9 @@ fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 fn text<'a>(v: &'a Value, key: &str) -> Result<&'a str, String> {
-    v[key].as_str().ok_or_else(|| format!("{key} string required"))
+    v[key]
+        .as_str()
+        .ok_or_else(|| format!("{key} string required"))
 }
 fn hex(value: &str, length: usize) -> bool {
     value.len() == length && value.bytes().all(|b| b.is_ascii_hexdigit())
@@ -193,8 +195,11 @@ fn pe_exports(bytes: &[u8], dll: bool, required: &[(&str, bool)]) -> Result<Valu
         let offset = u32_at(bytes, s + 20)? as usize;
         at(bytes, offset, size)?;
         sections.push((
-            u32_at(bytes, s + 12)?, u32_at(bytes, s + 8)? as usize,
-            size, offset, u32_at(bytes, s + 36)?,
+            u32_at(bytes, s + 12)?,
+            u32_at(bytes, s + 8)? as usize,
+            size,
+            offset,
+            u32_at(bytes, s + 36)?,
         ));
     }
     let map = |rva: u32, length: usize| -> Result<(usize, bool), String> {
@@ -203,9 +208,17 @@ fn pe_exports(bytes: &[u8], dll: bool, required: &[(&str, bool)]) -> Result<Valu
             .find_map(|(base, virtual_size, size, offset, flags)| {
                 let relative = rva.checked_sub(*base)? as usize;
                 let end = relative.checked_add(length)?;
-                let mapped = if *virtual_size == 0 { *size } else { *virtual_size };
+                let mapped = if *virtual_size == 0 {
+                    *size
+                } else {
+                    *virtual_size
+                };
                 (end <= *size && end <= mapped)
-                    .then(|| offset.checked_add(relative).map(|p| (p, flags & 0x2000_0000 != 0)))
+                    .then(|| {
+                        offset
+                            .checked_add(relative)
+                            .map(|p| (p, flags & 0x2000_0000 != 0))
+                    })
                     .flatten()
             })
             .ok_or_else(|| "required PE RVA is not backed by image bytes".into())
@@ -253,18 +266,23 @@ fn pe_exports(bytes: &[u8], dll: bool, required: &[(&str, bool)]) -> Result<Valu
     }
     let mut exports = Vec::new();
     for (name, function) in required {
-        let rva = *found.get(name).ok_or_else(|| format!("required export missing: {name}"))?;
+        let rva = *found
+            .get(name)
+            .ok_or_else(|| format!("required export missing: {name}"))?;
         if rva >= export_rva && rva < export_end {
             return Err("forwarded export cannot satisfy the normal product ABI".into());
         }
         let executable = if *function {
             map(rva, 1)?.1
         } else {
-            sections.iter().find_map(|(base, virtual_size, raw_size, _, flags)| {
-                let relative = rva.checked_sub(*base)? as usize;
-                (relative.checked_add(8)? <= (*virtual_size).max(*raw_size))
-                    .then_some(flags & 0x2000_0000 != 0)
-            }).ok_or("data export is outside its virtual section")?
+            sections
+                .iter()
+                .find_map(|(base, virtual_size, raw_size, _, flags)| {
+                    let relative = rva.checked_sub(*base)? as usize;
+                    (relative.checked_add(8)? <= (*virtual_size).max(*raw_size))
+                        .then_some(flags & 0x2000_0000 != 0)
+                })
+                .ok_or("data export is outside its virtual section")?
         };
         if executable != *function {
             return Err(format!("required export code/data kind differs: {name}"));
@@ -276,15 +294,30 @@ fn pe_exports(bytes: &[u8], dll: bool, required: &[(&str, bool)]) -> Result<Valu
 
 fn phase_argv(phase: &str) -> Vec<&'static str> {
     let mut command = vec![
-        "cargo", "+1.95.0", "build", "--locked", "--release",
-        "--manifest-path", "tools/Cargo.toml",
+        "cargo",
+        "+1.95.0",
+        "build",
+        "--locked",
+        "--release",
+        "--manifest-path",
+        "tools/Cargo.toml",
     ];
     if phase == "bins" {
-        command.extend(["--workspace", "--bins", "--message-format=json-render-diagnostics"]);
+        command.extend([
+            "--workspace",
+            "--bins",
+            "--message-format=json-render-diagnostics",
+        ]);
     } else {
         command.extend([
-            "--package", "civ6-native-bridge-rs", "--package", "civ6-bootstrap-rs",
-            "--lib", "--target", TARGET, "--message-format=json-render-diagnostics",
+            "--package",
+            "civ6-native-bridge-rs",
+            "--package",
+            "civ6-bootstrap-rs",
+            "--lib",
+            "--target",
+            TARGET,
+            "--message-format=json-render-diagnostics",
         ]);
     }
     command
@@ -319,7 +352,9 @@ fn validate_context(context: &Value, completion: &Value, context_sha: &str) -> R
     for phase in ["bins", "dlls"] {
         let binding = &completion["commands"][phase]["compiler_environment"];
         let compiler = text(&context["compiler"], "rustc_path")?;
-        let environment = binding.as_object().ok_or("actual compiler environment absent")?;
+        let environment = binding
+            .as_object()
+            .ok_or("actual compiler environment absent")?;
         if compiler.is_empty()
             || environment.len() != 9
             || binding["RUSTC"] != compiler
@@ -327,7 +362,8 @@ fn validate_context(context: &Value, completion: &Value, context_sha: &str) -> R
             || binding["RUSTC_WRAPPER"] != ""
             || binding["RUSTC_WORKSPACE_WRAPPER"] != ""
             || binding["CARGO_ENCODED_RUSTFLAGS"] != ""
-            || !environment.contains_key("RUSTFLAGS") || !binding["RUSTFLAGS"].is_null()
+            || !environment.contains_key("RUSTFLAGS")
+            || !binding["RUSTFLAGS"].is_null()
             || !environment.contains_key("CARGO_BUILD_RUSTFLAGS")
             || !binding["CARGO_BUILD_RUSTFLAGS"].is_null()
             || !environment.contains_key("CARGO_BUILD_RUSTC_WRAPPER")
@@ -346,12 +382,17 @@ fn validate_context(context: &Value, completion: &Value, context_sha: &str) -> R
             || completion["commands"][phase]["stderr_eof"] != true
             || completion["commands"][phase]["root_exit_observed"] != true
             || completion["commands"][phase]["stop_reason"] != "completed"
-            || completion["commands"][phase]["profile_environment"] != context["inputs"]["profile_environment"]
+            || completion["commands"][phase]["profile_environment"]
+                != context["inputs"]["profile_environment"]
             || !hex(text(&completion["commands"][phase], "stderr_sha256")?, 64)
-            || completion["commands"][phase]["native_pid"].as_u64().is_none_or(|n| n == 0)
+            || completion["commands"][phase]["native_pid"]
+                .as_u64()
+                .is_none_or(|n| n == 0)
             || text(&completion["commands"][phase], "native_started_utc")?.is_empty()
         {
-            return Err(format!("actual {phase} command/exit does not match pre-build plan"));
+            return Err(format!(
+                "actual {phase} command/exit does not match pre-build plan"
+            ));
         }
     }
     for field in ["configs", "vendors"] {
@@ -383,11 +424,16 @@ fn public_file_inventory(value: &Value) -> Result<(Value, String), String> {
         let name = text(entry, "name")?;
         let sha = text(entry, "sha256")?;
         let bytes = entry["bytes"].as_u64().ok_or("input byte length absent")?;
-        if name.is_empty() || name.len() > 4096
-            || name.contains('\\') || name.contains(':')
+        if name.is_empty()
+            || name.len() > 4096
+            || name.contains('\\')
+            || name.contains(':')
             || name.chars().any(char::is_control)
-            || name.split('/').any(|part| part.is_empty() || part == "." || part == "..")
-            || bytes > 512 * 1024 * 1024 || !hex(sha, 64)
+            || name
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == "..")
+            || bytes > 512 * 1024 * 1024
+            || !hex(sha, 64)
             || !names.insert(name)
         {
             return Err("input file name/hash/length is invalid or duplicated".into());
@@ -417,9 +463,13 @@ fn public_profile_environment(value: &Value) -> Result<Value, String> {
     let mut rows = Vec::new();
     for entry in entries {
         let name = text(entry, "name")?;
-        let present = entry["present"].as_bool().ok_or("profile presence must be boolean")?;
+        let present = entry["present"]
+            .as_bool()
+            .ok_or("profile presence must be boolean")?;
         if !name.starts_with("CARGO_PROFILE_")
-            || !name.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
             || !names.insert(name)
             || (present && !entry["sha256"].as_str().is_some_and(|s| hex(s, 64)))
             || (!present && !entry["sha256"].is_null())
@@ -428,7 +478,10 @@ fn public_profile_environment(value: &Value) -> Result<Value, String> {
         }
         rows.push(json!({"name":name,"present":present,"sha256":entry["sha256"]}));
     }
-    if PROFILE_DEFAULT_KEYS.iter().any(|name| !names.contains(name)) {
+    if PROFILE_DEFAULT_KEYS
+        .iter()
+        .any(|name| !names.contains(name))
+    {
         return Err("profile default/absence facts incomplete".into());
     }
     Ok(json!(rows))
@@ -441,7 +494,11 @@ fn public_inputs(inputs: &Value) -> Result<Value, String> {
         return Err("pre-build source inventory is incomplete".into());
     }
     let (source_files, source_digest) = public_file_inventory(&inputs["source_files"])?;
-    if source_files.as_array().unwrap().iter().any(|f| f["git_blob_sha1"].is_null())
+    if source_files
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f["git_blob_sha1"].is_null())
         || inputs["source_inventory_sha256"] != source_digest
         || inputs["source_file_count"].as_u64()
             != Some(source_files.as_array().unwrap().len() as u64)
@@ -453,7 +510,8 @@ fn public_inputs(inputs: &Value) -> Result<Value, String> {
     for item in inputs["configs"].as_array().ok_or("config inputs absent")? {
         let scope = text(item, "scope")?;
         let name = text(item, "name")?;
-        let ancestor = scope.strip_prefix("ancestor-")
+        let ancestor = scope
+            .strip_prefix("ancestor-")
             .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
         if !(scope == "cargo-home" || ancestor)
             || !matches!(name, "config" | "config.toml")
@@ -463,15 +521,21 @@ fn public_inputs(inputs: &Value) -> Result<Value, String> {
         {
             return Err("invalid or duplicate public config facts".into());
         }
-        configs.push(json!({"scope":scope,"name":name,"sha256":item["sha256"],"bytes":item["bytes"]}));
+        configs
+            .push(json!({"scope":scope,"name":name,"sha256":item["sha256"],"bytes":item["bytes"]}));
     }
     let mut vendors = Vec::new();
     for item in inputs["vendors"].as_array().ok_or("vendor inputs absent")? {
         let name = text(item, "name")?;
         let version = text(item, "version")?;
-        if name.is_empty() || version.is_empty()
-            || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
-            || !version.bytes().all(|b| b.is_ascii_alphanumeric() || b".-+".contains(&b))
+        if name.is_empty()
+            || version.is_empty()
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+            || !version
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".-+".contains(&b))
             || item["source_kind"] != "crates.io"
             || !hex(text(item, "sha256")?, 64)
             || !hex(text(item, "manifest_sha256")?, 64)
@@ -490,13 +554,17 @@ fn public_inputs(inputs: &Value) -> Result<Value, String> {
             return Err("dependency storage/checksum/input facts differ".into());
         }
         let facts = files.as_array().unwrap();
-        if !facts.iter().any(|f| f["name"] == "Cargo.toml"
-            && f["sha256"] == item["manifest_sha256"])
+        if !facts
+            .iter()
+            .any(|f| f["name"] == "Cargo.toml" && f["sha256"] == item["manifest_sha256"])
             || !(checksum.is_null() && !facts.iter().any(|f| f["name"] == ".cargo-checksum.json")
-                || facts.iter().any(|f| f["name"] == ".cargo-checksum.json"
-                    && f["sha256"] == *checksum))
+                || facts
+                    .iter()
+                    .any(|f| f["name"] == ".cargo-checksum.json" && f["sha256"] == *checksum))
         {
-            return Err("dependency manifest/checksum facts are not in the complete inventory".into());
+            return Err(
+                "dependency manifest/checksum facts are not in the complete inventory".into(),
+            );
         }
         vendors.push(json!({
             "name":name,"version":version,"source_kind":"crates.io","storage_kind":storage,
@@ -508,7 +576,10 @@ fn public_inputs(inputs: &Value) -> Result<Value, String> {
         return Err("vendor source facts absent".into());
     }
     let mut environment = Vec::new();
-    for item in inputs["environment"].as_array().ok_or("build environment facts absent")? {
+    for item in inputs["environment"]
+        .as_array()
+        .ok_or("build environment facts absent")?
+    {
         let name = text(item, "name")?;
         if !matches!(
             name,
@@ -539,14 +610,23 @@ fn public_compiler(context: &Value) -> Result<Value, String> {
     let verbose = text(compiler, "rustc_verbose")?;
     if compiler["toolchain"] != "1.95.0"
         || !text(compiler, "cargo_version")?.starts_with("cargo 1.95.0 ")
-        || !text(compiler, "cargo_version")?.bytes()
+        || !text(compiler, "cargo_version")?
+            .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b" .()-".contains(&b))
         || verbose.lines().any(|line| {
-            line.contains('/') || line.contains('\\')
+            line.contains('/')
+                || line.contains('\\')
                 || ![
-                    "rustc ", "binary: rustc", "commit-hash:", "commit-date:",
-                    "host:", "release:", "LLVM version:",
-                ].iter().any(|prefix| line.starts_with(prefix))
+                    "rustc ",
+                    "binary: rustc",
+                    "commit-hash:",
+                    "commit-date:",
+                    "host:",
+                    "release:",
+                    "LLVM version:",
+                ]
+                .iter()
+                .any(|prefix| line.starts_with(prefix))
         })
     {
         return Err("compiler facts contain unsupported or private data".into());
@@ -627,7 +707,8 @@ fn selected_record(
     if package_id.is_empty()
         || Path::new(text(package, "manifest_path")?)
             .canonicalize()
-            .map_err(|e| e.to_string())? != expected_manifest
+            .map_err(|e| e.to_string())?
+            != expected_manifest
     {
         return Err("workspace package identity/manifest differs from its role".into());
     }
@@ -636,7 +717,10 @@ fn selected_record(
         .filter(|(r, _)| r["package_id"] == package["id"] && r["target"]["name"] == role.target)
         .collect();
     if matches.len() != 1 {
-        return Err(format!("one actual compiler-artifact is required for {}", role.name));
+        return Err(format!(
+            "one actual compiler-artifact is required for {}",
+            role.name
+        ));
     }
     let (record, raw_sha) = matches[0];
     let manifest = Path::new(text(record, "manifest_path")?)
@@ -646,13 +730,22 @@ fn selected_record(
     let version = text(package, "version")?;
     let valid_kinds = |values: &Value| {
         values.as_array().is_some_and(|v| {
-            !v.is_empty() && v.len() <= 2
-                && v.iter().all(|k| if role.dll { k == "cdylib" || k == "rlib" } else { k == "bin" })
+            !v.is_empty()
+                && v.len() <= 2
+                && v.iter().all(|k| {
+                    if role.dll {
+                        k == "cdylib" || k == "rlib"
+                    } else {
+                        k == "bin"
+                    }
+                })
         })
     };
     if manifest != expected_manifest
         || version.is_empty()
-        || !version.bytes().all(|b| b.is_ascii_alphanumeric() || b".-+".contains(&b))
+        || !version
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b".-+".contains(&b))
         || record["fresh"].as_bool().is_none()
         || !valid_kinds(&record["target"]["kind"])
         || !valid_kinds(&record["target"]["crate_types"])
@@ -666,14 +759,21 @@ fn selected_record(
     {
         return Err("Cargo package/target/kind is not the required release software".into());
     }
-    let expected = root.join(role.relative).canonicalize().map_err(|e| e.to_string())?;
-    let names = record["filenames"].as_array().ok_or("Cargo filenames absent")?;
+    let expected = root
+        .join(role.relative)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let names = record["filenames"]
+        .as_array()
+        .ok_or("Cargo filenames absent")?;
     let mut matching = 0;
     for name in names {
         let path = Path::new(name.as_str().ok_or("Cargo filename is not text")?);
         if path.file_name() == Some(std::ffi::OsStr::new(role.name)) {
             if path.canonicalize().map_err(|e| e.to_string())? != expected {
-                return Err("Cargo output path differs from the source-bound release target".into());
+                return Err(
+                    "Cargo output path differs from the source-bound release target".into(),
+                );
             }
             matching += 1;
         }
@@ -695,10 +795,15 @@ fn selected_record(
         return Err("actual Cargo profile is incomplete".into());
     }
     let mut features = BTreeSet::new();
-    for value in record["features"].as_array().ok_or("Cargo features absent")? {
+    for value in record["features"]
+        .as_array()
+        .ok_or("Cargo features absent")?
+    {
         let feature = value.as_str().ok_or("Cargo feature must be text")?;
         if feature.is_empty()
-            || !feature.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.+".contains(&b))
+            || !feature
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_.+".contains(&b))
             || !features.insert(feature)
         {
             return Err("Cargo feature facts are invalid or duplicated".into());
@@ -710,7 +815,8 @@ fn selected_record(
         }
     } else if Path::new(text(record, "executable")?)
         .canonicalize()
-        .map_err(|e| e.to_string())? != expected
+        .map_err(|e| e.to_string())?
+        != expected
     {
         return Err("actual Cargo executable differs from its selected filename".into());
     }
@@ -757,8 +863,7 @@ pub fn write_bundle(
     let context_bytes = read(context_path)?;
     let context: Value = serde_json::from_slice(&context_bytes).map_err(|e| e.to_string())?;
     let completion_bytes = read(completion_path)?;
-    let completion: Value =
-        serde_json::from_slice(&completion_bytes).map_err(|e| e.to_string())?;
+    let completion: Value = serde_json::from_slice(&completion_bytes).map_err(|e| e.to_string())?;
     validate_context(&context, &completion, &digest(&context_bytes))?;
     let inputs = public_inputs(&context["inputs"])?;
     let after_inputs = public_inputs(&completion["inputs"])?;
@@ -784,7 +889,9 @@ pub fn write_bundle(
     let root = PathBuf::from(text(&context, "source_root")?)
         .canonicalize()
         .map_err(|e| e.to_string())?;
-    let packages = context["workspace_packages"].as_array().ok_or("workspace packages absent")?;
+    let packages = context["workspace_packages"]
+        .as_array()
+        .ok_or("workspace packages absent")?;
     let mut payloads = Vec::new();
     let mut rows = Vec::new();
     let mut records = Vec::new();
@@ -805,12 +912,11 @@ pub fn write_bundle(
         records.push(selected);
         payloads.push((role.name, bytes));
     }
-    let cargo_metadata = serde_json::to_vec_pretty(
-        &json!({
-            "schema":"civ6-selected-cargo-artifacts/v1","records":records,
-            "inputs_before":inputs,"inputs_after":after_inputs,
-        }),
-    ).map_err(|e| e.to_string())?;
+    let cargo_metadata = serde_json::to_vec_pretty(&json!({
+        "schema":"civ6-selected-cargo-artifacts/v1","records":records,
+        "inputs_before":inputs,"inputs_after":after_inputs,
+    }))
+    .map_err(|e| e.to_string())?;
     let manifest = json!({
         "schema":"civ6-windows-product-artifacts/v1",
         "repository":"AutoDevJapan/civ6-banseiki","repository_id":1392152644u64,
@@ -835,10 +941,7 @@ pub fn write_bundle(
         &output.join("manifest.json"),
         &serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
     )?;
-    create(
-        &output.join("cargo-artifacts.json"),
-        &cargo_metadata,
-    )?;
+    create(&output.join("cargo-artifacts.json"), &cargo_metadata)?;
     Ok(())
 }
 
@@ -883,7 +986,11 @@ mod tests {
         put32(&mut b, 0x400 + 36, 0x2300);
         let mut name = 0x800;
         for (i, (text, function)) in exports.iter().enumerate() {
-            let rva = if *function { 0x1000 + i * 8 } else { 0x2900 + i * 8 };
+            let rva = if *function {
+                0x1000 + i * 8
+            } else {
+                0x2900 + i * 8
+            };
             put32(&mut b, 0x500 + i * 4, rva as u32);
             put32(&mut b, 0x600 + i * 4, (name - 0x400 + 0x2000) as u32);
             put16(&mut b, 0x700 + i * 2, i as u16);
@@ -905,7 +1012,9 @@ mod tests {
             let root = dir.path().canonicalize().unwrap();
             let mut packages = Vec::new();
             for package in [
-                "civ6-autotest-rs", "civ6-native-bridge-rs", "civ6-bootstrap-rs",
+                "civ6-autotest-rs",
+                "civ6-native-bridge-rs",
+                "civ6-bootstrap-rs",
             ] {
                 let manifest = root.join("tools").join(package).join("Cargo.toml");
                 fs::create_dir_all(manifest.parent().unwrap()).unwrap();
@@ -921,7 +1030,11 @@ mod tests {
                 let path = root.join(role.relative);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();
                 fs::write(&path, image(role.dll, role.exports)).unwrap();
-                let kind = if role.dll { vec!["cdylib", "rlib"] } else { vec!["bin"] };
+                let kind = if role.dll {
+                    vec!["cdylib", "rlib"]
+                } else {
+                    vec!["bin"]
+                };
                 records.get_mut(role.phase).unwrap().push(json!({
                     "reason":"compiler-artifact","package_id":format!("fixture:{}",role.package),
                     "manifest_path":root.join(role.manifest),
@@ -943,8 +1056,10 @@ mod tests {
             let dependency_files = json!([{"name":"Cargo.toml","bytes":3,"sha256":digest(b"dep")}]);
             let source_digest = public_file_inventory(&source_files).unwrap().1;
             let dependency_digest = public_file_inventory(&dependency_files).unwrap().1;
-            let profile_environment: Vec<_> = PROFILE_DEFAULT_KEYS.iter()
-                .map(|name| json!({"name":name,"present":false,"sha256":null})).collect();
+            let profile_environment: Vec<_> = PROFILE_DEFAULT_KEYS
+                .iter()
+                .map(|name| json!({"name":name,"present":false,"sha256":null}))
+                .collect();
             let inputs = json!({
                 "cargo_lock_sha256":"a".repeat(64),"source_inventory_sha256":source_digest,
                 "source_file_count":3,"configs":[],"profile_environment":profile_environment,
@@ -1005,7 +1120,13 @@ mod tests {
                         "stdout_eof":true,"stderr_eof":true,"root_exit_observed":true,"stop_reason":"completed"},
                 },
             });
-            Self { _dir: dir, root, context, completion, records }
+            Self {
+                _dir: dir,
+                root,
+                context,
+                completion,
+                records,
+            }
         }
         fn package(&mut self) -> Result<PathBuf, String> {
             let context_bytes = serde_json::to_vec(&self.context).unwrap();
@@ -1027,11 +1148,15 @@ mod tests {
             fs::write(
                 self.root.join("completion.json"),
                 serde_json::to_vec(&self.completion).unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
             let output = self.root.join("bundle");
             write_bundle(
-                &self.root.join("context.json"), &self.root.join("bins.jsonl"),
-                &self.root.join("dlls.jsonl"), &self.root.join("completion.json"), &output,
+                &self.root.join("context.json"),
+                &self.root.join("bins.jsonl"),
+                &self.root.join("dlls.jsonl"),
+                &self.root.join("completion.json"),
+                &output,
             )?;
             Ok(output)
         }
@@ -1046,10 +1171,16 @@ mod tests {
             "filenames":["C:/private/dependency/not-opened.dll"],"fresh":true,
         }));
         let output = f.package().unwrap();
-        let names: BTreeSet<_> = fs::read_dir(&output).unwrap().map(|e| e.unwrap().file_name()).collect();
+        let names: BTreeSet<_> = fs::read_dir(&output)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
         assert_eq!(names.len(), 7);
         for role in ROLES {
-            assert_eq!(fs::read(output.join(role.name)).unwrap(), fs::read(f.root.join(role.relative)).unwrap());
+            assert_eq!(
+                fs::read(output.join(role.name)).unwrap(),
+                fs::read(f.root.join(role.relative)).unwrap()
+            );
         }
         let bytes = fs::read(output.join("manifest.json")).unwrap();
         let m: Value = serde_json::from_slice(&bytes).unwrap();
@@ -1060,19 +1191,30 @@ mod tests {
         assert_eq!(m["cargo_artifacts_sha256"], digest(cargo.as_bytes()));
         let selected: Value = serde_json::from_str(&cargo).unwrap();
         assert_eq!(selected["inputs_before"], selected["inputs_after"]);
-        assert_eq!(selected["inputs_before"]["source_files"].as_array().unwrap().len(), 3);
+        assert_eq!(
+            selected["inputs_before"]["source_files"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
         assert_eq!(selected["records"].as_array().unwrap().len(), 5);
-        assert!(selected["records"][0]["package"]["id_sha256"].as_str().is_some_and(|s| hex(s, 64)));
+        assert!(selected["records"][0]["package"]["id_sha256"]
+            .as_str()
+            .is_some_and(|s| hex(s, 64)));
         assert_eq!(selected["records"][0]["profile"]["opt_level"], "3");
         assert!(!String::from_utf8(bytes).unwrap().contains("C:/private"));
         assert!(!cargo.contains("C:/private"));
         assert!(!cargo.contains(&f.root.to_string_lossy().to_string()));
-        assert!(f.package().is_err(), "an existing bundle must never be overwritten");
+        assert!(
+            f.package().is_err(),
+            "an existing bundle must never be overwritten"
+        );
     }
 
     #[test]
     fn product_bundle_rejects_changed_inputs_source_command_or_failed_collection() {
-        for mode in 0..14 {
+        for mode in 0..15 {
             let mut f = Fixture::new();
             match mode {
                 0 => f.completion["source_sha"] = json!("f".repeat(40)),
@@ -1083,21 +1225,66 @@ mod tests {
                 5 => f.context["compiler"]["host"] = json!("wrong-host"),
                 6 => f.completion["commands"]["bins"]["native_pid"] = json!(0),
                 7 => f.completion["commands"]["bins"]["native_started_utc"] = Value::Null,
-                8 => f.completion["commands"]["bins"]["compiler_environment"]["RUSTC"] =
-                    json!("a different compiler"),
-                9 => f.completion["commands"]["bins"]["compiler_environment"]["RUSTC_WRAPPER"] =
-                    json!("a wrapper"),
-                10 => f.completion["commands"]["bins"]["compiler_environment"]
-                    ["CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER"] = json!("a workspace wrapper"),
-                11 => f.completion["commands"]["bins"]["compiler_environment"]
-                    ["CARGO_ENCODED_RUSTFLAGS"] = json!("--other-flags"),
-                12 => f.completion["commands"]["bins"]["compiler_environment"]
-                    ["RUSTFLAGS"] = json!("--other-flags"),
-                _ => f.completion["commands"]["bins"]["compiler_environment"]
-                    ["CARGO_BUILD_RUSTFLAGS"] = json!("--other-flags"),
+                8 => {
+                    f.completion["commands"]["bins"]["compiler_environment"]["RUSTC"] =
+                        json!("a different compiler")
+                }
+                9 => {
+                    f.completion["commands"]["bins"]["compiler_environment"]["RUSTC_WRAPPER"] =
+                        json!("a wrapper")
+                }
+                10 => {
+                    f.completion["commands"]["bins"]["compiler_environment"]
+                        ["CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER"] = json!("a workspace wrapper")
+                }
+                11 => {
+                    f.completion["commands"]["bins"]["compiler_environment"]
+                        ["CARGO_ENCODED_RUSTFLAGS"] = json!("--other-flags")
+                }
+                12 => {
+                    f.completion["commands"]["bins"]["compiler_environment"]["RUSTFLAGS"] =
+                        json!("--other-flags")
+                }
+                13 => {
+                    f.completion["commands"]["bins"]["compiler_environment"]
+                        ["CARGO_BUILD_RUSTFLAGS"] = json!("--other-flags")
+                }
+                _ => {
+                    f.completion["schema"] = json!("civ6-private-native-capture/v1");
+                    f.completion["result_save_state"] = json!("requires_receipt");
+                    f.completion["collection_complete"] = json!(true);
+                }
             }
             assert!(f.package().is_err(), "mode {mode}");
             assert!(!f.root.join("bundle").exists());
+        }
+    }
+
+    #[test]
+    fn product_bundle_rejects_each_missing_eof_or_root_observation() {
+        let mut normal = Fixture::new();
+        assert_eq!(fs::read_dir(normal.package().unwrap()).unwrap().count(), 7);
+        for phase in ["bins", "dlls"] {
+            for field in ["stdout_eof", "stderr_eof", "root_exit_observed"] {
+                let mut f = Fixture::new();
+                let before = f.completion["commands"][phase].clone();
+                assert_eq!(before["exit_code"], 0);
+                assert_eq!(before["collection_complete"], true);
+                assert_eq!(before["stop_reason"], "completed");
+                assert_eq!(before["stdout_eof"], true);
+                assert_eq!(before["stderr_eof"], true);
+                assert_eq!(before["root_exit_observed"], true);
+                f.completion["commands"][phase][field] = json!(false);
+                for (key, value) in before.as_object().unwrap() {
+                    if key.as_str() == field {
+                        assert_eq!(f.completion["commands"][phase][key.as_str()], false);
+                    } else {
+                        assert_eq!(&f.completion["commands"][phase][key.as_str()], value);
+                    }
+                }
+                assert!(f.package().is_err(), "{phase} {field}");
+                assert!(!f.root.join("bundle").exists(), "{phase} {field}");
+            }
         }
     }
 
@@ -1106,12 +1293,16 @@ mod tests {
         for mode in 0..8 {
             let mut f = Fixture::new();
             match mode {
-                0 => { f.records.get_mut("bins").unwrap().remove(0); }
+                0 => {
+                    f.records.get_mut("bins").unwrap().remove(0);
+                }
                 1 => {
                     let duplicate = f.records["bins"][0].clone();
                     f.records.get_mut("bins").unwrap().push(duplicate);
                 }
-                2 => f.records.get_mut("dlls").unwrap()[0]["target"]["kind"] = json!(["proc-macro"]),
+                2 => {
+                    f.records.get_mut("dlls").unwrap()[0]["target"]["kind"] = json!(["proc-macro"])
+                }
                 3 => {
                     let alias = f.root.join("wrong").join(ROLES[0].name);
                     fs::create_dir_all(alias.parent().unwrap()).unwrap();
@@ -1157,12 +1348,11 @@ mod tests {
         ] {
             assert!(cargo_records(bytes).is_err());
         }
-        let records = cargo_records(
-            b"ordinary output\n{\"reason\":\"build-finished\",\"success\":true}\n",
-        ).unwrap();
+        let records =
+            cargo_records(b"ordinary output\n{\"reason\":\"build-finished\",\"success\":true}\n")
+                .unwrap();
         assert!(records.is_empty());
     }
-
 
     #[test]
     fn product_pe_requires_executable_image_bit_for_exe_and_dll() {
@@ -1192,7 +1382,11 @@ mod tests {
             .args(["which", "--toolchain", "1.95.0", name])
             .output()
             .unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         PathBuf::from(String::from_utf8(output.stdout).unwrap().trim())
     }
 
@@ -1215,15 +1409,20 @@ mod tests {
         let quoted = serde_json::to_string(&poison.to_string_lossy()).unwrap();
         let config = root.join(".cargo/config.toml");
         let aliases = [
-            "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
-            "CARGO_BUILD_RUSTC", "CARGO_BUILD_RUSTC_WRAPPER",
+            "RUSTC",
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
             "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
         ];
         let command = || {
             let mut command = compiler_control_command(&cargo);
-            command.current_dir(root)
+            command
+                .current_dir(root)
                 .args(["check", "--offline", "--message-format=json"])
-                .arg("--manifest-path").arg(root.join("Cargo.toml"))
+                .arg("--manifest-path")
+                .arg(root.join("Cargo.toml"))
                 .env("CARGO_HOME", root.join("cargo-home"))
                 .env("CARGO_TARGET_DIR", root.join("target"))
                 .env_remove("CARGO_BUILD_TARGET")
@@ -1249,7 +1448,8 @@ mod tests {
             assert!(!result.status.success(), "unbound selection {mode}");
             assert!(
                 String::from_utf8_lossy(&result.stderr).contains(poison_name),
-                "mode {mode}: {}", String::from_utf8_lossy(&result.stderr),
+                "mode {mode}: {}",
+                String::from_utf8_lossy(&result.stderr),
             );
         }
         fs::write(
@@ -1260,8 +1460,10 @@ mod tests {
         ).unwrap();
         let mut flags = command();
         fs::write(&config, "").unwrap();
-        flags.env("RUSTC", &rustc)
-            .env("CARGO_BUILD_RUSTFLAGS", "--unavailable-compiler-flags-control");
+        flags.env("RUSTC", &rustc).env(
+            "CARGO_BUILD_RUSTFLAGS",
+            "--unavailable-compiler-flags-control",
+        );
         let rejected = flags.output().unwrap();
         assert!(!rejected.status.success());
         assert!(String::from_utf8_lossy(&rejected.stderr)
@@ -1274,22 +1476,34 @@ mod tests {
         for alias in &aliases[3..] {
             bound.env(alias, &poison);
         }
-        bound.env("CARGO_BUILD_RUSTFLAGS", "--unavailable-compiler-flags-control");
+        bound.env(
+            "CARGO_BUILD_RUSTFLAGS",
+            "--unavailable-compiler-flags-control",
+        );
         // The same explicit child environment is used by the CI producer.
-        bound.env("RUSTC", &rustc).env("CARGO_BUILD_RUSTC", &rustc)
-            .env("RUSTC_WRAPPER", "").env("RUSTC_WORKSPACE_WRAPPER", "")
+        bound
+            .env("RUSTC", &rustc)
+            .env("CARGO_BUILD_RUSTC", &rustc)
+            .env("RUSTC_WRAPPER", "")
+            .env("RUSTC_WORKSPACE_WRAPPER", "")
             .env_remove("CARGO_BUILD_RUSTC_WRAPPER")
             .env_remove("CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER")
             .env("CARGO_ENCODED_RUSTFLAGS", "")
             .env_remove("RUSTFLAGS")
             .env_remove("CARGO_BUILD_RUSTFLAGS");
         let result = bound.output().unwrap();
-        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
         let artifacts = cargo_records(&result.stdout).unwrap();
-        assert!(artifacts.iter().any(|(record, _)| {
-            record["target"]["name"] == "compiler_selection_control"
-                && record["fresh"] == false
-        }), "the fixed compiler must actually produce the control crate");
+        assert!(
+            artifacts.iter().any(|(record, _)| {
+                record["target"]["name"] == "compiler_selection_control" && record["fresh"] == false
+            }),
+            "the fixed compiler must actually produce the control crate"
+        );
     }
 
     #[test]
@@ -1298,8 +1512,19 @@ mod tests {
         let (safe, hash) = public_file_inventory(&rows).unwrap();
         assert_eq!(safe[0]["name"], rows[0]["name"]);
         assert!(safe[0]["git_blob_sha1"].is_null());
-        assert_eq!(hash, "1330e3a6132b2d61ac33e1be474cb10428f12cedaad825f94a209631fcc1e4e1");
-        for name in ["C:/private/input", "../other", "/root", "a\\b", "a/./b", "a//b", "a\nb"] {
+        assert_eq!(
+            hash,
+            "1330e3a6132b2d61ac33e1be474cb10428f12cedaad825f94a209631fcc1e4e1"
+        );
+        for name in [
+            "C:/private/input",
+            "../other",
+            "/root",
+            "a\\b",
+            "a/./b",
+            "a//b",
+            "a\nb",
+        ] {
             let bad = json!([{"name":name,"bytes":3,"sha256":"0".repeat(64)}]);
             assert!(public_file_inventory(&bad).is_err(), "{name:?}");
         }
@@ -1317,11 +1542,15 @@ mod tests {
         inputs["vendors"][0]["storage_kind"] = json!("directory");
         assert!(public_inputs(&inputs).is_err());
         inputs["vendors"][0]["checksum_metadata_sha256"] = json!("a".repeat(64));
-        inputs["vendors"][0]["files"].as_array_mut().unwrap().push(
-            json!({"name":".cargo-checksum.json","bytes":1,"sha256":"a".repeat(64)}),
+        inputs["vendors"][0]["files"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"name":".cargo-checksum.json","bytes":1,"sha256":"a".repeat(64)}));
+        inputs["vendors"][0]["sha256"] = json!(
+            public_file_inventory(&inputs["vendors"][0]["files"])
+                .unwrap()
+                .1
         );
-        inputs["vendors"][0]["sha256"] =
-            json!(public_file_inventory(&inputs["vendors"][0]["files"]).unwrap().1);
         public_inputs(&inputs).unwrap();
         inputs["source_files"][0]["name"] = json!("../private");
         assert!(public_inputs(&inputs).is_err());
@@ -1347,38 +1576,318 @@ mod tests {
             }
         }
         assert_ne!(public_profile_environment(&empty).unwrap(), before);
-        assert_ne!(public_profile_environment(&empty).unwrap(), public_profile_environment(&changed).unwrap());
+        assert_ne!(
+            public_profile_environment(&empty).unwrap(),
+            public_profile_environment(&changed).unwrap()
+        );
         let mut mismatched = Fixture::new();
         mismatched.completion["commands"]["bins"]["profile_environment"] = changed;
         assert!(mismatched.package().is_err());
         assert!(!mismatched.root.join("bundle").exists());
     }
 
+    const CAPTURE_PUBLIC_FIELDS: &[(&str, &str)] = &[
+        ("native_exit_code", "exit_code"),
+        ("collection_complete", "complete"),
+        ("stop_reason", "reason"),
+        ("capture_stop_reason", "capture_stop_reason"),
+        ("start_returned", "start_returned"),
+        ("root_exit_observed", "root_exit"),
+        ("failure_stage", "failure_stage"),
+        ("exception_kind", "exception_kind"),
+        ("exception_hresult", "exception_hresult"),
+        ("native_error_code", "native_error_code"),
+        ("result_save_state", "result_save_state"),
+        ("result_bytes", "result_bytes"),
+        ("result_sha256", "result_sha256"),
+        ("secondary_failure_count", "secondary_failure_count"),
+        ("stdout_state", "stdout_state"),
+        ("stderr_state", "stderr_state"),
+        ("stdout_bytes", "stdout_bytes"),
+        ("stdout_sha256", "stdout_sha256"),
+        ("stderr_bytes", "stderr_bytes"),
+        ("stderr_sha256", "stderr_sha256"),
+    ];
+
+    fn capture_public_snapshots(stdout: &str) -> Result<Vec<Value>, &'static str> {
+        let mut actual = Vec::new();
+        for line in stdout.lines() {
+            let Some(body) = line.strip_prefix("CIV_PRODUCT_NATIVE_CAPTURE ") else {
+                continue;
+            };
+            let record: Value =
+                serde_json::from_str(body).map_err(|_| "capture snapshot JSON invalid")?;
+            actual.push(record);
+        }
+        if actual.is_empty() {
+            return Err("capture snapshot missing");
+        }
+        for (index, record) in actual.iter().enumerate() {
+            let object = record.as_object().ok_or("capture snapshot object missing")?;
+            let phase = if index == 0 {
+                "fixture"
+            } else {
+                "fixture-next"
+            };
+            if object.len() != CAPTURE_PUBLIC_FIELDS.len() + 3
+                || record["schema"] != "civ6-native-capture/v3"
+                || record["evidence_kind"] != "historical_capture_snapshot"
+                || record["phase"] != phase
+            {
+                return Err("capture snapshot schema differs");
+            }
+            for &(public_key, _) in CAPTURE_PUBLIC_FIELDS {
+                let value = object.get(public_key).ok_or("capture snapshot field missing")?;
+                if let Some(text) = value.as_str() {
+                    if !text
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                    {
+                        return Err("capture snapshot contains unsafe text");
+                    }
+                }
+            }
+        }
+        Ok(actual)
+    }
+
+    fn capture_snapshot_matches_actual(snapshot: &Value, actual: &Value) -> bool {
+        CAPTURE_PUBLIC_FIELDS.iter().all(|&(public_key, actual_key)| {
+            snapshot
+                .get(public_key)
+                .zip(actual.get(actual_key))
+                .is_some_and(|(observed, returned)| observed == returned)
+        })
+    }
+
+    fn capture_public_records(stdout: &str, expected: &[Value]) -> Result<Vec<Value>, &'static str> {
+        let actual = capture_public_snapshots(stdout)?;
+        if actual.len() != expected.len()
+            || actual
+                .iter()
+                .zip(expected)
+                .any(|(snapshot, returned)| !capture_snapshot_matches_actual(snapshot, returned))
+        {
+            return Err("capture snapshot differs from actual projection");
+        }
+        Ok(actual)
+    }
+
+    fn capture_snapshot_is_accepted(
+        snapshot: &Value,
+        actual: Option<&Value>,
+        producer_exit: Option<i32>,
+        verified_current_buffer: bool,
+    ) -> bool {
+        let Some(actual) = actual else {
+            return false;
+        };
+        producer_exit == Some(0)
+            && verified_current_buffer
+            && snapshot["schema"] == "civ6-native-capture/v3"
+            && snapshot["evidence_kind"] == "historical_capture_snapshot"
+            && actual["complete"] == true
+            && actual["exit_code"] == 0
+            && actual["result_save_state"] == "saved"
+            && actual["result_bytes"]
+                .as_u64()
+                .is_some_and(|n| n > 0 && n <= 536_870_912)
+            && actual["result_sha256"].as_str().is_some_and(|s| hex(s, 64))
+            && capture_snapshot_matches_actual(snapshot, actual)
+    }
+
+    #[test]
+    fn product_capture_public_event_check_rejects_missing_wrong_and_private_fields() {
+        let fixture = json!({
+            "exit_code":null,"complete":false,"reason":"start_failed",
+            "capture_stop_reason":"start_failed","start_returned":null,"root_exit":false,
+            "failure_stage":"process_start","exception_kind":"win32",
+            "exception_hresult":-2147467259_i64,"native_error_code":2,
+            "result_save_state":"unavailable","result_bytes":null,"result_sha256":null,
+            "secondary_failure_count":2,"stdout_state":"owned_unavailable",
+            "stderr_state":"owned_hashed","stdout_bytes":null,"stdout_sha256":null,
+            "stderr_bytes":0,"stderr_sha256":digest(b"")
+        });
+        let event = json!({
+            "schema":"civ6-native-capture/v3","evidence_kind":"historical_capture_snapshot","phase":"fixture",
+            "native_exit_code":null,"collection_complete":false,"stop_reason":"start_failed",
+            "capture_stop_reason":"start_failed","start_returned":null,"root_exit_observed":false,
+            "failure_stage":"process_start","exception_kind":"win32",
+            "exception_hresult":-2147467259_i64,"native_error_code":2,
+            "result_save_state":"unavailable","result_bytes":null,"result_sha256":null,
+            "secondary_failure_count":2,"stdout_state":"owned_unavailable",
+            "stderr_state":"owned_hashed","stdout_bytes":null,"stdout_sha256":null,
+            "stderr_bytes":0,"stderr_sha256":digest(b"")
+        });
+        let line = format!("CIV_PRODUCT_NATIVE_CAPTURE {event}\n");
+        let expected = vec![fixture.clone()];
+        assert!(capture_public_records(&line, &expected).is_ok());
+        assert!(capture_public_records("", &expected).is_err());
+        let mut missing = event.clone();
+        missing.as_object_mut().unwrap().remove("exception_hresult");
+        assert!(capture_public_records(
+            &format!("CIV_PRODUCT_NATIVE_CAPTURE {missing}\n"),
+            &expected
+        )
+        .is_err());
+        for (key, value) in [
+            ("failure_stage", json!("stdout_flush")),
+            ("exception_kind", json!("io")),
+            ("exception_hresult", json!(0)),
+            ("native_error_code", json!(3)),
+            ("result_save_state", json!("saved")),
+        ] {
+            let mut wrong = event.clone();
+            wrong[key] = value;
+            assert!(capture_public_records(
+                &format!("CIV_PRODUCT_NATIVE_CAPTURE {wrong}\n"),
+                &expected
+            )
+            .is_err());
+        }
+        let mut private = event.clone();
+        private["capture_error"] = json!("C:/private/exception");
+        assert!(capture_public_records(
+            &format!("CIV_PRODUCT_NATIVE_CAPTURE {private}\n"),
+            &expected
+        )
+        .is_err());
+        // Parsing an advisory snapshot is different from accepting a completed producer.
+        assert!(!capture_snapshot_is_accepted(&event, Some(&fixture), Some(0), true));
+        let mut completed = fixture;
+        completed["complete"] = json!(true);
+        completed["exit_code"] = json!(0);
+        completed["reason"] = json!("completed");
+        completed["capture_stop_reason"] = json!("completed");
+        completed["result_save_state"] = json!("saved");
+        completed["result_bytes"] = json!(1024);
+        completed["result_sha256"] = json!("a".repeat(64));
+        completed["start_returned"] = json!(true);
+        completed["root_exit"] = json!(true);
+        completed["failure_stage"] = Value::Null;
+        completed["exception_kind"] = Value::Null;
+        completed["exception_hresult"] = Value::Null;
+        completed["native_error_code"] = Value::Null;
+        completed["secondary_failure_count"] = json!(0);
+        completed["stdout_state"] = json!("owned_hashed");
+        completed["stdout_bytes"] = json!(0);
+        completed["stdout_sha256"] = json!(digest(b""));
+        let mut historical = event;
+        for &(public_key, actual_key) in CAPTURE_PUBLIC_FIELDS {
+            historical[public_key] = completed[actual_key].clone();
+        }
+        assert!(capture_snapshot_is_accepted(&historical, Some(&completed), Some(0), true));
+        assert!(!capture_snapshot_is_accepted(&historical, None, Some(0), true));
+        for exit in [None, Some(1)] {
+            assert!(!capture_snapshot_is_accepted(&historical, Some(&completed), exit, true));
+        }
+        assert!(!capture_snapshot_is_accepted(&historical, Some(&completed), Some(0), false));
+    }
+
     #[cfg(windows)]
     fn run_capture_fixture(case: &str, profile: &str) -> (TempDir, Vec<Value>, String) {
         let directory = tempfile::tempdir().unwrap();
+        if case == "stdout_open_failure" {
+            fs::write(
+                directory.path().join("fixture.stdout.raw"),
+                b"C:/private/preexisting-unowned-stdout",
+            )
+            .unwrap();
+        }
+        if case == "stderr_open_failure" || case == "capture_finalize_save_failure" {
+            fs::create_dir(directory.path().join("fixture.stdout.raw.stderr.raw")).unwrap();
+        }
+        if case.ends_with("save_failure") {
+            fs::create_dir(directory.path().join("fixture.stdout.raw.result.json")).unwrap();
+        }
+        if case == "save_existing_file" {
+            fs::write(
+                directory.path().join("fixture.stdout.raw.result.json"),
+                b"C:/private/preserved-result",
+            )
+            .unwrap();
+        }
+        if case == "save_existing_pending" {
+            fs::write(
+                directory.path().join("fixture.stdout.raw.result.json.pending"),
+                b"C:/private/preserved-pending",
+            )
+            .unwrap();
+        }
         let executable = std::env::current_exe().unwrap();
         let mut command = compiler_control_command(Path::new("pwsh"));
-        command.args(["-NoProfile", "-NonInteractive", "-File"])
+        command
+            .args(["-NoProfile", "-NonInteractive", "-File"])
             .arg(crate::repo_root().join(".github/scripts/civ6-product-artifacts.ps1"))
             .args(["-Phase", "FixtureCapture", "-FixtureRoot"])
             .arg(directory.path())
-            .arg("-FixtureProgram").arg(&executable)
+            .arg("-FixtureProgram")
+            .arg(&executable)
             .args(["-FixtureCase", case, "-FixtureProfile", profile]);
         let output = command.output().unwrap();
         assert!(output.status.success(), "capture fixture driver failed");
         let stdout = String::from_utf8(output.stdout).unwrap();
         let stderr = String::from_utf8(output.stderr).unwrap();
-        assert!(!stdout.contains("C:/private/stdout-sentinel"), "stdout marker escaped");
-        assert!(!stdout.contains("C:/private/stderr-sentinel"), "stderr marker escaped");
-        assert!(!stderr.contains("C:/private/"), "private data escaped driver stderr");
-        let line = stdout.lines().find_map(|line| line.strip_prefix("CIV_PRODUCT_FIXTURE_RESULT ")).unwrap();
+        assert!(
+            !stdout.contains("C:/private/stdout-sentinel"),
+            "stdout marker escaped"
+        );
+        assert!(
+            !stdout.contains("C:/private/stderr-sentinel"),
+            "stderr marker escaped"
+        );
+        assert!(
+            !stderr.contains("C:/private/"),
+            "private data escaped driver stderr"
+        );
+        let line = stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("CIV_PRODUCT_FIXTURE_RESULT "))
+            .unwrap();
         let value: Value = serde_json::from_str(line).unwrap();
         let records = if let Some(records) = value.as_array() {
             records.clone()
         } else {
             vec![value]
         };
+        let snapshots = capture_public_snapshots(&stdout)
+            .expect("actual public historical capture snapshot is invalid");
+        assert_eq!(snapshots.len(), records.len());
+        assert!(!stdout.contains(directory.path().to_string_lossy().as_ref()));
+        assert!(!stdout.contains("C:/private/"));
+        for (index, (snapshot, returned)) in snapshots.iter().zip(&records).enumerate() {
+            if case == "post_emit_failure" && index == 0 {
+                assert!(!capture_snapshot_matches_actual(snapshot, returned));
+                assert_eq!(snapshot["collection_complete"], true);
+                assert_eq!(returned["complete"], false);
+            } else {
+                assert!(capture_snapshot_matches_actual(snapshot, returned));
+            }
+            let verified = returned["publication_verified"] == true;
+            assert_eq!(
+                capture_snapshot_is_accepted(
+                    snapshot,
+                    Some(returned),
+                    output.status.code(),
+                    verified,
+                ),
+                returned["actual_consumer_accepted"] == true
+            );
+            if verified {
+                let name = if index == 0 {
+                    "fixture.stdout.raw.result.json"
+                } else {
+                    "next.stdout.raw.result.json"
+                };
+                let bytes = fs::read(directory.path().join(name)).unwrap();
+                assert_eq!(returned["result_save_state"], "saved");
+                assert_eq!(returned["result_bytes"], bytes.len() as u64);
+                assert_eq!(returned["result_sha256"], digest(&bytes));
+            } else if returned["result_save_state"] == "unavailable" {
+                assert_eq!(returned["result_bytes"], Value::Null);
+                assert_eq!(returned["result_sha256"], Value::Null);
+            }
+        }
         (directory, records, stdout)
     }
 
@@ -1390,25 +1899,510 @@ mod tests {
             assert_eq!(events.len(), 1);
             assert_eq!(events[0]["exit_code"], expected);
             assert_eq!(events[0]["complete"], true);
+            assert_eq!(events[0]["start_returned"], true);
+            assert_eq!(events[0]["stdout_state"], "owned_hashed");
+            assert_eq!(events[0]["stderr_state"], "owned_hashed");
+            assert_eq!(events[0]["result_save_state"], "saved");
             assert_eq!(events[0]["reason"], "completed");
             let stdout = fs::read(directory.path().join("fixture.stdout.raw")).unwrap();
             let stderr = fs::read(directory.path().join("fixture.stdout.raw.stderr.raw")).unwrap();
             assert!(stdout.len() >= 2 * 1024 * 1024);
             assert!(stderr.len() >= 2 * 1024 * 1024);
-            assert!(stdout.windows(b"C:/private/stdout-sentinel".len()).any(|b| b == b"C:/private/stdout-sentinel"));
-            assert!(stderr.windows(b"C:/private/stderr-sentinel".len()).any(|b| b == b"C:/private/stderr-sentinel"));
+            assert!(stdout
+                .windows(b"C:/private/stdout-sentinel".len())
+                .any(|b| b == b"C:/private/stdout-sentinel"));
+            assert!(stderr
+                .windows(b"C:/private/stderr-sentinel".len())
+                .any(|b| b == b"C:/private/stderr-sentinel"));
             for (bytes, marker, fill) in [
                 (&stdout, b"C:/private/stdout-sentinel\n".as_slice(), b'O'),
                 (&stderr, b"C:/private/stderr-sentinel\n".as_slice(), b'E'),
             ] {
-                let start = bytes.windows(marker.len()).position(|b| b == marker).unwrap() + marker.len();
-                assert_eq!(&bytes[start..start + 2 * 1024 * 1024], vec![fill; 2 * 1024 * 1024]);
+                let start = bytes
+                    .windows(marker.len())
+                    .position(|b| b == marker)
+                    .unwrap()
+                    + marker.len();
+                assert_eq!(
+                    &bytes[start..start + 2 * 1024 * 1024],
+                    vec![fill; 2 * 1024 * 1024]
+                );
             }
             let result: Value = serde_json::from_slice(
                 &fs::read(directory.path().join("fixture.stdout.raw.result.json")).unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
             assert_eq!(result["stdout_sha256"], digest(&stdout));
             assert_eq!(result["stderr_sha256"], digest(&stderr));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_reports_fixed_start_failure_without_public_raw_path() {
+        let mut first_hresult = None;
+        for case in [
+            "start_failure",
+            "start_finalize_save_failure",
+            "start_publish_replaced",
+            "start_post_move_pin_failure",
+            "start_publication_release_failure",
+        ] {
+            let (directory, events, public) = run_capture_fixture(case, "absent");
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["complete"], false);
+            assert_eq!(event["reason"], "start_failed");
+            assert_eq!(event["failure_stage"], "process_start");
+            assert_eq!(event["exception_kind"], "win32");
+            assert_eq!(event["native_error_code"], 2);
+            let hresult = event["exception_hresult"].as_i64().unwrap();
+            if let Some(first) = first_hresult {
+                assert_eq!(hresult, first);
+            } else {
+                first_hresult = Some(hresult);
+            }
+            assert_eq!(event["start_returned"], Value::Null);
+            assert_eq!(event["root_exit"], false);
+            assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
+            let raw_stdout = directory.path().join("fixture.stdout.raw");
+            let raw_stderr = directory.path().join("fixture.stdout.raw.stderr.raw");
+            assert!(fs::read(raw_stdout).unwrap().is_empty());
+            assert!(fs::read(raw_stderr).unwrap().is_empty());
+            if case == "start_finalize_save_failure" {
+                assert_eq!(event["stdout_state"], "owned_unavailable");
+                assert_eq!(event["stdout_bytes"], Value::Null);
+                assert_eq!(event["stdout_sha256"], Value::Null);
+                assert_eq!(event["result_save_state"], "unavailable");
+                let stages = event["secondary_stages"].as_array().unwrap();
+                assert!(stages.iter().any(|value| value == "stdout_flush"));
+                assert!(stages.iter().any(|value| value == "result_save"));
+            } else if case == "start_publish_replaced" {
+                assert_eq!(event["stdout_state"], "owned_hashed");
+                assert_eq!(event["result_save_state"], "unavailable");
+                assert_eq!(event["publication_verified"], false);
+                assert_eq!(event["result_bytes"], Value::Null);
+                assert_eq!(event["result_sha256"], Value::Null);
+                let stages = event["secondary_stages"].as_array().unwrap();
+                assert!(stages.iter().any(|value| value == "result_save"));
+                assert_eq!(
+                    fs::read(directory.path().join("fixture.stdout.raw.result.json"))
+                        .unwrap()
+                        .as_slice(),
+                    b"C:/private/publication-replacement"
+                );
+            } else if case == "start_post_move_pin_failure" {
+                assert_eq!(event["result_save_state"], "unavailable");
+                assert_eq!(event["publication_verified"], false);
+                assert_eq!(event["actual_consumer_accepted"], false);
+                assert_eq!(event["candidate_without_receipt_accepted"], false);
+                assert_eq!(event["publication_resources_released"], true);
+                let stages = event["secondary_stages"].as_array().unwrap();
+                assert!(stages.iter().any(|value| value == "result_publish_open"));
+            } else if case == "start_publication_release_failure" {
+                assert_eq!(event["result_save_state"], "unavailable");
+                assert_eq!(event["complete"], false);
+                assert_eq!(event["actual_consumer_accepted"], false);
+                assert_eq!(event["publication_resources_released"], true);
+                let stages = event["secondary_stages"].as_array().unwrap();
+                assert!(stages.iter().any(|value| value == "result_publication_release"));
+            } else {
+                assert_eq!(event["result_save_state"], "saved");
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_reports_preflight_failure_before_raw_or_child_ownership() {
+        let (directory, events, public) = run_capture_fixture("success", "invalid");
+        let event = &events[0];
+        assert_eq!(events.len(), 1);
+        assert_eq!(event["complete"], false);
+        assert_eq!(event["reason"], "start_failed");
+        assert_eq!(event["capture_stop_reason"], "start_failed");
+        assert_eq!(event["failure_stage"], "profile_environment");
+        assert_eq!(event["last_failure_stage"], "profile_environment");
+        assert_eq!(event["exception_kind"], "powershell");
+        assert!(event["exception_hresult"].as_i64().is_some());
+        assert_eq!(event["native_error_code"], Value::Null);
+        assert_eq!(event["start_returned"], Value::Null);
+        assert_eq!(event["exit_code"], Value::Null);
+        assert_eq!(event["root_exit"], false);
+        for stream in ["stdout", "stderr"] {
+            assert_eq!(event[format!("{stream}_state")], "not_owned");
+            assert_eq!(event[format!("{stream}_bytes")], Value::Null);
+            assert_eq!(event[format!("{stream}_sha256")], Value::Null);
+        }
+        assert_eq!(event["result_save_state"], "saved");
+        assert_eq!(event["publication_verified"], true);
+        assert!(!directory.path().join("fixture.stdout.raw").exists());
+        assert!(!directory.path().join("fixture.stdout.raw.stderr.raw").exists());
+        assert!(!public.contains("BAD-NAME"));
+        assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_historical_snapshot_requires_final_result_and_current_buffer() {
+        for case in [
+            "success",
+            "publication_release_failure",
+            "failure_publication_release_failure",
+            "post_emit_failure",
+            "post_release_replacement",
+        ] {
+            let (directory, returned, public) = run_capture_fixture(case, "absent");
+            let snapshots = capture_public_snapshots(&public).unwrap();
+            assert_eq!(snapshots.len(), 1);
+            assert!(!public.contains("CIV_PRODUCT_NATIVE_PUBLICATION_FAILED"));
+            let snapshot = &snapshots[0];
+            let actual = &returned[0];
+            assert_eq!(snapshot["evidence_kind"], "historical_capture_snapshot");
+            assert_eq!(actual["publication_resources_released"], true);
+            let verified = actual["publication_verified"] == true;
+            assert_eq!(
+                capture_snapshot_is_accepted(snapshot, Some(actual), Some(0), verified),
+                case == "success"
+            );
+            assert!(!capture_snapshot_is_accepted(snapshot, None, Some(0), verified));
+            assert!(!capture_snapshot_is_accepted(snapshot, Some(actual), None, verified));
+            assert!(!capture_snapshot_is_accepted(snapshot, Some(actual), Some(1), verified));
+            if case == "success" {
+                assert_eq!(snapshot["collection_complete"], true);
+                assert_eq!(actual["actual_consumer_accepted"], true);
+            } else {
+                assert_eq!(actual["actual_consumer_accepted"], false);
+                if case == "post_release_replacement" {
+                    assert_eq!(snapshot["collection_complete"], true);
+                    assert_eq!(actual["complete"], true);
+                    assert_eq!(actual["result_save_state"], "saved");
+                    assert_eq!(actual["publication_verified"], false);
+                    let path = directory.path().join("fixture.stdout.raw.result.json");
+                    let changed = fs::read(path).unwrap();
+                    assert_ne!(actual["result_sha256"], digest(&changed));
+                    assert!(directory
+                        .path()
+                        .join("fixture.stdout.raw.result.json.after-release.original")
+                        .is_file());
+                } else if case == "post_emit_failure" {
+                    assert_eq!(snapshot["collection_complete"], true);
+                    assert_eq!(snapshot["result_save_state"], "saved");
+                    assert_eq!(actual["complete"], false);
+                    assert_eq!(actual["result_save_state"], "unavailable");
+                    assert_eq!(actual["failure_stage"], "public_event_write");
+                } else {
+                    assert_eq!(snapshot["collection_complete"], false);
+                    assert_eq!(snapshot["result_save_state"], "unavailable");
+                    assert_eq!(actual["failure_stage"], "result_publication_release");
+                    assert_eq!(
+                        actual["exit_code"],
+                        if case == "failure_publication_release_failure" {
+                            23
+                        } else {
+                            0
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_late_publication_failures_require_actual_verified_receipt() {
+        for case in ["success", "post_move_read_failure", "post_move_pin_failure"] {
+            let (directory, events, _) = run_capture_fixture(case, "absent");
+            let event = &events[0];
+            let candidate_bytes =
+                fs::read(directory.path().join("fixture.stdout.raw.result.json")).unwrap();
+            let candidate: Value = serde_json::from_slice(&candidate_bytes).unwrap();
+            assert_eq!(candidate["schema"], "civ6-private-native-capture/v1");
+            assert_eq!(candidate["collection_complete"], true);
+            assert_eq!(candidate["result_save_state"], "requires_receipt");
+            assert_eq!(candidate["result_bytes"], Value::Null);
+            assert_eq!(candidate["result_sha256"], Value::Null);
+            assert_eq!(event["candidate_without_receipt_accepted"], false);
+            assert_eq!(event["candidate_reader_without_receipt_accepted"], false);
+            assert_eq!(event["receiptless_actual_accepted"], false);
+            assert_eq!(event["publication_resources_released"], true);
+            if case == "success" {
+                assert_eq!(event["complete"], true);
+                assert_eq!(event["result_save_state"], "saved");
+                assert_eq!(event["actual_consumer_accepted"], true);
+                assert_eq!(event["publication_verified"], true);
+                assert_eq!(event["result_bytes"], candidate_bytes.len() as u64);
+                assert_eq!(event["result_sha256"], digest(&candidate_bytes));
+            } else {
+                assert_eq!(event["capture_stop_reason"], "completed");
+                assert_eq!(event["complete"], false);
+                assert_eq!(event["result_save_state"], "unavailable");
+                assert_eq!(event["actual_consumer_accepted"], false);
+                assert_eq!(event["publication_verified"], false);
+                assert_eq!(event["result_bytes"], Value::Null);
+                assert_eq!(event["result_sha256"], Value::Null);
+                assert_eq!(event["exception_kind"], "io");
+                assert_eq!(event["exception_hresult"].as_i64().unwrap() & 0xffff, 32);
+                assert_eq!(
+                    event["failure_stage"],
+                    if case == "post_move_read_failure" {
+                        "result_save"
+                    } else {
+                        "result_publish_open"
+                    }
+                );
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_publication_binds_final_snapshot_and_rejects_replacement() {
+        for case in ["success", "publish_replaced", "publish_pin_protected"] {
+            let (directory, events, _) = run_capture_fixture(case, "absent");
+            let event = &events[0];
+            let final_path = directory.path().join("fixture.stdout.raw.result.json");
+            assert_eq!(event["capture_stop_reason"], "completed");
+            if case == "publish_replaced" {
+                assert_eq!(event["complete"], false);
+                assert_eq!(event["reason"], "result_save_failed");
+                assert_eq!(event["failure_stage"], "result_save");
+                assert_eq!(event["result_save_state"], "unavailable");
+                assert_eq!(event["publication_verified"], false);
+                assert_eq!(event["result_bytes"], Value::Null);
+                assert_eq!(event["result_sha256"], Value::Null);
+                assert_eq!(
+                    fs::read(final_path).unwrap().as_slice(),
+                    b"C:/private/publication-replacement"
+                );
+                let original: Value = serde_json::from_slice(
+                    &fs::read(
+                        directory
+                            .path()
+                            .join("fixture.stdout.raw.result.json.pending.original"),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(original["collection_complete"], true);
+            } else {
+                assert_eq!(event["complete"], true);
+                assert_eq!(event["reason"], "completed");
+                assert_eq!(event["result_save_state"], "saved");
+                assert_eq!(event["publication_verified"], true);
+                let bytes = fs::read(final_path).unwrap();
+                assert_eq!(event["result_bytes"], bytes.len() as u64);
+                assert_eq!(event["result_sha256"], digest(&bytes));
+                if case == "publish_pin_protected" {
+                    assert_eq!(event["publication_pin_checked"], true);
+                }
+                assert!(!directory
+                    .path()
+                    .join("fixture.stdout.raw.result.json.unexpected")
+                    .exists());
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_result_publication_rejects_partial_and_post_write_failures() {
+        for case in [
+            "save_partial_failure",
+            "save_flush_failure",
+            "save_dispose_failure",
+            "save_existing_file",
+            "save_existing_pending",
+        ] {
+            let (directory, events, _) = run_capture_fixture(case, "absent");
+            let event = &events[0];
+            assert_eq!(event["capture_stop_reason"], "completed");
+            assert_eq!(event["complete"], false);
+            assert_eq!(event["reason"], "result_save_failed");
+            assert_eq!(event["failure_stage"], "result_save");
+            assert_eq!(event["result_save_state"], "unavailable");
+            assert_eq!(event["result_bytes"], Value::Null);
+            assert_eq!(event["result_sha256"], Value::Null);
+            assert_eq!(event["publication_verified"], false);
+            let published = directory.path().join("fixture.stdout.raw.result.json");
+            let pending = directory.path().join("fixture.stdout.raw.result.json.pending");
+            assert!(pending.is_file());
+            if case == "save_existing_file" {
+                assert_eq!(
+                    fs::read(published).unwrap().as_slice(),
+                    b"C:/private/preserved-result"
+                );
+            } else {
+                assert!(!published.exists());
+            }
+            let pending_bytes = fs::read(pending).unwrap();
+            if case == "save_existing_pending" {
+                assert_eq!(pending_bytes.as_slice(), b"C:/private/preserved-pending");
+            } else if case == "save_partial_failure" {
+                assert!(serde_json::from_slice::<Value>(&pending_bytes).is_err());
+            } else {
+                let uncommitted: Value = serde_json::from_slice(&pending_bytes).unwrap();
+                assert_eq!(uncommitted["collection_complete"], true);
+                // A complete pending JSON is still not a published capture receipt.
+                assert_eq!(event["publication_verified"], false);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_text_consumes_only_the_size_and_digest_verified_buffer() {
+        for case in ["consume_unchanged", "consume_modified", "consume_replaced"] {
+            let (directory, events, _) = run_capture_fixture(case, "absent");
+            let event = &events[0];
+            assert_eq!(event["complete"], true);
+            assert_eq!(event["publication_verified"], true);
+            let bytes = fs::read(directory.path().join("fixture.stdout.raw")).unwrap();
+            if case == "consume_unchanged" {
+                assert_eq!(event["consumer_verified"], true);
+                assert_eq!(event["consumer_bytes"], event["stdout_bytes"]);
+                assert_eq!(event["consumer_sha256"], event["stdout_sha256"]);
+                assert_eq!(event["consumer_sha256"], digest(&bytes));
+            } else {
+                assert_eq!(event["consumer_verified"], false);
+                assert_eq!(event["consumer_failure_stage"], "stdout_consume_verify");
+                assert_ne!(event["stdout_sha256"], digest(&bytes));
+                if case == "consume_modified" {
+                    assert_eq!(event["stdout_bytes"], bytes.len() as u64);
+                } else {
+                    let original =
+                        fs::read(directory.path().join("fixture.stdout.raw.original")).unwrap();
+                    assert_eq!(
+                        original.len() as u64,
+                        event["stdout_bytes"].as_u64().unwrap()
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_open_failures_keep_primary_diagnostic_and_raw_ownership() {
+        for case in ["stdout_open_failure", "stderr_open_failure"] {
+            let (directory, events, public) = run_capture_fixture(case, "absent");
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["complete"], false);
+            assert_eq!(event["reason"], "start_failed");
+            assert_eq!(event["exit_code"], Value::Null);
+            assert_eq!(event["start_returned"], Value::Null);
+            assert_eq!(event["root_exit"], false);
+            assert!(event["exception_kind"].as_str().is_some());
+            assert!(event["exception_hresult"].as_i64().is_some());
+            assert!(!public.contains("preexisting-unowned-stdout"));
+            assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
+            let record_path = directory.path().join("fixture.stdout.raw.result.json");
+            let result_bytes = fs::read(record_path).unwrap();
+            let private_record: Value = serde_json::from_slice(&result_bytes).unwrap();
+            for key in [
+                "failure_stage",
+                "exception_kind",
+                "exception_hresult",
+                "native_error_code",
+            ] {
+                assert_eq!(event[key], private_record[key]);
+            }
+            let stdout_path = directory.path().join("fixture.stdout.raw");
+            let stderr_path = directory.path().join("fixture.stdout.raw.stderr.raw");
+            assert_eq!(event["stderr_state"], "not_owned");
+            assert_eq!(event["stderr_bytes"], Value::Null);
+            assert_eq!(event["stderr_sha256"], Value::Null);
+            if case == "stdout_open_failure" {
+                assert_eq!(event["failure_stage"], "stdout_open");
+                assert_eq!(event["stdout_state"], "not_owned");
+                assert_eq!(event["stdout_bytes"], Value::Null);
+                assert_eq!(event["stdout_sha256"], Value::Null);
+                let preexisting = fs::read(&stdout_path).unwrap();
+                assert_eq!(preexisting.as_slice(), b"C:/private/preexisting-unowned-stdout");
+                assert!(!stderr_path.exists());
+            } else {
+                assert_eq!(event["failure_stage"], "stderr_open");
+                assert_eq!(event["stdout_state"], "owned_hashed");
+                assert_eq!(event["stdout_bytes"], 0);
+                assert_eq!(event["stdout_sha256"], digest(b""));
+                assert!(stderr_path.is_dir());
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_keeps_nonexception_stop_when_private_result_save_fails() {
+        for case in [
+            "cancel_save_failure",
+            "deadline_save_failure",
+            "limit_save_failure",
+            "save_failure",
+            "failure_save_failure",
+        ] {
+            let (directory, events, public) = run_capture_fixture(case, "absent");
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["complete"], false);
+            assert_eq!(event["result_save_state"], "unavailable");
+            assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
+            let blocked = directory.path().join("fixture.stdout.raw.result.json");
+            assert!(blocked.is_dir());
+            let reason = event["reason"].as_str().unwrap();
+            if case == "save_failure" {
+                assert_eq!(event["capture_stop_reason"], "completed");
+                assert_eq!(reason, "result_save_failed");
+                assert_eq!(event["failure_stage"], "result_save");
+                assert!(event["exception_hresult"].as_i64().is_some());
+            } else if case == "failure_save_failure" {
+                assert_eq!(event["capture_stop_reason"], "completed");
+                assert_eq!(reason, "completed");
+                assert_eq!(event["exit_code"], 23);
+                let secondary = event["secondary_stages"].as_array().unwrap();
+                assert!(secondary.iter().any(|stage| stage == "result_save"));
+            } else {
+                let expected: &[&str] = match case {
+                    "cancel_save_failure" => &["cancelled"],
+                    "deadline_save_failure" => &["deadline"],
+                    _ => &["stdout_limit", "stderr_limit"],
+                };
+                assert!(expected.contains(&reason));
+                assert_eq!(event["capture_stop_reason"], reason);
+                let secondary = event["secondary_stages"].as_array().unwrap();
+                assert!(secondary.iter().any(|stage| stage == "result_save"));
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_keeps_first_cleanup_or_capture_exception_over_later_errors() {
+        for case in [
+            "cleanup_finalize_save_failure",
+            "capture_finalize_save_failure",
+        ] {
+            let (directory, events, public) = run_capture_fixture(case, "absent");
+            let event = &events[0];
+            assert_eq!(event["complete"], false);
+            assert_eq!(event["result_save_state"], "unavailable");
+            assert_eq!(event["stdout_state"], "owned_unavailable");
+            assert_eq!(event["stdout_bytes"], Value::Null);
+            assert_eq!(event["stdout_sha256"], Value::Null);
+            assert!(event["exception_hresult"].as_i64().is_some());
+            assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
+            let secondary = event["secondary_stages"].as_array().unwrap();
+            assert!(secondary.iter().any(|stage| stage == "stdout_flush"));
+            assert!(secondary.iter().any(|stage| stage == "result_save"));
+            if case == "cleanup_finalize_save_failure" {
+                assert_eq!(event["capture_stop_reason"], "completed");
+                assert_eq!(event["reason"], "cleanup_error");
+                assert_eq!(event["failure_stage"], "root_wait");
+                assert_eq!(event["exception_kind"], "argument");
+            } else {
+                assert_eq!(event["reason"], "start_failed");
+                assert_eq!(event["failure_stage"], "stderr_open");
+            }
         }
     }
 
@@ -1419,13 +2413,23 @@ mod tests {
             let (directory, events, _) = run_capture_fixture(case, "absent");
             assert_eq!(events.len(), 2);
             assert_eq!(events[0]["complete"], false);
-            assert_eq!(events[0]["reason"], if case == "cancel" { "cancelled" } else { "deadline" });
+            assert_eq!(
+                events[0]["reason"],
+                if case == "cancel" {
+                    "cancelled"
+                } else {
+                    "deadline"
+                }
+            );
             assert_eq!(events[0]["root_exit"], true);
             assert!(events[0]["exit_code"].as_i64().is_some());
             assert_eq!(events[1]["complete"], true);
             assert_eq!(events[1]["exit_code"], 0);
             assert!(directory.path().join("fixture.stdout.raw").exists());
-            assert!(directory.path().join("fixture.stdout.raw.stderr.raw").exists());
+            assert!(directory
+                .path()
+                .join("fixture.stdout.raw.stderr.raw")
+                .exists());
             assert!(directory.path().join("next.stdout.raw").exists());
         }
     }
@@ -1441,10 +2445,18 @@ mod tests {
             ("CARGO_PROFILE_RELEASE_CODEGEN_UNITS", "1"),
             ("CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_CODEGEN_UNITS", "1"),
         ] {
-            let old = baseline[0]["profile_environment"].as_array().unwrap().iter()
-                .find(|row| row["name"] == name).unwrap();
-            let new = changed[0]["profile_environment"].as_array().unwrap().iter()
-                .find(|row| row["name"] == name).unwrap();
+            let old = baseline[0]["profile_environment"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["name"] == name)
+                .unwrap();
+            let new = changed[0]["profile_environment"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["name"] == name)
+                .unwrap();
             assert_eq!(old["present"], false);
             assert_eq!(old["sha256"], Value::Null);
             assert_eq!(new["present"], true);
@@ -1457,7 +2469,9 @@ mod tests {
     #[ignore = "owned subprocess helper for dual-stream tests"]
     fn product_capture_fixture_child() {
         use std::io::Write;
-        let Ok(case) = std::env::var("CIV6_CAPTURE_FIXTURE_CASE") else { return; };
+        let Ok(case) = std::env::var("CIV6_CAPTURE_FIXTURE_CASE") else {
+            return;
+        };
         let out = std::thread::spawn(|| {
             let mut stream = std::io::stdout().lock();
             stream.write_all(b"C:/private/stdout-sentinel\n").unwrap();
@@ -1473,9 +2487,13 @@ mod tests {
         out.join().unwrap();
         err.join().unwrap();
         if case == "wait" {
-            loop { std::thread::sleep(std::time::Duration::from_millis(100)); }
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
         }
-        if case == "failure" { std::process::exit(23); }
+        if case == "failure" {
+            std::process::exit(23);
+        }
     }
 
     #[cfg(windows)]
@@ -1485,69 +2503,116 @@ mod tests {
         let root = directory.path();
         let package = root.join("vendor/fixture");
         fs::create_dir_all(package.join("src")).unwrap();
-        fs::write(package.join("Cargo.toml"), "[package]\nname='fixture'\nversion='0.1.0'\nedition='2021'\n").unwrap();
+        fs::write(
+            package.join("Cargo.toml"),
+            "[package]\nname='fixture'\nversion='0.1.0'\nedition='2021'\n",
+        )
+        .unwrap();
         fs::write(package.join("src/lib.rs"), "pub const VALUE: u8 = 1;\n").unwrap();
         let checksum_path = package.join(".cargo-checksum.json");
-        fs::write(&checksum_path, serde_json::to_vec(
-            &json!({"package":"0".repeat(64),"files":{}}),
-        ).unwrap()).unwrap();
+        fs::write(
+            &checksum_path,
+            serde_json::to_vec(&json!({"package":"0".repeat(64),"files":{}})).unwrap(),
+        )
+        .unwrap();
         let project = root.join("project");
         fs::create_dir_all(project.join(".cargo")).unwrap();
         fs::create_dir_all(project.join("src")).unwrap();
         fs::create_dir(root.join("cargo-home")).unwrap();
         fs::write(project.join("Cargo.toml"),
             "[package]\nname='inventory-control'\nversion='0.1.0'\nedition='2021'\n[dependencies]\nfixture='=0.1.0'\n[workspace]\n").unwrap();
-        fs::write(project.join("src/lib.rs"), "pub fn value() -> u8 { fixture::VALUE }\n").unwrap();
+        fs::write(
+            project.join("src/lib.rs"),
+            "pub fn value() -> u8 { fixture::VALUE }\n",
+        )
+        .unwrap();
         fs::write(project.join("Cargo.lock"), format!(
             "version = 4\n[[package]]\nname='inventory-control'\nversion='0.1.0'\ndependencies=['fixture']\n[[package]]\nname='fixture'\nversion='0.1.0'\nsource='registry+https://github.com/rust-lang/crates.io-index'\nchecksum='{}'\n", "0".repeat(64),
         )).unwrap();
         let quoted_vendor = serde_json::to_string(&root.join("vendor").to_string_lossy()).unwrap();
-        fs::write(project.join(".cargo/config.toml"), format!(
+        fs::write(
+            project.join(".cargo/config.toml"),
+            format!(
             "[source.crates-io]\nreplace-with='local'\n[source.local]\ndirectory={quoted_vendor}\n",
-        )).unwrap();
+        ),
+        )
+        .unwrap();
         let cargo = compiler_control_tool("cargo");
         let rustc = compiler_control_tool("rustc");
         let mut metadata = compiler_control_command(&cargo);
-        metadata.current_dir(&project)
+        metadata
+            .current_dir(&project)
             .args(["metadata", "--offline", "--locked", "--format-version", "1"])
             .env("CARGO_HOME", root.join("cargo-home"))
-            .env("RUSTC", &rustc).env("CARGO_BUILD_RUSTC", &rustc)
-            .env("RUSTC_WRAPPER", "").env("RUSTC_WORKSPACE_WRAPPER", "")
-            .env_remove("CARGO_BUILD_RUSTC_WRAPPER").env_remove("CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER")
+            .env("RUSTC", &rustc)
+            .env("CARGO_BUILD_RUSTC", &rustc)
+            .env("RUSTC_WRAPPER", "")
+            .env("RUSTC_WORKSPACE_WRAPPER", "")
+            .env_remove("CARGO_BUILD_RUSTC_WRAPPER")
+            .env_remove("CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER")
             .env("CARGO_ENCODED_RUSTFLAGS", "");
         let accepted = metadata.output().unwrap();
-        assert!(accepted.status.success(), "normal Cargo empty-map fixture rejected");
+        assert!(
+            accepted.status.success(),
+            "normal Cargo empty-map fixture rejected"
+        );
         let capture = || {
             let mut command = compiler_control_command(Path::new("pwsh"));
-            command.args(["-NoProfile", "-NonInteractive", "-File"])
+            command
+                .args(["-NoProfile", "-NonInteractive", "-File"])
                 .arg(crate::repo_root().join(".github/scripts/civ6-product-artifacts.ps1"))
-                .args(["-Phase", "FixtureInventory", "-FixtureStorage", "directory", "-FixtureRoot"])
+                .args([
+                    "-Phase",
+                    "FixtureInventory",
+                    "-FixtureStorage",
+                    "directory",
+                    "-FixtureRoot",
+                ])
                 .arg(root);
             command.output().unwrap()
         };
         let empty = capture();
         assert!(empty.status.success(), "empty-map input capture rejected");
         let empty_stdout = String::from_utf8(empty.stdout).unwrap();
-        let line = empty_stdout.lines().find_map(|l| l.strip_prefix("CIV_PRODUCT_INVENTORY_FIXTURE ")).unwrap();
+        let line = empty_stdout
+            .lines()
+            .find_map(|l| l.strip_prefix("CIV_PRODUCT_INVENTORY_FIXTURE "))
+            .unwrap();
         let empty_fact: Value = serde_json::from_str(line).unwrap();
         assert!(empty_fact["files"].as_array().unwrap().len() >= 3);
         let listed = json!({
             "Cargo.toml":digest(&fs::read(package.join("Cargo.toml")).unwrap()),
             "src/lib.rs":digest(&fs::read(package.join("src/lib.rs")).unwrap()),
         });
-        fs::write(&checksum_path, serde_json::to_vec(
-            &json!({"package":"0".repeat(64),"files":listed}),
-        ).unwrap()).unwrap();
-        assert!(capture().status.success(), "ordinary vendor checksum rejected");
+        fs::write(
+            &checksum_path,
+            serde_json::to_vec(&json!({"package":"0".repeat(64),"files":listed})).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            capture().status.success(),
+            "ordinary vendor checksum rejected"
+        );
         fs::write(package.join("src/lib.rs"), "pub const VALUE: u8 = 2;\n").unwrap();
-        assert!(!capture().status.success(), "listed source mismatch was accepted");
-        fs::write(&checksum_path, serde_json::to_vec(
-            &json!({"package":"0".repeat(64),"files":{}}),
-        ).unwrap()).unwrap();
+        assert!(
+            !capture().status.success(),
+            "listed source mismatch was accepted"
+        );
+        fs::write(
+            &checksum_path,
+            serde_json::to_vec(&json!({"package":"0".repeat(64),"files":{}})).unwrap(),
+        )
+        .unwrap();
         let changed = capture();
-        assert!(changed.status.success(), "independent inventory must support empty maps");
+        assert!(
+            changed.status.success(),
+            "independent inventory must support empty maps"
+        );
         let text = String::from_utf8(changed.stdout).unwrap();
-        let line = text.lines().find_map(|l| l.strip_prefix("CIV_PRODUCT_INVENTORY_FIXTURE ")).unwrap();
+        let line = text
+            .lines()
+            .find_map(|l| l.strip_prefix("CIV_PRODUCT_INVENTORY_FIXTURE "))
+            .unwrap();
         let changed_fact: Value = serde_json::from_str(line).unwrap();
         assert_ne!(changed_fact["sha256"], empty_fact["sha256"]);
     }

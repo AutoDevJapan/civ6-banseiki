@@ -3,8 +3,8 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('Capture','Build','FixtureCapture','FixtureInventory')][string]$Phase,
     [string]$FixtureRoot,
     [string]$FixtureProgram,
-    [ValidateSet('success','failure','cancel','deadline')][string]$FixtureCase='success',
-    [ValidateSet('absent','changed')][string]$FixtureProfile='absent',
+    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','post_emit_failure','post_release_replacement')][string]$FixtureCase='success',
+    [ValidateSet('absent','changed','invalid')][string]$FixtureProfile='absent',
     [ValidateSet('registry-extracted','directory')][string]$FixtureStorage='registry-extracted'
 )
 $ErrorActionPreference='Stop'
@@ -92,18 +92,129 @@ function Package-Inventory([string]$Directory){
     foreach($fact in $files){$lookup.Add($fact.name,$fact)}
     foreach($name in $orderedNames){$lookup[$name]}
 }
-function Save-New([string]$Path,$Value){
+function Digest-Bytes([byte[]]$Bytes){
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+}
+function Read-Verified-Stream([IO.FileStream]$Stream,$Length,[string]$SHA256,[long]$Limit=134217728){
+    if($null-eq$Length-or$Length-lt0-or$Length-gt$Limit-or$SHA256-cnotmatch'^[0-9a-f]{64}$'){throw 'captured byte receipt invalid'}
+    if($Stream.Length-ne$Length){throw 'captured byte length differs'}
+    $Stream.Position=0
+    $bytes=[byte[]]::new([int]$Length);$offset=0
+    while($offset-lt$bytes.Length){
+        $count=$Stream.Read($bytes,$offset,($bytes.Length-$offset))
+        if($count-eq0){throw 'captured byte stream ended early'}
+        $offset+=$count
+    }
+    if($Stream.ReadByte()-ne-1-or$Stream.Length-ne$Length-or(Digest-Bytes $bytes)-cne$SHA256){throw 'captured byte digest differs'}
+    ,$bytes
+}
+function Read-Verified-Bytes([string]$Path,$Length,[string]$SHA256,[long]$Limit=134217728,$CaptureFailures=$null){
+    if($null-eq$Length-or$Length-lt0-or$Length-gt$Limit-or$SHA256-cnotmatch'^[0-9a-f]{64}$'){throw 'captured byte receipt invalid'}
+    $f=$null;$readError=$null;$disposeError=$null;$bytes=$null
+    try{
+        $f=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $bytes=Read-Verified-Stream $f $Length $SHA256 $Limit
+    }catch{$readError=$_.Exception}
+    finally{
+        if($null-ne$f){try{$f.Dispose()}catch{$disposeError=$_.Exception}}
+    }
+    if($null-ne$readError){
+        if($null-ne$disposeError-and$null-ne$CaptureFailures){Capture-Failure $CaptureFailures 'verified_read_dispose' $disposeError -Secondary}
+        throw $readError
+    }
+    if($null-ne$disposeError){throw $disposeError}
+    ,$bytes
+}
+function Save-New([string]$Path,$Value,[switch]$PassThru,[string]$FixtureFailure='',$CaptureFailures=$null){
     $b=[Text.UTF8Encoding]::new($false).GetBytes(($Value|ConvertTo-Json -Depth 100)+[Environment]::NewLine)
-    $f=[IO.File]::Open($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-    try{$f.Write($b,0,$b.Length);$f.Flush($true)}finally{$f.Dispose()}
+    if($b.Length-gt536870912){throw 'private result exceeds bound'}
+    # Only the final name plus its returned digest/size is a publication receipt.
+    # Failed pending files remain private, uncommitted, and are never overwritten.
+    $pending=$Path+'.pending'
+    $f=$null;$writeError=$null;$disposeError=$null
+    try{
+        $f=[IO.File]::Open($pending,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        if($FixtureFailure-eq'partial_write'){
+            $f.Write($b,0,[int][Math]::Max(1,[Math]::Floor($b.Length/2)))
+            throw [IO.IOException]::new('fixture partial publication write failure')
+        }
+        $f.Write($b,0,$b.Length)
+        if($FixtureFailure-eq'flush'){$f.Dispose()}
+        $f.Flush($true)
+    }catch{$writeError=$_.Exception}
+    finally{
+        if($null-ne$f){
+            try{
+                $f.Dispose()
+                # A deterministic post-close fault models an unconfirmed disposal.
+                if($FixtureFailure-eq'dispose'){throw [IO.IOException]::new('fixture publication dispose failure')}
+            }catch{$disposeError=$_.Exception}
+        }
+    }
+    if($null-ne$writeError){
+        if($null-ne$disposeError-and$null-ne$CaptureFailures){Capture-Failure $CaptureFailures 'result_save_dispose' $disposeError -Secondary}
+        throw $writeError
+    }
+    if($null-ne$disposeError){throw $disposeError}
+    $sha=Digest-Bytes $b
+    [void](Read-Verified-Bytes $pending $b.Length $sha 536870912 -CaptureFailures $CaptureFailures)
+    if($FixtureFailure-eq'replace_after_verify'){
+        # The explicit owned fixture synchronizes at the verified-path handoff.
+        [IO.File]::Move($pending,($pending+'.original'))
+        $replacement=[Text.Encoding]::UTF8.GetBytes('C:/private/publication-replacement')
+        $replacementWriter=[IO.File]::Open($pending,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try{$replacementWriter.Write($replacement,0,$replacement.Length);$replacementWriter.Flush($true)}finally{$replacementWriter.Dispose()}
+    }
+    [IO.File]::Move($pending,$Path)
+    $readBlocker=$null;$finalReadError=$null;$blockerReleaseError=$null
+    try{
+        if($FixtureFailure-eq'post_move_read'){
+            $readBlocker=[IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+        }
+        $published=Read-Verified-Bytes $Path $b.Length $sha 536870912 -CaptureFailures $CaptureFailures
+    }catch{$finalReadError=$_.Exception}
+    finally{
+        if($null-ne$readBlocker){try{$readBlocker.Dispose()}catch{$blockerReleaseError=$_.Exception}}
+    }
+    if($null-ne$finalReadError){
+        if($null-ne$blockerReleaseError-and$null-ne$CaptureFailures){Capture-Failure $CaptureFailures 'fixture_final_read_release' $blockerReleaseError -Secondary}
+        throw $finalReadError
+    }
+    if($null-ne$blockerReleaseError){throw $blockerReleaseError}
+    if($PassThru){[ordered]@{bytes=$published.Length;sha256=(Digest-Bytes $published)}}
+}
+function Read-Captured-Text([string]$Path,$Result){
+    $ledger=[ordered]@{first=$null;secondary=[Collections.Generic.List[object]]::new()}
+    try{
+        if(-not$Result.collection_complete-or$Result.stdout_state-ne'owned_hashed'){throw 'captured text is incomplete'}
+        $bytes=Read-Verified-Bytes $Path $Result.stdout_bytes $Result.stdout_sha256 16777216 -CaptureFailures $ledger
+        [Text.UTF8Encoding]::new($false,$true).GetString($bytes)
+    }catch{
+        Capture-Failure $ledger 'stdout_consume_verify' $_.Exception
+        $failed=[ordered]@{schema='civ6-capture-consumer-failure/v1';collection_complete=$false;stop_reason='consumer_error';capture=$Result}
+        Result-Failure $failed $ledger
+        $script:lastCaptureFailure=$failed
+        throw 'product captured text verification failed; private raw retained'
+    }
+}
+function Read-Published-Capture([string]$OutputPath,$Receipt){
+    if($Receipt.result_save_state-ne'saved'){throw 'capture result publication unavailable'}
+    $bytes=Read-Verified-Bytes ($OutputPath+'.result.json') $Receipt.result_bytes $Receipt.result_sha256 536870912
+    $record=[Text.UTF8Encoding]::new($false,$true).GetString($bytes)|ConvertFrom-Json -Depth 100 -ErrorAction Stop
+    if($record.schema-ne'civ6-private-native-capture/v1'-or$record.result_save_state-ne'requires_receipt'){throw 'capture result publication schema invalid'}
+    foreach($key in @('collection_complete','stop_reason','capture_stop_reason','exit_code','start_returned','root_exit_observed','failure_stage','exception_kind','exception_hresult','native_error_code','stdout_state','stdout_bytes','stdout_sha256','stderr_state','stderr_bytes','stderr_sha256')){
+        if(($record.$key|ConvertTo-Json -Depth 10 -Compress)-cne($Receipt.$key|ConvertTo-Json -Depth 10 -Compress)){throw 'capture result publication differs from receipt'}
+    }
+    $record
 }
 function Tool-Text([string]$Program,[string[]]$Arguments,[string]$Label){
     $index=$script:textToolIndex;$script:textToolIndex++
     $output=$prefix+'.'+$Phase.ToLowerInvariant()+'-tool-'+$index+'.stdout.raw'
     $result=Invoke-Native-Capture -Program $Program -Arguments $Arguments -RecordedArgv (@($Label)+$Arguments) -OutputPath $output -Label $Label -TimeoutMs 120000 -StreamLimit 16777216
-    Require-Capture $result
+    Require-Capture $result $output
     try{
-        [Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes($output))
+        Read-Captured-Text $output $result
     }catch{
         throw 'product tool text unavailable; private raw retained'
     }
@@ -161,62 +272,133 @@ function Set-Compiler-Environment($StartInfo,$Compiler){
         CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=$(if($environment.ContainsKey('CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER')){$environment['CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER']}else{$null})
     }
 }
+function Diagnostic-Codes($Exception){
+    $base=$Exception.GetBaseException()
+    $kind='other'
+    if($base-is[ComponentModel.Win32Exception]){$kind='win32'}
+    elseif($base-is[ArgumentException]){$kind='argument'}
+    elseif($base-is[InvalidOperationException]){$kind='invalid_operation'}
+    elseif($base-is[IO.IOException]){$kind='io'}
+    elseif($base-is[OperationCanceledException]){$kind='cancelled'}
+    elseif($base-is[Management.Automation.RuntimeException]){$kind='powershell'}
+    [ordered]@{
+        exception_kind=$kind
+        exception_hresult=[int]$base.HResult
+        native_error_code=$(if($base-is[ComponentModel.Win32Exception]){[int]$base.NativeErrorCode}else{$null})
+    }
+}
+function Owned-Raw-Fact([IO.FileStream]$Stream,[string]$Name){
+    $length=$Stream.Length
+    if($length-gt134217728){throw 'owned raw stream exceeds bound'}
+    $Stream.Position=0
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try{$digest=([BitConverter]::ToString($sha.ComputeHash($Stream))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+    if($Stream.Length-ne$length){throw 'owned raw length changed'}
+    [ordered]@{name=$Name;state='owned_hashed';bytes=$length;sha256=$digest}
+}
+function Capture-Failure($Ledger,[string]$Stage,$Exception,[switch]$Secondary){
+    $codes=Diagnostic-Codes $Exception
+    $entry=[ordered]@{
+        stage=$Stage;exception_kind=$codes.exception_kind
+        exception_hresult=$codes.exception_hresult;native_error_code=$codes.native_error_code
+        raw=$Exception.ToString()
+    }
+    if(-not$Secondary-and$null-eq$Ledger.first){$Ledger.first=$entry}else{$Ledger.secondary.Add($entry)}
+}
+function Result-Failure($Result,$Ledger){
+    $first=$Ledger.first
+    $Result['failure_stage']=$(if($null-ne$first){$first.stage}else{$null})
+    $Result['exception_kind']=$(if($null-ne$first){$first.exception_kind}else{$null})
+    $Result['exception_hresult']=$(if($null-ne$first){$first.exception_hresult}else{$null})
+    $Result['native_error_code']=$(if($null-ne$first){$first.native_error_code}else{$null})
+    $Result['capture_error']=$(if($null-ne$first){$first.raw}else{$null})
+    $Result['secondary_errors']=@($Ledger.secondary.ToArray())
+}
+function Invalidate-Capture-Publication($Result,$Failures){
+    $Result.collection_complete=$false
+    if($Result.stop_reason-eq'completed'){$Result.stop_reason='publication_finalize_failed'}
+    $Result.result_save_state='unavailable'
+    $Result.result_bytes=$null;$Result.result_sha256=$null
+    Result-Failure $Result $Failures
+    $script:lastCaptureFailure=$Result
+}
 function Invoke-Native-Capture(
     [string]$Program,[string[]]$Arguments,[string[]]$RecordedArgv,
     [string]$OutputPath,[string]$Label,$Compiler=$null,
     [int]$TimeoutMs=3600000,[long]$StreamLimit=134217728,
     [long]$CancelAfterBytes=0,[string]$FixtureChildCase='',
     $ExpectedProfile=$null,[string]$FixtureProfileCase='',
-    [Threading.CancellationToken]$CancellationToken=[Threading.CancellationToken]::None
+    [Threading.CancellationToken]$CancellationToken=[Threading.CancellationToken]::None,
+    [switch]$FixtureCleanupFault,[switch]$FixtureFinalizeFault,
+    [switch]$MatchCurrentProfile,[string]$FixtureResultSaveCase=''
 ){
-    $native=[Diagnostics.Process]::new()
-    $native.StartInfo=[Diagnostics.ProcessStartInfo]::new()
-    $native.StartInfo.FileName=$Program
-    $native.StartInfo.UseShellExecute=$false
-    $native.StartInfo.CreateNoWindow=$true
-    $native.StartInfo.WorkingDirectory=$root
-    $native.StartInfo.RedirectStandardOutput=$true
-    $native.StartInfo.RedirectStandardError=$true
-    foreach($argument in $Arguments){$native.StartInfo.ArgumentList.Add($argument)}
-    $compilerEnvironment=$null
-    if($null-ne$Compiler){$compilerEnvironment=Set-Compiler-Environment $native.StartInfo $Compiler}
-    if($FixtureChildCase){$native.StartInfo.Environment['CIV6_CAPTURE_FIXTURE_CASE']=$FixtureChildCase}
-    if($FixtureProfileCase){
-        foreach($name in @($native.StartInfo.Environment.Keys)){
-            if($name.StartsWith('CARGO_PROFILE_',[StringComparison]::OrdinalIgnoreCase)){[void]$native.StartInfo.Environment.Remove($name)}
-        }
-        if($FixtureProfileCase-eq'changed'){
-            $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_PANIC']='abort'
-            $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_LTO']='true'
-            $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_CODEGEN_UNITS']='1'
-            $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_CODEGEN_UNITS']='1'
-        }
-    }
-    $profileEnvironment=@(Profile-Facts $native.StartInfo.Environment)
-    $paths=@($OutputPath,($OutputPath+'.stderr.raw'))
+    $failures=[ordered]@{first=$null;secondary=[Collections.Generic.List[object]]::new()}
+    $native=$null;$cancellation=$null;$deadlineCancellation=$null
+    $compilerEnvironment=$null;$profileEnvironment=$null
     $writers=[IO.FileStream[]]::new(2);$pipes=[IO.Stream[]]::new(2);$reads=[object[]]::new(2)
-    $buffers=[byte[][]]::new(2);$buffers[0]=[byte[]]::new(65536);$buffers[1]=[byte[]]::new(65536)
+    $created=[bool[]]::new(2)
+    $facts=@(
+        [ordered]@{name='stdout';state='not_owned';bytes=$null;sha256=$null},
+        [ordered]@{name='stderr';state='not_owned';bytes=$null;sha256=$null}
+    )
     $totals=[long[]]::new(2);$eof=[bool[]]::new(2)
     $started=$false;$nativePID=$null;$startedUTC=$null;$exitCode=$null;$exitObserved=$false
-    $reason='start_failed';$errorRaw=$null;$killRequested=$false;$rootReaped=$false
-    $cancellation=[Threading.CancellationTokenSource]::CreateLinkedTokenSource($CancellationToken)
-    $deadlineCancellation=[Threading.CancellationTokenSource]::new()
+    $reason='start_failed';$killRequested=$false;$rootReaped=$false
+    $stage='initialize';$startReturned=$null;$captureReason=$null
     $timer=$null;$cancelTask=$null;$exitTask=$null
+    $script:lastCaptureFailure=$null
     try{
-        for($i=0;$i-lt2;$i++){$writers[$i]=[IO.File]::Open($paths[$i],[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::Read)}
+        $stage='process_create';$native=[Diagnostics.Process]::new()
+        $stage='start_info';$native.StartInfo=[Diagnostics.ProcessStartInfo]::new()
+        $native.StartInfo.FileName=$Program
+        $native.StartInfo.UseShellExecute=$false
+        $native.StartInfo.CreateNoWindow=$true
+        $native.StartInfo.WorkingDirectory=$root
+        $native.StartInfo.RedirectStandardOutput=$true
+        $native.StartInfo.RedirectStandardError=$true
+        $stage='arguments'
+        foreach($argument in $Arguments){$native.StartInfo.ArgumentList.Add($argument)}
+        $stage='compiler_environment'
+        if($null-ne$Compiler){$compilerEnvironment=Set-Compiler-Environment $native.StartInfo $Compiler}
+        $stage='child_environment'
+        if($FixtureChildCase){$native.StartInfo.Environment['CIV6_CAPTURE_FIXTURE_CASE']=$FixtureChildCase}
+        if($FixtureProfileCase){
+            foreach($name in @($native.StartInfo.Environment.Keys)){
+                if($name.StartsWith('CARGO_PROFILE_',[StringComparison]::OrdinalIgnoreCase)){[void]$native.StartInfo.Environment.Remove($name)}
+            }
+            if($FixtureProfileCase-eq'changed'){
+                $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_PANIC']='abort'
+                $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_LTO']='true'
+                $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_CODEGEN_UNITS']='1'
+                $native.StartInfo.Environment['CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_CODEGEN_UNITS']='1'
+            }
+            if($FixtureProfileCase-eq'invalid'){$native.StartInfo.Environment['CARGO_PROFILE_RELEASE_BAD-NAME']='fixture'}
+        }
+        $stage='profile_environment';$profileEnvironment=@(Profile-Facts $native.StartInfo.Environment)
+        if($MatchCurrentProfile){$stage='expected_profile';$ExpectedProfile=@(Profile-Facts ([Environment]::GetEnvironmentVariables()))}
+        $stage='buffers'
+        $buffers=[byte[][]]::new(2);$buffers[0]=[byte[]]::new(65536);$buffers[1]=[byte[]]::new(65536)
+        $paths=@($OutputPath,($OutputPath+'.stderr.raw'))
+        $stage='read_cancellation';$cancellation=[Threading.CancellationTokenSource]::CreateLinkedTokenSource($CancellationToken)
+        $stage='deadline_cancellation';$deadlineCancellation=[Threading.CancellationTokenSource]::new()
+        for($i=0;$i-lt2;$i++){$stage=$(if($i-eq0){'stdout_open'}else{'stderr_open'});$writers[$i]=[IO.File]::Open($paths[$i],[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read);$created[$i]=$true}
+        $stage='profile_check'
         if($null-ne$ExpectedProfile-and($profileEnvironment|ConvertTo-Json -Depth 10 -Compress)-cne($ExpectedProfile|ConvertTo-Json -Depth 10 -Compress)){
             $reason='profile_mismatch'
             throw 'actual child release profile differs from held input'
         }
         if($cancellation.IsCancellationRequested){$reason='cancelled';throw 'native capture cancelled before start'}
-        $started=$native.Start()
+        $stage='process_start'
+        $started=$native.Start();$startReturned=$started
         if(-not$started){throw 'native child did not start'}
-        $nativePID=$native.Id;$startedUTC=$native.StartTime.ToUniversalTime().ToString('o')
+        $stage='pid_read';$nativePID=$native.Id
+        $stage='start_time_read';$startedUTC=$native.StartTime.ToUniversalTime().ToString('o')
+        $stage='pipe_bind'
         $pipes=@($native.StandardOutput.BaseStream,$native.StandardError.BaseStream)
-        for($i=0;$i-lt2;$i++){$reads[$i]=$pipes[$i].ReadAsync($buffers[$i],0,$buffers[$i].Length,$cancellation.Token)}
-        $exitTask=$native.WaitForExitAsync()
-        $timer=[Threading.Tasks.Task]::Delay($TimeoutMs,$deadlineCancellation.Token)
-        $cancelTask=[Threading.Tasks.Task]::Delay(-1,$cancellation.Token)
+        for($i=0;$i-lt2;$i++){$stage=$(if($i-eq0){'stdout_read_begin'}else{'stderr_read_begin'});$reads[$i]=$pipes[$i].ReadAsync($buffers[$i],0,$buffers[$i].Length,$cancellation.Token)}
+        $stage='exit_task_begin';$exitTask=$native.WaitForExitAsync()
+        $stage='deadline_task_begin';$timer=[Threading.Tasks.Task]::Delay($TimeoutMs,$deadlineCancellation.Token)
+        $stage='cancel_task_begin';$cancelTask=[Threading.Tasks.Task]::Delay(-1,$cancellation.Token)
         $reason='running'
         while(-not($eof[0]-and$eof[1]-and$exitObserved)){
             if($cancellation.IsCancellationRequested){$reason='cancelled';break}
@@ -224,100 +406,225 @@ function Invoke-Native-Capture(
             for($i=0;$i-lt2;$i++){if(-not$eof[$i]){$pending.Add($reads[$i])}}
             if(-not$exitObserved){$pending.Add($exitTask)}
             $pending.Add($timer);$pending.Add($cancelTask)
+            $stage='drain_wait'
             $ready=[Threading.Tasks.Task]::WhenAny($pending.ToArray()).GetAwaiter().GetResult()
             if([object]::ReferenceEquals($ready,$timer)){$reason='deadline';break}
             if([object]::ReferenceEquals($ready,$cancelTask)){$reason='cancelled';break}
             if([object]::ReferenceEquals($ready,$exitTask)){
-                $exitTask.GetAwaiter().GetResult()
+                $stage='exit_observe';$exitTask.GetAwaiter().GetResult()
                 $exitCode=$native.ExitCode;$exitObserved=$true
                 continue
             }
             for($i=0;$i-lt2;$i++){
                 if($eof[$i]-or-not[object]::ReferenceEquals($ready,$reads[$i])){continue}
+                $stage=$(if($i-eq0){'stdout_read_end'}else{'stderr_read_end'})
                 $count=$reads[$i].GetAwaiter().GetResult()
                 $reads[$i]=$null
                 if($count-eq0){$eof[$i]=$true;continue}
                 $allowed=[int][Math]::Min([long]$count,($StreamLimit-$totals[$i]))
+                $stage=$(if($i-eq0){'stdout_write'}else{'stderr_write'})
                 if($allowed-gt0){$writers[$i].Write($buffers[$i],0,$allowed);$totals[$i]+=$allowed}
                 if($allowed-ne$count){$reason=$(if($i-eq0){'stdout_limit'}else{'stderr_limit'});break}
+                $stage=$(if($i-eq0){'stdout_read_begin'}else{'stderr_read_begin'})
                 $reads[$i]=$pipes[$i].ReadAsync($buffers[$i],0,$buffers[$i].Length,$cancellation.Token)
             }
             if($reason-ne'running'){break}
             if($CancelAfterBytes-gt0-and($totals[0]+$totals[1])-ge$CancelAfterBytes){$reason='cancelled';$cancellation.Cancel();break}
         }
         if($eof[0]-and$eof[1]-and$exitObserved-and$reason-eq'running'){$reason='completed'}
+
     }catch{
-        $errorRaw=$_.Exception.ToString()
-        if($cancellation.IsCancellationRequested){$reason='cancelled'}elseif($reason-eq'running'){$reason='capture_error'}
+        Capture-Failure $failures $stage $_.Exception
+        if($reason-eq'running'){$reason=$(if($null-ne$cancellation-and$cancellation.IsCancellationRequested){'cancelled'}else{'capture_error'})}
     }finally{
-        if($started){
-            try{
-                if(-not$native.HasExited){$killRequested=$true;$native.Kill($true)}
-                $rootReaped=$native.WaitForExit(5000)
-                if($rootReaped){$exitCode=$native.ExitCode;$exitObserved=$true}
-            }catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
+        $captureReason=$reason
+        if(($FixtureCleanupFault-or$FixtureFinalizeFault)-and$created[0]){
+            try{$writers[0].Dispose()}catch{Capture-Failure $failures 'fixture_raw_prepare' $_.Exception}
         }
-        $cancellation.Cancel()
+        if($started){
+            $cleanupStage='root_status'
+            try{
+                if(-not$native.HasExited){$cleanupStage='root_kill';$killRequested=$true;$native.Kill($true)}
+                $cleanupStage='root_wait'
+                $reapBudget=$(if($FixtureCleanupFault){-2}else{5000})
+                $rootReaped=$native.WaitForExit($reapBudget)
+                if($rootReaped){$cleanupStage='root_exit_code';$exitCode=$native.ExitCode;$exitObserved=$true}
+            }catch{Capture-Failure $failures $cleanupStage $_.Exception}
+        }
+        if($null-ne$cancellation){try{$cancellation.Cancel()}catch{Capture-Failure $failures 'read_cancel' $_.Exception}}
         for($i=0;$i-lt2;$i++){
-            # Preserve any already-delivered prefix without waiting on an open descendant pipe.
+            $streamName=$(if($i-eq0){'stdout'}else{'stderr'})
             if($null-ne$reads[$i]-and$reads[$i].Status-eq[Threading.Tasks.TaskStatus]::RanToCompletion){
+                $cleanupStage=$streamName+'_pending_result'
                 try{
                     $remaining=$reads[$i].GetAwaiter().GetResult()
                     $allowed=[int][Math]::Min([long]$remaining,($StreamLimit-$totals[$i]))
+                    $cleanupStage=$streamName+'_pending_write'
                     if($allowed-gt0){$writers[$i].Write($buffers[$i],0,$allowed);$totals[$i]+=$allowed}
-                }catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
+                }catch{Capture-Failure $failures $cleanupStage $_.Exception}
             }
             if($null-ne$pipes[$i]){
-                try{$pipes[$i].Dispose()}catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
+                try{$pipes[$i].Dispose()}catch{Capture-Failure $failures ($streamName+'_pipe_dispose') $_.Exception}
             }
-            if($null-ne$writers[$i]){
-                try{$writers[$i].Flush($true)}catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
-                try{$writers[$i].Dispose()}catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
+            if($created[$i]){
+                $facts[$i]=[ordered]@{name=$streamName;state='owned_unavailable';bytes=$null;sha256=$null}
+                $cleanupStage=$streamName+'_flush'
+                try{
+                    $writers[$i].Flush($true)
+                    $cleanupStage=$streamName+'_hash'
+                    $facts[$i]=Owned-Raw-Fact $writers[$i] $streamName
+                }catch{Capture-Failure $failures $cleanupStage $_.Exception}
+                finally{
+                    try{$writers[$i].Dispose()}catch{Capture-Failure $failures ($streamName+'_raw_dispose') $_.Exception}
+                }
             }
         }
-        try{$native.Dispose()}catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
-        try{$cancellation.Dispose()}catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
-        try{$deadlineCancellation.Cancel()}catch{$errorRaw=([string]$errorRaw+[Environment]::NewLine+$_.Exception.ToString())}
-        $deadlineCancellation.Dispose()
-        if($reason-eq'completed'-and$null-ne$errorRaw){$reason='cleanup_error'}
+        if($null-ne$native){try{$native.Dispose()}catch{Capture-Failure $failures 'process_dispose' $_.Exception}}
+        if($null-ne$cancellation){try{$cancellation.Dispose()}catch{Capture-Failure $failures 'read_cancel_dispose' $_.Exception}}
+        if($null-ne$deadlineCancellation){
+            try{$deadlineCancellation.Cancel()}catch{Capture-Failure $failures 'deadline_cancel' $_.Exception}
+            try{$deadlineCancellation.Dispose()}catch{Capture-Failure $failures 'deadline_dispose' $_.Exception}
+        }
+        if($reason-eq'completed'-and$null-ne$failures.first){$reason='cleanup_error'}
     }
-    $stdout=File-Fact $paths[0] 'stdout'
-    $stderr=File-Fact $paths[1] 'stderr'
-    $complete=($reason-eq'completed'-and$eof[0]-and$eof[1]-and$exitObserved-and$null-eq$errorRaw)
+    $stdout=$facts[0]
+    $stderr=$facts[1]
+    $complete=($reason-eq'completed'-and$eof[0]-and$eof[1]-and$exitObserved-and$null-eq$failures.first-and$stdout.state-eq'owned_hashed'-and$stderr.state-eq'owned_hashed')
+    # The file is a candidate snapshot; success requires the later returned receipt.
     $result=[ordered]@{
+        schema='civ6-private-native-capture/v1';result_save_state='requires_receipt'
         argv=$RecordedArgv;program_path=$Program;exit_code=$exitCode
         collection_complete=$complete;stop_reason=$reason
+        capture_stop_reason=$captureReason;start_returned=$startReturned
+        failure_stage=$null;exception_kind=$null;exception_hresult=$null;native_error_code=$null
         stdout_eof=$eof[0];stderr_eof=$eof[1];root_exit_observed=$exitObserved
         native_pid=$nativePID;native_started_utc=$startedUTC;compiler_environment=$compilerEnvironment
         profile_environment=$profileEnvironment
+        stdout_state=$stdout.state;stderr_state=$stderr.state
         stdout_sha256=$stdout.sha256;stderr_sha256=$stderr.sha256
         stdout_bytes=$stdout.bytes;stderr_bytes=$stderr.bytes
-        capture_error=$errorRaw;kill_requested=$killRequested;root_reaped=$rootReaped
+        capture_error=$null;secondary_errors=@();kill_requested=$killRequested;root_reaped=$rootReaped
         descendant_state='not_attested'
     }
+    Result-Failure $result $failures
     if($Label-in@('bins','dlls')){$result['cargo_json_sha256']=$stdout.sha256}
-    Save-New ($OutputPath+'.result.json') $result
-    $capturePublicEvent=[ordered]@{
-        schema='civ6-native-capture/v2';phase=$Label
-        exit_code=$exitCode;collection_complete=$complete;stop_reason=$reason
-        stdout_bytes=$stdout.bytes;stdout_sha256=$stdout.sha256
-        stderr_bytes=$stderr.bytes;stderr_sha256=$stderr.sha256
+    $resultSaveState='saved'
+    $resultSaveError=$null;$publication=$null;$publicationPin=$null;$publicationBlocker=$null
+    $publicationStage='result_save';$publicationPinChecked=$false
+    try{
+        $publication=Save-New ($OutputPath+'.result.json') $result -PassThru -FixtureFailure $FixtureResultSaveCase -CaptureFailures $failures
+        $publicationStage='result_publish_open'
+        if($FixtureResultSaveCase-eq'post_move_pin'){
+            $publicationBlocker=[IO.File]::Open(($OutputPath+'.result.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+        }
+        $publicationPin=[IO.File]::Open(($OutputPath+'.result.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+        $publicationStage='result_publish_verify'
+        $publishedBytes=Read-Verified-Stream $publicationPin $publication.bytes $publication.sha256 536870912
+        $publication.bytes=$publishedBytes.Length
+        $publication.sha256=Digest-Bytes $publishedBytes
+        if($FixtureResultSaveCase-eq'pin_check'){
+            $publicationStage='fixture_publish_pin'
+            $rejected=$false
+            try{[IO.File]::Move(($OutputPath+'.result.json'),($OutputPath+'.result.json.unexpected'))}
+            catch [IO.IOException]{
+                if(($_.Exception.GetBaseException().HResult-band65535)-ne32){throw}
+                $rejected=$true
+            }
+            if(-not$rejected){throw 'publication read pin did not reject rename'}
+            $publicationPinChecked=$true
+        }
+    }catch{
+        $resultSaveState='unavailable'
+        $hadPrimary=($reason-ne'completed'-or$null-ne$failures.first-or($null-ne$exitCode-and$exitCode-ne0))
+        Capture-Failure $failures $publicationStage $_.Exception -Secondary:$hadPrimary
+        $publication=$null
+        $resultSaveError=$(if($hadPrimary){$failures.secondary[$failures.secondary.Count-1]}else{$failures.first})
+        if(-not$hadPrimary){$reason='result_save_failed'}
+        $complete=$false
+        $result.collection_complete=$complete
+        $result.stop_reason=$reason
+        Result-Failure $result $failures
     }
-    [Console]::Out.WriteLine('CIV_PRODUCT_NATIVE_CAPTURE '+($capturePublicEvent|ConvertTo-Json -Compress))
+    $result['result_save_state']=$resultSaveState
+    $result['result_save_error']=$resultSaveError
+    if($FixtureResultSaveCase-eq'pin_check'){$result['fixture_publication_pin_checked']=$publicationPinChecked}
+    $result['result_bytes']=$(if($null-ne$publication){$publication.bytes}else{$null})
+    $result['result_sha256']=$(if($null-ne$publication){$publication.sha256}else{$null})
+    if(-not$result.collection_complete-or$result.exit_code-ne0){$script:lastCaptureFailure=$result}
+    # Finish every known owned cleanup before taking the advisory snapshot.
+    $publicationCleanupFailed=$false
+    if($null-ne$publicationPin){
+        try{
+            $publicationPin.Dispose()
+            if($FixtureResultSaveCase-eq'release_failure'){throw [IO.IOException]::new('fixture publication release failure')}
+        }catch{
+            Capture-Failure $failures 'result_publication_release' $_.Exception
+            $publicationCleanupFailed=$true
+        }
+    }
+    if($null-ne$publicationBlocker){
+        try{$publicationBlocker.Dispose()}catch{
+            Capture-Failure $failures 'fixture_publication_blocker_release' $_.Exception
+            $publicationCleanupFailed=$true
+        }
+    }
+    if($publicationCleanupFailed){Invalidate-Capture-Publication $result $failures}
+    if($FixtureResultSaveCase-eq'replace_after_release'){
+        try{
+            [IO.File]::Move(($OutputPath+'.result.json'),($OutputPath+'.result.json.after-release.original'))
+            Save-New ($OutputPath+'.result.json') ([ordered]@{fixture='post_release_replacement'})
+        }catch{
+            Capture-Failure $failures 'fixture_post_release_replace' $_.Exception
+            Invalidate-Capture-Publication $result $failures
+        }
+    }
+    # This is historical data, never a standalone producer-success receipt.
+    # Callers require the actual return and a newly verified consumer buffer.
+    # The workflow also requires producer exit success; no live path is promised.
+    $capturePublicEvent=[ordered]@{
+        schema='civ6-native-capture/v3';evidence_kind='historical_capture_snapshot';phase=$Label
+        native_exit_code=$result.exit_code;collection_complete=$result.collection_complete;stop_reason=$result.stop_reason
+        capture_stop_reason=$result.capture_stop_reason;start_returned=$result.start_returned;root_exit_observed=$result.root_exit_observed
+        failure_stage=$result.failure_stage
+        exception_kind=$result.exception_kind;exception_hresult=$result.exception_hresult;native_error_code=$result.native_error_code
+        result_save_state=$result.result_save_state;result_bytes=$result.result_bytes;result_sha256=$result.result_sha256;secondary_failure_count=$result.secondary_errors.Count
+        stdout_state=$result.stdout_state;stderr_state=$result.stderr_state
+        stdout_bytes=$result.stdout_bytes;stdout_sha256=$result.stdout_sha256
+        stderr_bytes=$result.stderr_bytes;stderr_sha256=$result.stderr_sha256
+    }
+    try{
+        [Console]::Out.WriteLine('CIV_PRODUCT_NATIVE_CAPTURE '+($capturePublicEvent|ConvertTo-Json -Compress))
+        if($FixtureResultSaveCase-eq'emit_failure'){throw [IO.IOException]::new('fixture post-emission write failure')}
+    }catch{
+        Capture-Failure $failures 'public_event_write' $_.Exception
+        Invalidate-Capture-Publication $result $failures
+    }
     $result
 }
-function Require-Capture($Result){
+function Require-Capture($Result,[string]$OutputPath){
     if($null-ne$Result.exit_code-and$Result.exit_code-ne0){$script:producerExit=$Result.exit_code}
-    if(-not$Result.collection_complete-or$Result.exit_code-ne0){throw 'product native phase did not complete successfully'}
+    if(-not$Result.collection_complete-or$Result.exit_code-ne0-or$Result.result_save_state-ne'saved'-or[string]::IsNullOrWhiteSpace($OutputPath)){
+        $script:lastCaptureFailure=$Result
+        throw 'product native phase did not complete with a current publication receipt'
+    }
+    try{[void](Read-Published-Capture $OutputPath $Result)}
+    catch{
+        $ledger=[ordered]@{first=$null;secondary=[Collections.Generic.List[object]]::new()}
+        Capture-Failure $ledger 'result_consume_verify' $_.Exception
+        $failed=[ordered]@{schema='civ6-capture-consumer-failure/v1';collection_complete=$false;stop_reason='consumer_error';capture=$Result}
+        Result-Failure $failed $ledger
+        $script:lastCaptureFailure=$failed
+        throw 'product native publication receipt could not be verified'
+    }
 }
 function Metadata($Compiler){
     $index=$script:metadataIndex;$script:metadataIndex++
     $output=$prefix+'.'+$Phase.ToLowerInvariant()+'-metadata-'+$index+'.stdout.raw'
     $arguments=@('+1.95.0','metadata','--locked','--manifest-path','tools/Cargo.toml','--format-version','1')
-    $result=Invoke-Native-Capture -Program $Compiler.cargo_dispatcher_path -Arguments $arguments -RecordedArgv (@('cargo')+$arguments) -OutputPath $output -Label 'metadata' -Compiler $Compiler -ExpectedProfile @(Profile-Facts ([Environment]::GetEnvironmentVariables())) -TimeoutMs 120000 -StreamLimit 16777216
-    Require-Capture $result
+    $result=Invoke-Native-Capture -Program $Compiler.cargo_dispatcher_path -Arguments $arguments -RecordedArgv (@('cargo')+$arguments) -OutputPath $output -Label 'metadata' -Compiler $Compiler -MatchCurrentProfile -TimeoutMs 120000 -StreamLimit 16777216
+    Require-Capture $result $output
     try{
-        $json=[Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes($output))
+        $json=Read-Captured-Text $output $result
         $metadata=$json|ConvertFrom-Json -Depth 100 -ErrorAction Stop
         if($null-eq$metadata-or@($metadata.packages).Count-eq0){throw 'metadata packages absent'}
         $metadata
@@ -436,6 +743,52 @@ function Compiler-Facts {
         rustc_path=$rustc;cargo_path=$cargo
     }
 }
+function Fixture-Capture-Summary([string]$OutputPath,$Result){
+    $verified=$false
+    try{[void](Read-Published-Capture $OutputPath $Result);$verified=$true}catch{}
+    $savedLast=$script:lastCaptureFailure;$savedExit=$script:producerExit
+    $consumerAccepted=$false;$candidateAccepted=$false;$candidateReaderAccepted=$false
+    $receiptlessAccepted=$false;$resourcesReleased=$null
+    try{
+        try{Require-Capture $Result $OutputPath;$consumerAccepted=$true}catch{}
+        $receiptless=$Result|ConvertTo-Json -Depth 100|ConvertFrom-Json -Depth 100
+        [void]$receiptless.PSObject.Properties.Remove('result_bytes')
+        [void]$receiptless.PSObject.Properties.Remove('result_sha256')
+        try{Require-Capture $receiptless $OutputPath;$receiptlessAccepted=$true}catch{}
+        if([IO.File]::Exists($OutputPath+'.result.json')){
+            try{
+                # This unverified candidate is used only as a negative consumer input.
+                $candidate=[Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes($OutputPath+'.result.json'))|ConvertFrom-Json -Depth 100
+                try{Require-Capture $candidate $OutputPath;$candidateAccepted=$true}catch{}
+                try{[void](Read-Published-Capture $OutputPath $candidate);$candidateReaderAccepted=$true}catch{}
+            }catch{}
+            $probe=$null
+            try{
+                $probe=[IO.File]::Open(($OutputPath+'.result.json'),[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+                $resourcesReleased=$true
+            }catch{$resourcesReleased=$false}
+            finally{if($null-ne$probe){$probe.Dispose()}}
+        }
+    }finally{$script:lastCaptureFailure=$savedLast;$script:producerExit=$savedExit}
+    [ordered]@{
+        exit_code=$Result.exit_code;complete=$Result.collection_complete;reason=$Result.stop_reason
+        root_exit=$Result.root_exit_observed;profile_environment=$Result.profile_environment
+        failure_stage=$Result.failure_stage;start_returned=$Result.start_returned
+        exception_kind=$Result.exception_kind;exception_hresult=$Result.exception_hresult;native_error_code=$Result.native_error_code
+        stdout_state=$Result.stdout_state;stderr_state=$Result.stderr_state
+        stdout_bytes=$Result.stdout_bytes;stderr_bytes=$Result.stderr_bytes
+        stdout_sha256=$Result.stdout_sha256;stderr_sha256=$Result.stderr_sha256
+        capture_stop_reason=$Result.capture_stop_reason;result_save_state=$Result.result_save_state
+        result_bytes=$Result.result_bytes;result_sha256=$Result.result_sha256
+        secondary_failure_count=$Result.secondary_errors.Count
+        secondary_stages=@($Result.secondary_errors|ForEach-Object stage)
+        publication_verified=$verified;last_failure_stage=$script:lastCaptureFailure.failure_stage
+        publication_pin_checked=$Result.fixture_publication_pin_checked
+        actual_consumer_accepted=$consumerAccepted;candidate_without_receipt_accepted=$candidateAccepted
+        candidate_reader_without_receipt_accepted=$candidateReaderAccepted
+        receiptless_actual_accepted=$receiptlessAccepted;publication_resources_released=$resourcesReleased
+    }
+}
 try{
 if($Phase-eq'FixtureInventory'){
     if(-not$IsWindows){throw 'Windows fixture required'}
@@ -452,14 +805,57 @@ if($Phase-eq'FixtureCapture'){
     $root=[IO.Path]::GetFullPath($FixtureRoot)
     if([IO.Path]::GetFileName($FixtureProgram)-notmatch'^civ6_autotest_rs-[0-9a-f]+\.exe$'){throw 'own test harness required'}
     $fixtureArguments=@('--ignored','--exact','product_artifacts::tests::product_capture_fixture_child','--nocapture')
-    $case=$(if($FixtureCase-in@('cancel','deadline')){'wait'}else{$FixtureCase})
-    $cancelBytes=$(if($FixtureCase-eq'cancel'){131072}else{0})
-    $budget=$(if($FixtureCase-eq'deadline'){1500}else{20000})
-    $first=Invoke-Native-Capture -Program $FixtureProgram -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath (Join-Path $root 'fixture.stdout.raw') -Label 'fixture' -TimeoutMs $budget -StreamLimit 8388608 -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile
-    $events=@([ordered]@{exit_code=$first.exit_code;complete=$first.collection_complete;reason=$first.stop_reason;root_exit=$first.root_exit_observed;profile_environment=$first.profile_environment})
+    $cancelCase=$FixtureCase-in@('cancel','cancel_save_failure')
+    $deadlineCase=$FixtureCase-in@('deadline','deadline_save_failure')
+    $case=$(if($cancelCase-or$deadlineCase){'wait'}elseif($FixtureCase-in@('failure','failure_save_failure','failure_publication_release_failure')){'failure'}else{'success'})
+    $cancelBytes=$(if($cancelCase){131072}else{0})
+    $budget=$(if($deadlineCase){1500}else{20000})
+    $streamBudget=$(if($FixtureCase-eq'limit_save_failure'){65536}else{8388608})
+    $selectedFixture=$FixtureProgram
+    if($FixtureCase-in@('start_failure','start_finalize_save_failure','start_publish_replaced','start_post_move_pin_failure','start_publication_release_failure')){$selectedFixture=Join-Path $root 'civ6_autotest_rs-0000.exe'}
+    $saveFault=''
+    switch($FixtureCase){
+        'save_partial_failure'{$saveFault='partial_write'}
+        'save_flush_failure'{$saveFault='flush'}
+        'save_dispose_failure'{$saveFault='dispose'}
+        'publish_replaced'{$saveFault='replace_after_verify'}
+        'start_publish_replaced'{$saveFault='replace_after_verify'}
+        'publish_pin_protected'{$saveFault='pin_check'}
+        'post_move_read_failure'{$saveFault='post_move_read'}
+        'post_move_pin_failure'{$saveFault='post_move_pin'}
+        'start_post_move_pin_failure'{$saveFault='post_move_pin'}
+        'publication_release_failure'{$saveFault='release_failure'}
+        'failure_publication_release_failure'{$saveFault='release_failure'}
+        'start_publication_release_failure'{$saveFault='release_failure'}
+        'post_emit_failure'{$saveFault='emit_failure'}
+        'post_release_replacement'{$saveFault='replace_after_release'}
+    }
+    $output=Join-Path $root 'fixture.stdout.raw'
+    $first=Invoke-Native-Capture -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label 'fixture' -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault
+    $events=@(Fixture-Capture-Summary $output $first)
+    if($FixtureCase-in@('consume_unchanged','consume_modified','consume_replaced')){
+        if($FixtureCase-eq'consume_modified'){
+            $changed=[IO.File]::ReadAllBytes($output);$changed[0]=$changed[0]-bxor1
+            [IO.File]::WriteAllBytes($output,$changed)
+        }
+        if($FixtureCase-eq'consume_replaced'){
+            [IO.File]::Move($output,($output+'.original'))
+            [IO.File]::WriteAllBytes($output,[Text.Encoding]::UTF8.GetBytes('fixture replacement'))
+        }
+        try{
+            $text=Read-Captured-Text $output $first
+            $events[0]['consumer_verified']=$true
+            $events[0]['consumer_bytes']=[Text.Encoding]::UTF8.GetByteCount($text)
+            $events[0]['consumer_sha256']=Digest-Text $text
+        }catch{
+            $events[0]['consumer_verified']=$false
+            $events[0]['consumer_failure_stage']=$script:lastCaptureFailure.failure_stage
+        }
+    }
     if($FixtureCase-in@('cancel','deadline')){
-        $next=Invoke-Native-Capture -Program $FixtureProgram -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath (Join-Path $root 'next.stdout.raw') -Label 'fixture-next' -TimeoutMs 20000 -StreamLimit 8388608 -FixtureChildCase 'success'
-        $events+=[ordered]@{exit_code=$next.exit_code;complete=$next.collection_complete;reason=$next.stop_reason;root_exit=$next.root_exit_observed;profile_environment=$next.profile_environment}
+        $nextOutput=Join-Path $root 'next.stdout.raw'
+        $next=Invoke-Native-Capture -Program $FixtureProgram -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $nextOutput -Label 'fixture-next' -TimeoutMs 20000 -StreamLimit 8388608 -FixtureChildCase 'success'
+        $events+=Fixture-Capture-Summary $nextOutput $next
     }
     [Console]::Out.WriteLine('CIV_PRODUCT_FIXTURE_RESULT '+($events|ConvertTo-Json -Depth 10 -Compress))
     exit 0
@@ -517,7 +913,7 @@ try{
         $result=Invoke-Native-Capture -Program $context.compiler.cargo_dispatcher_path -Arguments @($command[1..($command.Count-1)]) -RecordedArgv $command -OutputPath $log -Label $phaseName -Compiler $context.compiler -ExpectedProfile $context.inputs.profile_environment
         $commands[$phaseName]=$result
         if(($result.profile_environment|ConvertTo-Json -Depth 10 -Compress)-cne($context.inputs.profile_environment|ConvertTo-Json -Depth 10 -Compress)){throw 'actual child release profile differs'}
-        Require-Capture $result
+        Require-Capture $result $log
     }
     $after=Source-State
     $afterCompiler=Compiler-Facts
@@ -533,13 +929,17 @@ try{
     $bundle=Join-Path $root 'tools/target/civ6-windows-product'
     $genArgs=@('--product-artifacts',$contextPath,$binsPath,$dllsPath,$completionPath,$bundle)
     $generated=Invoke-Native-Capture -Program $generator -Arguments $genArgs -RecordedArgv (@('civ6-bootstrap-scene')+$genArgs) -OutputPath ($prefix+'.generator.stdout.raw') -Label 'generator' -TimeoutMs 120000 -StreamLimit 16777216
-    Require-Capture $generated
+    Require-Capture $generated ($prefix+'.generator.stdout.raw')
     Write-Output ('CIV_PRODUCT_BUNDLE source='+$after.source_sha+' tree='+$after.source_tree+' members=5')
 }finally{$pin.Dispose()}
 }catch{
     if($prefix){
-        try{Save-New ($prefix+'.'+$Phase.ToLowerInvariant()+'.failure.json') ([ordered]@{error=$_.Exception.ToString();exit_code=$script:producerExit})}catch{}
+        try{Save-New ($prefix+'.'+$Phase.ToLowerInvariant()+'.failure.json') ([ordered]@{error=$_.Exception.ToString();exit_code=$script:producerExit;capture=$script:lastCaptureFailure})}catch{}
     }
-    [Console]::Out.WriteLine('CIV_PRODUCT_PHASE_FAILED exit_code='+$script:producerExit)
+    $safeFailure=Diagnostic-Codes $_.Exception
+    $safeFailure['schema']='civ6-product-phase-failure/v1'
+    $safeFailure['phase']=$Phase
+    $safeFailure['exit_code']=$script:producerExit
+    [Console]::Out.WriteLine('CIV_PRODUCT_PHASE_FAILED '+($safeFailure|ConvertTo-Json -Compress))
     exit $script:producerExit
 }
