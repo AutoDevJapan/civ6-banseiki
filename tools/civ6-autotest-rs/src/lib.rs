@@ -27,6 +27,7 @@ pub(crate) mod native_recovery_test_tree;
 pub mod native_trace;
 pub mod payment_scenario;
 pub mod persona_payment;
+pub mod product_artifacts;
 #[path = "../../native_recovery_protocol.rs"]
 pub mod recovery_protocol;
 pub mod reliability;

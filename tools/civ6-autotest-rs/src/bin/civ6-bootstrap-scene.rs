@@ -2,6 +2,19 @@
 fn main() {
     let result = (|| -> Result<(), Box<dyn std::error::Error>> {
         let args: Vec<_> = std::env::args().skip(1).collect();
+        if args.first().is_some_and(|s| s == "--product-artifacts") {
+            if args.len() != 6 {
+                return Err("usage: civ6-bootstrap-scene --product-artifacts CONTEXT.json BINS.jsonl DLLS.jsonl COMPLETION.json OUTPUT_DIRECTORY".into());
+            }
+            civ6_autotest_rs::product_artifacts::write_bundle(
+                std::path::Path::new(&args[1]),
+                std::path::Path::new(&args[2]),
+                std::path::Path::new(&args[3]),
+                std::path::Path::new(&args[4]),
+                std::path::Path::new(&args[5]),
+            )?;
+            return Ok(());
+        }
         if args.len() != 6 {
             return Err("usage: civ6-bootstrap-scene PREFIX.json RUNTIME.dll SHA256 BOOTSTRAP.dll SHA256 PHYSICAL_SAVE_NAME; or --original SCENE.json RUNTIME.dll SHA256 BOOTSTRAP.dll SHA256".into());
         }
