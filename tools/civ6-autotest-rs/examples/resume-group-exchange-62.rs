@@ -294,7 +294,10 @@ fn generated_resume_preserves_hardlinked_input_and_existing_outputs() {
     let unrelated = root.path().join("previous-diagnostic.json");
     fs::write(&unrelated, b"previous reviewed diagnostic").unwrap();
     assert!(write_scene(&unrelated, &scenario()).is_err());
-    assert_eq!(fs::read(&unrelated).unwrap(), b"previous reviewed diagnostic");
+    assert_eq!(
+        fs::read(&unrelated).unwrap(),
+        b"previous reviewed diagnostic"
+    );
 }
 
 #[cfg(unix)]

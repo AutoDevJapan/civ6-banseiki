@@ -22,16 +22,16 @@ enum Command {
 }
 fn generate(input: &Path, output: &Path) -> Result<()> {
     let mut data: serde_json::Value = serde_json::from_slice(&fs::read(input)?)?;
-    data["name"] =
-        json!("PR86 cost-one current Core promotion flags independent UI comparison");
+    data["name"] = json!("PR86 cost-one current Core promotion flags independent UI comparison");
     let steps = data["steps"].as_array_mut().unwrap();
     let start = steps
         .iter()
         .position(|s| s["action"] == "start_native_assign_calibration")
-        .ok_or_else(|| {
-            civ6_autotest_rs::Error::input("base assignment observation missing")
-        })?;
-    steps.insert(start+1,json!({"action":"ui_lua","state_name":"InGame","code":persona_payment::READ_COST_ONE}));
+        .ok_or_else(|| civ6_autotest_rs::Error::input("base assignment observation missing"))?;
+    steps.insert(
+        start + 1,
+        json!({"action":"ui_lua","state_name":"InGame","code":persona_payment::READ_COST_ONE}),
+    );
     scenario::validate_scenario(&data)?;
     let bytes = serde_json::to_vec_pretty(&data)?;
     // Match the payment-scenario generator: reviewed inputs and prior output
