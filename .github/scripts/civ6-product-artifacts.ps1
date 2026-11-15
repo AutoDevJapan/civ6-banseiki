@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('Capture','Build','FixtureCapture','FixtureInventory')][string]$Phase,
     [string]$FixtureRoot,
     [string]$FixtureProgram,
-    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','post_emit_failure','post_release_replacement')][string]$FixtureCase='success',
+    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','post_emit_failure','post_release_replacement','resolved_success','resolved_multiple','resolved_invalid','resolved_missing','working_directory_missing')][string]$FixtureCase='success',
     [ValidateSet('absent','changed','invalid')][string]$FixtureProfile='absent',
     [ValidateSet('registry-extracted','directory')][string]$FixtureStorage='registry-extracted'
 )
@@ -208,10 +208,41 @@ function Read-Published-Capture([string]$OutputPath,$Receipt){
     }
     $record
 }
-function Tool-Text([string]$Program,[string[]]$Arguments,[string]$Label){
+function Select-Application([object[]]$Candidates){
+    $selected=$(if($Candidates.Count-gt0){$Candidates[0]}else{$null})
+    $pathValue=$(if($null-ne$selected){$selected.Path}else{$null})
+    $sourceValue=$(if($null-ne$selected){$selected.Source}else{$null})
+    $sourceKind=$(if($null-eq$sourceValue){'none'}elseif($sourceValue-is[string]){'string'}elseif($sourceValue-is[array]){'array'}else{'other'})
+    $pathString=($pathValue-is[string])
+    $absolute=($pathString-and-not[string]::IsNullOrWhiteSpace($pathValue)-and[IO.Path]::IsPathFullyQualified($pathValue))
+    $path=$(if($absolute){[IO.Path]::GetFullPath($pathValue)}else{''})
+    $application=($null-ne$selected-and$selected.CommandType-eq[Management.Automation.CommandTypes]::Application)
+    $exists=($absolute-and[IO.File]::Exists($path))
+    [ordered]@{
+        path=$path;valid=($application-and$absolute-and$exists)
+        facts=[ordered]@{
+            resolution_kind='logical_application';application_candidates=$Candidates.Count
+            selected_is_application=$application;selected_path_is_string=$pathString
+            selected_path_count=$(if($null-eq$pathValue){0}elseif($pathValue-is[array]){$pathValue.Count}else{1})
+            selected_path_is_absolute=$absolute;selected_file_exists=$exists
+            selected_source_kind=$sourceKind
+            selected_source_count=$(if($null-eq$sourceValue){0}elseif($sourceValue-is[array]){$sourceValue.Count}else{1})
+        }
+    }
+}
+function Resolve-Application([string]$Name){
+    $candidates=@(Get-Command -Name $Name -CommandType Application -All -ErrorAction SilentlyContinue)
+    Select-Application $candidates
+}
+function Required-Application-Path([string]$Name){
+    $resolved=Resolve-Application $Name
+    if(-not$resolved.valid){throw 'required application binding unavailable'}
+    [string]$resolved.path
+}
+function Tool-Text([string]$Program,[string[]]$Arguments,[string]$Label,[string]$ApplicationName=''){
     $index=$script:textToolIndex;$script:textToolIndex++
     $output=$prefix+'.'+$Phase.ToLowerInvariant()+'-tool-'+$index+'.stdout.raw'
-    $result=Invoke-Native-Capture -Program $Program -Arguments $Arguments -RecordedArgv (@($Label)+$Arguments) -OutputPath $output -Label $Label -TimeoutMs 120000 -StreamLimit 16777216
+    $result=Invoke-Native-Capture -Program $Program -Arguments $Arguments -RecordedArgv (@($Label)+$Arguments) -OutputPath $output -Label $Label -ApplicationName $ApplicationName -TimeoutMs 120000 -StreamLimit 16777216
     Require-Capture $result $output
     try{
         Read-Captured-Text $output $result
@@ -220,8 +251,7 @@ function Tool-Text([string]$Program,[string[]]$Arguments,[string]$Label){
     }
 }
 function Git-One([string[]]$Arguments){
-    $program=(Get-Command -Name git -CommandType Application -ErrorAction Stop).Source
-    $value=@((Tool-Text $program $Arguments 'git') -split '\r?\n' | Where-Object { $_ -ne '' })
+    $value=@((Tool-Text -Program '' -Arguments $Arguments -Label 'git' -ApplicationName 'git') -split '\r?\n' | Where-Object { $_ -ne '' })
     if($value.Count-ne1){throw 'source identity unavailable'}
     [string]$value[0]
 }
@@ -229,9 +259,8 @@ function Source-State {
     $source=Git-One -Arguments @('rev-parse','HEAD')
     $tree=Git-One -Arguments @('rev-parse','HEAD^{tree}')
     if($source-notmatch'^[0-9a-f]{40}$'-or$tree-notmatch'^[0-9a-f]{40}$'){throw 'invalid source revision'}
-    $program=(Get-Command -Name git -CommandType Application -ErrorAction Stop).Source
-    [void](Tool-Text $program @('diff','--quiet') 'git')
-    [void](Tool-Text $program @('diff','--cached','--quiet') 'git')
+    [void](Tool-Text -Program '' -Arguments @('diff','--quiet') -Label 'git' -ApplicationName 'git')
+    [void](Tool-Text -Program '' -Arguments @('diff','--cached','--quiet') -Label 'git' -ApplicationName 'git')
     [ordered]@{source_sha=$source;source_tree=$tree;tracked_clean=$true}
 }
 function Profile-Facts($Environment){
@@ -330,11 +359,13 @@ function Invoke-Native-Capture(
     $ExpectedProfile=$null,[string]$FixtureProfileCase='',
     [Threading.CancellationToken]$CancellationToken=[Threading.CancellationToken]::None,
     [switch]$FixtureCleanupFault,[switch]$FixtureFinalizeFault,
-    [switch]$MatchCurrentProfile,[string]$FixtureResultSaveCase=''
+    [switch]$MatchCurrentProfile,[string]$FixtureResultSaveCase='',
+    [string]$ApplicationName='',[string]$FixtureResolutionCase=''
 ){
     $failures=[ordered]@{first=$null;secondary=[Collections.Generic.List[object]]::new()}
     $native=$null;$cancellation=$null;$deadlineCancellation=$null
     $compilerEnvironment=$null;$profileEnvironment=$null
+    $bindingFacts=$null;$boundWorkingDirectory=$null
     $writers=[IO.FileStream[]]::new(2);$pipes=[IO.Stream[]]::new(2);$reads=[object[]]::new(2)
     $created=[bool[]]::new(2)
     $facts=@(
@@ -350,12 +381,54 @@ function Invoke-Native-Capture(
     try{
         $stage='process_create';$native=[Diagnostics.Process]::new()
         $stage='start_info';$native.StartInfo=[Diagnostics.ProcessStartInfo]::new()
+        $stage='program_binding'
+        $resolution=$null
+        if($ApplicationName){$resolution=Resolve-Application $ApplicationName}
+        if($FixtureResolutionCase-in@('multiple','invalid','missing')){
+            $candidates=@()
+            if($FixtureResolutionCase-ne'missing'){
+                $pathValue=$(if($FixtureResolutionCase-eq'invalid'){@($Program,$Program)}else{$Program})
+                $candidates=@(
+                    [pscustomobject]@{CommandType=[Management.Automation.CommandTypes]::Application;Path=$pathValue;Source=@('fixture-source-a','fixture-source-b')},
+                    [pscustomobject]@{CommandType=[Management.Automation.CommandTypes]::Application;Path=$Program;Source='fixture-source'}
+                )
+            }
+            $resolution=Select-Application $candidates
+            $resolution.facts.resolution_kind='fixture_descriptors'
+        }
+        if($null-ne$resolution){
+            $Program=[string]$resolution.path
+            $bindingFacts=$resolution.facts
+        }else{
+            $bindingFacts=[ordered]@{
+                resolution_kind='direct_path';application_candidates=0;selected_is_application=$false
+                selected_path_is_string=($Program-is[string]);selected_path_count=1
+                selected_path_is_absolute=([IO.Path]::IsPathFullyQualified($Program))
+                selected_file_exists=([IO.File]::Exists($Program))
+                selected_source_kind='not_applicable';selected_source_count=0
+            }
+        }
         $native.StartInfo.FileName=$Program
         $native.StartInfo.UseShellExecute=$false
         $native.StartInfo.CreateNoWindow=$true
-        $native.StartInfo.WorkingDirectory=$root
+        $rootString=($script:root-is[string]-and-not[string]::IsNullOrWhiteSpace($script:root))
+        $rootAbsolute=($rootString-and[IO.Path]::IsPathFullyQualified($script:root))
+        $boundWorkingDirectory=$(if($rootAbsolute){[IO.Path]::GetFullPath($script:root)}else{''})
+        if($FixtureResolutionCase-eq'missing_cwd'){$boundWorkingDirectory=Join-Path $script:root 'civ6-fixture-missing-cwd'}
+        $native.StartInfo.WorkingDirectory=$boundWorkingDirectory
         $native.StartInfo.RedirectStandardOutput=$true
         $native.StartInfo.RedirectStandardError=$true
+        $bindingEvent=[ordered]@{schema='civ6-process-binding/v1';phase=$Label}
+        foreach($key in $bindingFacts.Keys){$bindingEvent[$key]=$bindingFacts[$key]}
+        $bindingEvent['filename_matches_selection']=($native.StartInfo.FileName-ceq$Program)
+        $bindingEvent['argument_count']=$Arguments.Count
+        $bindingEvent['working_directory_is_string']=$rootString
+        $bindingEvent['working_directory_is_absolute']=$rootAbsolute
+        $bindingEvent['working_directory_exists']=[IO.Directory]::Exists($boundWorkingDirectory)
+        [Console]::Out.WriteLine('CIV_PRODUCT_PROCESS_BINDING '+($bindingEvent|ConvertTo-Json -Compress))
+        if($null-ne$resolution-and-not$resolution.valid){throw 'application binding unavailable'}
+        $stage='working_directory'
+        if(-not$rootAbsolute-or-not[IO.Directory]::Exists($boundWorkingDirectory)){throw 'native working directory unavailable'}
         $stage='arguments'
         foreach($argument in $Arguments){$native.StartInfo.ArgumentList.Add($argument)}
         $stage='compiler_environment'
@@ -493,7 +566,7 @@ function Invoke-Native-Capture(
     # The file is a candidate snapshot; success requires the later returned receipt.
     $result=[ordered]@{
         schema='civ6-private-native-capture/v1';result_save_state='requires_receipt'
-        argv=$RecordedArgv;program_path=$Program;exit_code=$exitCode
+        argv=$RecordedArgv;program_path=$Program;working_directory=$boundWorkingDirectory;binding_facts=$bindingFacts;exit_code=$exitCode
         collection_complete=$complete;stop_reason=$reason
         capture_stop_reason=$captureReason;start_returned=$startReturned
         failure_stage=$null;exception_kind=$null;exception_hresult=$null;native_error_code=$null
@@ -671,8 +744,7 @@ function Dependency-Fact($package,$cargoHome){
     }
 }
 function Input-Facts($Metadata){
-    $git=(Get-Command -Name git -CommandType Application -ErrorAction Stop).Source
-    $tracked=@((Tool-Text $git @('-c','core.quotepath=false','ls-files','--full-name') 'git') -split '\r?\n' | Where-Object { $_ -ne '' })
+    $tracked=@((Tool-Text -Program '' -Arguments @('-c','core.quotepath=false','ls-files','--full-name') -Label 'git' -ApplicationName 'git') -split '\r?\n' | Where-Object { $_ -ne '' })
     if($tracked.Count-eq0){throw 'source file inventory absent'}
     $source=@()
     [string[]]$sourceNames=$tracked
@@ -722,8 +794,8 @@ function Compiler-Facts {
     foreach($name in @('RUSTC','RUSTC_WRAPPER','RUSTC_WORKSPACE_WRAPPER','RUSTFLAGS','CARGO_ENCODED_RUSTFLAGS','CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER')){
         if([Environment]::GetEnvironmentVariable($name)){throw 'unexpected compiler override'}
     }
-    $cargoDispatcher=(Get-Command -Name cargo -CommandType Application -ErrorAction Stop).Source
-    $rustupDispatcher=(Get-Command -Name rustup -CommandType Application -ErrorAction Stop).Source
+    $cargoDispatcher=Required-Application-Path 'cargo'
+    $rustupDispatcher=Required-Application-Path 'rustup'
     $rustc=(Tool-Text $rustupDispatcher @('which','--toolchain','1.95.0','rustc') 'rustup').Trim()
     $cargo=(Tool-Text $rustupDispatcher @('which','--toolchain','1.95.0','cargo') 'rustup').Trim()
     $verbose=(Tool-Text $rustupDispatcher @('run','1.95.0','rustc','-vV') 'rustup').Trim()
@@ -831,7 +903,9 @@ if($Phase-eq'FixtureCapture'){
         'post_release_replacement'{$saveFault='replace_after_release'}
     }
     $output=Join-Path $root 'fixture.stdout.raw'
-    $first=Invoke-Native-Capture -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label 'fixture' -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault
+    $applicationName=$(if($FixtureCase-eq'resolved_success'){[IO.Path]::GetFileName($FixtureProgram)}else{''})
+    $resolutionCase=$(switch($FixtureCase){'resolved_multiple'{'multiple'}'resolved_invalid'{'invalid'}'resolved_missing'{'missing'}'working_directory_missing'{'missing_cwd'}default{''}})
+    $first=Invoke-Native-Capture -ApplicationName $applicationName -FixtureResolutionCase $resolutionCase -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label 'fixture' -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault
     $events=@(Fixture-Capture-Summary $output $first)
     if($FixtureCase-in@('consume_unchanged','consume_modified','consume_replaced')){
         if($FixtureCase-eq'consume_modified'){

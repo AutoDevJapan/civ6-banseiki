@@ -1623,7 +1623,9 @@ mod tests {
             return Err("capture snapshot missing");
         }
         for (index, record) in actual.iter().enumerate() {
-            let object = record.as_object().ok_or("capture snapshot object missing")?;
+            let object = record
+                .as_object()
+                .ok_or("capture snapshot object missing")?;
             let phase = if index == 0 {
                 "fixture"
             } else {
@@ -1637,7 +1639,9 @@ mod tests {
                 return Err("capture snapshot schema differs");
             }
             for &(public_key, _) in CAPTURE_PUBLIC_FIELDS {
-                let value = object.get(public_key).ok_or("capture snapshot field missing")?;
+                let value = object
+                    .get(public_key)
+                    .ok_or("capture snapshot field missing")?;
                 if let Some(text) = value.as_str() {
                     if !text
                         .bytes()
@@ -1652,15 +1656,20 @@ mod tests {
     }
 
     fn capture_snapshot_matches_actual(snapshot: &Value, actual: &Value) -> bool {
-        CAPTURE_PUBLIC_FIELDS.iter().all(|&(public_key, actual_key)| {
-            snapshot
-                .get(public_key)
-                .zip(actual.get(actual_key))
-                .is_some_and(|(observed, returned)| observed == returned)
-        })
+        CAPTURE_PUBLIC_FIELDS
+            .iter()
+            .all(|&(public_key, actual_key)| {
+                snapshot
+                    .get(public_key)
+                    .zip(actual.get(actual_key))
+                    .is_some_and(|(observed, returned)| observed == returned)
+            })
     }
 
-    fn capture_public_records(stdout: &str, expected: &[Value]) -> Result<Vec<Value>, &'static str> {
+    fn capture_public_records(
+        stdout: &str,
+        expected: &[Value],
+    ) -> Result<Vec<Value>, &'static str> {
         let actual = capture_public_snapshots(stdout)?;
         if actual.len() != expected.len()
             || actual
@@ -1753,7 +1762,12 @@ mod tests {
         )
         .is_err());
         // Parsing an advisory snapshot is different from accepting a completed producer.
-        assert!(!capture_snapshot_is_accepted(&event, Some(&fixture), Some(0), true));
+        assert!(!capture_snapshot_is_accepted(
+            &event,
+            Some(&fixture),
+            Some(0),
+            true
+        ));
         let mut completed = fixture;
         completed["complete"] = json!(true);
         completed["exit_code"] = json!(0);
@@ -1776,12 +1790,32 @@ mod tests {
         for &(public_key, actual_key) in CAPTURE_PUBLIC_FIELDS {
             historical[public_key] = completed[actual_key].clone();
         }
-        assert!(capture_snapshot_is_accepted(&historical, Some(&completed), Some(0), true));
-        assert!(!capture_snapshot_is_accepted(&historical, None, Some(0), true));
+        assert!(capture_snapshot_is_accepted(
+            &historical,
+            Some(&completed),
+            Some(0),
+            true
+        ));
+        assert!(!capture_snapshot_is_accepted(
+            &historical,
+            None,
+            Some(0),
+            true
+        ));
         for exit in [None, Some(1)] {
-            assert!(!capture_snapshot_is_accepted(&historical, Some(&completed), exit, true));
+            assert!(!capture_snapshot_is_accepted(
+                &historical,
+                Some(&completed),
+                exit,
+                true
+            ));
         }
-        assert!(!capture_snapshot_is_accepted(&historical, Some(&completed), Some(0), false));
+        assert!(!capture_snapshot_is_accepted(
+            &historical,
+            Some(&completed),
+            Some(0),
+            false
+        ));
     }
 
     #[cfg(windows)]
@@ -1809,7 +1843,9 @@ mod tests {
         }
         if case == "save_existing_pending" {
             fs::write(
-                directory.path().join("fixture.stdout.raw.result.json.pending"),
+                directory
+                    .path()
+                    .join("fixture.stdout.raw.result.json.pending"),
                 b"C:/private/preserved-pending",
             )
             .unwrap();
@@ -1824,6 +1860,13 @@ mod tests {
             .arg("-FixtureProgram")
             .arg(&executable)
             .args(["-FixtureCase", case, "-FixtureProfile", profile]);
+        if case == "resolved_success" {
+            let mut search = vec![executable.parent().unwrap().to_path_buf()];
+            if let Some(current) = std::env::var_os("PATH") {
+                search.extend(std::env::split_paths(&current));
+            }
+            command.env("PATH", std::env::join_paths(search).unwrap());
+        }
         let output = command.output().unwrap();
         assert!(output.status.success(), "capture fixture driver failed");
         let stdout = String::from_utf8(output.stdout).unwrap();
@@ -1939,6 +1982,85 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn product_capture_normalizes_application_binding_without_publishing_paths() {
+        for case in [
+            "resolved_success",
+            "resolved_multiple",
+            "resolved_invalid",
+            "resolved_missing",
+            "working_directory_missing",
+        ] {
+            let (directory, events, public) = run_capture_fixture(case, "absent");
+            let event = &events[0];
+            let binding: Value = serde_json::from_str(
+                public
+                    .lines()
+                    .find_map(|line| line.strip_prefix("CIV_PRODUCT_PROCESS_BINDING "))
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(binding["schema"], "civ6-process-binding/v1");
+            assert_eq!(binding["phase"], "fixture");
+            assert_eq!(binding["filename_matches_selection"], true);
+            assert_eq!(binding["working_directory_is_string"], true);
+            assert_eq!(binding["working_directory_is_absolute"], true);
+            assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
+            for (key, value) in binding.as_object().unwrap() {
+                if key == "schema"
+                    || key == "phase"
+                    || key == "resolution_kind"
+                    || key == "selected_source_kind"
+                {
+                    assert!(value.as_str().is_some());
+                } else {
+                    assert!(value.is_boolean() || value.as_u64().is_some(), "{key}");
+                }
+            }
+            if case == "resolved_success" || case == "resolved_multiple" {
+                assert_eq!(event["complete"], true);
+                assert_eq!(event["actual_consumer_accepted"], true);
+                assert_eq!(binding["selected_path_is_string"], true);
+                assert_eq!(binding["selected_path_is_absolute"], true);
+                assert_eq!(binding["selected_file_exists"], true);
+                assert_eq!(binding["working_directory_exists"], true);
+                if case == "resolved_success" {
+                    assert_eq!(binding["resolution_kind"], "logical_application");
+                    assert!(binding["application_candidates"].as_u64().unwrap() >= 1);
+                } else {
+                    assert_eq!(binding["resolution_kind"], "fixture_descriptors");
+                    assert_eq!(binding["application_candidates"], 2);
+                    assert_eq!(binding["selected_source_kind"], "array");
+                    assert_eq!(binding["selected_source_count"], 2);
+                }
+            } else {
+                assert_eq!(event["complete"], false);
+                assert_eq!(event["actual_consumer_accepted"], false);
+                assert_eq!(event["start_returned"], Value::Null);
+                assert_eq!(event["stdout_state"], "not_owned");
+                assert_eq!(event["stderr_state"], "not_owned");
+                assert_eq!(
+                    event["failure_stage"],
+                    if case == "working_directory_missing" {
+                        "working_directory"
+                    } else {
+                        "program_binding"
+                    }
+                );
+                if case == "working_directory_missing" {
+                    assert_eq!(binding["selected_file_exists"], true);
+                    assert_eq!(binding["working_directory_exists"], false);
+                } else if case == "resolved_missing" {
+                    assert_eq!(binding["application_candidates"], 0);
+                } else {
+                    assert_eq!(binding["selected_path_is_string"], false);
+                    assert_eq!(binding["selected_path_count"], 2);
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn product_capture_reports_fixed_start_failure_without_public_raw_path() {
         let mut first_hresult = None;
         for case in [
@@ -2005,7 +2127,9 @@ mod tests {
                 assert_eq!(event["actual_consumer_accepted"], false);
                 assert_eq!(event["publication_resources_released"], true);
                 let stages = event["secondary_stages"].as_array().unwrap();
-                assert!(stages.iter().any(|value| value == "result_publication_release"));
+                assert!(stages
+                    .iter()
+                    .any(|value| value == "result_publication_release"));
             } else {
                 assert_eq!(event["result_save_state"], "saved");
             }
@@ -2037,7 +2161,10 @@ mod tests {
         assert_eq!(event["result_save_state"], "saved");
         assert_eq!(event["publication_verified"], true);
         assert!(!directory.path().join("fixture.stdout.raw").exists());
-        assert!(!directory.path().join("fixture.stdout.raw.stderr.raw").exists());
+        assert!(!directory
+            .path()
+            .join("fixture.stdout.raw.stderr.raw")
+            .exists());
         assert!(!public.contains("BAD-NAME"));
         assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
     }
@@ -2065,9 +2192,24 @@ mod tests {
                 capture_snapshot_is_accepted(snapshot, Some(actual), Some(0), verified),
                 case == "success"
             );
-            assert!(!capture_snapshot_is_accepted(snapshot, None, Some(0), verified));
-            assert!(!capture_snapshot_is_accepted(snapshot, Some(actual), None, verified));
-            assert!(!capture_snapshot_is_accepted(snapshot, Some(actual), Some(1), verified));
+            assert!(!capture_snapshot_is_accepted(
+                snapshot,
+                None,
+                Some(0),
+                verified
+            ));
+            assert!(!capture_snapshot_is_accepted(
+                snapshot,
+                Some(actual),
+                None,
+                verified
+            ));
+            assert!(!capture_snapshot_is_accepted(
+                snapshot,
+                Some(actual),
+                Some(1),
+                verified
+            ));
             if case == "success" {
                 assert_eq!(snapshot["collection_complete"], true);
                 assert_eq!(actual["actual_consumer_accepted"], true);
@@ -2225,7 +2367,9 @@ mod tests {
             assert_eq!(event["result_sha256"], Value::Null);
             assert_eq!(event["publication_verified"], false);
             let published = directory.path().join("fixture.stdout.raw.result.json");
-            let pending = directory.path().join("fixture.stdout.raw.result.json.pending");
+            let pending = directory
+                .path()
+                .join("fixture.stdout.raw.result.json.pending");
             assert!(pending.is_file());
             if case == "save_existing_file" {
                 assert_eq!(
@@ -2319,7 +2463,10 @@ mod tests {
                 assert_eq!(event["stdout_bytes"], Value::Null);
                 assert_eq!(event["stdout_sha256"], Value::Null);
                 let preexisting = fs::read(&stdout_path).unwrap();
-                assert_eq!(preexisting.as_slice(), b"C:/private/preexisting-unowned-stdout");
+                assert_eq!(
+                    preexisting.as_slice(),
+                    b"C:/private/preexisting-unowned-stdout"
+                );
                 assert!(!stderr_path.exists());
             } else {
                 assert_eq!(event["failure_stage"], "stderr_open");
