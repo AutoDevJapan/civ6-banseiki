@@ -5,7 +5,7 @@
 mod host;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::{error::Error, fs, path::Path};
+use std::{error::Error, fs, io::Write, path::Path};
 
 const SAVE_NAME: &str =
     "JAC-Enemy-Neutralization-b4daf733336c42d682acf021ce8b2dd0-0000000000000001";
@@ -24,6 +24,18 @@ fn pin(bytes: &[u8], expected: &str) -> Result<(), Box<dyn Error>> {
     if format!("{:x}", Sha256::digest(bytes)) != expected {
         return Err("historical evidence SHA256 mismatch".into());
     }
+    Ok(())
+}
+
+// Derived diagnostics are new files. Keep the pinned scene, physical save and
+// prior evidence intact even when OUTPUT names one of their filesystem aliases.
+fn write_scene(output: &Path, scene: &Value) -> Result<(), Box<dyn Error>> {
+    let bytes = serde_json::to_vec_pretty(scene)?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output)?;
+    file.write_all(&bytes)?;
     Ok(())
 }
 
@@ -126,7 +138,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut scene: Value = serde_json::from_slice(&raw)?;
         pin_skill_input(&mut scene)?;
         civ6_autotest_rs::scenario::validate_scenario(&scene)?;
-        fs::write(&args[3], serde_json::to_vec_pretty(&scene)?)?;
+        write_scene(Path::new(&args[3]), &scene)?;
         println!("VERIFIED untouched T9 skill scene and input; original 41 operations retained");
         return Ok(());
     }
@@ -140,7 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     pin(&fs::read(&args[2])?, SAVE_SHA)?;
     let scene = scenario();
     civ6_autotest_rs::scenario::validate_scenario(&scene)?;
-    fs::write(&args[3], serde_json::to_vec_pretty(&scene)?)?;
+    write_scene(Path::new(&args[3]), &scene)?;
     println!("VERIFIED live04: all 10 START records, 9 OK, terminal wait FAIL; EQUALIZE/ACCEPT not started; save {SAVE_SHA}");
     Ok(())
 }
@@ -234,4 +246,70 @@ fn resume_has_no_prepare_or_reservation_write_and_stops_on_unknown_return() {
         .unwrap()
         .contains("p.stage=='RETURNED'"));
     civ6_autotest_rs::scenario::validate_scenario(&s).unwrap();
+}
+
+#[test]
+fn generated_resume_preserves_existing_save_and_scene_bytes() {
+    let root = tempfile::tempdir().unwrap();
+    let save = root.path().join("original.Civ6Save");
+    let saved = b"owned save bytes, settings and RNG outcome";
+    fs::write(&save, saved).unwrap();
+    let scene = scenario();
+    let error = write_scene(&save, &scene).unwrap_err();
+    assert_eq!(
+        error.downcast_ref::<std::io::Error>().unwrap().kind(),
+        std::io::ErrorKind::AlreadyExists
+    );
+    assert_eq!(fs::read(&save).unwrap(), saved);
+
+    let original = root.path().join("original-scene.json");
+    let original_bytes = serde_json::to_vec(&json!({"original":"all operations"})).unwrap();
+    fs::write(&original, &original_bytes).unwrap();
+    assert!(write_scene(&original, &scene).is_err());
+    assert_eq!(fs::read(&original).unwrap(), original_bytes);
+
+    let output = root.path().join("resume.json");
+    write_scene(&output, &scene).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&fs::read(&output).unwrap()).unwrap(),
+        scene
+    );
+    civ6_autotest_rs::scenario::validate_scenario(&scene).unwrap();
+    assert_eq!(fs::read(&save).unwrap(), saved);
+    assert_eq!(fs::read(&original).unwrap(), original_bytes);
+}
+
+#[test]
+fn generated_resume_preserves_hardlinked_input_and_existing_outputs() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("original.Civ6Save");
+    let bytes = b"single original save identity";
+    fs::write(&input, bytes).unwrap();
+    let alias = root.path().join("resume.json");
+    fs::hard_link(&input, &alias).unwrap();
+    assert!(write_scene(&alias, &scenario()).is_err());
+    assert_eq!(fs::read(&input).unwrap(), bytes);
+    assert_eq!(fs::read(&alias).unwrap(), bytes);
+
+    let unrelated = root.path().join("previous-diagnostic.json");
+    fs::write(&unrelated, b"previous reviewed diagnostic").unwrap();
+    assert!(write_scene(&unrelated, &scenario()).is_err());
+    assert_eq!(fs::read(&unrelated).unwrap(), b"previous reviewed diagnostic");
+}
+
+#[cfg(unix)]
+#[test]
+fn generated_resume_does_not_follow_output_symlinks() {
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("original.Civ6Save");
+    fs::write(&input, b"original save").unwrap();
+    let alias = root.path().join("resume.json");
+    std::os::unix::fs::symlink(&input, &alias).unwrap();
+    assert!(write_scene(&alias, &scenario()).is_err());
+    assert_eq!(fs::read(&input).unwrap(), b"original save");
+    let missing = root.path().join("missing-save");
+    let dangling = root.path().join("dangling.json");
+    std::os::unix::fs::symlink(&missing, &dangling).unwrap();
+    assert!(write_scene(&dangling, &scenario()).is_err());
+    assert!(!missing.exists());
 }
