@@ -1028,9 +1028,7 @@ fn cancelled_or_failed_restart_never_leaves_a_prior_bootstrap_launch() {
                         .unwrap()
                         .contains("fixture FireTuner disabled"));
                     let events = fixture.events();
-                    assert!(
-                        position(&events, "diagnostics:11") < position(&events, "evidence:11")
-                    );
+                    assert!(position(&events, "diagnostics:11") < position(&events, "evidence:11"));
                 }
                 _ => {
                     assert_eq!(error.kind, ErrorKind::Scenario);
@@ -1185,7 +1183,10 @@ fn rejected_process_renewal_cannot_reuse_a_completed_bootstrap_launch() {
             }
             {
                 let mut state = fixture.state.lock().unwrap();
-                assert!(state.bootstrap_launch.is_none(), "mode {mode} kept an old pin");
+                assert!(
+                    state.bootstrap_launch.is_none(),
+                    "mode {mode} kept an old pin"
+                );
                 assert_eq!(state.alive, Some((12, 102.0)));
                 assert_eq!(state.launches, 2);
                 assert!(state.events[first_new_event..].iter().all(|event| {

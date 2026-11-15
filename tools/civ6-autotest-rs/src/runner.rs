@@ -1076,7 +1076,10 @@ mod bootstrap_launch_identity_tests {
             ..Default::default()
         };
         backend.retain_bootstrap_launch();
-        assert!(backend.startup_pin.is_none(), "actual startup pin was not moved");
+        assert!(
+            backend.startup_pin.is_none(),
+            "actual startup pin was not moved"
+        );
         let retained = backend
             .bootstrap_launch_pin
             .as_ref()
@@ -1105,7 +1108,10 @@ mod bootstrap_launch_identity_tests {
         .is_err());
         assert!(!released.load(Ordering::SeqCst));
         drop(consumer);
-        assert!(released.load(Ordering::SeqCst), "actual CloseHandle did not succeed");
+        assert!(
+            released.load(Ordering::SeqCst),
+            "actual CloseHandle did not succeed"
+        );
         assert_eq!(
             unsafe { WaitForSingleObject(peer.as_raw_handle(), 0) },
             WAIT_TIMEOUT
