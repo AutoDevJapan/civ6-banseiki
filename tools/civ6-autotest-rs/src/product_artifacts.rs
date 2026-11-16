@@ -1926,10 +1926,36 @@ mod tests {
         assert!(!stdout.contains(directory.path().to_string_lossy().as_ref()));
         assert!(!stdout.contains("C:/private/"));
         for (index, (snapshot, returned)) in snapshots.iter().zip(&records).enumerate() {
-            if case == "post_emit_failure" && index == 0 {
+            if matches!(
+                case,
+                "post_emit_failure"
+                    | "failure_post_emit_failure"
+                    | "cancel_post_emit_failure"
+                    | "deadline_post_emit_failure"
+                    | "limit_post_emit_failure"
+                    | "start_post_emit_failure"
+            ) && index == 0
+            {
                 assert!(!capture_snapshot_matches_actual(snapshot, returned));
-                assert_eq!(snapshot["collection_complete"], true);
                 assert_eq!(returned["complete"], false);
+                let path = directory.path().join("fixture.stdout.raw.result.json");
+                let bytes = fs::read(path).unwrap();
+                let candidate: Value = serde_json::from_slice(&bytes).unwrap();
+                let mut historical = returned.clone();
+                for &(public_key, actual_key) in CAPTURE_PUBLIC_FIELDS {
+                    let value = match public_key {
+                        "native_exit_code" => candidate["exit_code"].clone(),
+                        "result_save_state" => json!("saved"),
+                        "result_bytes" => json!(bytes.len() as u64),
+                        "result_sha256" => json!(digest(&bytes)),
+                        "secondary_failure_count" => {
+                            json!(candidate["secondary_errors"].as_array().unwrap().len() as u64)
+                        }
+                        _ => candidate[public_key].clone(),
+                    };
+                    historical[actual_key] = value;
+                }
+                assert!(capture_snapshot_matches_actual(snapshot, &historical));
             } else {
                 let difference = capture_snapshot_first_difference(snapshot, returned);
                 let field = difference.unwrap_or("none");
@@ -2270,11 +2296,26 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn product_capture_historical_snapshot_requires_final_result_and_current_buffer() {
+        let (_baseline_directory, baseline, _) = run_capture_fixture("start_failure", "absent");
+        assert_eq!(baseline[0]["exception_kind"], "win32");
+        assert_eq!(baseline[0]["native_error_code"], 2);
+        let start_hresult = baseline[0]["exception_hresult"]
+            .as_i64()
+            .expect("start failure baseline HRESULT missing");
         for case in [
             "success",
             "publication_release_failure",
             "failure_publication_release_failure",
+            "start_publication_release_failure",
+            "cancel_publication_release_failure",
+            "deadline_publication_release_failure",
+            "limit_publication_release_failure",
             "post_emit_failure",
+            "failure_post_emit_failure",
+            "start_post_emit_failure",
+            "cancel_post_emit_failure",
+            "deadline_post_emit_failure",
+            "limit_post_emit_failure",
             "post_release_replacement",
         ] {
             let (directory, returned, public) = run_capture_fixture(case, "absent");
@@ -2311,39 +2352,105 @@ mod tests {
             if case == "success" {
                 assert_eq!(snapshot["collection_complete"], true);
                 assert_eq!(actual["actual_consumer_accepted"], true);
+                continue;
+            }
+            assert_eq!(actual["actual_consumer_accepted"], false);
+            if case == "post_release_replacement" {
+                assert_eq!(snapshot["collection_complete"], true);
+                assert_eq!(actual["complete"], true);
+                assert_eq!(actual["result_save_state"], "saved");
+                assert_eq!(actual["publication_verified"], false);
+                let path = directory.path().join("fixture.stdout.raw.result.json");
+                let changed = fs::read(path).unwrap();
+                assert_ne!(actual["result_sha256"], digest(&changed));
+                assert!(directory
+                    .path()
+                    .join("fixture.stdout.raw.result.json.after-release.original")
+                    .is_file());
+                continue;
+            }
+            let after_emit = case.ends_with("post_emit_failure");
+            let late_stage = if after_emit {
+                "public_event_write"
             } else {
-                assert_eq!(actual["actual_consumer_accepted"], false);
-                if case == "post_release_replacement" {
-                    assert_eq!(snapshot["collection_complete"], true);
-                    assert_eq!(actual["complete"], true);
-                    assert_eq!(actual["result_save_state"], "saved");
-                    assert_eq!(actual["publication_verified"], false);
-                    let path = directory.path().join("fixture.stdout.raw.result.json");
-                    let changed = fs::read(path).unwrap();
-                    assert_ne!(actual["result_sha256"], digest(&changed));
-                    assert!(directory
-                        .path()
-                        .join("fixture.stdout.raw.result.json.after-release.original")
-                        .is_file());
-                } else if case == "post_emit_failure" {
-                    assert_eq!(snapshot["collection_complete"], true);
-                    assert_eq!(snapshot["result_save_state"], "saved");
-                    assert_eq!(actual["complete"], false);
-                    assert_eq!(actual["result_save_state"], "unavailable");
-                    assert_eq!(actual["failure_stage"], "public_event_write");
+                "result_publication_release"
+            };
+            assert_eq!(actual["complete"], false);
+            assert_eq!(actual["result_save_state"], "unavailable");
+            assert_eq!(actual["result_bytes"], Value::Null);
+            assert_eq!(actual["result_sha256"], Value::Null);
+            if after_emit {
+                assert_eq!(snapshot["result_save_state"], "saved");
+                assert_eq!(
+                    snapshot["collection_complete"],
+                    case == "post_emit_failure" || case == "failure_post_emit_failure"
+                );
+            } else {
+                assert_eq!(snapshot["collection_complete"], false);
+                assert_eq!(snapshot["result_save_state"], "unavailable");
+            }
+            let secondary = actual["secondary_stages"].as_array().unwrap();
+            assert_eq!(actual["secondary_failure_count"], secondary.len() as u64);
+            let secondary_expected =
+                case != "publication_release_failure" && case != "post_emit_failure";
+            assert!(
+                actual["late_diagnostic_verified"] == true,
+                "private late diagnostic correspondence failed"
+            );
+            assert!(
+                actual["late_diagnostic_secondary"] == secondary_expected,
+                "private late diagnostic location differs"
+            );
+            assert!(
+                actual["late_diagnostic_negative_rejections"] == 10,
+                "private late diagnostic sensitivity controls failed"
+            );
+            if case.starts_with("start_") {
+                assert_eq!(actual["capture_stop_reason"], "start_failed");
+                assert_eq!(actual["reason"], "start_failed");
+                assert_eq!(actual["failure_stage"], "process_start");
+                assert_eq!(actual["exception_kind"], "win32");
+                let actual_hresult = actual["exception_hresult"]
+                    .as_i64()
+                    .expect("returned start failure HRESULT missing");
+                assert_eq!(actual_hresult, start_hresult);
+                assert_eq!(actual["native_error_code"], 2);
+                assert_eq!(actual["exit_code"], Value::Null);
+                assert_eq!(secondary, &[json!(late_stage)]);
+            } else if case.starts_with("failure_") {
+                assert_eq!(actual["capture_stop_reason"], "completed");
+                assert_eq!(actual["reason"], "completed");
+                assert_eq!(actual["exit_code"], 23);
+                assert_eq!(actual["failure_stage"], Value::Null);
+                assert_eq!(actual["exception_kind"], Value::Null);
+                assert_eq!(actual["exception_hresult"], Value::Null);
+                assert_eq!(actual["native_error_code"], Value::Null);
+                assert_eq!(secondary, &[json!(late_stage)]);
+            } else if case.starts_with("cancel_")
+                || case.starts_with("deadline_")
+                || case.starts_with("limit_")
+            {
+                let expected: &[&str] = if case.starts_with("cancel_") {
+                    &["cancelled"]
+                } else if case.starts_with("deadline_") {
+                    &["deadline"]
                 } else {
-                    assert_eq!(snapshot["collection_complete"], false);
-                    assert_eq!(snapshot["result_save_state"], "unavailable");
-                    assert_eq!(actual["failure_stage"], "result_publication_release");
-                    assert_eq!(
-                        actual["exit_code"],
-                        if case == "failure_publication_release_failure" {
-                            23
-                        } else {
-                            0
-                        }
-                    );
-                }
+                    &["stdout_limit", "stderr_limit"]
+                };
+                let reason = actual["reason"].as_str().unwrap();
+                assert!(expected.contains(&reason));
+                assert_eq!(actual["capture_stop_reason"], reason);
+                assert_eq!(actual["failure_stage"], Value::Null);
+                assert_eq!(actual["exception_kind"], Value::Null);
+                assert_eq!(secondary, &[json!(late_stage)]);
+            } else {
+                assert_eq!(actual["capture_stop_reason"], "completed");
+                assert_eq!(actual["reason"], "publication_finalize_failed");
+                assert_eq!(actual["exit_code"], 0);
+                assert_eq!(actual["failure_stage"], late_stage);
+                assert_eq!(actual["exception_kind"], "io");
+                assert!(actual["exception_hresult"].as_i64().is_some());
+                assert!(secondary.is_empty());
             }
         }
     }

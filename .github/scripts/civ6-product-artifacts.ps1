@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('Capture','Build','FixtureCapture','FixtureInventory')][string]$Phase,
     [string]$FixtureRoot,
     [string]$FixtureProgram,
-    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','post_emit_failure','post_release_replacement','resolved_success','resolved_multiple','resolved_invalid','resolved_missing','working_directory_missing','public_label_git','public_label_unknown','public_label_path','cwd_bound','cwd_other')][string]$FixtureCase='success',
+    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','cancel_publication_release_failure','deadline_publication_release_failure','limit_publication_release_failure','failure_post_emit_failure','cancel_post_emit_failure','deadline_post_emit_failure','limit_post_emit_failure','start_post_emit_failure','post_emit_failure','post_release_replacement','resolved_success','resolved_multiple','resolved_invalid','resolved_missing','working_directory_missing','public_label_git','public_label_unknown','public_label_path','cwd_bound','cwd_other')][string]$FixtureCase='success',
     [ValidateSet('absent','changed','invalid')][string]$FixtureProfile='absent',
     [ValidateSet('registry-extracted','directory')][string]$FixtureStorage='registry-extracted'
 )
@@ -358,9 +358,13 @@ function Result-Failure($Result,$Ledger){
     $Result['capture_error']=$(if($null-ne$first){$first.raw}else{$null})
     $Result['secondary_errors']=@($Ledger.secondary.ToArray())
 }
+function Test-Capture-Primary-Outcome($Result){
+    ($Result.stop_reason-ne'completed'-or$null-ne$Result.failure_stage-or($null-ne$Result.exit_code-and$Result.exit_code-ne0))
+}
 function Invalidate-Capture-Publication($Result,$Failures){
+    $hadPrimary=Test-Capture-Primary-Outcome $Result
     $Result.collection_complete=$false
-    if($Result.stop_reason-eq'completed'){$Result.stop_reason='publication_finalize_failed'}
+    if(-not$hadPrimary){$Result.stop_reason='publication_finalize_failed'}
     $Result.result_save_state='unavailable'
     $Result.result_bytes=$null;$Result.result_sha256=$null
     Result-Failure $Result $Failures
@@ -602,7 +606,7 @@ function Invoke-Native-Capture(
     if($Label-in@('bins','dlls')){$result['cargo_json_sha256']=$stdout.sha256}
     $resultSaveState='saved'
     $resultSaveError=$null;$publication=$null;$publicationPin=$null;$publicationBlocker=$null
-    $publicationStage='result_save';$publicationPinChecked=$false
+    $publicationStage='result_save';$publicationPinChecked=$false;$fixtureLateExpected=$null
     try{
         $publication=Save-New ($OutputPath+'.result.json') $result -PassThru -FixtureFailure $FixtureResultSaveCase -CaptureFailures $failures
         $publicationStage='result_publish_open'
@@ -627,7 +631,7 @@ function Invoke-Native-Capture(
         }
     }catch{
         $resultSaveState='unavailable'
-        $hadPrimary=($reason-ne'completed'-or$null-ne$failures.first-or($null-ne$exitCode-and$exitCode-ne0))
+        $hadPrimary=Test-Capture-Primary-Outcome $result
         Capture-Failure $failures $publicationStage $_.Exception -Secondary:$hadPrimary
         $publication=$null
         $resultSaveError=$(if($hadPrimary){$failures.secondary[$failures.secondary.Count-1]}else{$failures.first})
@@ -650,13 +654,21 @@ function Invoke-Native-Capture(
             $publicationPin.Dispose()
             if($FixtureResultSaveCase-eq'release_failure'){throw [IO.IOException]::new('fixture publication release failure')}
         }catch{
-            Capture-Failure $failures 'result_publication_release' $_.Exception
+            if($FixtureResultSaveCase-eq'release_failure'){
+                $fixtureLateBase=$_.Exception.GetBaseException()
+                $fixtureLateExpected=[ordered]@{
+                    stage='result_publication_release';exception_kind='io'
+                    exception_hresult=[int]$fixtureLateBase.HResult;native_error_code=$null;raw_sha256=(Digest-Text ($_.Exception.ToString()))
+                    exception_matches=($fixtureLateBase-is[IO.IOException]-and$fixtureLateBase.Message-ceq'fixture publication release failure')
+                }
+            }
+            Capture-Failure $failures 'result_publication_release' $_.Exception -Secondary:(Test-Capture-Primary-Outcome $result)
             $publicationCleanupFailed=$true
         }
     }
     if($null-ne$publicationBlocker){
         try{$publicationBlocker.Dispose()}catch{
-            Capture-Failure $failures 'fixture_publication_blocker_release' $_.Exception
+            Capture-Failure $failures 'fixture_publication_blocker_release' $_.Exception -Secondary:(Test-Capture-Primary-Outcome $result)
             $publicationCleanupFailed=$true
         }
     }
@@ -666,7 +678,7 @@ function Invoke-Native-Capture(
             [IO.File]::Move(($OutputPath+'.result.json'),($OutputPath+'.result.json.after-release.original'))
             Save-New ($OutputPath+'.result.json') ([ordered]@{fixture='post_release_replacement'})
         }catch{
-            Capture-Failure $failures 'fixture_post_release_replace' $_.Exception
+            Capture-Failure $failures 'fixture_post_release_replace' $_.Exception -Secondary:(Test-Capture-Primary-Outcome $result)
             Invalidate-Capture-Publication $result $failures
         }
     }
@@ -688,9 +700,18 @@ function Invoke-Native-Capture(
         [Console]::Out.WriteLine('CIV_PRODUCT_NATIVE_CAPTURE '+($capturePublicEvent|ConvertTo-Json -Compress))
         if($FixtureResultSaveCase-eq'emit_failure'){throw [IO.IOException]::new('fixture post-emission write failure')}
     }catch{
-        Capture-Failure $failures 'public_event_write' $_.Exception
+        if($FixtureResultSaveCase-eq'emit_failure'){
+            $fixtureLateBase=$_.Exception.GetBaseException()
+            $fixtureLateExpected=[ordered]@{
+                stage='public_event_write';exception_kind='io'
+                exception_hresult=[int]$fixtureLateBase.HResult;native_error_code=$null;raw_sha256=(Digest-Text ($_.Exception.ToString()))
+                exception_matches=($fixtureLateBase-is[IO.IOException]-and$fixtureLateBase.Message-ceq'fixture post-emission write failure')
+            }
+        }
+        Capture-Failure $failures 'public_event_write' $_.Exception -Secondary:(Test-Capture-Primary-Outcome $result)
         Invalidate-Capture-Publication $result $failures
     }
+    if($null-ne$fixtureLateExpected){$result['fixture_late_expected']=$fixtureLateExpected}
     $result
 }
 function Require-Capture($Result,[string]$OutputPath){
@@ -834,6 +855,17 @@ function Compiler-Facts {
         rustc_path=$rustc;cargo_path=$cargo
     }
 }
+function Fixture-Late-Diagnostic-Matches($Actual,$Expected){
+    if($Actual-isnot[Collections.IDictionary]-or$null-eq$Expected-or-not$Expected.exception_matches){return $false}
+    foreach($key in @('stage','exception_kind','exception_hresult','native_error_code','raw')){
+        if(-not$Actual.Contains($key)){return $false}
+    }
+    ($Actual.stage-is[string]-and$Actual.stage-ceq$Expected.stage-and
+     $Actual.exception_kind-is[string]-and$Actual.exception_kind-ceq$Expected.exception_kind-and
+     $Actual.exception_hresult-is[int]-and$Actual.exception_hresult-eq$Expected.exception_hresult-and
+     $null-eq$Actual.native_error_code-and$Actual.raw-is[string]-and
+     -not[string]::IsNullOrWhiteSpace($Actual.raw)-and(Digest-Text $Actual.raw)-ceq$Expected.raw_sha256)
+}
 function Fixture-Capture-Summary([string]$OutputPath,$Result){
     $returnedSnapshot=[ordered]@{
         exit_code=$Result.exit_code;complete=$Result.collection_complete;reason=$Result.stop_reason
@@ -849,6 +881,43 @@ function Fixture-Capture-Summary([string]$OutputPath,$Result){
         secondary_stages=@($Result.secondary_errors|ForEach-Object stage)
         publication_pin_checked=$Result.fixture_publication_pin_checked
     }
+    $lateVerified=$null;$lateSecondary=$null;$lateRejected=0
+    $lateExpected=$Result.fixture_late_expected
+    if($null-ne$lateExpected){
+        $lateSecondary=$script:FixtureCase-in@(
+            'failure_publication_release_failure','start_publication_release_failure',
+            'cancel_publication_release_failure','deadline_publication_release_failure','limit_publication_release_failure',
+            'failure_post_emit_failure','start_post_emit_failure','cancel_post_emit_failure','deadline_post_emit_failure','limit_post_emit_failure'
+        )
+        $lateActual=$null
+        if($lateSecondary){
+            $lateEntries=@($Result.secondary_errors|Where-Object{$_.stage-ceq$lateExpected.stage})
+            if($lateEntries.Count-eq1){$lateActual=$lateEntries[0]}
+        }else{
+            $lateActual=[ordered]@{
+                stage=$Result.failure_stage;exception_kind=$Result.exception_kind;exception_hresult=$Result.exception_hresult
+                native_error_code=$Result.native_error_code;raw=$Result.capture_error
+            }
+        }
+        $lateVerified=Fixture-Late-Diagnostic-Matches $lateActual $lateExpected
+        if($lateActual-is[Collections.IDictionary]){
+            $lateWrong=[ordered]@{
+                stage='fixture_mismatch';exception_kind='other';exception_hresult=($lateExpected.exception_hresult-bxor1)
+                native_error_code=0;raw='fixture private diagnostic mismatch'
+            }
+            foreach($changedKey in $lateWrong.Keys){
+                foreach($removeField in @($true,$false)){
+                    $lateCopy=[ordered]@{}
+                    foreach($key in $lateActual.Keys){$lateCopy[$key]=$lateActual[$key]}
+                    if($removeField){[void]$lateCopy.Remove($changedKey)}else{$lateCopy[$changedKey]=$lateWrong[$changedKey]}
+                    if(-not(Fixture-Late-Diagnostic-Matches $lateCopy $lateExpected)){$lateRejected++}
+                }
+            }
+        }
+    }
+    $returnedSnapshot['late_diagnostic_verified']=$lateVerified
+    $returnedSnapshot['late_diagnostic_secondary']=$lateSecondary
+    $returnedSnapshot['late_diagnostic_negative_rejections']=$lateRejected
     $verified=$false
     try{[void](Read-Published-Capture $OutputPath $Result);$verified=$true}catch{}
     $savedLast=$script:lastCaptureFailure;$savedExit=$script:producerExit
@@ -900,14 +969,14 @@ if($Phase-eq'FixtureCapture'){
     $root=[IO.Path]::GetFullPath($FixtureRoot)
     if([IO.Path]::GetFileName($FixtureProgram)-notmatch'^civ6_autotest_rs-[0-9a-f]+\.exe$'){throw 'own test harness required'}
     $fixtureArguments=@('--ignored','--exact','product_artifacts::tests::product_capture_fixture_child','--nocapture')
-    $cancelCase=$FixtureCase-in@('cancel','cancel_save_failure')
-    $deadlineCase=$FixtureCase-in@('deadline','deadline_save_failure')
-    $case=$(if($FixtureCase-in@('cwd_bound','cwd_other')){'cwd'}elseif($cancelCase-or$deadlineCase){'wait'}elseif($FixtureCase-in@('failure','failure_save_failure','failure_publication_release_failure')){'failure'}else{'success'})
+    $cancelCase=$FixtureCase-in@('cancel','cancel_save_failure','cancel_publication_release_failure','cancel_post_emit_failure')
+    $deadlineCase=$FixtureCase-in@('deadline','deadline_save_failure','deadline_publication_release_failure','deadline_post_emit_failure')
+    $case=$(if($FixtureCase-in@('cwd_bound','cwd_other')){'cwd'}elseif($cancelCase-or$deadlineCase){'wait'}elseif($FixtureCase-in@('failure','failure_save_failure','failure_publication_release_failure','failure_post_emit_failure')){'failure'}else{'success'})
     $cancelBytes=$(if($cancelCase){131072}else{0})
     $budget=$(if($deadlineCase){1500}else{20000})
-    $streamBudget=$(if($FixtureCase-eq'limit_save_failure'){65536}else{8388608})
+    $streamBudget=$(if($FixtureCase-in@('limit_save_failure','limit_publication_release_failure','limit_post_emit_failure')){65536}else{8388608})
     $selectedFixture=$FixtureProgram
-    if($FixtureCase-in@('start_failure','start_finalize_save_failure','start_publish_replaced','start_post_move_pin_failure','start_publication_release_failure')){$selectedFixture=Join-Path $root 'civ6_autotest_rs-0000.exe'}
+    if($FixtureCase-in@('start_failure','start_finalize_save_failure','start_publish_replaced','start_post_move_pin_failure','start_publication_release_failure','start_post_emit_failure')){$selectedFixture=Join-Path $root 'civ6_autotest_rs-0000.exe'}
     $saveFault=''
     switch($FixtureCase){
         'save_partial_failure'{$saveFault='partial_write'}
@@ -922,6 +991,14 @@ if($Phase-eq'FixtureCapture'){
         'publication_release_failure'{$saveFault='release_failure'}
         'failure_publication_release_failure'{$saveFault='release_failure'}
         'start_publication_release_failure'{$saveFault='release_failure'}
+        'cancel_publication_release_failure'{$saveFault='release_failure'}
+        'deadline_publication_release_failure'{$saveFault='release_failure'}
+        'limit_publication_release_failure'{$saveFault='release_failure'}
+        'failure_post_emit_failure'{$saveFault='emit_failure'}
+        'cancel_post_emit_failure'{$saveFault='emit_failure'}
+        'deadline_post_emit_failure'{$saveFault='emit_failure'}
+        'limit_post_emit_failure'{$saveFault='emit_failure'}
+        'start_post_emit_failure'{$saveFault='emit_failure'}
         'post_emit_failure'{$saveFault='emit_failure'}
         'post_release_replacement'{$saveFault='replace_after_release'}
     }
