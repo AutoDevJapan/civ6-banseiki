@@ -1,0 +1,27 @@
+{
+  "name": "Read native spy-capacity sources after two preserved failures",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008",
+      "exact_name": true,
+      "timeout": 300
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "local b=assert(ExposedMembers.JAC_PersonaBoundary,'boundary reader missing')\nassert(b.ReadEnemyResultDiagnostic()=='FAILED','turn-45 failed native mission changed')\nlocal owner=Game.GetLocalPlayer()\nassert(owner==0 and Players[owner]:IsTurnActive(),'attacker turn changed')\nlocal player=Players[owner]\nlocal culture=player:GetCulture()\nlocal capacity=player:GetDiplomacy():GetSpyCapacity()\nlocal grants={}\nfor row in GameInfo.CivicModifiers() do\n  if row.ModifierId=='CIVIC_GRANT_SPY' then\n    local civic=GameInfo.Civics[row.CivicType]\n    grants[#grants+1]=row.CivicType..':'..tostring(civic and culture:HasCivic(civic.Index))\n  end\nend\ntable.sort(grants)\nlocal candidates={}\nfor _,kind in ipairs({'CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE','CIVIC_JAC_SENGOKU_NANBAN_ENVOYS','CIVIC_JAC_SENGOKU_TEA_DIPLOMACY','CIVIC_JAC_SENGOKU_GUN_CORPS_ORGANIZATION'}) do\n  local civic=GameInfo.Civics[kind]\n  candidates[#candidates+1]=kind..':'..tostring(civic and culture:HasCivic(civic.Index))\nend\nreturn 'turn='..Game.GetCurrentGameTurn()..' capacity='..tostring(capacity)..' grants='..table.concat(grants,',')..' candidates='..table.concat(candidates,',')"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

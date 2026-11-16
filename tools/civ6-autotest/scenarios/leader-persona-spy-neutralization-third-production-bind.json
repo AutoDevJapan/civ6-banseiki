@@ -1,0 +1,15 @@
+{
+  "name": "Explicitly adopt the unique generation three native production increment without advancing a turn",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[0]; local b=ExposedMembers.JAC_PersonaBoundary; return p and p:IsTurnActive() and b and type(b.ThirdSpyBind)=='function'"}},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyStatus(); assert(s.progressed,'third production reservation has not received native progress'); return s.mapCount==1"}},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind()"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.thirdLast=='ERROR_ATTEST' or b.thirdLast=='ERROR_ADOPT' then error(b.thirdLast) end; return b.ThirdSpyStatus().bound"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyStatus(); local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.current==3 and r.spyID==s.map.id and s.map.owner==0 and s.map.unitType==GameInfo.Units.UNIT_SPY.Index and s.physicalCount==3); return b.RetryLivingSpy()"},
+    {"action":"exit_to_menu"}
+  ]
+}

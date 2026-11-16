@@ -493,8 +493,10 @@ fn run(args: Args) -> Result<()> {
 }
 
 fn main() {
+    let native_recovery = civ6_autotest_rs::native_recovery::ExitGuard;
     if let Err(error) = run(Args::parse()) {
         eprintln!("{error}");
+        drop(native_recovery);
         std::process::exit(1);
     }
 }

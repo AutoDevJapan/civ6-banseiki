@@ -1,0 +1,798 @@
+{
+  "name": "15 km Japan: civic evolution Titles, individual Merit, irreversible category/route choices, city effects and save/load",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2"
+      ],
+      "disable_ids": [
+        "8c615430-5a09-4431-877a-bfd03bca9e80",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0",
+        "61320778-2e75-4c11-9009-94101b519aba",
+        "4a72b1c0-958b-4bd5-81e4-a094f86ce643",
+        "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb",
+        "a1faab65-5371-4e25-9a46-7522075f865d"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=0 then error('scenario requires human in slot zero') end;\nlocal count=0; local official=0;\nfor r in GameInfo.JAC_LeaderPersonas() do count=count+1 end; if count~=22 then error('22 persona definitions required') end;\nfor g in GameInfo.JAC_PersonaDisabledGovernors() do official=official+1; if GameInfo.Governors[g.GovernorType] then error('disabled Governor remains registered: '..g.GovernorType) end end;\nif official<8 then error('official governor removal record missing') end;\nlocal sources=0; for r in GameInfo.CivicModifiers() do if r.ModifierId=='JAC_PERSONA_CIVIC_EVOLUTION_TITLE' then sources=sources+1 end end;\nif sources~=15 then error('expected 15 Sengoku civic title grants') end;\nlocal timeline=Game.GetGreatPeople():GetTimeline(); if type(timeline)~='table' then error('native Great People timeline unavailable') end; for _,entry in ipairs(timeline) do local individual=GameInfo.GreatPersonIndividuals[entry.Individual]; if individual and individual.GreatPersonClassType=='GREAT_PERSON_CLASS_JAC_PERSONA' then error('joined-only persona appeared in normal Great People recruitment timeline') end end; return 'persona-only appointment gate, civic grants and hidden recruitment timeline verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local owner=Players[0]; local governors=owner:GetGovernors(); local city=owner:GetCities():GetCapitalCity(); local results={}; local units=owner:GetUnits(); local unit; for _,u in units:Members() do unit=u; break end; local great=unit and unit:GetGreatPerson(); local people=Game.GetGreatPeople and Game.GetGreatPeople();\nfor _,entry in ipairs({{governors,'PlayerGovernors',{'HasGovernor','GetGovernor','GetGovernorList','GetGovernorByType','GetGovernorByID','CanAppoint','CanEverAppointGovernor','GetGovernorPoints','GetGovernorPointsSpent','ChangeGovernorPoints'}},{units,'Units',{'Destroy','Members','FindID'}},{people,'GreatPeople',{'CreatePerson','GrantPerson'}},{great,'GreatPerson',{'IsGreatPerson','GetIndividual','GetActionCharges'}},{unit,'Unit',{'GetGreatPerson','GetID','GetType','GetOwner'}},{city,'City',{'GetGovernor','GetAssignedGovernor','GetGovernorType','GetGovernorOwner','GetGovernorAssigned','GetGovernorEstablished','GetAllAssignedGovernors'}}}) do\n for _,name in ipairs(entry[3]) do local ok,kind=pcall(function() return type(entry[1][name]) end); local line=entry[2]..'.'..name..'='..(ok and kind or 'not enumerable'); results[#results+1]=line; print('JAC_PERSONA_API '..line) end\nend; return table.concat(results,'; ')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local owner=Players[0]; local governors=owner:GetGovernors(); local city=owner:GetCities():GetCapitalCity(); local results={}; local units=owner:GetUnits(); local unit; for _,u in units:Members() do unit=u; break end; local great=unit and unit:GetGreatPerson(); local people=Game.GetGreatPeople and Game.GetGreatPeople();\nfor _,entry in ipairs({{governors,'PlayerGovernors',{'HasGovernor','GetGovernor','GetGovernorList','GetGovernorByType','GetGovernorByID','CanAppoint','CanEverAppointGovernor','GetGovernorPoints','GetGovernorPointsSpent','ChangeGovernorPoints'}},{units,'Units',{'Destroy','Members','FindID'}},{people,'GreatPeople',{'CreatePerson','GrantPerson'}},{great,'GreatPerson',{'IsGreatPerson','GetIndividual','GetActionCharges'}},{unit,'Unit',{'GetGreatPerson','GetID','GetType','GetOwner'}},{city,'City',{'GetGovernor','GetAssignedGovernor','GetGovernorType','GetGovernorOwner','GetGovernorAssigned','GetGovernorEstablished','GetAllAssignedGovernors'}}}) do\n for _,name in ipairs(entry[3]) do local ok,kind=pcall(function() return type(entry[1][name]) end); local line=entry[2]..'.'..name..'='..(ok and kind or 'not enumerable'); results[#results+1]=line; print('JAC_PERSONA_API '..line) end\nend; return table.concat(results,'; ')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local api=ExposedMembers.JAC_LeaderPersona; if not api then error('gameplay context absent') end;\nlocal cities=Players[0]:GetCities(); local a=cities:GetCapitalCity(); local b;\nlocal names={}; for _,city in cities:Members() do\n local name=Locale.Lookup(city:GetName()); if names[name] then error('duplicate owned city display name: '..name) end; names[name]=true;\n if city:GetID()~=a:GetID() and (not b or city:GetID()<b:GetID()) then b=city end\nend\nif not a or not b then error('two owned cities required') end;\nGame:SetProperty('JAC_PERSONA_SCENARIO_CITY_A',a:GetID()); Game:SetProperty('JAC_PERSONA_SCENARIO_CITY_B',b:GetID());\nreturn 'owned city IDs saved'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "print('JAC_PERSONA_CONTEXT hidden='..tostring(ContextPtr:IsHidden())..' busy='..tostring(UI.IsGameCoreBusy())); ContextPtr:SetHide(false);\nlocal culture=Players[0]:GetCulture(); for c in GameInfo.Civics() do if c.Index~=culture:GetProgressingCivic() and culture:CanProgress(c.Index) then\n JAC_PERSONA_TUNER_CIVIC_TARGET=c.Index; UI.RequestPlayerOperation(0,PlayerOperations.PROGRESS_CIVIC,{[PlayerOperations.PARAM_CIVIC_TYPE]=c.Hash,[PlayerOperations.PARAM_INSERT_MODE]=PlayerOperations.VALUE_EXCLUSIVE}); print('JAC_PERSONA_CONTROL_CIVIC '..c.CivicType); break end end;\nJAC_PERSONA_TUNER_JOIN_STATE='queued';\nContextPtr:SetUpdate(function()\n ContextPtr:ClearUpdate(); JAC_PERSONA_TUNER_JOIN_STATE='running';\n print('JAC_PERSONA_FRAME busy='..tostring(UI.IsGameCoreBusy())..' paused='..tostring(GameConfiguration.IsPaused()));\n for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil then error('source missing: '..l) end; JAC_RequestLeaderJoin(source);\nend;\n JAC_PERSONA_TUNER_JOIN_STATE='submitted';\nend); return 'joins deferred to the real UI frame'"
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-join-dispatch.png"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_LeaderPersona_View",
+        "code": "for _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do if Game:GetProperty('JAC_PERSONA_'..l..'_OWNER')~=0 then return 'frame='..tostring(JAC_PERSONA_TUNER_JOIN_STATE)..' hidden='..tostring(ContextPtr:IsHidden())..' controlCivic='..tostring(JAC_PERSONA_TUNER_CIVIC_TARGET and Players[0]:GetCulture():GetProgressingCivic()==JAC_PERSONA_TUNER_CIVIC_TARGET)..' busy='..tostring(UI.IsGameCoreBusy()) end end; return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local api=ExposedMembers.JAC_LeaderPersona;\nfor _,l in ipairs({'LEADER_JAC_DATE_TANEMUNE','LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'}) do\n local source; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if PlayerConfigurations[p:GetID()]:GetLeaderTypeName()==l then source=p:GetID() end end;\n if source==nil or Game:GetProperty('JAC_PERSONA_'..l..'_OWNER')~=0 then error('join failed: '..l) end;\n if api.Join(0,source)~='ALREADY_JOINED' then error('join not idempotent') end\nend\nlocal g=Players[0]:GetGovernors(); if g:GetGovernorPoints()-g:GetGovernorPointsSpent()~=0 then error('titles before civic research') end;\nif api.PrepareEvolution(0,'LEADER_JAC_DATE_TANEMUNE')~='NO_TITLE' then error('evolution without title') end;\nreturn 'three world-unique Great People joined; no free evolution' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; local count=0;\nfor _,u in Players[Game.GetLocalPlayer()]:GetUnits():Members() do local gp=u:GetGreatPerson(); local row=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if row and row.GreatPersonIndividualType==r.PersonType then\n count=count+1; if Locale.Lookup(u:GetName())~=Locale.Lookup(r.Name) or gp:GetActionCharges()~=0 then error('Great Person identity/charges wrong') end\nend end\nif count~=1 or Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT')~=0 then error('unique Great Person or unearned merit') end\nreturn 'named Great Person and zero merit' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "capture_as": "JAC_PERSONA_GREATPERSON"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-GreatPerson",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-GreatPerson",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "equals_capture": "JAC_PERSONA_GREATPERSON"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; local count=0;\nfor _,u in Players[Game.GetLocalPlayer()]:GetUnits():Members() do local gp=u:GetGreatPerson(); local row=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if row and row.GreatPersonIndividualType==r.PersonType then\n count=count+1; if Locale.Lookup(u:GetName())~=Locale.Lookup(r.Name) or gp:GetActionCharges()~=0 then error('Great Person identity/charges wrong') end\nend end\nif count~=1 or Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT')~=0 then error('unique Great Person or unearned merit') end\nreturn 'named Great Person and zero merit' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local gov=p:GetGovernors(); local culture=p:GetCulture();\ndo local c=GameInfo.Civics['CIVIC_JAC_SENGOKU_DOMAIN_LAW']; if culture:HasCivic(c.Index) then error('test civic already completed: '..c.CivicType) end; local before=gov:GetGovernorPoints()-gov:GetGovernorPointsSpent(); culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); if not culture:HasCivic(c.Index) or gov:GetGovernorPoints()-gov:GetGovernorPointsSpent()~=before+1 then error('Sengoku civic did not grant exactly one evolution title: '..c.CivicType) end end\nreturn 'earned titles from Sengoku civic completion'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "if ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,'LEADER_JAC_DATE_TANEMUNE')~='NO_TITLE' then error('cost2 evolved with one title') end; return 'full cost required'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local p=Players[0]; local gov=p:GetGovernors(); local culture=p:GetCulture();\ndo local c=GameInfo.Civics['CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES']; if culture:HasCivic(c.Index) then error('test civic already completed: '..c.CivicType) end; local before=gov:GetGovernorPoints()-gov:GetGovernorPointsSpent(); culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); if not culture:HasCivic(c.Index) or gov:GetGovernorPoints()-gov:GetGovernorPointsSpent()~=before+1 then error('Sengoku civic did not grant exactly one evolution title: '..c.CivicType) end end\nGame:SetProperty('JAC_PERSONA_SCENARIO_DATE_TOTAL_BEFORE',gov:GetGovernorPoints()); Game:SetProperty('JAC_PERSONA_SCENARIO_DATE_SPENT_BEFORE',gov:GetGovernorPointsSpent());\nreturn 'earned titles from Sengoku civic completion'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_EvolveLeader('LEADER_JAC_DATE_TANEMUNE'); return 'evolution requested'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_STATE')=='GOVERNOR'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=2 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=1 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor payment=1,1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; if not def or not g:HasPromotion(def.Hash) then error('native extra title unpaid: '..payment) end end\nif gs:GetGovernorPoints()~=Game:GetProperty('JAC_PERSONA_SCENARIO_DATE_TOTAL_BEFORE') or gs:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PERSONA_SCENARIO_DATE_SPENT_BEFORE')+2 then error('cost2 must increase native spent titles by two') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "capture_as": "JAC_PERSONA_GOVERNOR"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Governor",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Governor",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "equals_capture": "JAC_PERSONA_GOVERNOR"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_AssignLeader('LEADER_JAC_DATE_TANEMUNE',Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); return 'native assignment requested'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; local g=Players[Game.GetLocalPlayer()]:GetGovernors():GetGovernor(GameInfo.Governors[r.GovernorType].Hash); return g and g:GetAssignedCity() and g:GetAssignedCity():GetID()==Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=0, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=0}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=0 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then\n local gs=p:GetGovernors(); local before=gs:GetGovernorPoints()-gs:GetGovernorPointsSpent();\n if before<1 then local culture=p:GetCulture(); local added=false; for row in GameInfo.JAC_PersonaTitleCivics() do local c=GameInfo.Civics[row.CivicType]; if not culture:HasCivic(c.Index) then culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); added=true; break end end; if not added then error('AI title civic unavailable') end end;\n if gs:GetGovernorPoints()-gs:GetGovernorPointsSpent()<1 then error('AI has no usable title: '..p:GetID()) end; count=count+1;\nend end; if count~=21 then error('21 AI budgets required') end; Game:SetProperty('JAC_PERSONA_SCENARIO_AI_TITLE_BUDGETS',count); return 'all 21 AI can spend a title before native turns'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local bad={}; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then local gs=p:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do local def=GameInfo.Governors[row.GovernorType]; if gs:HasGovernor(def.Hash) and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID() then local g=gs:GetGovernor(def.Hash); bad[#bad+1]=p:GetID()..'/'..row.LeaderType..'/nativeType='..tostring(g and g:GetType()) end end end end; if #bad>0 then error('AI appointed unjoined personas after native turn: '..table.concat(bad,',')) end; return 'native AI appointment gate verified after first turn'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "capture_as": "JAC_PERSONA_ESTABLISHING"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Establishing",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Establishing",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "equals_capture": "JAC_PERSONA_ESTABLISHING"
+    },
+    {
+      "action": "end_turn",
+      "turns": 4,
+      "timeout": 2400
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; return Players[Game.GetLocalPlayer()]:GetGovernors():GetGovernor(GameInfo.Governors[r.GovernorType].Hash):IsEstablished()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=1, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=0}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=1 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "Game:SetProperty('JAC_PERSONA_SCENARIO_MERIT_BEFORE',Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT') or 0); return 'recorded earned merit'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 4,
+      "timeout": 2400
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local earned=Game:GetProperty(prefix..'MERIT');\nif earned~=(Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_BEFORE') or 0)+8 then error('four established turns did not earn 8 personal merit') end;\nif Game:GetProperty(prefix..'GOVERN_LAST_TURN')~=Game.GetCurrentGameTurn() then error('turn earning checkpoint absent') end;\nlocal before=earned; ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(0);\nif Game:GetProperty(prefix..'MERIT')~=before then error('duplicate turn notification earned twice') end;\nif Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_MERIT')~=0 then error('unevolved persona shared another person merit') end;\nGame:SetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE',earned);\nGame:SetProperty('JAC_PERSONA_SCENARIO_TITLES_PRE_PURCHASE',Players[0]:GetGovernors():GetGovernorPoints());\nGame:SetProperty('JAC_PERSONA_SCENARIO_SPENT_PRE_PURCHASE',Players[0]:GetGovernors():GetGovernorPointsSpent());\nreturn 'four real turns paid individual merit once each' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "if not JAC_TreeOpen('LEADER_JAC_DATE_TANEMUNE') or not JAC_TreeReview('LEADER_JAC_DATE_TANEMUNE_ENVOYS_1') or Controls.Confirmation:IsHidden() then error('confirmation screen absent') end; return 'review shows permanent locks'"
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-tree-confirmation.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "JAC_TreeCancel(); if not Controls.Confirmation:IsHidden() or JAC_TreeConfirm() then error('cancel did not cancel') end; return 'cancelled without spending'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_CATEGORY')~=nil or Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT')~=Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE') then error('cancel changed governor') end; return 'cancel changed nothing'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "if not JAC_TreeReview('LEADER_JAC_DATE_TANEMUNE_ENVOYS_1') then error('skill not available') end; return 'reviewed again'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "if not JAC_TreeConfirm() then error('confirmed purchase failed') end; return 'requested gameplay purchase'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_NODE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1')==1"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local r=JAC_PersonaTreeRules;\nif Game:GetProperty(prefix..'CATEGORY')~='CONTACT' or Game:GetProperty(prefix..'BRANCH_CONTACT_RELATIONS')~='ENVOYS' then error('permanent commitments lost') end;\nfor _,test in ipairs({{'LEADER_JAC_DATE_TANEMUNE_WORKS_1','CATEGORY_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_EXCHANGE_1','BRANCH_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_ENVOYS_3','PREREQ_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_ENVOYS_1','OWNED'}}) do\n if r.Status(Game.GetLocalPlayer(),'LEADER_JAC_DATE_TANEMUNE',test[1])~=test[2] then error('incorrect locked/owned node: '..test[1]) end\nend\nreturn 'category, exclusive sibling and prerequisites locked permanently' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local g=Players[0]:GetGovernors();\nif Game:GetProperty(prefix..'MERIT')~=Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE')-8 then error('wrong merit spend') end;\nif g:GetGovernorPoints()~=Game:GetProperty('JAC_PERSONA_SCENARIO_TITLES_PRE_PURCHASE') or g:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PERSONA_SCENARIO_SPENT_PRE_PURCHASE') then error('custom promotion spent Governor Titles') end;\nif Players[0]:GetProperty('JAC_PERSONA_PURCHASE_RESULT')~='PURCHASED' or Players[0]:GetProperty('JAC_PERSONA_PURCHASE_LEADER')~='LEADER_JAC_DATE_TANEMUNE' or Players[0]:GetProperty('JAC_PERSONA_PURCHASE_NODE')~='LEADER_JAC_DATE_TANEMUNE_ENVOYS_1' then error('purchase receipt differs from submitted node') end;\nif ExposedMembers.JAC_LeaderPersona.Purchase~=nil then error('purchase function exposed outside gameplay operation') end;\nreturn 'merit spent once; official titles unchanged' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaPurchase',Leader='LEADER_JAC_DATE_TANEMUNE',Node='LEADER_JAC_DATE_TANEMUNE_ENVOYS_1',ConfirmCategory='CONTACT',ConfirmRoute='ENVOYS'}); return 'duplicate request submitted through gameplay operation'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0]:GetProperty('JAC_PERSONA_PURCHASE_RESULT')=='OWNED' and Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT')==Game:GetProperty('JAC_PERSONA_SCENARIO_MERIT_PRE_PURCHASE')-8"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=1, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=1}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=1 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "capture_as": "JAC_PERSONA_MERIT_LOCKS"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Merit-Locks",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Merit-Locks",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "equals_capture": "JAC_PERSONA_MERIT_LOCKS"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "if not JAC_TreeOpen('LEADER_JAC_DATE_TANEMUNE') then error('tree reopen failed') end; local text=Controls.Result:GetText(); if text~=nil and text~='' then error('old purchase result replayed on reopen: '..tostring(text)) end; return 'tree reopened after load; native result='..tostring(text)..'; values='..select('#',Controls.Result:GetText())"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local r=JAC_PersonaTreeRules;\nif Game:GetProperty(prefix..'CATEGORY')~='CONTACT' or Game:GetProperty(prefix..'BRANCH_CONTACT_RELATIONS')~='ENVOYS' then error('permanent commitments lost') end;\nfor _,test in ipairs({{'LEADER_JAC_DATE_TANEMUNE_WORKS_1','CATEGORY_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_EXCHANGE_1','BRANCH_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_ENVOYS_3','PREREQ_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_ENVOYS_1','OWNED'}}) do\n if r.Status(Game.GetLocalPlayer(),'LEADER_JAC_DATE_TANEMUNE',test[1])~=test[2] then error('incorrect locked/owned node: '..test[1]) end\nend\nreturn 'category, exclusive sibling and prerequisites locked permanently' "
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-tree-owned-and-locked.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=1, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=1}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=1 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_AssignLeader('LEADER_JAC_DATE_TANEMUNE',Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')); return 'reassignment requested'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; local g=Players[Game.GetLocalPlayer()]:GetGovernors():GetGovernor(GameInfo.Governors[r.GovernorType].Hash); return g:GetAssignedCity() and g:GetAssignedCity():GetID()==Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=0, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=0}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=0 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=0, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=0}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=0 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "capture_as": "JAC_PERSONA_REASSIGNED"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Reassigned",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Reassigned",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_DATE_TANEMUNE'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "equals_capture": "JAC_PERSONA_REASSIGNED"
+    },
+    {
+      "action": "end_turn",
+      "turns": 5,
+      "timeout": 3000
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=GameInfo.JAC_LeaderPersonas['LEADER_JAC_DATE_TANEMUNE']; return Players[Game.GetLocalPlayer()]:GetGovernors():GetGovernor(GameInfo.Governors[r.GovernorType].Hash):IsEstablished()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=0, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=0}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=0 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=1, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=1}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=1 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local culture=Players[0]:GetCulture(); local gov=Players[0]:GetGovernors(); local added=0;\nfor row in GameInfo.JAC_PersonaTitleCivics() do\n if added<4 then local c=GameInfo.Civics[row.CivicType]; if not culture:HasCivic(c.Index) then\n  local before=gov:GetGovernorPoints()-gov:GetGovernorPointsSpent(); culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index));\n  if gov:GetGovernorPoints()-gov:GetGovernorPointsSpent()~=before+1 then error('civic title grant not exactly one') end; added=added+1\n end end\nend\nif added~=4 then error('four unresearched title civics required for remaining costs') end;\nGame:SetProperty('JAC_PERSONA_SCENARIO_COSTS_TOTAL_BEFORE',gov:GetGovernorPoints());\nGame:SetProperty('JAC_PERSONA_SCENARIO_COSTS_SPENT_BEFORE',gov:GetGovernorPointsSpent());\nreturn 'four more civic titles earned for costs 1 and 3' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_EvolveLeader('LEADER_JAC_ODA_NOBUHIDE'); return 'evolution requested'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_ODA_NOBUHIDE'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=1 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=0 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nif GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_1'] then error('cost1 has an extra payment promotion') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_View",
+      "code": "JAC_EvolveLeader('LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'); return 'evolution requested'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA_STATE')=='GOVERNOR'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=3 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=2 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor payment=1,2 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; if not def or not g:HasPromotion(def.Hash) then error('native extra title unpaid: '..payment) end end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local g=Players[0]:GetGovernors();\nif g:GetGovernorPoints()~=Game:GetProperty('JAC_PERSONA_SCENARIO_COSTS_TOTAL_BEFORE') or g:GetGovernorPointsSpent()~=Game:GetProperty('JAC_PERSONA_SCENARIO_COSTS_SPENT_BEFORE')+4 then error('cost1 and cost3 title accounting differs') end;\nif Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_MERIT')~=0 or Game:GetProperty('JAC_PERSONA_LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA_MERIT')~=0 then error('unassigned governors received shared merit') end;\nfor def in GameInfo.Governors() do if GameInfo.JAC_PersonaDisabledGovernors[def.GovernorType] then error('official Governor became appointable after titles') end end;\nlocal yes,list=g:GetGovernorList(); if not yes or #list~=3 then error('three native persona Governors required') end;\nreturn 'costs 1/2/3 and three individual Governors verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "capture_as": "JAC_PERSONA_THREE_COSTS"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Persona-Three-Costs",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Persona-Three-Costs",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; local r=GameInfo.JAC_LeaderPersonas[leader]; local p=Players[Game.GetLocalPlayer()]; local g=p:GetGovernors(); local v={};\nfor _,field in ipairs({'STATE','OWNER','SOURCE','NAME','PORTRAIT','PERSONALITY','TRAIT','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE','MERIT','CATEGORY','BRANCH_CONTACT_RELATIONS','GOVERN_LAST_TURN','ALLIANCES_BASELINED'}) do v[#v+1]=field..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_'..field))) end\nv[#v+1]='titles='..g:GetGovernorPoints()..'/'..g:GetGovernorPointsSpent();\nlocal gov=g:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and g:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif gov then v[#v+1]='governor='..gov:GetType(); v[#v+1]='established='..tostring(gov:IsEstablished()); v[#v+1]='onSite='..gov:GetTurnsOnSite(); local c=gov:GetAssignedCity(); v[#v+1]='city='..tostring(c and c:GetID()); if not gov:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native base ability lost') end; for payment=1,(Game:GetProperty('JAC_PERSONA_'..leader..'_EVOLUTION_COST') or r.EvolutionCost)-1 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; v[#v+1]='titlePayment'..payment..'='..tostring(def and gov:HasPromotion(def.Hash)) end end\nfor n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then v[#v+1]=n.NodeType..'='..tostring((Game:GetProperty('JAC_PERSONA_'..leader..'_NODE_'..n.NodeType))) end end\nreturn table.concat(v,'|')",
+      "equals_capture": "JAC_PERSONA_THREE_COSTS"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=3 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=2 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nfor payment=1,2 do local def=GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_'..payment]; if not def or not g:HasPromotion(def.Hash) then error('native extra title unpaid: '..payment) end end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_ODA_NOBUHIDE'; local r=GameInfo.JAC_LeaderPersonas[l]; local p=Players[0]; local gs=p:GetGovernors();\nif Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_COST')~=1 or Game:GetProperty('JAC_PERSONA_'..l..'_EVOLUTION_SURCHARGE')~=0 then error('evolution cost or surcharge differs') end\nlocal g=gs:HasGovernor(GameInfo.Governors[r.GovernorType].Hash) and gs:GetGovernor(GameInfo.Governors[r.GovernorType].Hash);\nif not g or not g:HasPromotion(GameInfo.GovernorPromotions[r.BasePromotionType].Hash) then error('native governor/base absent') end\nif GameInfo.GovernorPromotions[r.BasePromotionType..'_TITLE_1'] then error('cost1 has an extra payment promotion') end\nfor _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local individual=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]; if individual and individual.GreatPersonIndividualType==r.PersonType then error('Great Person survived evolution') end end\nif ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,l)~='ALREADY_EVOLVED' then error('evolution charged again') end\nreturn 'native governor and per-person cost verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_B')); if not city then error('skill target city missing') end; local cname=Locale.Lookup(city:GetName()); local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=1, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=1}; local found={};\nfor _,id in ipairs(GameEffects.GetModifiers()) do local def=GameEffects.GetModifierDefinition(id);\n if def and wanted[def.Id]~=nil and GameEffects.GetModifierActive(id) then\n  for _,obj in ipairs(GameEffects.GetModifierSubjects(id) or {}) do\n   if GameEffects.GetObjectsPlayerId(obj)==0 and Locale.Lookup(GameEffects.GetObjectName(obj) or '')==cname then found[def.Id]=(found[def.Id] or 0)+1 end\n  end\n end\nend\nfor id,expected in pairs(wanted) do if (found[id] or 0)~=expected then error(id..' has '..tostring(found[id] or 0)..' effective subjects in '..cname..'; expected '..expected) end end\nlocal marker=city:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE'); if (marker or 0)~=1 then error('gameplay settlement marker disagrees with native city effects: '..tostring(marker)) end;\nreturn 'actual active city effects and gameplay settlement marker verified' "
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "JAC_TreeOpen('LEADER_JAC_DATE_TANEMUNE'); return 'final tree opened'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'; local r=JAC_PersonaTreeRules;\nif Game:GetProperty(prefix..'CATEGORY')~='CONTACT' or Game:GetProperty(prefix..'BRANCH_CONTACT_RELATIONS')~='ENVOYS' then error('permanent commitments lost') end;\nfor _,test in ipairs({{'LEADER_JAC_DATE_TANEMUNE_WORKS_1','CATEGORY_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_EXCHANGE_1','BRANCH_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_ENVOYS_3','PREREQ_LOCKED'},{'LEADER_JAC_DATE_TANEMUNE_ENVOYS_1','OWNED'}}) do\n if r.Status(Game.GetLocalPlayer(),'LEADER_JAC_DATE_TANEMUNE',test[1])~=test[2] then error('incorrect locked/owned node: '..test[1]) end\nend\nreturn 'category, exclusive sibling and prerequisites locked permanently' "
+    },
+    {
+      "action": "screenshot",
+      "path": "leader-persona-tree-after-save-load.png"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local l='LEADER_JAC_DATE_TANEMUNE'; local key='JAC_PERSONA_'..l..'_MERIT'; local p=Players[0]; local d=p:GetDiplomacy(); if d:HasAllied(3) then error('alliance probe requires a new partner') end; Game:SetProperty('JAC_PERSONA_SCENARIO_ALLIANCE_BEFORE',Game:GetProperty(key) or 0); d:SetHasAllied(3,true); return 'native alliance formed; gameplay must award event-time merit'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_MERIT')==(Game:GetProperty('JAC_PERSONA_SCENARIO_ALLIANCE_BEFORE') or 0)+8"
+      },
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game:GetProperty('JAC_PERSONA_SCENARIO_AI_TITLE_BUDGETS')~=21 then error('AI appointment test had no title budgets') end; local pending=Game:GetProperty('JAC_PERSONA_PENDING_DEEDS'); if pending and next(pending) then error('native deed notifications remain unprocessed') end; if Game:GetProperty('JAC_PERSONA_PENDING_NATIVE_HISTORY') then error('native initialization crossed a deed turn; history needs verification') end; local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then count=count+1; local gs=p:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do if gs:HasGovernor(GameInfo.Governors[row.GovernorType].Hash) and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID() then error('AI appointed an unjoined persona: '..p:GetID()..'/'..row.LeaderType) end end end end; if count~=21 then error('all 21 AI houses required') end; local class=GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA']; local unit=GameInfo.Units[class.UnitType]; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then for _,u in p:GetUnits():Members() do if u:GetType()==unit.Index then error('unjoined AI acquired a persona Great Person through a native recruitment path') end end end end; return 'no unjoined AI governors or persona Great People'"
+    }
+  ]
+}

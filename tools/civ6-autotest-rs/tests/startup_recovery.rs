@@ -14,6 +14,38 @@ use std::{
     sync::{Arc, Mutex},
 };
 use support_driver::ManualClock;
+#[test]
+fn startup_lock_preparation_consumes_restart_budget_before_any_launch() {
+    struct Preparing(Arc<ManualClock>);
+    impl Backend for Preparing {
+        fn acquire_startup_lock_until(&mut self, deadline: std::time::Instant) -> Result<()> {
+            assert!(deadline > std::time::Instant::now());
+            self.0.advance(11.0);
+            Ok(())
+        }
+        fn authorize_game_control(&mut self, _: Option<GameProcess>) -> Result<()> {
+            panic!("expired preparation cannot authorize game control");
+        }
+        fn launch(&mut self) -> Result<()> {
+            panic!("expired preparation cannot launch a game");
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let clock = Arc::new(ManualClock::default());
+    let mut runner = Runner::with_backend(
+        json!({"name":"preparation bound","steps":[]}),
+        directory.path().into(),
+        directory.path().into(),
+        directory.path().into(),
+        4318,
+        Box::new(Preparing(clock.clone())),
+        clock,
+    );
+    assert_eq!(
+        runner.restart_game(10.0).unwrap_err().message,
+        "Step deadline expired"
+    );
+}
 fn clear_idle() -> IdleProof {
     IdleProof {
         software_adapters: Vec::new(),
@@ -80,8 +112,19 @@ struct State {
     events: Vec<String>,
     alive: Option<(u32, f64)>,
     launches: usize,
-    lock_checks: usize,
+
     steam_marks: usize,
+    lock_held: bool,
+    startup_pin: Option<GameProcess>,
+    bootstrap_launch: Option<GameProcess>,
+    bootstrap_prepared: Vec<GameProcess>,
+    fail_restart_health: bool,
+    fail_restart_lease: bool,
+}
+#[derive(Clone, Copy)]
+enum LockLoss {
+    BeforeShutdown,
+    AfterShutdown,
 }
 struct Game {
     state: Arc<Mutex<State>>,
@@ -96,10 +139,14 @@ struct Game {
     invalid_config: bool,
     wrong_executable: bool,
     launch_failure: bool,
+    handoff_missing: bool,
+    bootstrap_prepare_failure: bool,
+    cancel_after_retain: bool,
+    retain_delay: f64,
     no_window: bool,
     changed_after_diagnostics: bool,
     change_start_only: bool,
-    lost_lock_at: Option<usize>,
+    lost_lock_at: Option<LockLoss>,
     deny_lock: bool,
     resist_shutdown: bool,
     reset_clears_pending: bool,
@@ -119,6 +166,71 @@ fn clear_gpu() -> GpuSnapshot {
     }
 }
 impl Backend for Game {
+    fn check_native_bootstrap(&mut self) -> Result<()> {
+        if self.state.lock().unwrap().fail_restart_health {
+            Err(Error::input("fixture restart health failed"))
+        } else {
+            Ok(())
+        }
+    }
+    fn live_lease_budget(&self) -> Result<Option<f64>> {
+        if self.state.lock().unwrap().fail_restart_lease {
+            Err(Error::new(
+                ErrorKind::LiveLease,
+                "fixture restart lease failed",
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+    fn clear_bootstrap_launch(&mut self) {
+        let mut state = self.state.lock().unwrap();
+        state.bootstrap_launch = None;
+        state.events.push("bootstrap:clear".into());
+    }
+    fn pin_startup_process(&mut self, _: isize) -> Result<Option<GameProcess>> {
+        let mut state = self.state.lock().unwrap();
+        state.startup_pin = state.alive.map(Into::into);
+        Ok(state.startup_pin)
+    }
+    fn retain_bootstrap_launch(&mut self) {
+        let mut state = self.state.lock().unwrap();
+        assert!(state.lock_held, "handoff precedes startup unlock");
+        let pin = state.startup_pin.take();
+        if let Some(pin) = pin {
+            assert_eq!(state.alive, Some((pin.pid, pin.started)));
+        }
+        state.bootstrap_launch = if self.handoff_missing { None } else { pin };
+        if let Some(pin) = state.bootstrap_launch {
+            state.events.push(format!("bootstrap:retain:{}", pin.pid));
+        }
+        drop(state);
+        self.clock.advance(self.retain_delay);
+        if self.cancel_after_retain {
+            self.interrupted = true;
+        }
+    }
+    fn start_native_bootstrap(
+        &mut self,
+        _: &Path,
+        _: &Value,
+        deadline: std::time::Instant,
+    ) -> Result<()> {
+        assert!(deadline > std::time::Instant::now());
+        let mut state = self.state.lock().unwrap();
+        let pin = state
+            .bootstrap_launch
+            .take()
+            .ok_or_else(|| Error::input("fixture completed launch pin missing"))?;
+        if state.alive != Some((pin.pid, pin.started)) {
+            return Err(Error::input("fixture bootstrap target changed"));
+        }
+        if self.bootstrap_prepare_failure {
+            return Err(Error::input("fixture controller preparation failed"));
+        }
+        state.bootstrap_prepared.push(pin);
+        Ok(())
+    }
     fn begin_steam_observation(&mut self, _: &Path) -> Result<()> {
         let mut state = self.state.lock().unwrap();
         state.steam_marks += 1;
@@ -247,20 +359,31 @@ impl Backend for Game {
         if self.deny_lock {
             Err(Error::input("fixture missing shared lock"))
         } else {
+            self.state.lock().unwrap().lock_held = true;
             Ok(())
         }
     }
     fn check_startup_lock(&mut self) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        state.lock_checks += 1;
         state.events.push("lock:check".into());
-        if self.lost_lock_at.is_some_and(|n| state.lock_checks >= n) {
+        let lost = match self.lost_lock_at {
+            Some(LockLoss::BeforeShutdown) => {
+                state.events.iter().any(|e| e.starts_with("diagnostics:"))
+            }
+            Some(LockLoss::AfterShutdown) => {
+                state.events.iter().any(|e| e.starts_with("terminate:"))
+            }
+            None => false,
+        };
+        if !state.lock_held || lost {
             Err(Error::input("fixture lock lost"))
         } else {
             Ok(())
         }
     }
     fn release_startup_lock(&mut self) {
+        self.state.lock().unwrap().startup_pin = None;
+        self.state.lock().unwrap().lock_held = false;
         self.state
             .lock()
             .unwrap()
@@ -336,6 +459,10 @@ impl Fixture {
             invalid_config: false,
             wrong_executable: false,
             launch_failure: false,
+            handoff_missing: false,
+            bootstrap_prepare_failure: false,
+            cancel_after_retain: false,
+            retain_delay: 0.0,
             no_window: false,
             changed_after_diagnostics: false,
             change_start_only: false,
@@ -513,22 +640,24 @@ fn missing_or_lost_lock_prevents_shutdown_reset_and_retry_and_releases_guard() {
     for deny_lock in [true, false] {
         let mut fixture = Fixture::new(|game| {
             game.deny_lock = deny_lock;
-            game.lost_lock_at = Some(1);
+            game.lost_lock_at = Some(LockLoss::BeforeShutdown);
         });
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
-        assert_eq!(count(&events, "launch"), 1);
+        assert_eq!(count(&events, "launch"), if deny_lock { 0 } else { 1 });
         assert!(!events
             .iter()
             .any(|e| e.starts_with("terminate:") || e.starts_with("reset:")));
         assert_eq!(events.last().unwrap(), "lock:release");
-        assert_eq!(fixture.report()["retry"]["status"], "not_started");
+        if !deny_lock {
+            assert_eq!(fixture.report()["retry"]["status"], "not_started");
+        }
     }
 }
 
 #[test]
 fn lock_loss_after_shutdown_prevents_reset_and_retry() {
-    let mut fixture = Fixture::new(|game| game.lost_lock_at = Some(2));
+    let mut fixture = Fixture::new(|game| game.lost_lock_at = Some(LockLoss::AfterShutdown));
     fixture.runner.restart_game(20.0).unwrap_err();
     let events = fixture.events();
     assert_eq!(count(&events, "terminate:11:101"), 1);
@@ -567,9 +696,15 @@ fn initial_cancellation_and_launch_or_window_or_executable_failure_do_not_recove
             assert_eq!(error.kind, ErrorKind::Interrupted);
         }
         let events = fixture.events();
-        assert!(!events.iter().any(|e| e.starts_with("diagnostics:")
-            || e.starts_with("lock:")
-            || e.starts_with("reset:")));
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("diagnostics:") || e.starts_with("reset:")));
+        if mode == 0 {
+            assert!(!events.iter().any(|e| e.starts_with("lock:")));
+        } else {
+            assert_eq!(count(&events, "lock:acquire"), 1);
+            assert_eq!(events.last().unwrap(), "lock:release");
+        }
         assert!(fs::read_dir(&fixture.runner.output)
             .unwrap()
             .next()
@@ -602,9 +737,9 @@ fn menu_already_reached_and_invalid_tuner_configuration_do_not_recover() {
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
         assert_eq!(count(&events, "launch"), 1);
-        assert!(!events.iter().any(|e| e.starts_with("lock:")
-            || e.starts_with("reset:")
-            || e.starts_with("terminate:")));
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("reset:") || e.starts_with("terminate:")));
         if invalid_config {
             assert_eq!(fixture.report()["result"], "recovery_refused");
         }
@@ -619,7 +754,10 @@ fn invalid_timeout_and_failure_to_exit_do_not_launch_again() {
             fixture.runner.restart_game(timeout).unwrap_err().kind,
             ErrorKind::Input
         );
-        assert!(fixture.events().is_empty());
+        let state = fixture.state.lock().unwrap();
+        assert!(state.bootstrap_launch.is_none());
+        assert_eq!(state.launches, 0);
+        assert!(state.events.iter().all(|event| event == "bootstrap:clear"));
     }
     let mut fixture = Fixture::new(|game| game.resist_shutdown = true);
     fixture.runner.restart_game(20.0).unwrap_err();
@@ -797,4 +935,282 @@ fn startup_log_tail_is_bounded_and_stale_logs_are_identified() {
     assert_eq!(saved.len(), startup::LOG_LIMIT as usize);
     assert!(saved.ends_with(b"diagnostic end\n"));
     assert_eq!(rows.as_array().unwrap().len(), startup::STARTUP_LOGS.len());
+}
+
+#[test]
+fn completed_restart_retains_the_exact_retry_process_before_startup_unlock() {
+    for owner_start in [false, true] {
+        let mut fixture = Fixture::new(|_| {});
+        fixture.runner.owner_start = owner_start;
+        fixture.runner.restart_game(20.0).unwrap();
+        let expected = GameProcess {
+            pid: 12,
+            started: 102.0,
+        };
+        {
+            let state = fixture.state.lock().unwrap();
+            assert_eq!(state.bootstrap_launch, Some(expected));
+            assert!(state.startup_pin.is_none());
+            assert!(!state.lock_held);
+            let retained = position(&state.events, "bootstrap:retain:12");
+            let released = state
+                .events
+                .iter()
+                .rposition(|event| event == "lock:release")
+                .unwrap();
+            assert!(retained < released);
+            assert!(!state
+                .events
+                .iter()
+                .any(|event| event == "bootstrap:retain:11"));
+        }
+        let step = json!({
+            "action": "start_native_bootstrap",
+            "max_seconds": 60,
+            "timeout": 40,
+        });
+        fixture.runner.run_step(&step).unwrap();
+        assert!(fixture.state.lock().unwrap().bootstrap_launch.is_none());
+        assert_eq!(
+            fixture.state.lock().unwrap().bootstrap_prepared,
+            vec![expected]
+        );
+        let error = fixture.runner.run_step(&step).unwrap_err();
+        assert_eq!(error.message, "fixture completed launch pin missing");
+        assert_eq!(fixture.state.lock().unwrap().bootstrap_prepared.len(), 1);
+    }
+}
+
+#[test]
+fn cancelled_or_failed_restart_never_leaves_a_prior_bootstrap_launch() {
+    for owner_start in [false, true] {
+        for mode in 0..7 {
+            let mut fixture = Fixture::new(|game| match mode {
+                0 => game.interrupted = true,
+                1 => game.launch_failure = true,
+                2 => game.no_window = true,
+                3 => game.wrong_executable = true,
+                4 => game.invalid_config = true,
+                5 => game.cancel_after_retain = true,
+                _ => game.retain_delay = 1000.0,
+            });
+            fixture.runner.owner_start = owner_start;
+            fixture.state.lock().unwrap().bootstrap_launch = Some(GameProcess {
+                pid: 99,
+                started: 1.0,
+            });
+            let error = fixture.runner.restart_game(20.0).unwrap_err();
+            match mode {
+                0 | 5 => {
+                    assert_eq!(error.kind, ErrorKind::Interrupted);
+                    assert!(error.message.starts_with("fixture cancellation"));
+                }
+                1 => {
+                    assert_eq!(error.kind, ErrorKind::Input);
+                    assert_eq!(error.message, "fixture Steam launch failed");
+                }
+                2 => {
+                    assert_eq!(error.kind, ErrorKind::Scenario);
+                    assert!(error.message.starts_with("Civ VI window did not appear"));
+                    assert!(error.message.contains("fixture window absent"));
+                }
+                3 => {
+                    assert_eq!(error.kind, ErrorKind::Input);
+                    assert_eq!(error.message, "fixture wrong executable");
+                }
+                4 => {
+                    assert_eq!(error.kind, ErrorKind::Scenario);
+                    assert!(error.message.starts_with("Main menu did not become ready"));
+                    let report = fixture.report();
+                    assert_eq!(report["result"], "recovery_refused");
+                    assert!(report["reset"]["reason"]
+                        .as_str()
+                        .unwrap()
+                        .contains("fixture FireTuner disabled"));
+                    let events = fixture.events();
+                    assert!(position(&events, "diagnostics:11") < position(&events, "evidence:11"));
+                }
+                _ => {
+                    assert_eq!(error.kind, ErrorKind::Scenario);
+                    assert!(error.message.starts_with("Step deadline expired"));
+                }
+            }
+            let state = fixture.state.lock().unwrap();
+            assert_eq!(
+                count(&state.events, "launch"),
+                if mode == 0 {
+                    0
+                } else if mode >= 5 {
+                    2
+                } else {
+                    1
+                }
+            );
+            assert!(state.bootstrap_launch.is_none());
+            assert!(state.startup_pin.is_none());
+            assert!(!state.lock_held);
+            assert!(state.bootstrap_prepared.is_empty());
+            let retained = state
+                .events
+                .iter()
+                .any(|event| event.starts_with("bootstrap:retain:"));
+            assert_eq!(retained, mode >= 5);
+        }
+    }
+}
+
+#[test]
+fn ordinary_restart_succeeds_without_admitting_a_missing_bootstrap_handoff() {
+    for owner_start in [false, true] {
+        let mut fixture = Fixture::new(|game| game.handoff_missing = true);
+        fixture.runner.owner_start = owner_start;
+        fixture.runner.restart_game(20.0).unwrap();
+        let error = fixture
+            .runner
+            .run_step(&json!({
+                "action": "start_native_bootstrap",
+                "max_seconds": 60,
+                "timeout": 40,
+            }))
+            .unwrap_err();
+        assert_eq!(error.message, "fixture completed launch pin missing");
+        let state = fixture.state.lock().unwrap();
+        assert!(state.bootstrap_launch.is_none());
+        assert!(state.bootstrap_prepared.is_empty());
+        assert!(!state.lock_held);
+        assert_eq!(state.launches, 2);
+    }
+}
+
+#[test]
+fn failed_bootstrap_preparation_consumes_the_same_launch_in_both_startup_modes() {
+    for owner_start in [false, true] {
+        for mode in 0..3 {
+            let mut fixture = Fixture::new(|game| {
+                game.bootstrap_prepare_failure = mode == 2;
+            });
+            fixture.runner.owner_start = owner_start;
+            fixture.runner.restart_game(20.0).unwrap();
+            fixture.state.lock().unwrap().alive = Some(match mode {
+                0 => (99, 102.0),
+                1 => (12, 103.0),
+                _ => (12, 102.0),
+            });
+            let step = json!({
+                "action": "start_native_bootstrap",
+                "max_seconds": 60,
+                "timeout": 40,
+            });
+            let error = fixture.runner.run_step(&step).unwrap_err();
+            assert_eq!(
+                error.message,
+                if mode == 2 {
+                    "fixture controller preparation failed"
+                } else {
+                    "fixture bootstrap target changed"
+                }
+            );
+            assert!(fixture.state.lock().unwrap().bootstrap_launch.is_none());
+            fixture.state.lock().unwrap().alive = Some((12, 102.0));
+            assert_eq!(
+                fixture.runner.run_step(&step).unwrap_err().message,
+                "fixture completed launch pin missing"
+            );
+            let state = fixture.state.lock().unwrap();
+            assert!(state.bootstrap_prepared.is_empty());
+            assert_eq!(state.launches, 2);
+        }
+    }
+}
+
+#[test]
+fn rejected_process_renewal_cannot_reuse_a_completed_bootstrap_launch() {
+    for owner_start in [false, true] {
+        for mode in 0..9 {
+            let mut fixture = Fixture::new(|_| {});
+            fixture.runner.owner_start = owner_start;
+            fixture.runner.restart_game(20.0).unwrap();
+            let first_new_event = fixture.events().len();
+            assert!(fixture.state.lock().unwrap().bootstrap_launch.is_some());
+            let error = match mode {
+                0 => fixture.runner.restart_game(0.0).unwrap_err(),
+                1 => fixture.runner.restart_game(-1.0).unwrap_err(),
+                2 => fixture.runner.restart_game(f64::INFINITY).unwrap_err(),
+                3 => fixture.runner.restart_game(f64::NAN).unwrap_err(),
+                4 | 5 => fixture
+                    .runner
+                    .run_step(&json!({
+                        "action": "restart_game",
+                        "timeout": if mode == 4 { 0.0 } else { -1.0 },
+                    }))
+                    .unwrap_err(),
+                6 => {
+                    fixture.state.lock().unwrap().fail_restart_health = true;
+                    fixture
+                        .runner
+                        .run_step(&json!({"action":"restart_game","timeout":20}))
+                        .unwrap_err()
+                }
+                7 => {
+                    fixture.state.lock().unwrap().fail_restart_lease = true;
+                    fixture
+                        .runner
+                        .run_step(&json!({"action":"restart_game","timeout":20}))
+                        .unwrap_err()
+                }
+                _ => fixture
+                    .runner
+                    .launch_steam_and_wait(fixture.clock.at())
+                    .unwrap_err(),
+            };
+            match mode {
+                0..=3 => {
+                    assert_eq!(error.kind, ErrorKind::Input);
+                    assert_eq!(error.message, "restart timeout must be finite and positive");
+                }
+                6 => {
+                    assert_eq!(error.kind, ErrorKind::Input);
+                    assert_eq!(error.message, "fixture restart health failed");
+                }
+                7 => {
+                    assert_eq!(error.kind, ErrorKind::LiveLease);
+                    assert_eq!(error.message, "fixture restart lease failed");
+                }
+                _ => {
+                    assert_eq!(error.kind, ErrorKind::Scenario);
+                    assert_eq!(error.message, "Step deadline expired");
+                }
+            }
+            {
+                let mut state = fixture.state.lock().unwrap();
+                assert!(
+                    state.bootstrap_launch.is_none(),
+                    "mode {mode} kept an old pin"
+                );
+                assert_eq!(state.alive, Some((12, 102.0)));
+                assert_eq!(state.launches, 2);
+                assert!(state.events[first_new_event..].iter().all(|event| {
+                    event != "launch"
+                        && !event.starts_with("terminate:")
+                        && !event.starts_with("reset:")
+                        && event != "lock:acquire"
+                }));
+                state.fail_restart_health = false;
+                state.fail_restart_lease = false;
+            }
+            let prepare = json!({
+                "action": "start_native_bootstrap",
+                "max_seconds": 60,
+                "timeout": 40,
+            });
+            assert_eq!(
+                fixture.runner.run_step(&prepare).unwrap_err().message,
+                "fixture completed launch pin missing"
+            );
+            let state = fixture.state.lock().unwrap();
+            assert!(state.bootstrap_prepared.is_empty());
+            assert_eq!(state.alive, Some((12, 102.0)));
+            assert_eq!(state.launches, 2);
+        }
+    }
 }

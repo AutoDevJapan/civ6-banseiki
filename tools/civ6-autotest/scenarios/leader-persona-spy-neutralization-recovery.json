@@ -1,0 +1,82 @@
+{
+  "name": "Native success only: GameCore baseline and same-turn save/load equality",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('CAPTURE_ENEMY'); return 'capture actual GameCore merit and native duration'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local a=b.lastAction; if a=='ERROR_CAPTURE_ENEMY' or a=='UNKNOWN_CAPTURE_ENEMY' or a=='REJECTED_CAPTURE_ENEMY' then error('enemy recovery capture refused: '..a) end; return a=='ACCEPTED_CAPTURE_ENEMY' and Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY')~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')",
+      "capture_as": "ENEMY_NEUTRALIZED_BEFORE_LOAD"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')",
+      "equals_capture": "ENEMY_NEUTRALIZED_BEFORE_LOAD"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

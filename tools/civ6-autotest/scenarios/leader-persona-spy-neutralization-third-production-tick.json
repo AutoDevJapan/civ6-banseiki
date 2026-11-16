@@ -1,0 +1,17 @@
+{
+  "name": "Advance one real production turn and explicitly bind only a new generation three spy",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[0]; local b=ExposedMembers.JAC_PersonaBoundary; return p and p:IsTurnActive() and b and type(b.ThirdSpyBind)=='function'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyStatus(); assert(s.progressed and not s.bound and s.mapCount==0,'third production must be pending before a real turn'); return 'THIRD_PRODUCTION_PENDING'"},
+    {"action":"end_turn","turns":1,"timeout":600},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; b.thirdProductionStatus=b.ThirdSpyBind(); return b.thirdProductionStatus"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.thirdLast=='ERROR_ATTEST' or b.thirdLast=='ERROR_ADOPT' then error(b.thirdLast) end; return b.thirdProductionStatus=='PRODUCTION_PENDING' or b.ThirdSpyStatus().bound"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if not b.ThirdSpyStatus().bound then return 'THIRD_PRODUCTION_PENDING' end; return b.RetryLivingSpy()"},
+    {"action":"exit_to_menu"}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Read the official Government Plaza spy-capacity prerequisites in the captured game",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local d=b.EnemyRetryDiagnosis(); assert(d.spyID==655368 and d.eventID==0 and d.outcome=='CAPTURED' and d.occupied==1,'actual captive checkpoint differs'); local p=b.CaptiveCapacityPlan(); return p.stage..' capacity='..p.capacity..' occupied='..p.occupied..' city='..tostring(p.cityID)..' plot='..tostring(p.plot)..' x='..tostring(p.x)..' y='..tostring(p.y)..' building='..tostring(p.buildingType)"},
+    {"action":"exit_to_menu"}
+  ]
+}

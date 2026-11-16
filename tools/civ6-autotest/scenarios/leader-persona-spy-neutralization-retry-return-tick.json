@@ -1,0 +1,18 @@
+{
+  "name": "One real native spy return turn after the archived failed mission",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); assert(r.current==2 and r.mode=='RETURN' and not r.missionRequested,'native living spy retry state changed'); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN','spy has already returned; read the living roster before advancing'); return 'OFF_MAP_RETURN'"},
+    {"action":"end_turn","turns":1,"timeout":600},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()~='ARRIVAL_UNOBSERVED'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.RetryLivingSpy()=='ADOPTION_REQUIRED' then return b.TryAdoptReturnedSpy() end; return 'NO_ADOPTION'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='UNKNOWN_RETRY_ADOPT' or a=='ERROR_RETRY_ADOPT' then error(a) end; return a=='IDLE' or a=='ACCEPTED_RETRY_ADOPT'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()"},
+    {"action":"exit_to_menu"}
+  ]
+}

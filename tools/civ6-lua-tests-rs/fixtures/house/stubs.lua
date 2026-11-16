@@ -1,6 +1,7 @@
 
 local texts, language, sources, civilization = ...
 local function format(tag, ...)
+  assert(type(tag)=='string','string expected')
   local text = texts[tag]
   if text == nil then return tag end
   local args = { ... }

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt in only for the enemy neutralization experiment. Never ship as eligibility. -->
+<Mod id="bba3a0d2-8f08-4715-9263-00a773e6ae86" version="1">
+  <Properties>
+    <Name>JAC TEST ONLY: enemy Governor candidate gate</Name>
+    <Description>AI Date can select Ashina only after the diagnostic grants a real title.</Description>
+    <Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="JAC PoC: Leader Persona" />
+  </Dependencies>
+  <ActionCriteria>
+    <Criteria id="JAC_EnemyGovernor_15km">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_EnemyGovernor_Data" criteria="JAC_EnemyGovernor_15km">
+      <Properties><LoadOrder>410</LoadOrder></Properties>
+      <File>Data/JAC_EnemyGovernorFixture.sql</File>
+    </UpdateDatabase>
+  </InGameActions>
+  <Files><File>Data/JAC_EnemyGovernorFixture.sql</File></Files>
+</Mod>

@@ -1,0 +1,17 @@
+{
+  "name": "Reserve and send one generation three official neutralization mission without reusing event zero or one",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[0]; local b=ExposedMembers.JAC_PersonaBoundary; return p and p:IsTurnActive() and b and type(b.ThirdSpyReserve)=='function'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; assert(b.ThirdSpyStatus().bound and b.RetryLivingSpy()=='MISSION_READY','third native spy must be at the original enemy Governor'); b.ThirdSpyReserve('SPY_MISSION'); return 'third mission reservation queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.thirdLast; if a=='ERROR_SPY_MISSION' then error(a) end; return a=='ACCEPTED_SPY_MISSION'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.ThirdSpySend('SPY_MISSION')"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_SPY_MISSION' or a=='REJECTED_SPY_MISSION' or a=='UNKNOWN_SPY_MISSION' then error(a) end; return a=='ACCEPTED_SPY_MISSION'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.EnemyProgress()"},
+    {"action":"exit_to_menu"}
+  ]
+}

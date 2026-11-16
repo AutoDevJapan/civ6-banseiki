@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="8c615430-5a09-4431-877a-bfd03bca9e80" version="1">
+  <Properties>
+    <Name>LOC_JAC_NATIVE_SLOT_ONLY_NAME</Name>
+    <Teaser>LOC_JAC_NATIVE_SLOT_ONLY_DESCRIPTION</Teaser>
+    <Description>LOC_JAC_NATIVE_SLOT_ONLY_DESCRIPTION</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+    <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="LOC_JAC_PERSONA_MOD_NAME"/>
+    <Mod id="a1faab65-5371-4e25-9a46-7522075f865d" title="LOC_JAC_NATIVE_SLOTS_MOD_NAME"/>
+  </Dependencies>
+  <LocalizedText>
+    <Text id="LOC_JAC_NATIVE_SLOT_ONLY_NAME">
+      <ja_JP>JAC テスト専用：配置枠だけのAI比較</ja_JP>
+      <en_US>JAC TEST ONLY: ordinary slot AI comparison</en_US>
+      <ru_RU>JAC ТЕСТ: ИИ обычного губернатора</ru_RU>
+    </Text>
+    <Text id="LOC_JAC_NATIVE_SLOT_ONLY_DESCRIPTION">
+      <ja_JP>支払い総督を全勢力の候補から外し、匿名の配置枠だけの無断任命を調べる。</ja_JP>
+      <en_US>Excludes the payment proxy for all houses to test unauthorized appointment of the ordinary slot alone.</en_US>
+      <ru_RU>Исключает платежного губернатора у всех домов для проверки назначения обычного губернатора.</ru_RU>
+    </Text>
+  </LocalizedText>
+  <ActionCriteria>
+    <Criteria id="JAC_NativeSlotOnly_15km">
+      <RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+      <ConfigurationValueMatches>
+        <Group>Map</Group>
+        <ConfigurationId>MAP_SCRIPT</ConfigurationId>
+        <Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value>
+      </ConfigurationValueMatches>
+    </Criteria>
+  </ActionCriteria>
+  <InGameActions>
+    <UpdateDatabase id="JAC_NativeSlotOnly_Data" criteria="JAC_NativeSlotOnly_15km">
+      <Properties><LoadOrder>460</LoadOrder></Properties>
+      <File>Data/JAC_NativeSlotOnly.sql</File>
+    </UpdateDatabase>
+  </InGameActions>
+  <Files><File>Data/JAC_NativeSlotOnly.sql</File></Files>
+</Mod>

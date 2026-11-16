@@ -1,0 +1,26 @@
+{
+  "name": "Verify the native third-spy capacity after a saved immediate or later Civic completion",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "action": "inspect_native_spy_research",
+      "phase": "capacity_ready",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}
