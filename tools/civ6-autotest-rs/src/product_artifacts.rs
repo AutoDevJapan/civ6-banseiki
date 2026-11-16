@@ -1368,7 +1368,9 @@ mod tests {
     }
 
     fn compiler_control_command(program: &Path) -> std::process::Command {
-        let mut command = std::process::Command::new(program);
+        let command = std::process::Command::new(program);
+        #[cfg(windows)]
+        let mut command = command;
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -1667,6 +1669,18 @@ mod tests {
             })
     }
 
+    fn capture_safe_value_kind(value: Option<&Value>) -> &'static str {
+        match value {
+            None => "missing",
+            Some(Value::Null) => "null",
+            Some(Value::Bool(_)) => "bool",
+            Some(Value::Number(_)) => "number",
+            Some(Value::String(_)) => "string",
+            Some(Value::Array(_)) => "array",
+            Some(Value::Object(_)) => "object",
+        }
+    }
+
     fn capture_snapshot_matches_actual(snapshot: &Value, actual: &Value) -> bool {
         capture_snapshot_first_difference(snapshot, actual).is_none()
     }
@@ -1918,8 +1932,12 @@ mod tests {
             } else {
                 assert!(
                     capture_snapshot_matches_actual(snapshot, returned),
-                    "historical snapshot mismatch case={case} field={}",
-                    capture_snapshot_first_difference(snapshot, returned).unwrap_or("none")
+                    "historical snapshot mismatch case={case} field={} snapshot_kind={} returned_kind={} snapshot_exit={:?} returned_exit={:?}",
+                    capture_snapshot_first_difference(snapshot, returned).unwrap_or("none"),
+                    capture_safe_value_kind(snapshot.get("native_exit_code")),
+                    capture_safe_value_kind(returned.get("exit_code")),
+                    snapshot["native_exit_code"].as_i64(),
+                    returned["exit_code"].as_i64()
                 );
             }
             let verified = returned["publication_verified"] == true;
