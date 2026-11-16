@@ -1656,10 +1656,7 @@ mod tests {
         Ok(actual)
     }
 
-    fn capture_snapshot_first_difference(
-        snapshot: &Value,
-        actual: &Value,
-    ) -> Option<&'static str> {
+    fn capture_snapshot_first_difference(snapshot: &Value, actual: &Value) -> Option<&'static str> {
         CAPTURE_PUBLIC_FIELDS
             .iter()
             .find_map(|&(public_key, actual_key)| {
@@ -2028,7 +2025,10 @@ mod tests {
                 _ => "fixture",
             };
             assert_eq!(binding["phase"], phase);
-            assert_eq!(capture_public_snapshots(&public).unwrap()[0]["phase"], phase);
+            assert_eq!(
+                capture_public_snapshots(&public).unwrap()[0]["phase"],
+                phase
+            );
             assert!(!public.contains("unexpected-label"));
             assert!(!public.contains("public-phase-sentinel"));
             assert_eq!(binding["filename_matches_selection"], true);
@@ -2118,8 +2118,7 @@ mod tests {
                 "private child cwd does not satisfy the expected fixture-root relation"
             );
             if !expected_match {
-                let other =
-                    fs::canonicalize(directory.path().join("fixture-other-cwd")).unwrap();
+                let other = fs::canonicalize(directory.path().join("fixture-other-cwd")).unwrap();
                 assert!(
                     observed == other,
                     "negative fixture did not use its owned alternate root"
