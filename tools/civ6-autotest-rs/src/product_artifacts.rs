@@ -1634,7 +1634,8 @@ mod tests {
             if object.len() != CAPTURE_PUBLIC_FIELDS.len() + 3
                 || record["schema"] != "civ6-native-capture/v3"
                 || record["evidence_kind"] != "historical_capture_snapshot"
-                || record["phase"] != phase
+                || (record["phase"] != phase
+                    && !(index == 0 && (record["phase"] == "git" || record["phase"] == "unknown")))
             {
                 return Err("capture snapshot schema differs");
             }
@@ -1655,15 +1656,22 @@ mod tests {
         Ok(actual)
     }
 
-    fn capture_snapshot_matches_actual(snapshot: &Value, actual: &Value) -> bool {
+    fn capture_snapshot_first_difference(
+        snapshot: &Value,
+        actual: &Value,
+    ) -> Option<&'static str> {
         CAPTURE_PUBLIC_FIELDS
             .iter()
-            .all(|&(public_key, actual_key)| {
-                snapshot
-                    .get(public_key)
-                    .zip(actual.get(actual_key))
-                    .is_some_and(|(observed, returned)| observed == returned)
+            .find_map(|&(public_key, actual_key)| {
+                match snapshot.get(public_key).zip(actual.get(actual_key)) {
+                    Some((observed, returned)) if observed == returned => None,
+                    _ => Some(public_key),
+                }
             })
+    }
+
+    fn capture_snapshot_matches_actual(snapshot: &Value, actual: &Value) -> bool {
+        capture_snapshot_first_difference(snapshot, actual).is_none()
     }
 
     fn capture_public_records(
@@ -1748,6 +1756,10 @@ mod tests {
         ] {
             let mut wrong = event.clone();
             wrong[key] = value;
+            assert_eq!(
+                capture_snapshot_first_difference(&wrong, &expected[0]),
+                Some(key)
+            );
             assert!(capture_public_records(
                 &format!("CIV_PRODUCT_NATIVE_CAPTURE {wrong}\n"),
                 &expected
@@ -1850,6 +1862,9 @@ mod tests {
             )
             .unwrap();
         }
+        if case == "cwd_other" {
+            fs::create_dir(directory.path().join("fixture-other-cwd")).unwrap();
+        }
         let executable = std::env::current_exe().unwrap();
         let mut command = compiler_control_command(Path::new("pwsh"));
         command
@@ -1904,7 +1919,11 @@ mod tests {
                 assert_eq!(snapshot["collection_complete"], true);
                 assert_eq!(returned["complete"], false);
             } else {
-                assert!(capture_snapshot_matches_actual(snapshot, returned));
+                assert!(
+                    capture_snapshot_matches_actual(snapshot, returned),
+                    "historical snapshot mismatch case={case} field={}",
+                    capture_snapshot_first_difference(snapshot, returned).unwrap_or("none")
+                );
             }
             let verified = returned["publication_verified"] == true;
             assert_eq!(
@@ -1989,6 +2008,9 @@ mod tests {
             "resolved_invalid",
             "resolved_missing",
             "working_directory_missing",
+            "public_label_git",
+            "public_label_unknown",
+            "public_label_path",
         ] {
             let (directory, events, public) = run_capture_fixture(case, "absent");
             let event = &events[0];
@@ -2000,7 +2022,15 @@ mod tests {
             )
             .unwrap();
             assert_eq!(binding["schema"], "civ6-process-binding/v1");
-            assert_eq!(binding["phase"], "fixture");
+            let phase = match case {
+                "public_label_git" => "git",
+                "public_label_unknown" | "public_label_path" => "unknown",
+                _ => "fixture",
+            };
+            assert_eq!(binding["phase"], phase);
+            assert_eq!(capture_public_snapshots(&public).unwrap()[0]["phase"], phase);
+            assert!(!public.contains("unexpected-label"));
+            assert!(!public.contains("public-phase-sentinel"));
             assert_eq!(binding["filename_matches_selection"], true);
             assert_eq!(binding["working_directory_is_string"], true);
             assert_eq!(binding["working_directory_is_absolute"], true);
@@ -2016,7 +2046,14 @@ mod tests {
                     assert!(value.is_boolean() || value.as_u64().is_some(), "{key}");
                 }
             }
-            if case == "resolved_success" || case == "resolved_multiple" {
+            if matches!(
+                case,
+                "resolved_success"
+                    | "resolved_multiple"
+                    | "public_label_git"
+                    | "public_label_unknown"
+                    | "public_label_path"
+            ) {
                 assert_eq!(event["complete"], true);
                 assert_eq!(event["actual_consumer_accepted"], true);
                 assert_eq!(binding["selected_path_is_string"], true);
@@ -2026,7 +2063,7 @@ mod tests {
                 if case == "resolved_success" {
                     assert_eq!(binding["resolution_kind"], "logical_application");
                     assert!(binding["application_candidates"].as_u64().unwrap() >= 1);
-                } else {
+                } else if case == "resolved_multiple" {
                     assert_eq!(binding["resolution_kind"], "fixture_descriptors");
                     assert_eq!(binding["application_candidates"], 2);
                     assert_eq!(binding["selected_source_kind"], "array");
@@ -2056,6 +2093,40 @@ mod tests {
                     assert_eq!(binding["selected_path_count"], 2);
                 }
             }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn product_capture_private_child_cwd_distinguishes_the_requested_owned_root() {
+        for (case, expected_match) in [("cwd_bound", true), ("cwd_other", false)] {
+            let (directory, events, public) = run_capture_fixture(case, "absent");
+            assert_eq!(events[0]["complete"], true);
+            let raw = fs::read(directory.path().join("fixture.stdout.raw")).unwrap();
+            assert_eq!(events[0]["stdout_sha256"], digest(&raw));
+            let text = String::from_utf8(raw).unwrap();
+            let actual: PathBuf = serde_json::from_str(
+                text.lines()
+                    .find_map(|line| line.strip_prefix("CIV_PRIVATE_FIXTURE_CWD "))
+                    .unwrap(),
+            )
+            .unwrap();
+            let observed = fs::canonicalize(actual).unwrap();
+            let requested = fs::canonicalize(directory.path()).unwrap();
+            assert!(
+                (observed == requested) == expected_match,
+                "private child cwd does not satisfy the expected fixture-root relation"
+            );
+            if !expected_match {
+                let other =
+                    fs::canonicalize(directory.path().join("fixture-other-cwd")).unwrap();
+                assert!(
+                    observed == other,
+                    "negative fixture did not use its owned alternate root"
+                );
+            }
+            assert!(!public.contains("CIV_PRIVATE_FIXTURE_CWD"));
+            assert!(!public.contains(directory.path().to_string_lossy().as_ref()));
         }
     }
 
@@ -2619,6 +2690,14 @@ mod tests {
         let Ok(case) = std::env::var("CIV6_CAPTURE_FIXTURE_CASE") else {
             return;
         };
+        if case == "cwd" {
+            let cwd = std::env::current_dir().unwrap();
+            println!(
+                "CIV_PRIVATE_FIXTURE_CWD {}",
+                serde_json::to_string(&cwd).unwrap()
+            );
+            return;
+        }
         let out = std::thread::spawn(|| {
             let mut stream = std::io::stdout().lock();
             stream.write_all(b"C:/private/stdout-sentinel\n").unwrap();

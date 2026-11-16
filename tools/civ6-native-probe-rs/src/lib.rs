@@ -47,6 +47,7 @@ pub fn is_pinned_dx11_exe(path: &std::path::Path) -> bool {
     normalized_windows_path(path) == normalized_windows_path(std::path::Path::new(PINNED_DX11_EXE))
 }
 
+#[cfg(any(all(windows, target_arch = "x86_64"), test))]
 mod return_correlation;
 
 // Optional entry only; implementation and fixed EXE capability live in the PE lane.

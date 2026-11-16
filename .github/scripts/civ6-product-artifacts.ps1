@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)][ValidateSet('Capture','Build','FixtureCapture','FixtureInventory')][string]$Phase,
     [string]$FixtureRoot,
     [string]$FixtureProgram,
-    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','post_emit_failure','post_release_replacement','resolved_success','resolved_multiple','resolved_invalid','resolved_missing','working_directory_missing')][string]$FixtureCase='success',
+    [ValidateSet('success','failure','cancel','deadline','start_failure','stdout_open_failure','stderr_open_failure','cancel_save_failure','deadline_save_failure','limit_save_failure','save_failure','failure_save_failure','cleanup_finalize_save_failure','capture_finalize_save_failure','start_finalize_save_failure','save_partial_failure','save_flush_failure','save_dispose_failure','save_existing_file','save_existing_pending','consume_unchanged','consume_modified','consume_replaced','publish_replaced','start_publish_replaced','publish_pin_protected','post_move_read_failure','post_move_pin_failure','start_post_move_pin_failure','publication_release_failure','failure_publication_release_failure','start_publication_release_failure','post_emit_failure','post_release_replacement','resolved_success','resolved_multiple','resolved_invalid','resolved_missing','working_directory_missing','public_label_git','public_label_unknown','public_label_path','cwd_bound','cwd_other')][string]$FixtureCase='success',
     [ValidateSet('absent','changed','invalid')][string]$FixtureProfile='absent',
     [ValidateSet('registry-extracted','directory')][string]$FixtureStorage='registry-extracted'
 )
@@ -208,6 +208,21 @@ function Read-Published-Capture([string]$OutputPath,$Receipt){
     }
     $record
 }
+function Public-Capture-Phase([string]$Label){
+    switch -CaseSensitive ($Label){
+        'git'{'git'}
+        'rustup'{'rustup'}
+        'cargo'{'cargo'}
+        'rustc'{'rustc'}
+        'metadata'{'metadata'}
+        'bins'{'bins'}
+        'dlls'{'dlls'}
+        'generator'{'generator'}
+        'fixture'{'fixture'}
+        'fixture-next'{'fixture-next'}
+        default{'unknown'}
+    }
+}
 function Select-Application([object[]]$Candidates){
     $selected=$(if($Candidates.Count-gt0){$Candidates[0]}else{$null})
     $pathValue=$(if($null-ne$selected){$selected.Path}else{$null})
@@ -366,6 +381,7 @@ function Invoke-Native-Capture(
     $native=$null;$cancellation=$null;$deadlineCancellation=$null
     $compilerEnvironment=$null;$profileEnvironment=$null
     $bindingFacts=$null;$boundWorkingDirectory=$null
+    $publicPhase=Public-Capture-Phase $Label
     $writers=[IO.FileStream[]]::new(2);$pipes=[IO.Stream[]]::new(2);$reads=[object[]]::new(2)
     $created=[bool[]]::new(2)
     $facts=@(
@@ -415,10 +431,11 @@ function Invoke-Native-Capture(
         $rootAbsolute=($rootString-and[IO.Path]::IsPathFullyQualified($script:root))
         $boundWorkingDirectory=$(if($rootAbsolute){[IO.Path]::GetFullPath($script:root)}else{''})
         if($FixtureResolutionCase-eq'missing_cwd'){$boundWorkingDirectory=Join-Path $script:root 'civ6-fixture-missing-cwd'}
+        if($FixtureResolutionCase-eq'other_cwd'){$boundWorkingDirectory=Join-Path $script:root 'fixture-other-cwd'}
         $native.StartInfo.WorkingDirectory=$boundWorkingDirectory
         $native.StartInfo.RedirectStandardOutput=$true
         $native.StartInfo.RedirectStandardError=$true
-        $bindingEvent=[ordered]@{schema='civ6-process-binding/v1';phase=$Label}
+        $bindingEvent=[ordered]@{schema='civ6-process-binding/v1';phase=$publicPhase}
         foreach($key in $bindingFacts.Keys){$bindingEvent[$key]=$bindingFacts[$key]}
         $bindingEvent['filename_matches_selection']=($native.StartInfo.FileName-ceq$Program)
         $bindingEvent['argument_count']=$Arguments.Count
@@ -655,7 +672,7 @@ function Invoke-Native-Capture(
     # Callers require the actual return and a newly verified consumer buffer.
     # The workflow also requires producer exit success; no live path is promised.
     $capturePublicEvent=[ordered]@{
-        schema='civ6-native-capture/v3';evidence_kind='historical_capture_snapshot';phase=$Label
+        schema='civ6-native-capture/v3';evidence_kind='historical_capture_snapshot';phase=$publicPhase
         native_exit_code=$result.exit_code;collection_complete=$result.collection_complete;stop_reason=$result.stop_reason
         capture_stop_reason=$result.capture_stop_reason;start_returned=$result.start_returned;root_exit_observed=$result.root_exit_observed
         failure_stage=$result.failure_stage
@@ -816,6 +833,7 @@ function Compiler-Facts {
     }
 }
 function Fixture-Capture-Summary([string]$OutputPath,$Result){
+    $returnedSnapshot=$Result|ConvertTo-Json -Depth 100|ConvertFrom-Json -Depth 100
     $verified=$false
     try{[void](Read-Published-Capture $OutputPath $Result);$verified=$true}catch{}
     $savedLast=$script:lastCaptureFailure;$savedExit=$script:producerExit
@@ -843,19 +861,19 @@ function Fixture-Capture-Summary([string]$OutputPath,$Result){
         }
     }finally{$script:lastCaptureFailure=$savedLast;$script:producerExit=$savedExit}
     [ordered]@{
-        exit_code=$Result.exit_code;complete=$Result.collection_complete;reason=$Result.stop_reason
-        root_exit=$Result.root_exit_observed;profile_environment=$Result.profile_environment
-        failure_stage=$Result.failure_stage;start_returned=$Result.start_returned
-        exception_kind=$Result.exception_kind;exception_hresult=$Result.exception_hresult;native_error_code=$Result.native_error_code
-        stdout_state=$Result.stdout_state;stderr_state=$Result.stderr_state
-        stdout_bytes=$Result.stdout_bytes;stderr_bytes=$Result.stderr_bytes
-        stdout_sha256=$Result.stdout_sha256;stderr_sha256=$Result.stderr_sha256
-        capture_stop_reason=$Result.capture_stop_reason;result_save_state=$Result.result_save_state
-        result_bytes=$Result.result_bytes;result_sha256=$Result.result_sha256
-        secondary_failure_count=$Result.secondary_errors.Count
-        secondary_stages=@($Result.secondary_errors|ForEach-Object stage)
+        exit_code=$returnedSnapshot.exit_code;complete=$returnedSnapshot.collection_complete;reason=$returnedSnapshot.stop_reason
+        root_exit=$returnedSnapshot.root_exit_observed;profile_environment=$returnedSnapshot.profile_environment
+        failure_stage=$returnedSnapshot.failure_stage;start_returned=$returnedSnapshot.start_returned
+        exception_kind=$returnedSnapshot.exception_kind;exception_hresult=$returnedSnapshot.exception_hresult;native_error_code=$returnedSnapshot.native_error_code
+        stdout_state=$returnedSnapshot.stdout_state;stderr_state=$returnedSnapshot.stderr_state
+        stdout_bytes=$returnedSnapshot.stdout_bytes;stderr_bytes=$returnedSnapshot.stderr_bytes
+        stdout_sha256=$returnedSnapshot.stdout_sha256;stderr_sha256=$returnedSnapshot.stderr_sha256
+        capture_stop_reason=$returnedSnapshot.capture_stop_reason;result_save_state=$returnedSnapshot.result_save_state
+        result_bytes=$returnedSnapshot.result_bytes;result_sha256=$returnedSnapshot.result_sha256
+        secondary_failure_count=$returnedSnapshot.secondary_errors.Count
+        secondary_stages=@($returnedSnapshot.secondary_errors|ForEach-Object stage)
         publication_verified=$verified;last_failure_stage=$script:lastCaptureFailure.failure_stage
-        publication_pin_checked=$Result.fixture_publication_pin_checked
+        publication_pin_checked=$returnedSnapshot.fixture_publication_pin_checked
         actual_consumer_accepted=$consumerAccepted;candidate_without_receipt_accepted=$candidateAccepted
         candidate_reader_without_receipt_accepted=$candidateReaderAccepted
         receiptless_actual_accepted=$receiptlessAccepted;publication_resources_released=$resourcesReleased
@@ -879,7 +897,7 @@ if($Phase-eq'FixtureCapture'){
     $fixtureArguments=@('--ignored','--exact','product_artifacts::tests::product_capture_fixture_child','--nocapture')
     $cancelCase=$FixtureCase-in@('cancel','cancel_save_failure')
     $deadlineCase=$FixtureCase-in@('deadline','deadline_save_failure')
-    $case=$(if($cancelCase-or$deadlineCase){'wait'}elseif($FixtureCase-in@('failure','failure_save_failure','failure_publication_release_failure')){'failure'}else{'success'})
+    $case=$(if($FixtureCase-in@('cwd_bound','cwd_other')){'cwd'}elseif($cancelCase-or$deadlineCase){'wait'}elseif($FixtureCase-in@('failure','failure_save_failure','failure_publication_release_failure')){'failure'}else{'success'})
     $cancelBytes=$(if($cancelCase){131072}else{0})
     $budget=$(if($deadlineCase){1500}else{20000})
     $streamBudget=$(if($FixtureCase-eq'limit_save_failure'){65536}else{8388608})
@@ -904,8 +922,9 @@ if($Phase-eq'FixtureCapture'){
     }
     $output=Join-Path $root 'fixture.stdout.raw'
     $applicationName=$(if($FixtureCase-eq'resolved_success'){[IO.Path]::GetFileName($FixtureProgram)}else{''})
-    $resolutionCase=$(switch($FixtureCase){'resolved_multiple'{'multiple'}'resolved_invalid'{'invalid'}'resolved_missing'{'missing'}'working_directory_missing'{'missing_cwd'}default{''}})
-    $first=Invoke-Native-Capture -ApplicationName $applicationName -FixtureResolutionCase $resolutionCase -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label 'fixture' -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault
+    $resolutionCase=$(switch($FixtureCase){'resolved_multiple'{'multiple'}'resolved_invalid'{'invalid'}'resolved_missing'{'missing'}'working_directory_missing'{'missing_cwd'}'cwd_other'{'other_cwd'}default{''}})
+    $fixtureLabel=$(switch($FixtureCase){'public_label_git'{'git'}'public_label_unknown'{'unexpected-label'}'public_label_path'{'C:/private/public-phase-sentinel'}default{'fixture'}})
+    $first=Invoke-Native-Capture -ApplicationName $applicationName -FixtureResolutionCase $resolutionCase -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label $fixtureLabel -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault
     $events=@(Fixture-Capture-Summary $output $first)
     if($FixtureCase-in@('consume_unchanged','consume_modified','consume_replaced')){
         if($FixtureCase-eq'consume_modified'){

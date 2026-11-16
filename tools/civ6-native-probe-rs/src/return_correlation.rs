@@ -10,6 +10,7 @@ pub(crate) enum EntryKind {
     CanAppoint,
 }
 
+#[cfg(all(windows, target_arch = "x86_64"))]
 impl EntryKind {
     pub(crate) fn label(self) -> &'static str {
         match self {
