@@ -501,7 +501,9 @@ function Invoke-Native-Capture(
             if([object]::ReferenceEquals($ready,$timer)){$reason='deadline';break}
             if([object]::ReferenceEquals($ready,$cancelTask)){$reason='cancelled';break}
             if([object]::ReferenceEquals($ready,$exitTask)){
-                $stage='exit_observe';$exitTask.GetAwaiter().GetResult()
+                # The runtime Task subtype can return VoidTaskResult to PowerShell.
+                # Observe completion and exceptions without adding a receipt-stream item.
+                $stage='exit_observe';[void]$exitTask.GetAwaiter().GetResult()
                 $exitCode=$native.ExitCode;$exitObserved=$true
                 continue
             }
@@ -927,7 +929,9 @@ if($Phase-eq'FixtureCapture'){
     $applicationName=$(if($FixtureCase-eq'resolved_success'){[IO.Path]::GetFileName($FixtureProgram)}else{''})
     $resolutionCase=$(switch($FixtureCase){'resolved_multiple'{'multiple'}'resolved_invalid'{'invalid'}'resolved_missing'{'missing'}'working_directory_missing'{'missing_cwd'}'cwd_other'{'other_cwd'}default{''}})
     $fixtureLabel=$(switch($FixtureCase){'public_label_git'{'git'}'public_label_unknown'{'unexpected-label'}'public_label_path'{'C:/private/public-phase-sentinel'}default{'fixture'}})
-    $first=Invoke-Native-Capture -ApplicationName $applicationName -FixtureResolutionCase $resolutionCase -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label $fixtureLabel -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault
+    $firstRecords=@(Invoke-Native-Capture -ApplicationName $applicationName -FixtureResolutionCase $resolutionCase -Program $selectedFixture -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $output -Label $fixtureLabel -TimeoutMs $budget -StreamLimit $streamBudget -CancelAfterBytes $cancelBytes -FixtureChildCase $case -FixtureProfileCase $FixtureProfile -FixtureCleanupFault:($FixtureCase-eq'cleanup_finalize_save_failure') -FixtureFinalizeFault:($FixtureCase-in@('capture_finalize_save_failure','start_finalize_save_failure')) -FixtureResultSaveCase $saveFault)
+    if($firstRecords.Count-ne1-or$firstRecords[0]-isnot[Collections.IDictionary]-or$firstRecords[0].schema-cne'civ6-private-native-capture/v1'){throw 'capture fixture primary return must be one capture record'}
+    $first=$firstRecords[0]
     $events=@(Fixture-Capture-Summary $output $first)
     if($FixtureCase-in@('consume_unchanged','consume_modified','consume_replaced')){
         if($FixtureCase-eq'consume_modified'){
@@ -950,7 +954,9 @@ if($Phase-eq'FixtureCapture'){
     }
     if($FixtureCase-in@('cancel','deadline')){
         $nextOutput=Join-Path $root 'next.stdout.raw'
-        $next=Invoke-Native-Capture -Program $FixtureProgram -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $nextOutput -Label 'fixture-next' -TimeoutMs 20000 -StreamLimit 8388608 -FixtureChildCase 'success'
+        $nextRecords=@(Invoke-Native-Capture -Program $FixtureProgram -Arguments $fixtureArguments -RecordedArgv @('own-test-fixture') -OutputPath $nextOutput -Label 'fixture-next' -TimeoutMs 20000 -StreamLimit 8388608 -FixtureChildCase 'success')
+        if($nextRecords.Count-ne1-or$nextRecords[0]-isnot[Collections.IDictionary]-or$nextRecords[0].schema-cne'civ6-private-native-capture/v1'){throw 'capture fixture next return must be one capture record'}
+        $next=$nextRecords[0]
         $events+=Fixture-Capture-Summary $nextOutput $next
     }
     [Console]::Out.WriteLine('CIV_PRODUCT_FIXTURE_RESULT '+($events|ConvertTo-Json -Depth 10 -Compress))

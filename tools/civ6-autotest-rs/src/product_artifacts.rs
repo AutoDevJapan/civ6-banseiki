@@ -1669,6 +1669,7 @@ mod tests {
             })
     }
 
+    #[cfg(windows)]
     fn capture_safe_value_kind(value: Option<&Value>) -> &'static str {
         match value {
             None => "missing",
@@ -1930,12 +1931,21 @@ mod tests {
                 assert_eq!(snapshot["collection_complete"], true);
                 assert_eq!(returned["complete"], false);
             } else {
+                let difference = capture_snapshot_first_difference(snapshot, returned);
+                let field = difference.unwrap_or("none");
+                let actual_key = CAPTURE_PUBLIC_FIELDS
+                    .iter()
+                    .find_map(|&(public_key, actual_key)| {
+                        (public_key == field).then_some(actual_key)
+                    })
+                    .unwrap_or("none");
                 assert!(
                     capture_snapshot_matches_actual(snapshot, returned),
-                    "historical snapshot mismatch case={case} field={} snapshot_kind={} returned_kind={} snapshot_exit={:?} returned_exit={:?}",
-                    capture_snapshot_first_difference(snapshot, returned).unwrap_or("none"),
-                    capture_safe_value_kind(snapshot.get("native_exit_code")),
-                    capture_safe_value_kind(returned.get("exit_code")),
+                    "historical snapshot mismatch case={case} field={field} snapshot_kind={} returned_kind={} snapshot_integer={:?} returned_integer={:?} snapshot_exit={:?} returned_exit={:?}",
+                    capture_safe_value_kind(snapshot.get(field)),
+                    capture_safe_value_kind(returned.get(actual_key)),
+                    snapshot.get(field).and_then(Value::as_i64),
+                    returned.get(actual_key).and_then(Value::as_i64),
                     snapshot["native_exit_code"].as_i64(),
                     returned["exit_code"].as_i64()
                 );
