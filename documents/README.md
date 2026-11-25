@@ -65,6 +65,7 @@
 | [`poc/assassin.md`](poc/assassin.md) | 束2の暗殺者：毎ターン補正する育成、全国ロック・任務、自由都市分裂・複数要因の隣国吸収・外交支持の採決・後継者、固定罰則、保存、日英露UI、18ターンの実機シナリオ |
 | [`questions.md`](questions.md) | オーナーの判断が必要な事項の一覧。決まったら SSOT に反映して削除する |
 | [`repository-rules.md`](repository-rules.md) | **リポジトリルール**。作業する人・エージェントが必ず守る |
+| [`AGENTS.md`](AGENTS.md) | Codexの仕様作業用の入口。リポジトリのルートから `codex --cd documents` で起動すると読み込まれる |
 | [`rust-migration.md`](rust-migration.md) | 実行ツール・生成ツール・テストを Rust へ移す手順 |
 | [`rust-migration-test-inventory.json`](rust-migration-test-inventory.json) | 移行前の全テスト名と、Rust で対応する workspace の区分 |
 | [`rust-migration-incremental-inventory.json`](rust-migration-incremental-inventory.json) | 移行中に main へ追加された吸収・英雄・再起動の137項目 |
