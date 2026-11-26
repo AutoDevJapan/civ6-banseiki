@@ -12,4 +12,4 @@
 
 AutoDevJapan が権利を持つ自作コードは [MIT License](LICENSE) で提供します。ゲーム本体や第三者の素材には各権利者の条件が適用されます。
 
-一部のテスト素材は、出所と再配布の許諾を確認中です。これらの素材を使うときは、素材ごとの利用条件と MIT の適用範囲を確認してください。 [素材ごとの扱い](https://github.com/AutoDevJapan/civ6-banseiki/wiki/%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9%E3%81%A8%E7%AC%AC%E4%B8%89%E8%80%85%E3%83%87%E3%83%BC%E3%82%BF)
+一部のテスト素材は、出所と再配布の許諾を確認中です。テスト用であることだけを根拠に MIT の対象とは扱いません。詳しくは[素材ごとの利用条件](https://github.com/AutoDevJapan/civ6-banseiki/wiki/%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9%E3%81%A8%E7%AC%AC%E4%B8%89%E8%80%85%E3%83%87%E3%83%BC%E3%82%BF)をご覧ください。
