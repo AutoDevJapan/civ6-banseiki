@@ -304,6 +304,44 @@ fn malformed_chunks_stale_nonce_and_duplicate_frames_fail() {
 }
 
 #[test]
+fn exhausted_hotseat_frame_serial_returns_an_error_without_unwinding() {
+    let nonce = test_nonce();
+    let frame = |serial| format!("JAC_HS|1|{nonce}|scene.1|{serial}|4|RESULT|1/1|61\n");
+    for parse in [hs::parse_frames, hs::parse_available_frames] {
+        let normal = parse(&(frame(1) + &frame(2)), nonce).unwrap();
+        assert_eq!(normal.len(), 2);
+        let upper = parse(&(frame(usize::MAX - 1) + &frame(usize::MAX)), nonce).unwrap();
+        assert_eq!(upper[1].serial, usize::MAX);
+
+        let exhausted = frame(usize::MAX) + &frame(1);
+        let result = std::panic::catch_unwind(|| parse(&exhausted, nonce));
+        let error = result
+            .expect("exhausted hotseat serial must return Err, not unwind")
+            .unwrap_err();
+        assert!(error.to_string().contains("frame serial"), "{error}");
+    }
+}
+
+#[test]
+fn exhausted_hotseat_load_epoch_returns_an_error_without_unwinding() {
+    let (frames, _) = lua_run();
+    let boot = frames.iter().find(|frame| frame.kind == "BOOT").unwrap();
+    let saved = hs::WitnessSnapshot::parse(&boot.body).unwrap();
+    hs::validate_load_epoch(&saved, boot, test_nonce(), 1, 2).unwrap();
+    hs::validate_load_epoch(&saved, boot, test_nonce(), usize::MAX - 1, usize::MAX).unwrap();
+
+    for observed in [0, usize::MAX] {
+        let result = std::panic::catch_unwind(|| {
+            hs::validate_load_epoch(&saved, boot, test_nonce(), usize::MAX, observed)
+        });
+        let error = result
+            .expect("exhausted load epoch must return Err, not unwind")
+            .unwrap_err();
+        assert!(error.to_string().contains("exactly one fresh"), "{error}");
+    }
+}
+
+#[test]
 fn full_growth_comparison_catches_a_single_xp_change_and_bad_epochs() {
     let (frames, _) = lua_run();
     let state = hs::WitnessSnapshot::parse(&frames.iter().find(|f| f.kind == "BOOT").unwrap().body)

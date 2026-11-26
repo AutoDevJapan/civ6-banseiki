@@ -1,0 +1,85 @@
+//! Complete native birth bodies and chained pdata, checked before hooks.
+use super::*;
+pub(super) const FRAMES: &[FixedFrame] = &[
+FixedFrame{begin:0x84ec00,end:0x84ec48,sha:"9eb258b9bd3ef8dc5ca5089dc0c6b12dff9fd4ec44ac70eaf01823645fec5259",#[cfg(test)] specimen:"40534883ec20488bd9488b49104885c9742e807b45007405e893870000488b4b104885c9740a488b01ba01000000ff1048c7431000000000b0014883c4205bc332c04883c4205bc3",parts:&[
+Fragment{begin:0x84ec00,end:0x84ec48,unwind:0x11c0b10,hex:"0106020006320230"},
+]},
+FixedFrame{begin:0x81b330,end:0x81b382,sha:"3442dadd93dd3c7ce02f5e5cc42eec0dbca16768e4aca5a90093af464a54407d",#[cfg(test)] specimen:"40534883ec30488bd9e8228f740041b916010000c7442428000000008bd0c7442420250000004c8d05c3818200418d49b2e86a7216004885c07411488b5330488bc84883c4305be9845803004883c4305bc3",parts:&[
+Fragment{begin:0x81b330,end:0x81b382,unwind:0x1198528,hex:"0106020006520230"},
+]},
+FixedFrame{begin:0x81c680,end:0x81c6d3,sha:"5267829daac4bc64c4817351e6a85bc0a248ec8b3677dfe37156bd83f00cfc81",#[cfg(test)] specimen:"40534883ec30488bd9e8d27b74008bd0c74424280000000041b9cc010000c7442420250000004c8d0583748200b968000000e8195f16004885c07411488b5330488bc84883c4305be9337700004883c4305bc3",parts:&[
+Fragment{begin:0x81c680,end:0x81c6d3,unwind:0x1198528,hex:"0106020006520230"},
+]},
+FixedFrame{begin:0x83ade0,end:0x83ae33,sha:"698260b9614d0dc340be6e4536aa426f2eb1daef1fb7d72154a84b27abfdd862",#[cfg(test)] specimen:"40534883ec30488bd9e8729472008bd0c74424280000000041b9ed0c0000c7442420250000004c8d05e3b18000b948000000e8b97714004885c07411488b5330488bc84883c4305be9733001004883c4305bc3",parts:&[
+Fragment{begin:0x83ade0,end:0x83ae33,unwind:0x1198528,hex:"0106020006520230"},
+]},
+FixedFrame{begin:0x84e4e0,end:0x84e564,sha:"8faae4f2e90d76363797cb5be1048152e543736e91e435d9073ae3ea7a4753cf",#[cfg(test)] specimen:"48895c2408574883ec30488b010fb7fa488bd9ff5058837b40017541e85f5d710041b99d010000c7442428010000008bd0c7442420250000004c8d05109a7f00418d4983e8a74013004885c0740b0fb7d7488bc8e8d725010048894310488b4b104885c9740b807b45007405e80f8e000048837b1000488b5c24400f95c04883c4305fc3",parts:&[
+Fragment{begin:0x84e4e0,end:0x84e564,unwind:0x1244e9c,hex:"010a04000a3408000a520670"},
+]},
+FixedFrame{begin:0x860b10,end:0x860b93,sha:"760de1640d513d8dd39f32d5d822198e4445d854ec77c6678380ed04134fefc4",#[cfg(test)] specimen:"48895c24104889742418574883ec200fb7da488bf1e8d6ebfbff488d05d78c7e00488d8ee0000000488906e880fd6f00488d8ee0000000c74424300000000066895c2434e887fd6f004533c9488d4c24304533c0418d5120e8b3514000488d8ee0000000488986d0000000e890911200488b5c2438488bc6488b7424404883c4205fc3",parts:&[
+Fragment{begin:0x860b10,end:0x860b93,unwind:0x118038c,hex:"010f06000f6408000f3407000f320b70"},
+]},
+FixedFrame{begin:0x857360,end:0x8573a8,sha:"dd75435e3c61fbaffac11193658e64c8c81173855e07190fa48a11ce83b8e87a",#[cfg(test)] specimen:"40534883ec40488d0543fdffff48894c24304889442438488bd9488b01ff5008448b4b74488d4c24304c8bc0c74424200000000033d2e8d54c1300488983c00000004883c4405bc3",parts:&[
+Fragment{begin:0x857360,end:0x8573a8,unwind:0x1198508,hex:"0106020006720230"},
+]},
+FixedFrame{begin:0x98c070,end:0x98c12b,sha:"8a99e7d3c90099d1e3fcb1e907424994642a3a6b11e3431c4f705b8b55b63026",#[cfg(test)] specimen:"48895c240848896c2410488974241848897c242041564883ec30418bf9498bf0488bea4c8bf1e8c5815d008bd0c74424280000000041b91e000000c7442420030000004c8d05e60f6e00b9d0000000e80c65ffff4885c0740d488bc8e81ffeffff488bd8eb0233db8b4424604c8bce4c8b134c8bc589442428498bd6488bcb897c242041ff520884c075124c8b03ba01000000488bcb41ff1033c0eb03488bc3488b5c2440488b6c2448488b742450488b7c24584883c430415ec3",parts:&[
+Fragment{begin:0x98c070,end:0x98c12b,unwind:0x11a4cd4,hex:"011a0a001a740b001a640a001a5409001a3408001a5216e0"},
+]},
+FixedFrame{begin:0x98bef0,end:0x98bf7f,sha:"d2ff75c21e189710aa21749bfdd245067a3127f6fd78e841d159c80d45180fe4",#[cfg(test)] specimen:"48895c2408574883ec20488d052f116e0033ff488901488bd948897908488979104883c120e8a6495d004889bba0000000488d4b6089bba8000000488d15ca116e00c783ac000000010000004889bbb00000004889bbb80000004889bbc000000089bbc80000004088bbcc0000004088bbcd0000004088bbce000000e8df7bffff488bc3488b5c24304883c4205fc3",parts:&[
+Fragment{begin:0x98bef0,end:0x98bf7f,unwind:0x11f0fac,hex:"010a04000a3406000a320670"},
+]},
+FixedFrame{begin:0x861550,end:0x861731,sha:"aba9e4f57658392d2e771a2fb82e3c77cfbc2cd60dc6eaafb3bae98fa97a449b",#[cfg(test)] specimen:"48895c241048896c241848897c242041564881ec90000000488bf94881c1e0000000e869f36f00488b87d00000004885c00f8496000000660f1f8400000000004533c0488d542430488bc8e8b04d400085c07e79488b4424384533c9488b5c244833c9448b400c33c04885db740b4c8b4b10488b43188b4b088b54243083fa03894c2428488d4c2450440f444424444889442420e89758ffff488d542450488bcfe8ca5affff4885db7408488bcbe85d444000488d4c2450e8335affff488b87d00000004885c00f8573ffffff488d8f80000000e8b7f26f00488b4758483947500f84ba000000488b5f504889b424a0000000483bd87474488bcbe830303300448b43288b50082b10488b08e84f4340004c8bc84885c074498b530485d2743a488b8fd00000004885c9742e488379280074274c8b413033c04d85c0741c488b492839510c0f848a00000048ffc04881c190010000493bc072e8498bc9e8ae4340004883c340483b5f58758c488b7758488b5f50483bde73180f1f8000000000488bcbe86859ffff4883c340483bde72ef488b4750488bb424a000000048894758488d8f80000000e813861200488d8fe0000000e8078612004c8d9c249000000033c0498b5b18498b6b20498b7b28498be3415ec34d8bc133d2e8d1734000eb81",parts:&[
+Fragment{begin:0x861550,end:0x86163b,unwind:0x11cb060,hex:"011809001874170018541600183415001801120011e00000"},
+Fragment{begin:0x86163b,end:0x8616f1,unwind:0x11cb078,hex:"2108020008641400501586003b16860060b01c01"},
+Fragment{begin:0x8616f1,end:0x861725,unwind:0x11cb08c,hex:"21000000501586003b16860060b01c01"},
+Fragment{begin:0x861725,end:0x861731,unwind:0x11cb09c,hex:"2100020000641400501586003b16860060b01c01"},
+]},
+];
+pub(super) unsafe fn verify(module: usize) -> Result<(), &'static str> {
+    for f in FRAMES {
+        let len = (f.end - f.begin) as usize;
+        if !committed_range(module + f.begin as usize, len, 1, false) {
+            return Err("transport body range");
+        }
+        let bytes =
+            unsafe { std::slice::from_raw_parts((module + f.begin as usize) as *const u8, len) };
+        if format!("{:x}", Sha256::digest(bytes)) != f.sha {
+            return Err("transport complete body differs");
+        }
+        for p in f.parts {
+            let mut base = 0;
+            let row = unsafe {
+                windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry(
+                    module as u64 + u64::from(p.begin),
+                    &mut base,
+                    null_mut(),
+                )
+            };
+            let expected = [
+                p.begin.to_le_bytes(),
+                p.end.to_le_bytes(),
+                p.unwind.to_le_bytes(),
+            ]
+            .concat();
+            if base != module as u64
+                || copy_current::<12>(row as u64)
+                    .as_ref()
+                    .map(|v| v.as_slice())
+                    != Some(expected.as_slice())
+            {
+                return Err("transport pdata differs");
+            }
+            for (i, byte) in (0..p.hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&p.hex[i..i + 2], 16).unwrap())
+                .enumerate()
+            {
+                if copy_current::<1>(module as u64 + u64::from(p.unwind) + i as u64) != Some([byte])
+                {
+                    return Err("transport unwind differs");
+                }
+            }
+        }
+    }
+    Ok(())
+}

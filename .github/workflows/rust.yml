@@ -20,21 +20,63 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Install Rust
-        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt --component clippy
+      - name: Capture Windows product build inputs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CIV6_EXPECTED_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./.github/scripts/civ6-product-artifacts.ps1 -Phase Capture
       - name: Check formatting
         run: cargo fmt --manifest-path tools/Cargo.toml --all -- --check
+      - name: Check product publisher and scenario driver
+        run: cargo +1.95.0 clippy --locked --manifest-path tools/Cargo.toml -p civ6-autotest-rs --all-targets -- -D warnings
       - name: Run all Rust and Lua tests
-        run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
+        shell: pwsh
+        run: |
+          cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets -- --nocapture 2>&1 | Tee-Object -FilePath rust-tests.log
+          $testExit = $LASTEXITCODE
+          $log = Get-Content -LiteralPath rust-tests.log -Raw
+          $vendors = @([regex]::Matches($log, 'ATOMIC_CPU vendor=(\S+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+          $executed = @([regex]::Matches($log, 'ATOMIC_FIXTURE status=EXECUTED cpu_vendor=\S+ test=([^;\s]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+          $notExecuted = @([regex]::Matches($log, 'ATOMIC_FIXTURE status=NOT_EXECUTED cpu_vendor=\S+ test=([^;\s]+)') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+          @(
+            '### Native atomic instruction fixtures'
+            ''
+            ('CPU vendor: ' + ($vendors -join ', '))
+            'Condition: Windows x86_64, AuthenticAMD'
+            ('EXECUTED: ' + $executed.Count)
+            ('NOT EXECUTED: ' + $notExecuted.Count)
+            $(if (!$IsWindows) { 'Windows fixtures NOT EXECUTED on this OS; counts above are observed fixture reports only.' })
+            'Cargo success alone does not establish native fixture execution.'
+          ) | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if ($testExit -ne 0) { exit $testExit }
+          if ($vendors.Count -ne 1) { throw 'CPU vendor report missing or ambiguous' }
+          if ($IsWindows -and ($executed.Count + $notExecuted.Count) -eq 0) { throw 'Native atomic fixture reports missing' }
       - name: Run all workspace doctests
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --doc
+      - name: Release test build space before compiling release tools
+        run: cargo clean --manifest-path tools/Cargo.toml --profile dev
       - name: Build all tools
-        run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
+        shell: pwsh
+        run: |
+          if ($IsWindows) {
+            ./.github/scripts/civ6-product-artifacts.ps1 -Phase Build
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } else {
+            cargo +1.95.0 build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Record release binary hashes
         shell: pwsh
         run: |
@@ -55,3 +97,54 @@ jobs:
             & $driver $scenario.FullName --check
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+      - name: Upload source-bound Windows product software
+        id: product_artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: civ6-windows-product-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            tools/target/civ6-windows-product/civ6-autotest.exe
+            tools/target/civ6-windows-product/civ6-startup-diagnostics.exe
+            tools/target/civ6-windows-product/civ6-bootstrap-scene.exe
+            tools/target/civ6-windows-product/civ6_native_bridge_rs.dll
+            tools/target/civ6-windows-product/civ6_bootstrap_rs.dll
+            tools/target/civ6-windows-product/manifest.json
+            tools/target/civ6-windows-product/cargo-artifacts.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+      - name: Record Windows product artifact origin
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CIV6_EXPECTED_SOURCE: ${{ github.event.pull_request.head.sha || github.sha }}
+          CIV6_ARTIFACT_ID: ${{ steps.product_artifact.outputs.artifact-id }}
+          CIV6_UPLOAD_REPORTED_SHA256: ${{ steps.product_artifact.outputs.artifact-digest }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifestPath = './tools/target/civ6-windows-product/manifest.json'
+          $metadataPath = './tools/target/civ6-windows-product/cargo-artifacts.json'
+          $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -Depth 100
+          $artifactId = 0UL
+          if (![ulong]::TryParse($env:CIV6_ARTIFACT_ID, [ref]$artifactId) -or $artifactId -eq 0) { throw 'Artifact ID missing' }
+          if ($env:CIV6_UPLOAD_REPORTED_SHA256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Upload digest missing' }
+          if ($manifest.source_sha -ne $env:CIV6_EXPECTED_SOURCE -or $manifest.source_tree -notmatch '^[0-9a-f]{40}$') { throw 'Source revision differs' }
+          if ($manifest.repository_id -ne 1392152644 -or $manifest.producer.run_id -ne [long]$env:GITHUB_RUN_ID -or $manifest.producer.run_attempt -ne [long]$env:GITHUB_RUN_ATTEMPT) { throw 'Producer run differs' }
+          $record = [ordered]@{
+            schema = 'civ6-product-artifact-origin/v1'
+            repository_id = 1392152644
+            source_sha = $manifest.source_sha
+            source_tree = $manifest.source_tree
+            workflow_blob = $manifest.producer.workflow_blob
+            run_id = [long]$env:GITHUB_RUN_ID
+            run_attempt = [long]$env:GITHUB_RUN_ATTEMPT
+            job_key = $env:GITHUB_JOB
+            runner_os = $env:RUNNER_OS
+            artifact_id = $artifactId
+            artifact_name = ('civ6-windows-product-' + $manifest.source_sha + '-' + $env:GITHUB_RUN_ID + '-' + $env:GITHUB_RUN_ATTEMPT)
+            upload_reported_sha256 = $env:CIV6_UPLOAD_REPORTED_SHA256.ToLowerInvariant()
+            manifest_sha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            cargo_metadata_sha256 = (Get-FileHash -LiteralPath $metadataPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          Write-Output ('CIV_PRODUCT_ARTIFACT_ORIGIN ' + ($record | ConvertTo-Json -Compress))

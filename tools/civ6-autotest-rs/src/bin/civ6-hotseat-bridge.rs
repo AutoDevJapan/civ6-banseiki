@@ -354,6 +354,17 @@ fn init(bundle_path: &Path, logs: &Path) -> Result<()> {
     Ok(())
 }
 
+fn handoff_target(turn: i64, after_step: usize) -> Result<(i64, i64)> {
+    match after_step {
+        6 | 16 => Ok((turn, 1)),
+        13 => turn
+            .checked_add(1)
+            .map(|next| (next, 0))
+            .ok_or_else(|| Error::scenario("hotseat turn counter exhausted")),
+        _ => Err(Error::scenario("unsupported hotseat handoff step")),
+    }
+}
+
 fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f64) -> Result<()> {
     if !timeout.is_finite() || !(0.1..=600.0).contains(&timeout) {
         return Err(Error::scenario("timeout must be 0.1..600 seconds"));
@@ -371,7 +382,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
     let required_turn = match number {
         4..=6 => 3,
         7..=10 => 6,
-        12 | 13 => 11,
+        12..=13 => 11,
         14..=16 => 13,
         17..=19 => 16,
         21 => 20,
@@ -447,11 +458,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
             .dialog_open
             .as_ref()
             .ok_or_else(|| Error::scenario("missing PlayerChange witness"))?;
-        let expected = match number {
-            6 => (receipt.before.turn, 1),
-            13 => (receipt.before.turn + 1, 0),
-            _ => (receipt.before.turn, 1),
-        };
+        let expected = handoff_target(receipt.before.turn, number)?;
         if (receipt.before.turn, receipt.before.local)
             != match number {
                 6 => (receipt.before.turn, 0),
@@ -742,6 +749,7 @@ fn run(args: Args) -> Result<()> {
 }
 
 fn main() -> std::process::ExitCode {
+    let _native_recovery = civ6_autotest_rs::native_recovery::ExitGuard;
     match run(Args::parse()) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
@@ -754,6 +762,20 @@ fn main() -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exhausted_hotseat_turn_returns_an_error_before_accepting_a_handoff() {
+        assert_eq!(handoff_target(1, 6).unwrap(), (1, 1));
+        assert_eq!(handoff_target(1, 13).unwrap(), (2, 0));
+        assert_eq!(handoff_target(i64::MAX, 16).unwrap(), (i64::MAX, 1));
+        assert_eq!(handoff_target(i64::MAX - 1, 13).unwrap(), (i64::MAX, 0));
+        let result = std::panic::catch_unwind(|| handoff_target(i64::MAX, 13));
+        let error = result
+            .expect("exhausted hotseat turn must return Err, not unwind")
+            .unwrap_err();
+        assert!(error.to_string().contains("turn"), "{error}");
+        assert!(handoff_target(1, 12).is_err());
+    }
 
     #[test]
     fn input_only_bundles_reject_all_acceptance_commands_before_game_access() {

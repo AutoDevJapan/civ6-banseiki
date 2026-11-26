@@ -1,0 +1,18 @@
+{
+  "name": "Classify one official Oligarchy request without a fresh Civic completion",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); local g=b.ReadCapacityGovernment('Tier1'); local d=b.EnemyRetryDiagnosis(); assert(p.stage=='TIER1_GOVERNMENT_BLOCKED' and g.stage=='NO_CIVIC_COMPLETED_THIS_TURN' and g.currentIndex==0 and g.currentType=='GOVERNMENT_CHIEFDOM' and g.target.governmentType=='GOVERNMENT_OLIGARCHY' and g.target.civicOwned and g.target.unlocked and g.canChangeAtAll and not g.changeMade and g.strategicCommands and g.anarchyTurns==0 and d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and d.mission.turn==23 and d.outcome=='CAPTURED' and d.occupied==1 and d.capacity==1 and d.captive.captor==1 and d.captive.nameIndex==-1,'Government classification actor or original captive differs'); b.Queue('CLASSIFY_CAPACITY_GOVERNMENT'); return 'one official Oligarchy request queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_CLASSIFY_CAPACITY_GOVERNMENT' or a=='UNKNOWN_CLASSIFY_CAPACITY_GOVERNMENT' then error(a) end; return a=='REQUESTED_CLASSIFY_CAPACITY_GOVERNMENT'"}},
+    {"action":"end_turn","turns":1,"timeout":600},
+    {"action":"wait_for","timeout":240,"condition":{"type":"lua","state_name":"InGame","code":"local a=Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_INTENT'); local p=Players[Game.GetLocalPlayer()]; return a and a.status=='PREPARED' and p and p:IsTurnActive() and Game.GetCurrentGameTurn()==a.turn+1"}},
+    {"action":"ui_lua","state_name":"InGame","code":"ExposedMembers.JAC_PersonaBoundary.Queue('READ_CAPACITY_GOVERNMENT_CLASSIFICATION'); return 'read-only native Government classification queued after one real turn'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_READ_CAPACITY_GOVERNMENT_CLASSIFICATION' or a=='UNKNOWN_READ_CAPACITY_GOVERNMENT_CLASSIFICATION' or a=='REJECTED_READ_CAPACITY_GOVERNMENT_CLASSIFICATION' then error(a) end; return a=='CLASSIFIED_READ_CAPACITY_GOVERNMENT_CLASSIFICATION'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local x=b.GovernmentClassification(); local i=assert(Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_INTENT')); local r=assert(Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ')); assert(x.owner==0 and x.token==i.token and x.originalTurn==i.turn and x.readTurn==i.turn+1 and x.beforeTotal==1 and x.beforeSpent==0 and x.afterTotal==r.total and x.afterSpent==r.spent and x.nativeSource=='UI_NATIVE_CULTURE','classification provenance or official title accounting differs'); if x.status~='NATIVE_GOV_ACCEPTED' then error(x.status..' raw='..tostring(x.rawValue)..' stage='..tostring(x.planStage)..' production='..tostring(x.productionReasons)) end; return x.status..' productionReady='..tostring(x.productionReady)..' stage='..tostring(x.planStage)"},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"exit_to_menu"}
+  ]
+}

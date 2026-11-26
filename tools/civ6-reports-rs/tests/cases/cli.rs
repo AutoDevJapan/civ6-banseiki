@@ -9,7 +9,7 @@ use std::{
 fn run(bin: &str, args: &[&std::ffi::OsStr]) -> Output {
     Command::new(bin)
         .args(args)
-        .current_dir(support::root())
+        .current_dir(support::source_root())
         .output()
         .unwrap()
 }
@@ -241,6 +241,18 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
             .unwrap();
     assert!(default.output.is_none());
     assert!(default.repo.is_none());
+    // A shared target can reside inside another checkout. The moved-binary
+    // tests verify that default inference follows its executable; this parser
+    // contract checks the explicitly selected repository without that layout
+    // assumption or writing a generated artifact into the other checkout.
+    let selected = scenario::repository_root(Some(&support::source_root())).unwrap();
+    assert_eq!(
+        scenario::output_in_repository(&selected),
+        support::source_root()
+            .canonicalize()
+            .unwrap()
+            .join("tools/civ6-autotest/scenarios/court-arbitration-ai.json")
+    );
     // An external Cargo target may live inside another checkout. Default
     // discovery follows the executable, not the compile-time source tree;
     // scenario_paths tests that precedence with two controlled checkouts.

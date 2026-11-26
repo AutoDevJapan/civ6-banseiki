@@ -4,8 +4,11 @@ pub mod driver;
 pub mod fairness;
 pub mod process;
 mod process_tree;
+#[path = "../../native_recovery_protocol.rs"]
+pub mod recovery_protocol;
 pub mod review;
 pub mod ship;
+mod software_renderer;
 pub use process::{Call, Output, Runner};
 use serde_json::Value;
 use std::path::{Path, PathBuf};

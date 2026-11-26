@@ -104,6 +104,12 @@ UPDATE Governments SET PrereqCivic='CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION'
 DELETE FROM Governments WHERE GovernmentType NOT IN (
   'GOVERNMENT_CHIEFDOM','GOVERNMENT_OLIGARCHY','GOVERNMENT_MERCHANT_REPUBLIC','GOVERNMENT_MONARCHY'
 );
+-- The three retained Governments point to POLICY_GOV_* rows that this PoC
+-- removes below. Detach those optional policy unlocks first: the official
+-- Governments.PolicyToUnlock foreign key otherwise deletes the Governments.
+UPDATE Governments SET PolicyToUnlock=NULL WHERE GovernmentType IN (
+  'GOVERNMENT_OLIGARCHY','GOVERNMENT_MERCHANT_REPUBLIC','GOVERNMENT_MONARCHY'
+);
 UPDATE Policies SET PrereqCivic='CIVIC_JAC_SENGOKU_HOUSE_RULES', PrereqTech=NULL WHERE PolicyType IN ('POLICY_DISCIPLINE','POLICY_URBAN_PLANNING');
 UPDATE Policies SET PrereqCivic='CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE', PrereqTech=NULL WHERE PolicyType='POLICY_SURVEY';
 UPDATE Policies SET PrereqCivic='CIVIC_JAC_SENGOKU_VILLAGE_ASSEMBLIES', PrereqTech=NULL WHERE PolicyType='POLICY_ILKUM';

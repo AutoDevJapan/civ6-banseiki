@@ -1,3 +1,6 @@
+#[path = "fixtures/shipped_scenarios.rs"]
+mod shipped_scenarios;
+
 use civ6_autotest_rs::judge::{
     judge, log_marker_replaced, read_since, slice_log_bytes, snapshot_logs, LOG_NAMES,
 };
@@ -174,9 +177,18 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     );
     assert!(ids.contains("BD7A82C5-6B38-4B69-A7F5-8DC9AF534249"));
     assert!(ids.contains("61320778-2E75-4C11-9009-94101B519ABA"));
+    assert!(ids.contains("91CF7B65-54BB-4F69-A452-19A65527CDE2"));
+    assert!(ids.contains("4A72B1C0-958B-4BD5-81E4-A094F86CE643"));
+    assert!(ids.contains("5D4393C0-C02A-48BF-83D2-7B6839D4E5CB"));
+    assert!(ids.contains("A1FAAB65-5371-4E25-9A46-7522075F865D"));
+    assert!(ids.contains("8C615430-5A09-4431-877A-BFD03BCA9E80"));
+    assert!(ids.contains("C678A216-58AB-4D40-A614-8F309D36AC86"));
+    assert!(ids.contains("BBA3A0D2-8F08-4715-9263-00A773E6AE86"));
+    assert!(ids.contains("2B20F0D9-64CD-42B8-9841-74067419B81E"));
+    assert!(ids.contains("D8532710-F853-4C53-8853-271000000001"));
     assert_eq!(
         ids.len(),
-        14,
+        23,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -494,95 +506,13 @@ fn malformed_huge_turn_counters_fail_closed() {
 #[test]
 fn shipped_scenario_inventory_and_json_are_intact() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
-    let expected:Vec<_>="assassin-leader-save-load.json banseiki-ruleset.json bundle0-load-save.json clans-notebooks.json clans-house-names.json clans-both-ai.json custom-clans.json leader-portraits.json growth-notebooks.json sengoku-trees.json sengoku-starting-knowledge.json sengoku-calendar.json unification-victory.json unification-registry-15km.json unification-pact.json sengoku-house-names-oda.json sengoku-house-names-takeda.json sengoku-alliances.json ages-probe.json sengoku-ages.json sengoku-dark-policy.json sengoku-ages-screens.json historical-events-15km.json religion-persistence.json religion-pressure-probe.json religion-hero-delay.json house-crests.json japan-map-20km.json japan-map-15km.json japan-map-20km-takeda.json japan-map-15km-takeda.json japan-1534-relations.json probe-ally-vision.json probe-alliance-type.json probe-alliance-expiry.json probe-end-alliance.json japan-1534-relations-settlers.json japan-1534-feud-ui.json japan-resources.json japan-no-world-congress.json japan-city-names.json japan-house-city-names.json japan-map-setup-screen.json japan-map-15km-settlers.json japan-map-15km-200turn.json japan-15km-200turn-full.json japan-15km-200turn-tuning.json japan-prosperous-15km.json court-arbitration.json court-arbitration-human.json court-arbitration-ai.json probe-make-peace.json probe-era-timing-standard.json probe-era-timing-quick.json sengoku-era-reigns.json sengoku-oaths-oda.json japan-15km-20turn-full-metrics.json japan-15km-300turn-full-metrics.json sengoku-era-reigns-epic.json sengoku-era-reigns-marathon.json sengoku-era-reigns-beyond-nine.json great-people-zero-musicians.json resources-calendar-epic.json".split_whitespace().map(str::to_string).collect();
-    let expected_names: Vec<_> = expected
-        .into_iter()
-        .chain(
-            [
-                "assassin-blocked-recovery.json",
-                "absorption-japan.json",
-                "absorption-japan-recall-continuation.json",
-                "absorption-japan-owner-turn-diagnostic.json",
-                "absorption-japan-owner-turn-isolated.json",
-                "absorption-hero-recall.json",
-                "absorption-priest-diagnostic.json",
-                "absorption-religion-persistence.json",
-                "absorption-spent-spread-192.json",
-                "absorption-spent-spread-block-192.json",
-                "absorption-faith-precision.json",
-                "absorption-hero-window-diagnostic.json",
-                "absorption-japan-native.json",
-                "absorption-context-probe.json",
-                "absorption-ai-palace-deal-readonly.json",
-                "absorption-ai-palace-deal-physical.json",
-                "absorption-carrier-boundary-load.json",
-                "absorption-flow.json",
-                "absorption-native-custody.json",
-                "absorption-native-carrier-hotseat-save.json",
-                "absorption-native-carrier-witness-hold.json",
-                "absorption-native-deal.json",
-                "absorption-native-product-probe.json",
-                "absorption-native-product-resume.json",
-                "absorption-native-product-finish.json",
-                "absorption-native-scatter-inventory.json",
-                "absorption-native-scatter-carrier.json",
-                "absorption-native-scatter-flow-start.json",
-                "absorption-native-scatter-physical-probe.json",
-                "absorption-native-bridge-probe.json",
-                "absorption-native-ai-same-owner-move.json",
-                "absorption-native-ai-carrier-return.json",
-                "absorption-native-carrier-side-effects.json",
-                "absorption-native-cross-owner-freecity.json",
-                "absorption-native-freecity-recover-original.json",
-                "absorption-native-reverse-carrier-recovery.json",
-                "absorption-native-scatter-reward-site.json",
-                "absorption-native-scatter-recovery.json",
-                "absorption-native-acquired-palace-product.json",
-                "absorption-native-acquired-carrier-diff.json",
-                "absorption-native-acquired-carrier-resume.json",
-                "absorption-native-acquired-result-final.json",
-                "absorption-native-work-probe.json",
-                "absorption-native-artwork-locks.json",
-                "absorption-native-artwork-aged.json",
-                "absorption-native-artifact-full.json",
-                "absorption-native-production-core-probe.json",
-                "absorption-native-excavation-resume.json",
-                "absorption-native-type-art-prepare.json",
-                "absorption-native-type-artifact-prepare.json",
-                "absorption-native-type-city-owner-transfer.json",
-                "absorption-native-type-return.json",
-                "absorption-native-type-scatter.json",
-                "absorption-native-type-run-art-city-fresh.json",
-                "absorption-native-type-run-art-return-fresh.json",
-                "absorption-native-type-run-art-scatter-fresh.json",
-                "absorption-native-type-run-artifact-city.json",
-                "absorption-native-type-run-artifact-return.json",
-                "absorption-native-type-run-artifact-scatter.json",
-                "absorption-return-boundary.json",
-                "assassin-actor-eliminated-save-load.json",
-                "assassin-target-eliminated-save-load.json",
-                "hotseat-bridge-live-hold.json",
-                "multiplayer-banseiki-hotseat-growth.json",
-                "multiplayer-hotseat-growth.json",
-                "multiplayer-japan-15km-settlers-hotseat-growth.json",
-                "multiplayer-japan-staging-assignment.json",
-                "multiplayer-japan-staging-diagnostic.json",
-                "mod-selection-rollback.json",
-                "banseiki-pool-hotseat.json",
-                "banseiki-pool-single-player.json",
-                "banseiki-pool-bridge.json",
-                "banseiki-pool-random-bridge.json",
-                "reliability-seed.json",
-                "reliability-cycle.json",
-            ]
-            .into_iter()
-            .map(str::to_string),
-        )
+    let expected: BTreeSet<_> = shipped_scenarios::SHIPPED_SCENARIOS
+        .iter()
+        .map(|(name, _)| (*name).to_string())
         .collect();
-    let expected: BTreeSet<_> = expected_names.iter().cloned().collect();
     assert_eq!(
         expected.len(),
-        expected_names.len(),
+        shipped_scenarios::SHIPPED_SCENARIOS.len(),
         "scenario inventory must not repeat a filename"
     );
     let actual: BTreeSet<_> = fs::read_dir(&folder)
@@ -590,7 +520,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|name| name.ends_with(".json"))
         .collect();
-    assert_eq!(actual, expected);
+    assert_eq!(actual, expected, "shipped scenario names differ");
     for name in &actual {
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(folder.join(name)).unwrap()).unwrap();

@@ -26,6 +26,11 @@ pub fn retry_recovery_with(
             );
         }
         check()?;
+        if clock.now() >= end {
+            return Err(
+                last_error.unwrap_or_else(|| Error::input("autosave recovery deadline expired"))
+            );
+        }
         let result = recover();
         match result {
             Err(e)
@@ -37,7 +42,9 @@ pub fn retry_recovery_with(
                 if left <= 0.0 {
                     return Err(e);
                 }
-                eprintln!("Autosave recovery sharing violation; waiting within the original deadline: {e}");
+                eprintln!(
+                    "Autosave recovery sharing violation; waiting within the original deadline: {e}"
+                );
                 last_error = Some(e);
                 clock.sleep(left.min(0.25));
             }
@@ -287,7 +294,9 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
         if !s.original.exists()
             || (moved_or_uncertain && Some(identity(&s.original)?) != s.original_identity)
         {
-            return Err(Error::input("original autosave archive is missing and current folder is not the original; keeping recovery record"));
+            return Err(Error::input(
+                "original autosave archive is missing and current folder is not the original; keeping recovery record",
+            ));
         }
         fs::remove_file(state)?;
         return Ok(());
@@ -515,6 +524,69 @@ mod tests {
         )
         .is_err());
         assert_eq!(calls, 0);
+    }
+    #[test]
+    fn retry_rechecks_the_original_deadline_after_ownership_validation() {
+        use crate::time::Clock;
+        for validation_seconds in [0.25, 1.0, 1.5] {
+            let clock = RetryClock::default();
+            let mut recoveries = 0;
+            let mut validations = 0;
+            let result = retry_recovery_with(
+                &clock,
+                1.0,
+                || {
+                    validations += 1;
+                    clock.sleep(validation_seconds);
+                    Ok(())
+                },
+                || {
+                    recoveries += 1;
+                    Ok(())
+                },
+            );
+            assert_eq!(validations, 1);
+            if validation_seconds < 1.0 {
+                assert!(result.is_ok());
+                assert_eq!(recoveries, 1);
+            } else {
+                assert!(
+                    result.is_err(),
+                    "ownership validation consumed the deadline"
+                );
+                assert_eq!(recoveries, 0, "late ownership validation started recovery");
+            }
+            assert_eq!(clock.now(), validation_seconds);
+        }
+    }
+    #[test]
+    fn late_validation_on_a_retry_preserves_the_last_sharing_error() {
+        use crate::time::Clock;
+        let clock = RetryClock::default();
+        let mut validations = 0;
+        let mut recoveries = 0;
+        let error = retry_recovery_with(
+            &clock,
+            1.0,
+            || {
+                validations += 1;
+                clock.sleep(if validations == 1 { 0.25 } else { 0.5 });
+                Ok(())
+            },
+            || {
+                recoveries += 1;
+                Err(Error::new(
+                    crate::ErrorKind::Io,
+                    "kept sharing failure (os error 32)",
+                ))
+            },
+        )
+        .unwrap_err();
+        assert_eq!(validations, 2);
+        assert_eq!(recoveries, 1);
+        assert_eq!(error.kind, crate::ErrorKind::Io);
+        assert!(error.message.contains("kept sharing failure"));
+        assert_eq!(clock.now(), 1.0);
     }
     #[test]
     fn original_identity_clears_leftover_receipt_after_restore_even_when_owner_data_changes() {
